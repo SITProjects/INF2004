@@ -12,9 +12,8 @@
         "ms-vscode.cmake-tools",
         "ms-vscode.cpptools",
         "ms-python.python",
-        "raspberry-pi.raspberry-pi-pico",
         "Wokwi.wokwi-vscode",
-        "open.chatgpt",
+        "openai.chatgpt",
         "esbenp.prettier-vscode",
         "pre-commit.com-vscode"
       ],
@@ -33,8 +32,6 @@
     }
   },
   "remoteUser": "vscode",
-  "runArgs": ["--privileged"],
-  "mounts": ["source=/dev/bus/usb,target=/dev/bus/usb,type=bind"],
   "postStartCommand": "pre-commit install"
   // Configure tool-specific properties.
   // "customizations": {}

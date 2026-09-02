@@ -4,7 +4,7 @@ FROM mcr.microsoft.com/devcontainers/base:bookworm
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install ARM GCC cross-compiler, Newlib standard library, and build tools
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y \
     build-essential \
     cmake \
     ninja-build \
@@ -21,6 +21,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN python3 -m venv /opt/pre-commit \
     && /opt/pre-commit/bin/pip install --no-cache-dir pre-commit
+
+RUN git clone \
+        --depth 1 \
+        https://github.com/raspberrypi/pico-sdk.git \
+        /opt/pico-sdk && \
+    cd /opt/pico-sdk && \
+    git submodule update --init --recursive
+
+ENV PICO_SDK_PATH=/opt/pico-sdk
+
+RUN chmod -R a+rX /opt/pico-sdk
 
 ENV PATH="/opt/pre-commit/bin:${PATH}"
 
