@@ -1,21 +1,38 @@
 // For format details, see https://aka.ms/devcontainer.json. For config options, see the
 // README at: https://github.com/devcontainers/templates/tree/main/src/debian
 {
-  "name": "project_title",
+  "name": "INF2004 Embedded Systems Programming Lab",
   // Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
-  "image": "ghcr.io/commit2main/universal:latest",
-  // Features to add to the dev container. More info: https://containers.dev/features.
-  // "features": {
-  //   "ghcr.io/devcontainers-extra/features/apt-get-packages:1": {
-  //     "clean_ppas": true,
-  //     "preserve_apt_list": true,
-  //     "packages": ""
-  //   }
-  // }
-  // Use 'forwardPorts' to make a list of ports inside the container available locally.
-  // "forwardPorts": []
-  // Use 'postCreateCommand' to run commands after the container is created.
-  "postCreateCommand": "pre-commit install"
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.cmake-tools",
+        "ms-vscode.cpptools",
+        "ms-python.python",
+        "Wokwi.wokwi-vscode",
+        "openai.chatgpt",
+        "esbenp.prettier-vscode",
+        "pre-commit.com-vscode"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "[json]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
+        },
+        "[c]": {
+          "editor.defaultFormatter": "ms-vscode.cpptools"
+        },
+        "[cpp]": {
+          "editor.defaultFormatter": "ms-vscode.cpptools"
+        }
+      }
+    }
+  },
+  "remoteUser": "vscode",
+  "postStartCommand": "pre-commit install"
   // Configure tool-specific properties.
   // "customizations": {}
   // Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
