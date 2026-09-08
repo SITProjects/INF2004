@@ -1,65 +1,88 @@
-# Embedded Systems Programming
+# INF2004 Vehicle Controller
 
-> [!NOTE]
-> WIP, remove this note when project is ready.
+Structure-only embedded C project. Source files contain file comments, their
+matching header include, and empty section markers. There are no functions,
+API declarations, algorithms, or hardware operations yet.
 
-project_description
+## Repository layout
 
----
-
-## Project Scope
-
-- [link_to_source](link_to_source)
-  - scope_description
-
-## Usage
-
-### runtime_executable
-
-```sh
-./runtime_executable <args> [optional]
+```text
+app/
+    CMakeLists.txt
+    main.c / main.h
+    vehicle_controller/
+        vehicle_controller.c / vehicle_controller.h
+modules/
+    motion/
+    navigation/
+    obstacle/
+    telemetry/
+    terrain/
+drivers/
+    CMakeLists.txt
+    barcode/
+    gpio/
+    imu/
+    motor/
+    ultrasonic/
+    wifi/
+shared/
+    CMakeLists.txt
+    include/shared.h
+    src/shared.c
+templates/
+    module.c / module.h
+docs/
+    architecture/
+    hardware/
+    interfaces/
+    coding_standard.md
 ```
 
-- runtime_executable_description
+Every feature module and individual driver contains `CMakeLists.txt`,
+`include/<name>.h`, and `src/<name>.c`. Public include paths and dependencies
+are scoped to CMake targets.
 
-## Getting Started
+## Development environment
 
-### Prerequisites
+Open the repository in VS Code and select **Reopen in Container**. The supplied
+Dev Container provides CMake, the ARM compiler, Pico SDK, clang-format, and
+pre-commit. Work inside the container for consistent tooling.
 
-- [Git](https://github.com/git-guides/install-git) (fully set-up)
-- [Docker/Podman](https://docs.docker.com/engine/install/)
-- [VS Code](https://code.visualstudio.com/download)
-  - [Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension
+Install the commit hooks if they are not already installed:
 
-> [!WARNING]
-> Do not use GitHub Desktop! All interactions (files, git, runtime, etc.) should be done through the Dev Container within VS Code.
+```sh
+pre-commit install
+```
 
-### Installation
+## Check the skeleton
 
-1. Clone the repo
+The default build compiles the empty modules and application objects using C99.
+It requires a host C compiler and CMake; no Pico SDK is needed for this check.
 
-   ```sh
-   git clone git@github.com:10x-Slackers/repo_name.git
-   ```
+```sh
+cmake -S . -B build/skeleton
+cmake --build build/skeleton
+find app modules drivers shared templates -type f \
+    \( -name '*.c' -o -name '*.h' \) -exec clang-format --dry-run --Werror {} +
+```
 
-2. Open the repository in VS Code
+No executable or firmware is produced because `main()` is intentionally absent.
+After implementing the application, the reserved Pico firmware configuration is:
 
-   ```sh
-   code repo_name/
-   ```
+```sh
+cmake -S . -B build/firmware -DBUILD_FIRMWARE=ON
+cmake --build build/firmware
+```
 
-3. Click on the "Re-open in Dev Container" prompt
-4. Install the pre-commit hooks
+This requires `PICO_SDK_PATH` and the ARM toolchain. Select the intended board
+with `-DPICO_BOARD=<board>` when configuring firmware. Linking firmware will
+remain incomplete until the entry point is implemented. Wokwi paths refer to
+the future output in `build/firmware/`.
 
-   ```sh
-   pre-commit install
-   ```
+## Coding standard
 
-5. Start working!
-
-## Developer Tooling
-
-- Dev Containers
-  - Standardised developer environment
-- Pre-Commit
-  - Run linting and formatting for all files during git commit
+Use [BARR-C:2018](https://barrgroup.com/sites/default/files/barr_c_coding_standard_2018.pdf)
+and the [project coding guide](docs/coding_standard.md). Start new C modules
+from [the templates](templates/). Editor settings and the formatting hook cover
+the supported style rules; future code still needs semantic review.
