@@ -2,8 +2,6 @@
  * @file telemetry.h
  * @brief Telemetry module placeholder.
  *
- * Copyright (c) 2026 10x Slackers
- * SPDX-License-Identifier: MIT
  */
 
 #ifndef TELEMETRY_H

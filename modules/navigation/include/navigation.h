@@ -2,8 +2,6 @@
  * @file navigation.h
  * @brief Navigation module placeholder.
  *
- * Copyright (c) 2026 10x Slackers
- * SPDX-License-Identifier: MIT
  */
 
 #ifndef NAVIGATION_H

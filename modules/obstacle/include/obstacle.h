@@ -2,8 +2,6 @@
  * @file obstacle.h
  * @brief Obstacle module placeholder.
  *
- * Copyright (c) 2026 10x Slackers
- * SPDX-License-Identifier: MIT
  */
 
 #ifndef OBSTACLE_H

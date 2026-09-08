@@ -2,8 +2,6 @@
  * @file terrain.h
  * @brief Terrain module placeholder.
  *
- * Copyright (c) 2026 10x Slackers
- * SPDX-License-Identifier: MIT
  */
 
 #ifndef TERRAIN_H

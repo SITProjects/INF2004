@@ -2,8 +2,6 @@
  * @file motion.h
  * @brief Motion module placeholder.
  *
- * Copyright (c) 2026 10x Slackers
- * SPDX-License-Identifier: MIT
  */
 
 #ifndef MOTION_H
@@ -14,5 +12,6 @@
 /* Public types, constants, and macros. */
 
 /* Public function declarations. */
+void hello_from_motion (void);
 
 #endif /* MOTION_H */

@@ -2,8 +2,6 @@
  * @file main.h
  * @brief Application entry point placeholder.
  *
- * Copyright (c) 2026 10x Slackers
- * SPDX-License-Identifier: MIT
  */
 
 #ifndef MAIN_H

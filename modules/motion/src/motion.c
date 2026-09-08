@@ -17,3 +17,9 @@
 /* Public function definitions. */
 
 /* Private function definitions. */
+void
+hello_from_motion ()
+{
+    // Placeholder for speed control logic
+    printf("hello from motion module with speed\n");
+}

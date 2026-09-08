@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "author": "INF2004",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "wokwi-pi-pico", "id": "pico", "top": 0, "left": 0, "attrs": {} },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "button20",
+      "top": -80,
+      "left": 180,
+      "attrs": {
+        "color": "blue",
+        "label": "GP20"
+      }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "button21",
+      "top": -20,
+      "left": 180,
+      "attrs": {
+        "color": "blue",
+        "label": "GP21"
+      }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "button22",
+      "top": 40,
+      "left": 180,
+      "attrs": {
+        "color": "blue",
+        "label": "GP22"
+      }
+    },
+    {
+      "type": "wokwi-buzzer",
+      "id": "buzzer",
+      "top": 120,
+      "left": 180,
+      "attrs": {
+        "volume": "0.1"
+      }
+    },
+    {
+      "type": "wokwi-neopixel",
+      "id": "rgb",
+      "top": 190,
+      "left": 180,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led15",
+      "top": 120,
+      "left": -120,
+      "attrs": {
+        "color": "blue",
+        "label": "GP15"
+      }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r15",
+      "top": 130,
+      "left": -50,
+      "rotate": 90,
+      "attrs": {
+        "value": "1000"
+      }
+    }
+  ],
+  "connections": [
+    ["button20:1.l", "pico:GP20", "green", []],
+    ["button20:2.l", "pico:GND.1", "black", []],
+
+    ["button21:1.l", "pico:GP21", "green", []],
+    ["button21:2.l", "pico:GND.2", "black", []],
+
+    ["button22:1.l", "pico:GP22", "green", []],
+    ["button22:2.l", "pico:GND.3", "black", []],
+
+    ["buzzer:1", "pico:GP18", "orange", []],
+    ["buzzer:2", "pico:GND.4", "black", []],
+
+    ["rgb:DIN", "pico:GP28", "purple", []],
+    ["rgb:VDD", "pico:3V3", "red", []],
+    ["rgb:VSS", "pico:GND.8", "black", []],
+
+    ["pico:GP15", "r15:1", "blue", []],
+    ["r15:2", "led15:A", "blue", []],
+    ["led15:C", "pico:GND.5", "black", []]
+  ]
+}
