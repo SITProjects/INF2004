@@ -7,6 +7,7 @@
  */
 
 #include "motion.h"
+#include <stdio.h>
 
 /* Private types, constants, and macros. */
 

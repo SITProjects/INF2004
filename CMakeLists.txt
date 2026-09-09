@@ -5,7 +5,6 @@ include($ENV{PICO_SDK_PATH}/external/pico_sdk_import.cmake)
 project(vehicle_controller C CXX ASM)
 
 set(CMAKE_C_STANDARD 11)
-set(CMAKE_C_STANDARD 17)
 
 pico_sdk_init()
 
