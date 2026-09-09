@@ -16,3 +16,10 @@ repos:
       # Converts all line endings to LF
       - id: mixed-line-ending
         args: ["--fix=lf"]
+  - repo: local
+    hooks:
+      - id: clang-format
+        name: Check C formatting (BARR-C style subset)
+        entry: clang-format --dry-run --Werror
+        language: system
+        files: '^(app|drivers|modules|shared|templates)/.*\.(c|h)$'
