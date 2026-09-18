@@ -9,4 +9,5 @@ target_include_directories(obstacle PUBLIC
 target_link_libraries(obstacle PRIVATE
     shared
     drivers
+    pico_stdlib
 )
