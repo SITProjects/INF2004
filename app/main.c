@@ -12,8 +12,6 @@
 #include "motion.h"
 #include "obstacle.h"
 
-static repeating_timer_t obstacle_timer;
-
 int init_modules (void);
 
 int
@@ -28,7 +26,7 @@ main (void)
 
     while (true)
     {
-        if (obstacle_update())
+        if (obstacle_update_check())
         {
             if (is_obstacle_detected())
             {
@@ -43,7 +41,7 @@ main (void)
 int
 init_modules (void)
 {
-    if (obstacle_init(OBSTACLE_TRIG_PIN, OBSTACLE_ECHO_PIN, &obstacle_timer))
+    if (obstacle_init(OBSTACLE_TRIG_PIN, OBSTACLE_ECHO_PIN))
     {
         return 1;
     }
