@@ -4,23 +4,27 @@
  *
  * SPDX-License-Identifier: MIT
  */
+#include "obstacle.h"
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include "obstacle.h"
 #include "pico/time.h"
 #include "pico/stdlib.h"
 #include "hardware/gpio.h"
-#include "hardware/irq.h"
+#include "hardware/sync.h"
 
 /* Private constants. */
 #define OBSTACLE_THRESHOLD_CM 5.0f
+#define ECHO_TIMEOUT_US 30000u
 
 /* Private state. */
 static volatile uint32_t echo_start_us = 0;
 static volatile uint32_t echo_pulse_us = 0;
 static volatile bool measurement_ready = false;
-static float distance_cm = 0.0f;
+static volatile uint32_t trigger_start_us = 0;
+static volatile bool measurement_pending = false;
+static volatile bool echo_active = false;
+static float distance_cm = -1.0f;
 static bool obstacle_detected = false;
 
 static int ultrasonic_echo_pin, ultrasonic_trig_pin;
@@ -28,6 +32,7 @@ static int ultrasonic_echo_pin, ultrasonic_trig_pin;
 /* Private function declarations. */
 static void ultrasonic_isr (void);
 static bool obstacle_timer_callback (repeating_timer_t * timer);
+static void expire_measurement (uint32_t now_us);
 /* Public functions. */
 
 int
@@ -59,11 +64,28 @@ obstacle_init (int trig_pin, int echo_pin, repeating_timer_t * timer)
 }
 
 void
-obstacle_trigger (int trig_pin, int echo_pin)
+obstacle_trigger (int trig_pin)
 {
+    uint32_t irq_state = save_and_disable_interrupts();
+    uint32_t now_us = time_us_32();
+    expire_measurement(now_us);
+    if (measurement_pending)
+    {
+        restore_interrupts(irq_state);
+        return;
+    }
+
+    /* Discard stale edges before starting a new measurement. */
+    gpio_acknowledge_irq(ultrasonic_echo_pin,
+                         GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL);
+    trigger_start_us = now_us;
+    echo_active = false;
+    measurement_pending = true;
+
     /*
      * Send the ultrasonic trigger pulse.
-     * Ultrasonic sensor requires a 2us low pulse followed by a 10us high pulse to initiate measurement
+     * The sensor requires a 2us low pulse followed by a 10us high pulse
+     * to initiate measurement.
      */
     gpio_put(trig_pin, 0);
     busy_wait_us_32(2);
@@ -72,27 +94,33 @@ obstacle_trigger (int trig_pin, int echo_pin)
     busy_wait_us_32(10);
 
     gpio_put(trig_pin, 0);
+    restore_interrupts(irq_state);
 }
 
 bool
 obstacle_update (void)
 {
+    /* The GPIO ISR, timer, and caller run on the initializing core. */
+    uint32_t irq_state = save_and_disable_interrupts();
+    expire_measurement(time_us_32());
     if (!measurement_ready)
     {
+        restore_interrupts(irq_state);
         return false;
     }
-    bool previous_state = obstacle_detected;
-
     uint32_t pulse_us = echo_pulse_us;
     measurement_ready = false;
+    restore_interrupts(irq_state);
 
-    // Calculate distance in centimeters using the speed of sound (343 m/s)
-    distance_cm = ((float)pulse_us * 0.0343f) / 2.0f;
+    bool previous_state = obstacle_detected;
+
+    /* A zero pulse denotes no valid echo, not a zero-distance obstacle. */
+    distance_cm = pulse_us ? ((float)pulse_us * 0.0343f) / 2.0f : -1.0f;
     // Determine if the obstacle is too close based on the threshold
     // TODO: Different threshold level for different motor speed
 
     // Updates the obstacle detected state based on threshold
-    if (distance_cm < OBSTACLE_THRESHOLD_CM)
+    if ((distance_cm >= 0.0f) && (distance_cm < OBSTACLE_THRESHOLD_CM))
     {
         obstacle_detected = true;
     }
@@ -121,25 +149,45 @@ obstacle_get_distance_cm (void)
 static void
 ultrasonic_isr (void)
 {
-    // Handle the ultrasonic interrupt service routine
+    uint32_t irq_state = save_and_disable_interrupts();
     uint32_t events = gpio_get_irq_event_mask(ultrasonic_echo_pin);
+    uint32_t now_us = time_us_32();
+    gpio_acknowledge_irq(ultrasonic_echo_pin, events);
+    expire_measurement(now_us);
 
-    if (events & GPIO_IRQ_EDGE_RISE)
+    if ((events & (GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL)) ==
+        (GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL))
     {
-        echo_start_us = time_us_32();
-
-        gpio_acknowledge_irq(ultrasonic_echo_pin, GPIO_IRQ_EDGE_RISE);
+        /* Both edges latched: their timing is unknown. Await the timeout. */
+        echo_active = false;
     }
-
-    if (events & GPIO_IRQ_EDGE_FALL)
+    else if (measurement_pending && (events & GPIO_IRQ_EDGE_RISE))
     {
-        uint32_t echo_end_us = time_us_32();
-
-        echo_pulse_us = echo_end_us - echo_start_us;
-
+        echo_start_us = now_us;
+        echo_active = true;
+    }
+    else if (measurement_pending && echo_active &&
+             (events & GPIO_IRQ_EDGE_FALL))
+    {
+        echo_pulse_us = now_us - echo_start_us;
         measurement_ready = true;
+        measurement_pending = false;
+        echo_active = false;
+    }
+    restore_interrupts(irq_state);
+}
 
-        gpio_acknowledge_irq(ultrasonic_echo_pin, GPIO_IRQ_EDGE_FALL);
+/* Called only with interrupts disabled; subtraction handles clock wrap. */
+static void
+expire_measurement (uint32_t now_us)
+{
+    if (measurement_pending &&
+        ((uint32_t)(now_us - trigger_start_us) >= ECHO_TIMEOUT_US))
+    {
+        measurement_pending = false;
+        echo_active = false;
+        echo_pulse_us = 0;
+        measurement_ready = true;
     }
 }
 
@@ -147,7 +195,7 @@ static bool
 obstacle_timer_callback (repeating_timer_t * timer)
 {
     (void)timer;
-    obstacle_trigger(ultrasonic_trig_pin, ultrasonic_echo_pin);
+    obstacle_trigger(ultrasonic_trig_pin);
 
     return true;
 }

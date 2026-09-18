@@ -8,7 +8,6 @@
 #define MAIN_H
 
 /* Public includes. */
-#include <stdio.h>
 
 /* Public types, constants, and macros. */
 #define OBSTACLE_ECHO_PIN 2
