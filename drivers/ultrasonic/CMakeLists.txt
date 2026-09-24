@@ -8,6 +8,4 @@ target_include_directories(ultrasonic PUBLIC
 
 target_link_libraries(ultrasonic PRIVATE shared)
 
-if(BUILD_FIRMWARE)
-    target_link_libraries(ultrasonic PRIVATE pico_stdlib)
-endif()
+target_link_libraries(ultrasonic PRIVATE pico_stdlib hardware_gpio)

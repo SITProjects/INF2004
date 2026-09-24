@@ -3,7 +3,7 @@
  * @brief Coordinate servo settling and fresh ultrasonic measurements.
  */
 #include "obstacle.h"
-#include "ranging.h"
+#include "ultrasonic.h"
 #include "servo.h"
 #include "pico/time.h"
 #include "hardware/gpio.h"
