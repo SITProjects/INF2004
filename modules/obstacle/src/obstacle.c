@@ -43,7 +43,7 @@ obstacle_scan (void)
 
     if (scan_phase == SCAN_READY)
     {
-        if (ranging_trigger())
+        if (ultrasonic_trigger())
         {
             scan_phase = SCAN_MEASURING;
         }
@@ -51,7 +51,7 @@ obstacle_scan (void)
     }
 
     float distance_cm;
-    if (!ranging_read(&distance_cm))
+    if (!ultrasonic_read(&distance_cm))
     {
         return result;
     }
@@ -113,7 +113,7 @@ obstacle_init (int trig_pin, int echo_pin, int servo_pin)
     {
         return 1;
     }
-    if (servo_init(servo_pin) || ranging_init(trig_pin, echo_pin))
+    if (servo_init(servo_pin) || ultrasonic_init(trig_pin, echo_pin))
     {
         return 1;
     }
