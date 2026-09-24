@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include "pico/stdlib.h"
 #include "obstacle.h"
+#include "hardware/irq.h"
 
 static int init_modules (void);
 
