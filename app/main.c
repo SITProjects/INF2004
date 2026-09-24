@@ -1,18 +1,16 @@
 /**
  * @file main.c
- * @brief Application entry point placeholder.
+ * @brief Vehicle controller application entry point.
  *
  */
 
 #include "main.h"
 #include <stdio.h>
 #include "pico/stdlib.h"
-#include "pico/time.h"
-#include "hardware/irq.h"
-#include "motion.h"
 #include "obstacle.h"
+#include "hardware/irq.h"
 
-int init_modules (void);
+static int init_modules (void);
 
 int
 main (void)
@@ -26,22 +24,29 @@ main (void)
 
     while (true)
     {
-        if (obstacle_update_check())
+        obstacle_scan_result_t scan = obstacle_scan();
+        switch (scan.status)
         {
-            if (is_obstacle_detected())
-            {
-                printf("OBSTACLE TOO CLOSE!\n");
-            }
+            case OBSTACLE_CLEAR:
+                /* TODO: Allow forward motion. */
+                break;
+            case OBSTACLE_PATH_FOUND:
+                /* TODO: Turn toward scan.angle before moving forward. */
+                break;
+            case OBSTACLE_SCANNING:
+            case OBSTACLE_BLOCKED:
+            case OBSTACLE_UNKNOWN:
+                /* TODO: Keep motion stopped until a direction is available. */
+                break;
         }
-
         tight_loop_contents();
     }
 }
 
-int
+static int
 init_modules (void)
 {
-    if (obstacle_init(OBSTACLE_TRIG_PIN, OBSTACLE_ECHO_PIN))
+    if (obstacle_init(OBSTACLE_TRIG_PIN, OBSTACLE_ECHO_PIN, OBSTACLE_SERVO_PIN))
     {
         return 1;
     }

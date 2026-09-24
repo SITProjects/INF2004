@@ -1,39 +1,41 @@
 /**
  * @file obstacle.h
- * @brief Ultrasonic obstacle detection on the initializing core.
- *
+ * @brief Nonblocking obstacle detection and directional scanning.
  */
-
 #ifndef OBSTACLE_H
 #define OBSTACLE_H
 
-/* Public includes. */
-#include <stdbool.h>
-#include "pico/time.h"
+typedef enum
+{
+    OBSTACLE_SCANNING,
+    OBSTACLE_CLEAR,
+    OBSTACLE_PATH_FOUND,
+    OBSTACLE_BLOCKED,
+    OBSTACLE_UNKNOWN
+} obstacle_status_t;
 
-/* Public types, constants, and macros. */
+typedef struct
+{
+    obstacle_status_t status;
+    /* 90 for CLEAR, selected angle for PATH_FOUND, otherwise -1. */
+    int angle;
+} obstacle_scan_result_t;
 
-/* Public function declarations. */
 /**
- * @brief Initialises the GPIO and ISR service for obstacle module
- * @return 0 on success, 1 on failure
-*/
-int obstacle_init (int trig_pin, int echo_pin);
-
-/** @brief Trigger on the configured pin; ignore requests while awaiting echo. */
-void obstacle_trigger (int trig_pin);
-
-/**
- * @brief Consume the latest echo or expire a measurement after 23 ms.
- * @return True only on transition to a detected obstacle.
- * No valid echo clears detection and sets distance to -1 (unavailable).
- * Call all public functions on the core that called obstacle_init().
+ * @brief Advance the scan without waiting for servo movement or echo arrival.
+ * Call regularly on the initializing core. CLEAR means the centre is clear;
+ * PATH_FOUND means a clear side was found, not that the vehicle has turned.
+ * BLOCKED means all tested directions are blocked; UNKNOWN means an echo was
+ * unavailable. Completed results persist during return-to-centre settling.
+ * Only CLEAR and PATH_FOUND carry a usable angle. Persistent obstacles cause
+ * repeated scans. The caller owns motion decisions for every status.
  */
-bool obstacle_update_check (void);
+obstacle_scan_result_t obstacle_scan (void);
 
-/** @return True if an obstacle is currently detected. */
-bool is_obstacle_detected (void);
+/**
+ * @return 0 on success, 1 for invalid pins or an unsupported system clock.
+ * Initialise once before scanning.
+ */
+int obstacle_init (int trig_pin, int echo_pin, int servo_pin);
 
-/** @return Last distance in cm, or -1 before a reading or after no valid echo. */
-float obstacle_get_distance_cm (void);
 #endif /* OBSTACLE_H */

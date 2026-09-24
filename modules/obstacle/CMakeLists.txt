@@ -1,4 +1,6 @@
 add_library(obstacle STATIC
+    src/ranging.c
+    src/servo.c
     src/obstacle.c
 )
 
@@ -7,7 +9,7 @@ target_include_directories(obstacle PUBLIC
 )
 
 target_link_libraries(obstacle PRIVATE
-    shared
-    drivers
+    hardware_pwm
+    hardware_clocks
     pico_stdlib
 )
