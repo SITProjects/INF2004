@@ -1,6 +1,6 @@
 /**
  * @file main.h
- * @brief Application entry point placeholder.
+ * @brief GPIO assignments for the vehicle controller application.
  *
  */
 
@@ -10,6 +10,7 @@
 /* Public includes. */
 
 /* Public types, constants, and macros. */
+
 #define OBSTACLE_ECHO_PIN 2
 #define OBSTACLE_TRIG_PIN 3
 #define OBSTACLE_SERVO_PIN 12
