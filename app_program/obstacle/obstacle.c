@@ -55,7 +55,7 @@ scan_task (INT stacd, void * p_exinf)
     tm_printf((UB *)"obstacle: scanning started\n");
 
     /* An impossible angle, so the first result is always printed. */
-    obstacle_scan_result_t last = {OBSTACLE_SCANNING, -2};
+    obstacle_scan_result_t last = {OBSTACLE_SCANNING, -2, -1.0f};
     for (;;)
     {
         obstacle_scan_result_t scan = obstacle_scan_update();
