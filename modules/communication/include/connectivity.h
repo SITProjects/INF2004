@@ -13,7 +13,7 @@
  * @brief Initialize connectivity once at startup and start connecting.
  * @param ssid Non-NULL, null-terminated name, borrowed for the module lifetime.
  * @param password Non-NULL, null-terminated password, borrowed for module life.
- * @return true if initialized (connection may be pending), false on invalid
+ * @return 0(true) if initialized (connection may be pending), 1(false) on invalid
  * arguments, repeated initialization, or hardware initialization failure.
  * @note Credentials must remain valid and unchanged for the module lifetime.
  * All connectivity APIs must be called from the main loop context.

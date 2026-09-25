@@ -1,5 +1,5 @@
 /**
- * @file wifi_connection.c
+ * @file wifi.c
  * @brief Low-level Wi-Fi operations for Raspberry Pi Pico W.
  */
 #include "wifi.h"
