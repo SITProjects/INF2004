@@ -14,11 +14,10 @@ add_subdirectory(drivers)
 
 
 # Modules
-add_subdirectory(modules/connectivity)
+add_subdirectory(modules/communication)
 add_subdirectory(modules/motion)
 add_subdirectory(modules/navigation)
 add_subdirectory(modules/obstacle)
-add_subdirectory(modules/telemetry)
 add_subdirectory(modules/terrain)
 
 add_executable(vehicle_controller app/main.c app/vehicle_controller/vehicle_controller.c)
@@ -34,8 +33,7 @@ target_link_libraries(vehicle_controller PRIVATE
     shared
     drivers
 
-    telemetry
-    connectivity
+    communication
     motion
     navigation
     terrain

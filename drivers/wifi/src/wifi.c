@@ -2,7 +2,8 @@
  * @file wifi_connection.c
  * @brief Low-level Wi-Fi operations for Raspberry Pi Pico W.
  */
-#include "wifi_connection.h"
+#include "wifi.h"
+#include "lwipopts.h"
 
 #include <stddef.h>
 #include <stdio.h>

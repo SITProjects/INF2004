@@ -1,9 +1,9 @@
 /**
- * @file wifi_connection.h
+ * @file wifi.h
  * @brief Low-level Pico W Wi-Fi operations.
  */
-#ifndef WIFI_CONNECTION_H
-#define WIFI_CONNECTION_H
+#ifndef WIFI_H
+#define WIFI_H
 
 /* Public includes. */
 #include <stdbool.h>
@@ -37,4 +37,4 @@ bool wifi_is_connected (void);
  */
 void wifi_print_network_info (void);
 
-#endif /* WIFI_CONNECTION_H */
+#endif /* WIFI_H */

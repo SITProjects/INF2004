@@ -8,7 +8,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include "pico/time.h"
-#include "wifi_connection.h"
+#include "wifi.h"
 
 /* Private types, constants, and macros. */
 #define CONNECTIVITY_TIMEOUT_US UINT64_C(10000000)
@@ -32,7 +32,7 @@ static uint64_t deadline_us;
 static void connectivity_start_attempt (void);
 
 /* Public function definitions. */
-bool
+int
 connectivity_init (const char * ssid, const char * password)
 {
     if ((state != CONNECTIVITY_STOPPED) || (ssid == NULL) || (password == NULL))
@@ -41,12 +41,12 @@ connectivity_init (const char * ssid, const char * password)
     }
     if (!wifi_init())
     {
-        return false;
+        return 1;
     }
     network_ssid = ssid;
     network_password = password;
     connectivity_start_attempt();
-    return true;
+    return 0;
 }
 
 void

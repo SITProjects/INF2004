@@ -51,10 +51,12 @@ init_modules (void)
 {
     if (obstacle_init(OBSTACLE_TRIG_PIN, OBSTACLE_ECHO_PIN, OBSTACLE_SERVO_PIN))
     {
+        printf("Failed to initialize obstacle module\n");
         return 1;
     }
-    if (!connectivity_init(WIFI_SSID, WIFI_PASSWORD))
+    else if (connectivity_init(WIFI_SSID, WIFI_PASSWORD))
     {
+        printf("Failed to initialize connectivity module\n");
         return 1;
     }
     irq_set_enabled(IO_IRQ_BANK0, true);

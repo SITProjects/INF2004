@@ -18,7 +18,7 @@
  * @note Credentials must remain valid and unchanged for the module lifetime.
  * All connectivity APIs must be called from the main loop context.
  */
-bool connectivity_init (const char * ssid, const char * password);
+int connectivity_init (const char * ssid, const char * password);
 
 /**
  * @brief Advance connection state without waiting for association or DHCP.

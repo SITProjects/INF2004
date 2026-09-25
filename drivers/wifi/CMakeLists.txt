@@ -1,5 +1,5 @@
 add_library(wifi STATIC
-    src/wifi_connection.c
+    src/wifi.c
 )
 
 target_include_directories(wifi PUBLIC
