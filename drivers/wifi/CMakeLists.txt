@@ -4,8 +4,6 @@ add_library(wifi STATIC
 
 target_include_directories(wifi PUBLIC
     ${CMAKE_CURRENT_LIST_DIR}/include
-	PRIVATE
-    ${CMAKE_CURRENT_LIST_DIR}/../../app
 )
 
 target_link_libraries(wifi PUBLIC

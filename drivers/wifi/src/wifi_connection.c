@@ -1,86 +1,45 @@
 /**
  * @file wifi_connection.c
- * @brief Handles Wi-Fi connection and automatic reconnection for Raspberry Pi Pico W.
+ * @brief Low-level Wi-Fi operations for Raspberry Pi Pico W.
  */
-
 #include "wifi_connection.h"
-#include "main.h"
 
-#include <stdbool.h>
+#include <stddef.h>
 #include <stdio.h>
-
 #include "pico/cyw43_arch.h"
-#include "pico/stdlib.h"
-
 #include "lwip/ip4_addr.h"
 #include "lwip/netif.h"
 
-#define WIFI_CONNECT_TIMEOUT_MS 10000
-#define WIFI_RETRY_DELAY_MS 5000
-
-static bool
-wifi_connect ()
+/* Public function definitions. */
+bool
+wifi_init (void)
 {
-    printf("Connecting to Wi-Fi: %s\n", WIFI_SSID);
-
-    int result = cyw43_arch_wifi_connect_timeout_ms(WIFI_SSID, WIFI_PASSWORD,
-                                                    CYW43_AUTH_WPA2_AES_PSK,
-                                                    WIFI_CONNECT_TIMEOUT_MS);
-
-    if (result != 0)
+    if (cyw43_arch_init() != 0)
     {
-        printf("Wi-Fi connection failed. Error code: %d\n", result);
         return false;
     }
-
-    printf("Connected successfully!\n");
+    cyw43_arch_enable_sta_mode();
     return true;
-}
-
-static void
-wifi_connect_until_success (void)
-{
-    while (!wifi_connect(WIFI_SSID, WIFI_PASSWORD))
-    {
-        printf("Retrying Wi-Fi connection in %d seconds...\n",
-               WIFI_RETRY_DELAY_MS / 1000);
-        sleep_ms(WIFI_RETRY_DELAY_MS);
-    }
-}
-
-static bool
-wifi_is_connected (void)
-{
-    int status = cyw43_tcpip_link_status(&cyw43_state, CYW43_ITF_STA);
-    return status == CYW43_LINK_UP;
 }
 
 bool
-wifi_init (const char * ssid, const char * password)
+wifi_connect_start (const char * ssid, const char * password)
 {
-    if (cyw43_arch_init())
+    if ((ssid == NULL) || (password == NULL))
     {
-        printf("Failed to initialise Wi-Fi\n");
         return false;
     }
-
-    cyw43_arch_enable_sta_mode();
-    wifi_connect_until_success();
-    wifi_print_network_info();
-
-    return true;
+    return cyw43_arch_wifi_connect_async(ssid, password,
+                                         CYW43_AUTH_WPA2_AES_PSK) == 0;
 }
 
-void
-wifi_monitor (void)
+bool
+wifi_is_connected (void)
 {
-    if (!wifi_is_connected())
-    {
-        printf("Wi-Fi connection lost!\n");
-        wifi_connect_until_success();
-        printf("Wi-Fi connection restored!\n");
-        wifi_print_network_info();
-    }
+    cyw43_arch_lwip_begin();
+    int status = cyw43_tcpip_link_status(&cyw43_state, CYW43_ITF_STA);
+    cyw43_arch_lwip_end();
+    return status == CYW43_LINK_UP;
 }
 
 void

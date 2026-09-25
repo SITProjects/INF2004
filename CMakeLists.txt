@@ -14,6 +14,7 @@ add_subdirectory(drivers)
 
 
 # Modules
+add_subdirectory(modules/connectivity)
 add_subdirectory(modules/motion)
 add_subdirectory(modules/navigation)
 add_subdirectory(modules/obstacle)
@@ -34,6 +35,7 @@ target_link_libraries(vehicle_controller PRIVATE
     drivers
 
     telemetry
+    connectivity
     motion
     navigation
     terrain
