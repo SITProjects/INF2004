@@ -1,6 +1,4 @@
 add_library(obstacle STATIC
-    src/ranging.c
-    src/servo.c
     src/obstacle.c
 )
 
@@ -9,7 +7,8 @@ target_include_directories(obstacle PUBLIC
 )
 
 target_link_libraries(obstacle PRIVATE
-    hardware_pwm
-    hardware_clocks
+    servo
+    ultrasonic
+    hardware_gpio
     pico_stdlib
 )
