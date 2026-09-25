@@ -9,6 +9,7 @@
 #include "pico/stdlib.h"
 #include "obstacle.h"
 #include "hardware/irq.h"
+#include "wifi_connection.h"
 
 static int init_modules (void);
 
@@ -24,6 +25,8 @@ main (void)
 
     while (true)
     {
+        wifi_monitor();
+
         obstacle_scan_result_t scan = obstacle_scan();
         switch (scan.status)
         {
@@ -47,6 +50,10 @@ static int
 init_modules (void)
 {
     if (obstacle_init(OBSTACLE_TRIG_PIN, OBSTACLE_ECHO_PIN, OBSTACLE_SERVO_PIN))
+    {
+        return 1;
+    }
+    if (!wifi_init(WIFI_SSID, WIFI_PASSWORD))
     {
         return 1;
     }

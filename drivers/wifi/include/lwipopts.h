@@ -1,5 +1,5 @@
-#ifndef _LWIPOPTS_H
-#define _LWIPOPTS_H
+#ifndef LWIPOPTS_H
+#define LWIPOPTS_H
 
 // Pico W threadsafe background uses lwIP in NO_SYS mode
 #ifndef NO_SYS

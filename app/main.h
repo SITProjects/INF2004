@@ -13,6 +13,8 @@
 #define OBSTACLE_ECHO_PIN 2
 #define OBSTACLE_TRIG_PIN 3
 #define OBSTACLE_SERVO_PIN 12
+#define WIFI_SSID "Jerome"
+#define WIFI_PASSWORD "ym123456"
 /* Public function declarations. */
 
 #endif /* MAIN_H */
