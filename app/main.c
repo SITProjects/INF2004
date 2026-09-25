@@ -5,14 +5,14 @@
  */
 
 #include "main.h"
-#include <stdio.h>
-#include "pico/stdlib.h"
 #include "obstacle.h"
 #include "hardware/irq.h"
 #include "connectivity.h"
 #include "credentials.h"
 
 static int init_modules (void);
+
+/* Public function definitions. */
 
 int
 main (void)
@@ -46,6 +46,8 @@ main (void)
         tight_loop_contents();
     }
 }
+
+/* Private function definitions. */
 
 static int
 init_modules (void)
