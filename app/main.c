@@ -54,7 +54,7 @@ init_modules (void)
         printf("Failed to initialize obstacle module\n");
         return 1;
     }
-    else if (connectivity_init(WIFI_SSID, WIFI_PASSWORD))
+    if (connectivity_init(WIFI_SSID, WIFI_PASSWORD))
     {
         printf("Failed to initialize connectivity module\n");
         return 1;
