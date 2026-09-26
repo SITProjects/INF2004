@@ -20,8 +20,8 @@ target_link_libraries(vehicle_controller PRIVATE
     motion
     navigation
     obstacle
-    telemetry
     terrain
+    communication
 )
 
 if(BUILD_FIRMWARE)
