@@ -38,7 +38,7 @@ bool motor_init (motor_id_t id, uint32_t pin_a, uint32_t pin_b,
 /**
  * @brief Drive a motor at a signed duty cycle.
  * @param duty Fraction from -1.0 (full reverse) to 1.0 (full forward);
- * values outside the range are clamped, and 0.0 lets the motor coast.
+ * values outside the range are clamped, and 0.0 brakes the motor.
  */
 void motor_set_duty (motor_id_t id, float duty);
 

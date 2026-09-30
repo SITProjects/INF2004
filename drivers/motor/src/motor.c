@@ -79,7 +79,7 @@ motor_set_duty (motor_id_t id, float duty)
         magnitude = 1.0f;
     }
 
-    /* PWM one input and hold the other low: drive with coast between. */
+    /* PWM one input and hold the other low: drive with brake between. */
     uint16_t level = (uint16_t)(magnitude * (float)pwm_full);
     if (duty >= 0.0f)
     {
@@ -94,10 +94,10 @@ motor_set_duty (motor_id_t id, float duty)
 void
 motor_brake (motor_id_t id)
 {
-    /* Both inputs high shorts the motor through the H-bridge. */
+    /* Robo Pico driver: both inputs low brakes, both high coasts. */
     if ((id < MOTOR_COUNT) && motors[id].b_ready)
     {
-        set_levels(&motors[id], pwm_full, pwm_full);
+        set_levels(&motors[id], 0u, 0u);
     }
 }
 
