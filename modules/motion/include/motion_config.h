@@ -27,7 +27,7 @@
 #define MOTION_RIGHT_MOTOR_INVERTED false
 
 /* Distance between the two wheels' contact points, in mm. Calibrate. */
-#define MOTION_TRACK_WIDTH_MM 130.0f
+#define MOTION_TRACK_WIDTH_MM 115.0f
 
 /* Highest wheel speed any command may request, in mm/s. */
 #define MOTION_MAX_SPEED_MM_S 500.0f
