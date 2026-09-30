@@ -10,10 +10,9 @@
 #include <math.h>
 #include "motion_config.h"
 #include "motor.h"
+#include "shared.h"
 
 /* Private types, constants, and macros. */
-#define MOTION_PI 3.14159265f
-#define DEG_TO_RAD (MOTION_PI / 180.0f)
 #define SPEED_EPSILON_MM_S 1.0f
 
 /* Static data. */
