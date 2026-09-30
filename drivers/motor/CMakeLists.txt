@@ -8,6 +8,4 @@ target_include_directories(motor PUBLIC
 
 target_link_libraries(motor PRIVATE shared)
 
-if(BUILD_FIRMWARE)
-    target_link_libraries(motor PRIVATE pico_stdlib)
-endif()
+target_link_libraries(motor PRIVATE pico_stdlib hardware_pwm hardware_clocks hardware_gpio)
