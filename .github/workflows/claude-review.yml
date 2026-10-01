@@ -1,0 +1,69 @@
+name: Claude PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    # Skip drafts and forks (forks cannot read repository secrets).
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+      id-token: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Run Claude review
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          track_progress: true
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            Review this pull request for INF2004, an embedded C vehicle
+            controller built on the Raspberry Pi Pico SDK. Read AGENTS.md and
+            docs/coding_standard.md first and review against them.
+
+            Focus on:
+            - Correctness: logic errors, integer overflow and signedness,
+              unit mistakes (us/ms, cm/mm, degrees), off-by-one errors,
+              uninitialised state, and missing return-value checks.
+            - Embedded concerns: blocking waits without timeouts, work in
+              interrupt handlers, shared state touched from ISRs or the other
+              core without protection, and stack or heap pressure.
+            - Layering: drivers must not depend on modules or app code;
+              application decisions belong in app/, feature behavior in
+              modules/, hardware access in drivers/.
+            - Conventions: BARR-C:2018 and the project coding standard (fixed
+              width types, braces on all control-flow bodies, static private
+              helpers, module-prefixed public symbols, Doxygen on public APIs
+              with units and ownership), plus new sources registered in the
+              relevant CMakeLists.txt.
+            - Validation: note behavior changes that were not exercised on
+              hardware or a simulator.
+
+            Ignore mtk3smp-rp2040/ and other third-party code unless the PR
+            modifies it. Do not comment on formatting that clang-format or
+            pre-commit already enforces.
+
+            Post inline comments for specific issues and one short summary
+            comment. Only report issues you are confident about, and skip
+            praise and restating the diff.
+          claude_args: |
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
