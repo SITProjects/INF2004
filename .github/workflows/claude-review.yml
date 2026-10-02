@@ -43,7 +43,18 @@ jobs:
             Post a concise review summary using gh pr comment.
             If no significant issues are found, say so.
 
-            Also update the PR description using gh pr edit.
+            Also update the PR description using a standalone gh pr edit command.
+            Pass the description through standard input using --body-file -
+            and a quoted heredoc. Do not create a temporary file or use
+            additional shell commands.
+            
+            Command format:
+            gh pr edit ${{ github.event.issue.number }} --repo ${{ github.repository }} --body-file - <<'PR_DESCRIPTION'
+            <updated description>
+            PR_DESCRIPTION
+            
+            After updating, use gh pr view to verify the description was saved.
+            If blocked, report the exact attempted command and error.
             Base the description on the actual diff and existing description.
             Include a concise summary, key changes, and testing information.
             Preserve existing issue references, checklists, and relevant author notes.
