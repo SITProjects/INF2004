@@ -1,0 +1,32 @@
+name: Claude Pro PR Review
+
+on:
+  issue_comment:
+    types: [created] # Triggers when bot is pinged
+
+jobs:
+  execute_ping:
+    if: github.event.issue.pull_request && contains(github.event.comment.body, '@pr-review')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write       # Allows Claude to checkout the repository
+      pull-requests: write  # Allows Claude to post review comments directly on the PR diff
+      issues: write         # Allows Claude to log issue comments if needed
+      id-token: write
+
+    steps:
+      - name: Acknowledge Ping
+        run: echo "Claude has been pinged for a PR review."
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetches full history so Claude can see the entire PR diff
+
+      - name: Claude Code Review
+        uses: anthropic/claude-code-action@v1
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          claude_args: "--allowedTools comment,view" # Restricts Claude to read-only reviewing
