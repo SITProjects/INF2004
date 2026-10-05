@@ -6,105 +6,74 @@
 #include "obstacle_scan.h"
 #include "drv_servo.h"
 #include "drv_ultrasonic.h"
-#include <stdint.h>
+/* Use the toolchain size_t for both libm and the kernel headers. */
+#define PROHIBIT_DEF_SIZE_T
+#include <stddef.h>
 #include <tk/tkernel.h>
 #include <math.h>
 #include <stdbool.h>
-#include <stddef.h>
 
 /* Private types, constants, and macros. */
 
+#define GPIO_COUNT 30
+#define DEG_TO_RAD (3.14159265358979323846f / 180.0f)
 #define OBSTACLE_THRESHOLD_CM 5.0f
-#define SERVO_SETTLE_MS 1000u
 #define CENTRE_ANGLE 90
-#define DEGREES_TO_RADIANS (3.14159265358979323846f / 180.0f)
-
+#define MAX_SERVO_TRAVEL_DEGREES 180u
+#define ACCEPTABLE_RESULT_FROM_SIDES 1.3f
 typedef enum
 {
-    SCAN_SETTLING,
+    SERVO_SETTLING,
     SCAN_READY,
     SCAN_MEASURING
 } scan_phase_t;
 
 /* Static data. */
 
+/* Servo should scan these angles to the left and right of centre. */
 static const int scan_angles[] = {60, 120};
+static float scan_offset_cosines[sizeof(scan_angles) / sizeof(scan_angles[0])];
+static obstacle_servo_timing_t servo_timing;
+static int sensor_angle;
 static scan_phase_t scan_phase;
 static uint32_t settle_start_ms;
+static uint32_t settle_duration_ms;
 static size_t side_index;
-static int clear_side_angle;
+static float front_distance_cm;
+static float sampled_span_cm;
+static uint8_t contributing_sides;
+static obstacle_scan_result_t result;
+static float farthest_clear_distance_cm;
+static int path_found_angle;
 static bool scanning_sides;
 static bool scan_had_invalid_echo;
-static float front_distance_cm;
-static float obstacle_width_cm;
-static obstacle_scan_result_t result;
 
 /* Private function declarations. */
 
-static void process_centre_measurement (float distance_cm);
+static void scan_centre (float distance_cm);
 static void scan_sides (float distance_cm);
 static float calculate_sample_span (float centre_distance_cm,
                                     float side_distance_cm,
-                                    float offset_degrees);
+                                    float offset_cosine);
 static void move_sensor (int angle);
 static uint32_t now_ms (void);
+static obstacle_scan_result_t read_result (void);
+static void publish_result (obstacle_status_t status, float span_cm, int angle,
+                            uint8_t side_count);
 
 /* Public function definitions. */
 
-obstacle_scan_result_t
-obstacle_scan_update (void)
-{
-    switch (scan_phase)
-    {
-        case SCAN_SETTLING:
-            if ((uint32_t)(now_ms() - settle_start_ms) < SERVO_SETTLE_MS)
-            {
-                return result;
-            }
-            scan_phase = SCAN_READY;
-            return result;
-        case SCAN_READY:
-            if (ultrasonic_trigger())
-            {
-                scan_phase = SCAN_MEASURING;
-            }
-            return result;
-        case SCAN_MEASURING:
-            break;
-        default:
-            scanning_sides = false;
-            result = (obstacle_scan_result_t){OBSTACLE_UNKNOWN, -1, -1.0f};
-            move_sensor(CENTRE_ANGLE);
-            return result;
-    }
-
-    float distance_cm;
-    if (!ultrasonic_read(&distance_cm))
-    {
-        return result;
-    }
-
-    // Scan centre then sides
-    if (scanning_sides)
-    {
-        scan_sides(distance_cm);
-    }
-    else
-    {
-        process_centre_measurement(distance_cm);
-    }
-
-    return result;
-}
-
 int
-obstacle_scan_init (int trig_pin, int echo_pin, int servo_pin)
+obstacle_scan_init (int trig_pin, int echo_pin, int servo_pin,
+                    const obstacle_servo_timing_t * timing)
 {
     /* Validate before either component configures hardware. */
-    if (trig_pin < 0 || trig_pin >= 30 || echo_pin < 0 ||
-        echo_pin >= 30 || servo_pin < 0 ||
-        servo_pin >= 30 || trig_pin == echo_pin ||
-        trig_pin == servo_pin || echo_pin == servo_pin)
+    if (trig_pin < 0 || trig_pin >= GPIO_COUNT || echo_pin < 0 ||
+        echo_pin >= GPIO_COUNT || servo_pin < 0 || servo_pin >= GPIO_COUNT ||
+        trig_pin == echo_pin || trig_pin == servo_pin ||
+        echo_pin == servo_pin || timing == NULL ||
+        (timing->travel_ms_per_60_degrees == 0u &&
+         timing->settle_margin_ms == 0u))
     {
         return 1;
     }
@@ -113,10 +82,53 @@ obstacle_scan_init (int trig_pin, int echo_pin, int servo_pin)
         return 1;
     }
 
+    servo_timing = *timing;
+    sensor_angle = -1;
+    for (size_t index = 0; index < sizeof(scan_angles) / sizeof(scan_angles[0]);
+         ++index)
+    {
+        float offset_radians =
+            (float)(scan_angles[index] - CENTRE_ANGLE) * DEG_TO_RAD;
+        scan_offset_cosines[index] = cosf(offset_radians);
+    }
     scanning_sides = false;
-    result = (obstacle_scan_result_t){OBSTACLE_SCANNING, -1, -1.0f};
+    result = (obstacle_scan_result_t){.status = OBSTACLE_SCANNING,
+                                      .sampled_span_cm = -1.0f,
+                                      .path_found_angle = -1};
     move_sensor(CENTRE_ANGLE);
     return 0;
+}
+
+obstacle_scan_result_t
+obstacle_scan_update (void)
+{
+    switch (scan_phase)
+    {
+        case SERVO_SETTLING:
+            if ((uint32_t)(now_ms() - settle_start_ms) < settle_duration_ms)
+            {
+                return result;
+            }
+            /* Servo has settled, start scanning. */
+            scan_phase = SCAN_READY;
+            return result;
+        case SCAN_READY:
+            /* Trigger ultrasonic measurement. */
+            if (ultrasonic_trigger())
+            {
+                scan_phase = SCAN_MEASURING;
+            }
+            return result;
+        case SCAN_MEASURING:
+            return read_result();
+        default:
+            /* Recover with an unknown position and a fresh fault result. */
+            scanning_sides = false;
+            sensor_angle = -1;
+            publish_result(OBSTACLE_UNKNOWN, -1.0f, -1, 0u);
+            move_sensor(CENTRE_ANGLE);
+            return result;
+    }
 }
 
 char const *
@@ -141,29 +153,54 @@ obstacle_scan_status_name (obstacle_status_t status)
 
 /* Private function definitions. */
 
-static void
-process_centre_measurement (float distance_cm)
+static obstacle_scan_result_t
+read_result (void)
 {
-    if (distance_cm < 0.0f)
+    float distance_cm;
+    /* False means no completed measurement; invalid echoes return -1 cm. */
+    if (!ultrasonic_read(&distance_cm))
     {
-        result = (obstacle_scan_result_t){OBSTACLE_UNKNOWN, -1, -1.0f};
+        return result;
+    }
+    if (scanning_sides)
+    {
+        scan_sides(distance_cm);
+    }
+    else
+    {
+        scan_centre(distance_cm);
+    }
+    return result;
+}
+
+static void
+scan_centre (float distance_cm)
+{
+    if (distance_cm <= 0.0f)
+    {
+        publish_result(OBSTACLE_UNKNOWN, -1.0f, -1, 0u);
         scan_phase = SCAN_READY;
     }
     else if (distance_cm >= OBSTACLE_THRESHOLD_CM)
     {
-        result = (obstacle_scan_result_t){OBSTACLE_CLEAR, CENTRE_ANGLE, -1.0f};
+        publish_result(OBSTACLE_CLEAR, -1.0f, CENTRE_ANGLE, 0u);
         scan_phase = SCAN_READY;
     }
     else
     {
         /* Save the centre reading before measuring both sides. */
-        result = (obstacle_scan_result_t){OBSTACLE_SCANNING, -1, -1.0f};
+        path_found_angle = -1;
+        result = (obstacle_scan_result_t){.status = OBSTACLE_SCANNING,
+                                          .sequence = result.sequence,
+                                          .sampled_span_cm = -1.0f,
+                                          .path_found_angle = -1};
         scanning_sides = true;
-        scan_had_invalid_echo = false;
         front_distance_cm = distance_cm;
-        obstacle_width_cm = 0.0f;
+        sampled_span_cm = 0.0f;
+        contributing_sides = 0u;
+        scan_had_invalid_echo = false;
         side_index = 0;
-        clear_side_angle = -1;
+        farthest_clear_distance_cm = -1.0f;
         move_sensor(scan_angles[side_index]);
     }
 }
@@ -171,65 +208,84 @@ process_centre_measurement (float distance_cm)
 static void
 scan_sides (float distance_cm)
 {
-    if (distance_cm < 0.0f)
+    if (distance_cm <= 0.0f)
     {
+        /* An invalid echo provides neither a span nor a clear direction. */
         scan_had_invalid_echo = true;
     }
-    else
+    else if (distance_cm >= OBSTACLE_THRESHOLD_CM)
     {
-        if (distance_cm >= OBSTACLE_THRESHOLD_CM && clear_side_angle < 0)
+        /* A clear side contributes zero span, even inside the filter. */
+        if (distance_cm > farthest_clear_distance_cm)
         {
-            clear_side_angle = scan_angles[side_index];
+            farthest_clear_distance_cm = distance_cm;
+            path_found_angle = scan_angles[side_index];
         }
-        float offset_degrees =
-            fabsf((float)(scan_angles[side_index] - CENTRE_ANGLE));
-        obstacle_width_cm += calculate_sample_span(front_distance_cm,
-                                                   distance_cm, offset_degrees);
     }
-
+    else if (distance_cm <= front_distance_cm * ACCEPTABLE_RESULT_FROM_SIDES)
+    {
+        sampled_span_cm += calculate_sample_span(
+            front_distance_cm, distance_cm, scan_offset_cosines[side_index]);
+        ++contributing_sides;
+    }
     ++side_index;
     if (side_index < sizeof(scan_angles) / sizeof(scan_angles[0]))
     {
         move_sensor(scan_angles[side_index]);
         return;
     }
-
-    /* Publish a result only after both side measurements have completed. */
-    if (clear_side_angle >= 0)
+    obstacle_status_t status = OBSTACLE_BLOCKED;
+    if (path_found_angle != -1)
     {
-        result = (obstacle_scan_result_t){OBSTACLE_PATH_FOUND, clear_side_angle,
-                                          -1.0f};
+        status = OBSTACLE_PATH_FOUND;
     }
-    else
+    else if (scan_had_invalid_echo)
     {
-        result = (obstacle_scan_result_t){
-            scan_had_invalid_echo ? OBSTACLE_UNKNOWN : OBSTACLE_BLOCKED, -1,
-            -1.0f};
+        status = OBSTACLE_UNKNOWN;
     }
-    result.width_cm = scan_had_invalid_echo ? -1.0f : obstacle_width_cm;
-
+    publish_result(status, sampled_span_cm > 0.0f ? sampled_span_cm : -1.0f,
+                   path_found_angle, contributing_sides);
     scanning_sides = false;
     move_sensor(CENTRE_ANGLE);
 }
 
 static float
 calculate_sample_span (float centre_distance_cm, float side_distance_cm,
-                       float offset_degrees)
+                       float offset_cosine)
 {
     /* Law of cosines: chord between centre and side samples. */
-    float angle_radians = offset_degrees * DEGREES_TO_RADIANS;
     return sqrtf(side_distance_cm * side_distance_cm +
                  centre_distance_cm * centre_distance_cm -
-                 2.0f * side_distance_cm * centre_distance_cm *
-                     cosf(angle_radians));
+                 2.0f * side_distance_cm * centre_distance_cm * offset_cosine);
 }
 
 static void
 move_sensor (int angle)
 {
+    uint32_t travel_degrees = MAX_SERVO_TRAVEL_DEGREES;
+    if (sensor_angle >= 0)
+    {
+        int delta = angle - sensor_angle;
+        travel_degrees = (uint32_t)(delta < 0 ? -delta : delta);
+    }
+    uint32_t travel_ms =
+        (travel_degrees * servo_timing.travel_ms_per_60_degrees + 59u) / 60u;
     servo_set_angle(angle);
+    sensor_angle = angle;
     settle_start_ms = now_ms();
-    scan_phase = SCAN_SETTLING;
+    settle_duration_ms = travel_ms + servo_timing.settle_margin_ms;
+    scan_phase = SERVO_SETTLING;
+}
+
+static void
+publish_result (obstacle_status_t status, float span_cm, int angle,
+                uint8_t side_count)
+{
+    result = (obstacle_scan_result_t){.status = status,
+                                      .sequence = result.sequence + 1u,
+                                      .sampled_span_cm = span_cm,
+                                      .contributing_sides = side_count,
+                                      .path_found_angle = angle};
 }
 
 /* Kernel time since boot in ms; wraps after 49 days, so compare by
