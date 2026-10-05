@@ -11,4 +11,5 @@ target_link_libraries(obstacle PRIVATE
     ultrasonic
     hardware_gpio
     pico_stdlib
+    shared
 )

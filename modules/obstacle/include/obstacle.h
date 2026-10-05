@@ -6,7 +6,20 @@
 #ifndef OBSTACLE_H
 #define OBSTACLE_H
 
+/* Public includes. */
+
+#include <stdint.h>
+
 /* Public types, constants, and macros. */
+
+/** Servo timing measured at the operating voltage and mechanical load. */
+typedef struct
+{
+    /** Travel time in milliseconds per 60 degrees, excluding settling. */
+    uint16_t travel_ms_per_60_degrees;
+    /** Extra settling time in milliseconds after the estimated travel. */
+    uint16_t settle_margin_ms;
+} obstacle_servo_timing_t;
 
 typedef enum
 {
@@ -19,32 +32,48 @@ typedef enum
 
 typedef struct
 {
+    /** The current status of the obstacle detection. */
     obstacle_status_t status;
-    /** Servo angle in degrees: 90 for CLEAR, selected side for PATH_FOUND,
-     * -1 otherwise. */
-    int angle;
-    /** Sampled width estimate in cm for PATH_FOUND or BLOCKED when both side
-     * echoes are valid; -1 when unavailable or while scanning.
-     * Assumes the centre and side echoes come from the same obstacle.
-     * Fixed scan angles do not locate the obstacle's actual edges. */
-    float width_cm;
+    /** Starts at zero; increments for each completed centre or side scan,
+     * or a state recovery fault. Wraps modulo 2^32. Unchanged while waiting
+     * or SCANNING. Compare with the last consumed sequence for fresh results.
+     */
+    uint32_t sequence;
+    /** Sum of centre-to-side spans in cm. Invalid readings and clear sides
+     * (>= 5 cm) contribute zero. Remaining readings contribute only when
+     * <= 1.3 times the centre distance. One contributing side is retained
+     * without doubling. A zero total is reported as -1 (unavailable), as is
+     * the span while scanning. Assumes contributing echoes hit the same
+     * object as the centre echo; does not locate the object's edges.
+     */
+    float sampled_span_cm;
+    /** Number of sides contributing to sampled_span_cm: 0, 1, or 2.
+     * One contribution is a partial span; even two do not locate edges.
+     */
+    uint8_t contributing_sides;
+    /** Direction in degrees: 90 for CLEAR, 60 or 120 for PATH_FOUND,
+     * -1 otherwise. PATH_FOUND selects the farthest valid clear side;
+     * equal distances select the left side (60 degrees).
+     */
+    int path_found_angle;
 } obstacle_scan_result_t;
 
 /* Public function declarations. */
 
 /**
- * @brief Advance the scan without waiting for servo movement or echo arrival.
- * Call regularly on the initializing core after obstacle_init() succeeds.
- * CLEAR means the centre is clear; PATH_FOUND means a clear side was found,
- * not that the vehicle has turned.
- * BLOCKED means all tested directions are blocked; UNKNOWN means an echo was
- * unavailable and no clear side was found. A centre obstacle triggers both
- * 60- and 120-degree measurements before publishing a completed result.
- * PATH_FOUND selects the first clear side in that order.
- * Completed results persist during return-to-centre settling.
- * Only CLEAR and PATH_FOUND carry a usable angle. Persistent obstacles cause
- * repeated scans. The caller owns motion decisions for every status.
- * @return A caller-owned snapshot of the current scan result.
+ * @brief Perform nonblocking obstacle detection and directional scanning.
+ * Complete both side measurements before publishing a side scan result,
+ * including when the first side is clear. Call regularly after obstacle_init()
+ * succeeds on the same core. Completed results persist while returning to
+ * centre; subsequent scans start with zero accumulated span. Only act on a
+ * completed result once per sequence. PATH_FOUND does not mean the vehicle
+ * has turned or that a vehicle-width corridor has been measured.
+ * @return The current scan result:
+ *       OBSTACLE_SCANNING: still scanning, no path found yet
+ *       OBSTACLE_CLEAR: no obstacle detected in front
+ *       OBSTACLE_PATH_FOUND: obstacle detected, but a path is available
+ *       OBSTACLE_BLOCKED: obstacle detected, no path available
+ *       OBSTACLE_UNKNOWN: sensor error or invalid reading
  */
 obstacle_scan_result_t obstacle_scan (void);
 
@@ -53,9 +82,15 @@ obstacle_scan_result_t obstacle_scan (void);
  * @param trig_pin Ultrasonic trigger GPIO number.
  * @param echo_pin Ultrasonic echo GPIO number, distinct from trig_pin.
  * @param servo_pin Servo GPIO number, distinct from both ultrasonic pins.
- * @return 0 on success, 1 for invalid pins or an unsupported system clock.
+ * @param timing Non-null timing configuration, copied during this call.
+ * At least one timing field must be nonzero. Travel time is rounded up and
+ * added to the settling margin. Startup assumes up to 180 degrees of travel
+ * because the physical position is unknown. A travel time of zero with a
+ * 1000 ms margin preserves the original, uncalibrated one-second wait.
+ * @return 0 on success, 1 for invalid pins/timing or unsupported system clock.
  * Initialise once and call obstacle_scan() on the same core.
  */
-int obstacle_init (int trig_pin, int echo_pin, int servo_pin);
+int obstacle_init (int trig_pin, int echo_pin, int servo_pin,
+                   const obstacle_servo_timing_t * timing);
 
 #endif /* OBSTACLE_H */

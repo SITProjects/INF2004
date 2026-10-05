@@ -8,6 +8,18 @@ set(CMAKE_C_STANDARD 11)
 
 pico_sdk_init()
 
+if(NOT PICO_CYW43_SUPPORTED)
+    message(FATAL_ERROR
+        "Vehicle firmware requires a Wi-Fi board. Configure a separate build "
+        "directory with -DPICO_BOARD=pico_w for the current hardware/simulator.")
+endif()
+
+if(NOT TARGET pico_cyw43_arch_lwip_threadsafe_background)
+    message(FATAL_ERROR
+        "Pico SDK Wi-Fi support is unavailable. Install the SDK's cyw43-driver "
+        "and lwip submodules before configuring this project.")
+endif()
+
 # Shared code and hardware drivers
 add_subdirectory(shared)
 add_subdirectory(drivers)
