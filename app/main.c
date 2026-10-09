@@ -10,6 +10,7 @@
 #include "obstacle.h"
 #include "hardware/irq.h"
 #include "connectivity.h"
+#include "credentials.h"
 
 static int init_modules (void);
 

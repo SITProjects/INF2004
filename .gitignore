@@ -1,3 +1,6 @@
 build
 *.cmake
 **/diagram.json
+
+# Local application credentials
+/app/credentials.h
