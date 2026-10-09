@@ -1,8 +1,8 @@
 # INF2004 Vehicle Controller
 
-Structure-only embedded C project. Source files contain file comments, their
-matching header include, and empty section markers. There are no functions,
-API declarations, algorithms, or hardware operations yet.
+Embedded C vehicle controller using the Raspberry Pi Pico SDK. The application
+runs obstacle scanning and Wi-Fi connection monitoring; other components remain
+placeholders.
 
 ## Repository layout
 
@@ -10,13 +10,14 @@ API declarations, algorithms, or hardware operations yet.
 app/
     CMakeLists.txt
     main.c / main.h
+    credentials.example.h
     vehicle_controller/
         vehicle_controller.c / vehicle_controller.h
 modules/
+    communication/
     motion/
     navigation/
     obstacle/
-    telemetry/
     terrain/
 drivers/
     CMakeLists.txt
@@ -24,6 +25,7 @@ drivers/
     gpio/
     imu/
     motor/
+    servo/
     ultrasonic/
     wifi/
 shared/
@@ -55,30 +57,53 @@ Install the commit hooks if they are not already installed:
 pre-commit install
 ```
 
-## Check the skeleton
+## Wi-Fi credentials
 
-The default build compiles the empty modules and application objects using C99.
-It requires a host C compiler and CMake; no Pico SDK is needed for this check.
-
-```sh
-cmake -S . -B build/skeleton
-cmake --build build/skeleton
-find app modules drivers shared templates -type f \
-    \( -name '*.c' -o -name '*.h' \) -exec clang-format --dry-run --Werror {} +
-```
-
-No executable or firmware is produced because `main()` is intentionally absent.
-After implementing the application, the reserved Pico firmware configuration is:
+Before building, copy the committed example header from the repository root:
 
 ```sh
-cmake -S . -B build/firmware -DBUILD_FIRMWARE=ON
-cmake --build build/firmware
+cp app/credentials.example.h app/credentials.h
 ```
 
-This requires `PICO_SDK_PATH` and the ARM toolchain. Select the intended board
-with `-DPICO_BOARD=<board>` when configuring firmware. Linking firmware will
-remain incomplete until the entry point is implemented. Wokwi paths refer to
-the future output in `build/firmware/`.
+If you already have `app/credentials.h`, edit it instead of overwriting it.
+Replace `your-network-name` and `your-network-password` with your Wi-Fi SSID
+and password. The current driver uses WPA2 authentication.
+
+`app/main.c` includes this local header and passes `WIFI_SSID` and
+`WIFI_PASSWORD` to `connectivity_init()`. Keep the actual credentials in
+`app/credentials.h`, which Git ignores; commit only the example header. A fresh
+checkout needs this setup before compilation. Credentials are compiled into
+firmware, so avoid sharing firmware containing private credentials.
+
+## Build and check
+
+The current firmware uses C11 and requires the Pico SDK and ARM toolchain.
+The Dev Container sets `PICO_SDK_PATH` to `/opt/pico-sdk`; outside the container,
+set it to your installed SDK, including its required submodules.
+
+For the application with Wi-Fi enabled, use a Raspberry Pi Pico W:
+
+```sh
+cmake -S . -B build/pico_w -DPICO_BOARD=pico_w
+cmake --build build/pico_w --parallel 2
+```
+
+Use a separate build directory when changing board or toolchain. The current
+Wi-Fi driver requires a board with a supported Wi-Fi chip; the plain Pico does
+not provide Wi-Fi. Outputs include `build/pico_w/vehicle_controller.uf2` and
+`build/pico_w/vehicle_controller.elf`.
+
+Check project C formatting with:
+
+```sh
+rg --files app modules drivers shared templates -g '*.c' -g '*.h' -0 |
+    xargs -0 clang-format --dry-run --Werror
+```
+
+USB stdio is enabled and UART stdio is disabled. The checked-in `wokwi.toml`
+expects firmware under `build/`; update its paths if using `build/pico_w/`.
+The simulator diagram does not currently wire the ultrasonic sensor or servo,
+so a successful build does not validate obstacle scanning or Wi-Fi behavior.
 
 ## Coding standard
 

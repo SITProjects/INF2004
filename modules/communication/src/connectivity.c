@@ -37,7 +37,7 @@ connectivity_init (const char * ssid, const char * password)
 {
     if ((state != CONNECTIVITY_STOPPED) || (ssid == NULL) || (password == NULL))
     {
-        return false;
+        return 1;
     }
     if (!wifi_init())
     {
