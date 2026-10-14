@@ -1,6 +1,7 @@
 add_subdirectory(barcode)
 add_subdirectory(gpio)
 add_subdirectory(imu)
+add_subdirectory(line_sensor)
 add_subdirectory(motor)
 add_subdirectory(servo)
 add_subdirectory(ultrasonic)
@@ -12,6 +13,7 @@ target_link_libraries(drivers INTERFACE
     barcode
     gpio
     imu
+    line_sensor
     motor
     servo
     ultrasonic

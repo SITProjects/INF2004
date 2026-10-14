@@ -14,6 +14,7 @@ add_subdirectory(drivers)
 
 
 # Modules
+add_subdirectory(modules/line_follow)
 add_subdirectory(modules/communication)
 add_subdirectory(modules/motion)
 add_subdirectory(modules/navigation)
