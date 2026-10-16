@@ -151,6 +151,89 @@
 #error "TERRAIN_CAR_*_SIGN must be 1 or -1"
 #endif
 
+/*
+ * Accelerometer gain per BOARD axis, from the six-side test: lay the
+ * board with each axis pointing up, then down, and use
+ * gain = 2 x 9.80665 / (reading up - reading down).
+ * Gains belong to the chip, not the mounting; redo the test only if the
+ * GY-511 board is replaced.
+ */
+#ifndef TERRAIN_GAIN_BOARD_X
+#define TERRAIN_GAIN_BOARD_X 0.981f
+#endif
+#ifndef TERRAIN_GAIN_BOARD_Y
+#define TERRAIN_GAIN_BOARD_Y 0.977f
+#endif
+#ifndef TERRAIN_GAIN_BOARD_Z
+#define TERRAIN_GAIN_BOARD_Z 0.995f
+#endif
+
+/*
+ * Level reference: the average reading, in car axes and m/s^2 with gains
+ * applied, of the car standing still on a floor checked to be flat.
+ * Boot calibration compares against it to decide whether the car is
+ * level. Record it again whenever the sensor is remounted.
+ * Current values: bench reading on a levelled surface (2026-10-16),
+ * before the sensor was mounted on the car.
+ */
+#ifndef TERRAIN_LEVEL_REF_X
+#define TERRAIN_LEVEL_REF_X (-0.125f)
+#endif
+#ifndef TERRAIN_LEVEL_REF_Y
+#define TERRAIN_LEVEL_REF_Y (0.917f)
+#endif
+#ifndef TERRAIN_LEVEL_REF_Z
+#define TERRAIN_LEVEL_REF_Z (8.247f)
+#endif
+
+/* Samples in one calibration attempt: 200 is 2 s at 100 Hz. */
+#ifndef TERRAIN_CALIB_SAMPLES
+#define TERRAIN_CALIB_SAMPLES 200u
+#endif
+
+#if TERRAIN_CALIB_SAMPLES < 1
+#error "TERRAIN_CALIB_SAMPLES must be at least 1"
+#endif
+
+/*
+ * Stillness: largest allowed (max - min) on any axis during an attempt,
+ * in m/s^2. Readings move in steps of about 0.16 m/s^2, so this allows
+ * about four steps of noise.
+ */
+#ifndef TERRAIN_CALIB_MAX_SPREAD_MPS2
+#define TERRAIN_CALIB_MAX_SPREAD_MPS2 0.6f
+#endif
+
+/*
+ * Stillness: largest allowed difference between the size of the average
+ * reading and the size of the level reference, in m/s^2. A bigger
+ * difference means the car was being pushed or lifted.
+ */
+#ifndef TERRAIN_CALIB_MAX_GRAVITY_ERR_MPS2
+#define TERRAIN_CALIB_MAX_GRAVITY_ERR_MPS2 0.5f
+#endif
+
+/*
+ * Largest allowed angle, in degrees, between the measured gravity
+ * direction and the level reference. Above it the car is not on level
+ * ground and calibration stops with NOT_LEVEL.
+ */
+#ifndef TERRAIN_LEVEL_MAX_DEG
+#define TERRAIN_LEVEL_MAX_DEG 2.0f
+#endif
+
+/*
+ * Failed terrain_update() calls in a row before the I2C bus and sensor
+ * are set up again. 10 is 100 ms at the 10 ms update rate.
+ */
+#ifndef TERRAIN_FAULT_RETRY_UPDATES
+#define TERRAIN_FAULT_RETRY_UPDATES 10u
+#endif
+
+#if TERRAIN_FAULT_RETRY_UPDATES < 1
+#error "TERRAIN_FAULT_RETRY_UPDATES must be at least 1"
+#endif
+
 /* Public function declarations. */
 
 #endif /* TERRAIN_CONFIG_H */
