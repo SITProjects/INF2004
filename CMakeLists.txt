@@ -14,6 +14,7 @@ add_subdirectory(drivers)
 
 
 # Modules
+add_subdirectory(modules/line_follow)
 add_subdirectory(modules/communication)
 add_subdirectory(modules/motion)
 add_subdirectory(modules/navigation)
@@ -49,3 +50,18 @@ pico_enable_stdio_uart(vehicle_controller 0)
 
 # Generate .uf2, .bin, .hex, etc.
 pico_add_extra_outputs(vehicle_controller)
+
+# Optional diagnostic firmware; does not change the vehicle application.
+option(BUILD_IR_SERIAL_TEST "Enable the standalone IR serial test target" OFF)
+if(BUILD_IR_SERIAL_TEST)
+    add_executable(line_sensor_calibration EXCLUDE_FROM_ALL
+        app/line_sensor_calibration/line_sensor_calibration.c
+    )
+    target_link_libraries(line_sensor_calibration PRIVATE
+        pico_stdlib
+        line_follow
+    )
+    pico_enable_stdio_usb(line_sensor_calibration 1)
+    pico_enable_stdio_uart(line_sensor_calibration 0)
+    pico_add_extra_outputs(line_sensor_calibration)
+endif()
