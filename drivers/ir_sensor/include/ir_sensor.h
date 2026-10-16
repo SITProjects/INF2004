@@ -28,7 +28,9 @@ typedef struct
 void ir_sensor_init (void);
 
 /**
- * @brief Read left, then right, using two blocking, unfiltered conversions.
+ * @brief Read left, then right, using blocking ADC conversions.
+ * @note Discard the first conversion after each channel selection and return
+ *       the second unchanged. Four conversions produce two unfiltered samples.
  * @pre Call ir_sensor_init() first; retain exclusive ADC access.
  * @return Raw ADC counts, not simultaneous samples or surface classifications.
  */

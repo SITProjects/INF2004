@@ -28,8 +28,11 @@ ir_sensor_reading_t
 ir_sensor_read (void)
 {
     adc_select_input(IR_SENSOR_LEFT_CHANNEL);
+    /* Discard the first conversion after switching ADC channels. */
+    (void)adc_read();
     uint16_t const left_raw = adc_read();
     adc_select_input(IR_SENSOR_RIGHT_CHANNEL);
+    (void)adc_read();
     uint16_t const right_raw = adc_read();
     ir_sensor_reading_t const reading = {
         .left_raw = left_raw,

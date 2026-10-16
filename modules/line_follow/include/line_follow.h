@@ -10,21 +10,32 @@
 
 /* Public types, constants, and macros. */
 
+/**
+ * @brief Navigation requests; this module does not operate the motors.
+ */
 typedef enum
 {
+    /** Both WHITE with alignment unknown; request line acquisition. */
     LINE_COMMAND_SEARCH = 0,
+    /** Both WHITE after the caller has established line alignment. */
     LINE_COMMAND_FORWARD,
+    /** Left BLACK and right WHITE; request steering left. */
     LINE_COMMAND_STEER_LEFT,
+    /** Left WHITE and right BLACK; request steering right. */
     LINE_COMMAND_STEER_RIGHT,
+    /** Sustained both BLACK; junction candidate, not confirmed geometry. */
     LINE_COMMAND_JUNCTION,
+    /** Both BLACK awaiting consecutive-sample confirmation; request stop. */
     LINE_COMMAND_STOP
 } line_command_t;
 
 /* Public function declarations. */
 
 /**
- * @brief Reset the module to UNKNOWN and clear junction confirmation.
- * @note State belongs to one sensor pair; calls must be serialized.
+ * @brief Reset line alignment to unknown and clear junction confirmation.
+ * @note Both WHITE returns SEARCH until line_follow_start_following() is
+ *       called. Sensor readings alone never establish alignment.
+ *       State belongs to one sensor pair; calls must be serialized.
  */
 void line_follow_init (void);
 
