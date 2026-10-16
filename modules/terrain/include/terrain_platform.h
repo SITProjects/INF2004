@@ -4,7 +4,7 @@
  *
  * Internal to the terrain module; other modules should not call it.
  *
- * Implemented by terrain_platform_pico.c for the Pico SDK build. Once the
+ * Implemented by terrain_platform.c for the Pico SDK build. Once the
  * uT-Kernel (mtk3) build is set up, a uT-Kernel implementation will be
  * added and this header shared by both, so they offer the same functions.
  *

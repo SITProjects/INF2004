@@ -2,7 +2,7 @@ add_library(imu STATIC
     src/imu.c
     # Pico SDK bus access. Switches to a uT-Kernel version once the RTOS
     # build is set up.
-    src/imu_bus_pico.c
+    src/imu_bus.c
 )
 
 target_include_directories(imu PUBLIC

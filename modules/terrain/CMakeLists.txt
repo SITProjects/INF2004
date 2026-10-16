@@ -4,7 +4,7 @@ add_library(terrain STATIC
     src/terrain_log.c
     # Pico SDK platform layer. Switches to a uT-Kernel version once the
     # RTOS build is set up.
-    src/terrain_platform_pico.c
+    src/terrain_platform.c
 )
 
 target_include_directories(terrain PUBLIC

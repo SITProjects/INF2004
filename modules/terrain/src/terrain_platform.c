@@ -1,5 +1,5 @@
 /**
- * @file terrain_platform_pico.c
+ * @file terrain_platform.c
  * @brief IMU clock, lock and text output through the Pico SDK.
  *
  * Implements terrain_platform.h for the Pico SDK (CMake) build.

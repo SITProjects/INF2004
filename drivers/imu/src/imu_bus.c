@@ -1,5 +1,5 @@
 /**
- * @file imu_bus_pico.c
+ * @file imu_bus.c
  * @brief IMU I2C bus access through the Pico SDK.
  *
  * Implements imu_bus.h for the Pico SDK (CMake) build. Every transfer

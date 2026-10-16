@@ -5,7 +5,7 @@
  * Uses fixed-width types only; uT-Kernel redefines size_t as a signed
  * type, so size_t must not appear in this interface.
  *
- * Implemented by imu_bus_pico.c for the Pico SDK build. Once the
+ * Implemented by imu_bus.c for the Pico SDK build. Once the
  * uT-Kernel (mtk3) build is set up, a uT-Kernel implementation will be
  * added and this header shared by both, so they offer the same functions.
  *
