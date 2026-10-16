@@ -1,11 +1,11 @@
 /**
- * @file line_sensor.h
+ * @file ir_sensor.h
  * @brief Raw analogue readings from two reflective IR line sensors.
  *
  */
 
-#ifndef LINE_SENSOR_H
-#define LINE_SENSOR_H
+#ifndef IR_SENSOR_H
+#define IR_SENSOR_H
 
 /* Public includes. */
 #include <stdint.h>
@@ -16,7 +16,7 @@ typedef struct
 {
     uint16_t left_raw;  /**< Left sensor (GP26), 0 to 4095 ADC counts. */
     uint16_t right_raw; /**< Right sensor (GP27), 0 to 4095 ADC counts. */
-} line_sensor_reading_t;
+} ir_sensor_reading_t;
 
 /* Public function declarations. */
 
@@ -25,13 +25,13 @@ typedef struct
  * @note Requires exclusive access to the shared ADC during initialization
  *       and reads. Concurrent users must serialize the whole operation.
  */
-void line_sensor_init (void);
+void ir_sensor_init (void);
 
 /**
  * @brief Read left, then right, using two blocking, unfiltered conversions.
- * @pre Call line_sensor_init() first; retain exclusive ADC access.
+ * @pre Call ir_sensor_init() first; retain exclusive ADC access.
  * @return Raw ADC counts, not simultaneous samples or surface classifications.
  */
-line_sensor_reading_t line_sensor_read (void);
+ir_sensor_reading_t ir_sensor_read (void);
 
-#endif /* LINE_SENSOR_H */
+#endif /* IR_SENSOR_H */

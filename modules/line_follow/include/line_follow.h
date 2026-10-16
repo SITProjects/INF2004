@@ -6,7 +6,7 @@
 #ifndef LINE_FOLLOW_H
 #define LINE_FOLLOW_H
 
-#include "line_sensor.h"
+#include "ir_sensor.h"
 
 /* Public types, constants, and macros. */
 
@@ -16,32 +16,50 @@ typedef enum
     LINE_COMMAND_FORWARD,
     LINE_COMMAND_STEER_LEFT,
     LINE_COMMAND_STEER_RIGHT,
-    LINE_COMMAND_JUNCTION
+    LINE_COMMAND_JUNCTION,
+    LINE_COMMAND_STOP
 } line_command_t;
 
 /* Public function declarations. */
 
 /**
- * @brief Reset the module to SEARCHING state.
+ * @brief Reset the module to UNKNOWN and clear junction confirmation.
  * @note State belongs to one sensor pair; calls must be serialized.
  */
 void line_follow_init (void);
+
+/**
+ * @brief Enter FOLLOWING after the caller has established line alignment.
+ * @pre Call line_follow_init() first; serialize with all other module calls.
+ * @note This records the caller's decision; it does not detect alignment.
+ *       A future acquisition controller must decide when to call it. Do not
+ *       call solely because one or more sensor samples contain BLACK.
+ *       Repeated calls are harmless and preserve junction confirmation.
+ */
+void line_follow_start_following (void);
 
 /**
  * @brief Convert IR sensor readings into a navigation decision.
  *
  * @pre Call line_follow_init() before the first update or to restart seeking.
  * @param reading Left and right ADC counts, each in the range 0 to 4095.
- * @note Counts >= 700 mean BLACK; lower counts mean WHITE. Any BLACK
- *       enters FOLLOWING. Left-only BLACK steers left; right-only BLACK
- *       steers right; both BLACK returns JUNCTION without confirmation.
- *       Both WHITE returns SEARCH in SEARCHING, or FORWARD in FOLLOWING.
- *       FOLLOWING assumes the line is between the spaced sensors; it cannot
- *       distinguish that condition from a lost line. Only init resets state.
- *       No motors are controlled.
+ * @note Counts >= 700 mean BLACK; lower counts mean WHITE. Left-only BLACK
+ *       steers left and right-only BLACK steers right in either state.
+ *       Sensor readings never switch UNKNOWN to FOLLOWING automatically.
+ *       Both BLACK returns STOP for the first two consecutive samples, then
+ *       JUNCTION while both remain BLACK. Any non-BB sample resets this count.
+ *       JUNCTION indicates sustained black coverage, not confirmed geometry.
+ *       Both WHITE returns SEARCH in UNKNOWN, or FORWARD in FOLLOWING.
+ *       SEARCH requests acquisition; this module implements no search motion.
+ *       FOLLOWING records caller-established alignment; both WHITE can still
+ *       mean centred or lost. Call init to reset the state to UNKNOWN.
+ *       Call once per fresh reading pair at a regular sampling interval.
+ *       Three BB samples span two intervals (about 40 ms at 20 ms cadence);
+ *       confirmation counts require validation at the actual control rate.
+ *       Commands, including STOP, are requests only; no motors are controlled.
  * @return Navigation decision for the motion controller.
  */
-line_command_t line_follow_update (line_sensor_reading_t reading);
+line_command_t line_follow_update (ir_sensor_reading_t reading);
 
 /**
  * @brief Get a printable name for a line command.

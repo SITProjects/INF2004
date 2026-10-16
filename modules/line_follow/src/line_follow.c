@@ -6,32 +6,42 @@
 #include "line_follow.h"
 
 #include <stdbool.h>
+#include <stdint.h>
 
 /* Private types, constants, and macros. */
 
 #define LEFT_BLACK_THRESHOLD 700u
 #define RIGHT_BLACK_THRESHOLD 700u
+#define JUNCTION_CONFIRM_SAMPLES 3u
 
 typedef enum
 {
-    LINE_FOLLOW_SEARCHING = 0,
+    LINE_FOLLOW_UNKNOWN = 0,
     LINE_FOLLOW_FOLLOWING
 } line_follow_state_t;
 
 /* Static data. */
 
-static line_follow_state_t state = LINE_FOLLOW_SEARCHING;
+static line_follow_state_t state = LINE_FOLLOW_UNKNOWN;
+static uint8_t junction_sample_count;
 
 /* Public function definitions. */
 
 void
 line_follow_init (void)
 {
-    state = LINE_FOLLOW_SEARCHING;
+    state = LINE_FOLLOW_UNKNOWN;
+    junction_sample_count = 0u;
+}
+
+void
+line_follow_start_following (void)
+{
+    state = LINE_FOLLOW_FOLLOWING;
 }
 
 line_command_t
-line_follow_update (line_sensor_reading_t reading)
+line_follow_update (ir_sensor_reading_t reading)
 {
     bool const b_left_black = (reading.left_raw >= LEFT_BLACK_THRESHOLD);
 
@@ -39,14 +49,23 @@ line_follow_update (line_sensor_reading_t reading)
 
     line_command_t command;
 
-    if (b_left_black || b_right_black)
+    if (b_left_black && b_right_black)
     {
-        state = LINE_FOLLOW_FOLLOWING;
+        if (junction_sample_count < JUNCTION_CONFIRM_SAMPLES)
+        {
+            ++junction_sample_count;
+        }
+    }
+    else
+    {
+        junction_sample_count = 0u;
     }
 
     if (b_left_black && b_right_black)
     {
-        command = LINE_COMMAND_JUNCTION;
+        command = (junction_sample_count >= JUNCTION_CONFIRM_SAMPLES)
+                      ? LINE_COMMAND_JUNCTION
+                      : LINE_COMMAND_STOP;
     }
     else if (b_left_black)
     {
@@ -56,7 +75,7 @@ line_follow_update (line_sensor_reading_t reading)
     {
         command = LINE_COMMAND_STEER_RIGHT;
     }
-    else if (LINE_FOLLOW_SEARCHING == state)
+    else if (LINE_FOLLOW_UNKNOWN == state)
     {
         command = LINE_COMMAND_SEARCH;
     }
@@ -93,6 +112,10 @@ line_follow_command_name (line_command_t command)
 
         case LINE_COMMAND_JUNCTION:
             p_name = "JUNCTION";
+            break;
+
+        case LINE_COMMAND_STOP:
+            p_name = "STOP";
             break;
 
         default:
