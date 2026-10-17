@@ -9,10 +9,8 @@
   "customizations": {
     "vscode": {
       "extensions": [
-        "ms-vscode.cmake-tools",
         "ms-vscode.cpptools",
         "ms-python.python",
-        "Wokwi.wokwi-vscode",
         "openai.chatgpt",
         "esbenp.prettier-vscode",
         "pre-commit.com-vscode"
@@ -27,8 +25,7 @@
         },
         "[cpp]": {
           "editor.defaultFormatter": "ms-vscode.cpptools"
-        },
-        "cmake.configureOnOpen": true
+        }
       }
     }
   },

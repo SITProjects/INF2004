@@ -1,113 +1,307 @@
-# INF2004 Vehicle Controller
+# INF2004 Vehicle Controller — micro T-Kernel 3.0 on Raspberry Pi Pico W
 
-Embedded C vehicle controller using the Raspberry Pi Pico SDK. The application
-runs obstacle scanning and Wi-Fi connection monitoring; other components remain
-placeholders.
+The team's vehicle controller, built on the course's micro T-Kernel 3.0
+project template: the kernel runs on **both cores** of the Pico W's RP2040,
+with a USB serial console and the WiFi driver built in.
 
-## Repository layout
+## INF2004 at a glance
 
-```text
-app/
-    CMakeLists.txt
-    main.c / main.h
-    credentials.example.h
-    vehicle_controller/
-        vehicle_controller.c / vehicle_controller.h
-modules/
-    communication/
-    motion/
-    navigation/
-    obstacle/
-    terrain/
-drivers/
-    CMakeLists.txt
-    barcode/
-    gpio/
-    imu/
-    motor/
-    servo/
-    ultrasonic/
-    wifi/
-shared/
-    CMakeLists.txt
-    include/shared.h
-    src/shared.c
-templates/
-    module.c / module.h
-docs/
-    architecture/
-    hardware/
-    interfaces/
-    coding_standard.md
-```
+Five subsystems, one folder each in `app_program/` (owners, pins,
+priorities and peripherals are in **`TEAM.md`**):
 
-Every feature module and individual driver contains `CMakeLists.txt`,
-`include/<name>.h`, and `src/<name>.c`. Public include paths and dependencies
-are scoped to CMake targets.
+| Subsystem | Feature | Hardware | Task |
+|---|---|---|---|
+| `obstacle/` | Obstacle detection: scans left and right when blocked | ultrasonic sensor GP2/GP3, servo GP12 | `obstacle_scan_task`, core 0 |
+| `motion/` | Motion: open-loop differential drive, held braked for now | motors GP8–GP11 | none yet |
+| `line_follow/` | Line following: IR readings → line commands, printed every 200 ms (motors off) | IR sensors GP26/GP27 (ADC) | `line_follow_task` |
+| `terrain/` | Terrain: GY-511 accelerometer, calibration at power-up | I2C0 GP4/GP5 (Grove 3) | `terrain_task` |
+| `communication/` | Communication: Wi-Fi connection status | Pico W radio (kernel-owned) | `communication_task` |
 
-## Development environment
+The subsystems run independently for now; the interfaces between them (for
+example obstacle results and line commands driving the motors) are still to
+be designed and recorded in `TEAM.md` section 5.
 
-Open the repository in VS Code and select **Reopen in Container**. The supplied
-Dev Container provides CMake, the ARM compiler, Pico SDK, clang-format, and
-pre-commit. Work inside the container for consistent tooling.
+Before the first build, create your local Wi-Fi settings (section 2.2). A
+plain `make` builds with `NET=lwip`, so the Pico joins that network at
+power-up.
 
-Install the commit hooks if they are not already installed:
+Coding standard: [BARR-C:2018](https://barrgroup.com/sites/default/files/barr_c_coding_standard_2018.pdf)
+and [`docs/coding_standard.md`](docs/coding_standard.md) for `app_program/`;
+the kernel keeps its own upstream style. The Dev Container in `.devcontainer/`
+supplies the compiler, Pico SDK, clang-format and pre-commit.
 
-```sh
-pre-commit install
-```
+---
 
-## Wi-Fi credentials
+You need a **Raspberry Pi Pico W**, a USB cable, and a computer running
+macOS, Linux, or Windows with **WSL (Ubuntu)**. On Windows, run every
+command below inside the WSL Ubuntu terminal.
 
-Before building, copy the committed example header from the repository root:
+---
+
+## 1. Set up the Pico C SDK and the compiler
+
+You need two separate things:
+
+| What | Why | Where it comes from |
+|---|---|---|
+| **Pico C SDK** | USB, WiFi and network stack source code | `git clone` (step 1.2) |
+| **Arm GNU Toolchain** (`arm-none-eabi-gcc`) | the compiler | a separate download (step 1.3) |
+
+> ⚠️ **The SDK does NOT include the compiler.** You must install the compiler
+> on its own and put its `bin` folder on your `PATH` (step 1.4).
+
+The Dev Container already has both; inside it, skip to section 2.
+
+**1.1 Install the basic tools: git, make and a host C++ compiler**
 
 ```sh
-cp app/credentials.example.h app/credentials.h
+# macOS
+xcode-select --install
+
+# Linux / WSL (Ubuntu)
+sudo apt update && sudo apt install -y git make g++
 ```
 
-If you already have `app/credentials.h`, edit it instead of overwriting it.
-Replace `your-network-name` and `your-network-password` with your Wi-Fi SSID
-and password. The current driver uses WPA2 authentication.
-
-`app/main.c` includes this local header and passes `WIFI_SSID` and
-`WIFI_PASSWORD` to `connectivity_init()`. Keep the actual credentials in
-`app/credentials.h`, which Git ignores; commit only the example header. A fresh
-checkout needs this setup before compilation. Credentials are compiled into
-firmware, so avoid sharing firmware containing private credentials.
-
-## Build and check
-
-The current firmware uses C11 and requires the Pico SDK and ARM toolchain.
-The Dev Container sets `PICO_SDK_PATH` to `/opt/pico-sdk`; outside the container,
-set it to your installed SDK, including its required submodules.
-
-For the application with Wi-Fi enabled, use a Raspberry Pi Pico W:
+**1.2 Download the Pico C SDK** (any folder works; this guide uses `~/pico`)
 
 ```sh
-cmake -S . -B build/pico_w -DPICO_BOARD=pico_w
-cmake --build build/pico_w --parallel 2
+mkdir -p ~/pico && cd ~/pico
+git clone --branch 2.2.0 https://github.com/raspberrypi/pico-sdk.git
+cd pico-sdk
+git submodule update --init lib/tinyusb lib/cyw43-driver lib/lwip
 ```
 
-Use a separate build directory when changing board or toolchain. The current
-Wi-Fi driver requires a board with a supported Wi-Fi chip; the plain Pico does
-not provide Wi-Fi. Outputs include `build/pico_w/vehicle_controller.uf2` and
-`build/pico_w/vehicle_controller.elf`.
+The `submodule` line is required: it downloads the USB, WiFi and network
+(lwIP) drivers. (SDK 2.3.0 has also been tested and works.)
 
-Check project C formatting with:
+**1.3 Install the Arm GNU Toolchain (the compiler)**
+
+- **macOS / Windows (WSL) / Linux:** download from
+  <https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads>.
+  Pick the **AArch32 bare-metal target (arm-none-eabi)** package for your
+  computer. For WSL, choose the **Linux x86_64** `.tar.xz`.
+  Extract it, e.g. to `~/tools/arm-gnu-toolchain-<version>/`.
+- **Linux / WSL shortcut:** `sudo apt install -y gcc-arm-none-eabi`
+  installs it straight onto your PATH. If you use this, skip the PATH line in 1.4.
+
+Find the folder that contains `arm-none-eabi-gcc`. It is the toolchain's
+**`bin`** folder, e.g. `~/tools/arm-gnu-toolchain-15.3.rel1/bin`.
+
+**1.4 Tell your shell where the compiler and SDK are**
+
+Add these two lines to the end of `~/.zshrc` (macOS) or `~/.bashrc` (Linux/WSL),
+**changing both paths to match your computer**:
 
 ```sh
-rg --files app modules drivers shared templates -g '*.c' -g '*.h' -0 |
-    xargs -0 clang-format --dry-run --Werror
+export PATH="$HOME/tools/arm-gnu-toolchain-15.3.rel1/bin:$PATH"   # folder that contains arm-none-eabi-gcc
+export PICO_SDK_PATH="$HOME/pico/pico-sdk"                         # the SDK from step 1.2
 ```
 
-USB stdio is enabled and UART stdio is disabled. The checked-in `wokwi.toml`
-expects firmware under `build/`; update its paths if using `build/pico_w/`.
-The simulator diagram does not currently wire the ultrasonic sensor or servo,
-so a successful build does not validate obstacle scanning or Wi-Fi behavior.
+Open a **new** terminal, then check both:
 
-## Coding standard
+```sh
+arm-none-eabi-gcc --version     # must print a version, not "command not found"
+ls $PICO_SDK_PATH               # must list the SDK files
+```
 
-Use [BARR-C:2018](https://barrgroup.com/sites/default/files/barr_c_coding_standard_2018.pdf)
-and the [project coding guide](docs/coding_standard.md). Start new C modules
-from [the templates](templates/). Editor settings and the formatting hook cover
-the supported style rules; future code still needs semantic review.
+If `arm-none-eabi-gcc` is "not found", your `PATH` does not point to the
+toolchain's `bin` folder. Fix that before going further.
+
+---
+
+## 2. Clone this repo and build the `.uf2` file
+
+**2.1 Clone your project**
+
+```sh
+cd ~/pico
+git clone <URL-of-this-repo> my-project
+cd my-project
+```
+
+**2.2 Set your Wi-Fi network**
+
+```sh
+cp config/wifi_secrets.example.h config/wifi_secrets.h
+```
+
+Edit `config/wifi_secrets.h` and replace `your-network-name` and
+`your-network-password` with your network's name and password. The file is
+ignored by git: never commit it. The credentials are compiled into the
+firmware, so do not share a `.uf2` built with private credentials. To build
+without joining a network, use `make NET=none`.
+
+**2.3 Build**
+
+```sh
+cd build_make
+make -j8
+```
+
+A successful build ends with a line like
+`tools/elf2uf2 mtk3pico_smp1_usb_cdc_wifi_lwip.elf mtk3pico_smp1_usb_cdc_wifi_lwip.uf2`.
+Your firmware is **`build_make/mtk3pico_smp1_usb_cdc_wifi_lwip.uf2`**.
+
+If `make` stops with an error, it tells you which one is wrong:
+`arm-none-eabi-gcc not found` means fix `PATH`,
+`PICO_SDK_PATH is not set` means fix `PICO_SDK_PATH` (step 1.4), and
+`config/wifi_secrets.h not found` means do step 2.2.
+
+To build a single-core, UART-only or test version, see section 3.
+
+**2.4 Flash it onto the Pico W**
+
+1. Hold the **BOOTSEL** button and plug the Pico W into USB, then release.
+   A drive called **RPI-RP2** appears.
+2. Copy the `.uf2` file onto that drive. On WSL, run `explorer.exe .` in
+   `build_make` to open the folder in Windows. The Pico reboots by itself.
+
+**2.5 See the output**
+
+Open the Pico's USB serial port at 115200 baud:
+
+```sh
+screen /dev/tty.usbmodem* 115200      # macOS   (quit: Ctrl-A then K)
+screen /dev/ttyACM0 115200            # Linux
+```
+
+On Windows, use PuTTY or the VS Code *Serial Monitor* on the new COM port.
+You should see the kernel banner, one start-up line per subsystem, then each
+subsystem's reports: scan results (`obstacle: CLEAR, angle 90`), IR readings
+every 200 ms (`Left AO: … | Right AO: … | Command: …`), the IMU calibration
+state, and `Wi-Fi connected` with the IP address.
+
+**2.6 Write your own code**
+
+Your code lives in **`app_program/`**. Every `.c` file there, and in its
+subfolders, is compiled automatically.
+
+- **`app_main.c` → `usermain()` is where the program starts.** It first calls
+  every subsystem's `<name>_init()` (create kernel objects), then every
+  `<name>_start()` (start tasks). Read its comments first.
+- **One folder per student:** `app_program/obstacle/`, `motion/`,
+  `line_follow/`, `terrain/`, `communication/`.
+- `<name>.h` is that subsystem's public interface: the object IDs and
+  data formats the other subsystems may use. `<name>.c` holds
+  `<name>_init()` and `<name>_start()`; `<name>_test.c` holds the tests.
+- `app.h` holds the definitions shared by the whole team.
+- **Drivers go in your subsystem folder too**, as a `drv_<name>.c` /
+  `drv_<name>.h` pair, e.g. `obstacle/drv_ultrasonic.c`. They are compiled
+  automatically. Do not add drivers under `device/`: that folder holds the
+  kernel's own serial, I2C and ADC drivers, and adding to it means editing
+  kernel and makefile files shared by the whole team. `line_follow` (ADC)
+  and `terrain` (I2C) use those kernel drivers through `tk_opn_dev()`.
+- Start new files from `templates/` (see `docs/coding_standard.md`).
+
+**Working as a team:** record owners, pins, priorities and the interfaces
+between subsystems in **`TEAM.md`**, and record every test in
+**`testing/`** (see `testing/README.md`). `make TEST=1` builds a test image
+that runs all the subsystem tests at power-up. Short videos of tests and
+demos are shared as unlisted YouTube links, listed in **`videos/`**.
+
+Pins: use **GP0–GP22 and GP26–GP28**. GP0/GP1 are free unless your team
+builds with `CRASH_REPORT=1` (section 3), which needs them. Never use
+GP23/GP24/GP25/GP29: they are wired to the Pico W radio. The Pico W's
+on-board LED is also on the radio, so use an external LED instead.
+
+After editing, run `make -j8` again in `build_make` and copy the new `.uf2`.
+
+---
+
+## 3. Build options: `SMP`, `CONSOLE`, `WIFI`, `NET`, `TEST`, `CRASH_REPORT`
+
+`make` on its own uses the defaults. To build differently, put options
+after `make`. They can be combined in any order:
+
+```sh
+make -j8                          # defaults: SMP=1 CONSOLE=usb_cdc WIFI=cyw43 NET=lwip TEST=0 CRASH_REPORT=0
+make SMP=0 -j8                    # single-core build
+make NET=none -j8                 # radio on, but no network stack: does not join Wi-Fi
+make CONSOLE=uart WIFI=none -j8   # no USB console, radio off (no Pico SDK needed)
+make TEST=1 -j8                   # firmware with the subsystem self-tests
+make CRASH_REPORT=1 -j8           # also see crash reports, on GP0/GP1 (uses those pins)
+```
+
+To set several options at once, list them all, separated by spaces. For
+example, to track down a crash in the test build while running on one core only:
+
+```sh
+make SMP=0 TEST=1 CRASH_REPORT=1 -j8
+#  -> build_make/mtk3pico_smp0_usb_cdc_wifi_lwip_crash_test.uf2
+```
+
+Any option you leave out keeps its default (here `CONSOLE=usb_cdc`,
+`WIFI=cyw43` and `NET=lwip`). Options are not remembered: give them on every
+`make`, as the next plain `make` goes back to the defaults.
+
+| Option | Values (**default**) | What it does | Image name | C macro your code can test |
+|---|---|---|---|---|
+| `SMP` | `0`, **`1`** | `1` runs the kernel on both RP2040 cores; `0` uses core 0 only | `smp1` / `smp0` | `TK_SUPPORT_SMP` (1 or 0) |
+| `CONSOLE` | **`usb_cdc`**, `uart` | where `tm_printf` output goes. `usb_cdc` = USB cable; `uart` = UART0 only (GP0 TX / GP1 RX, needs a USB-serial adapter) | `_usb_cdc` / `_uart` | `TM_CONSOLE_USB_CDC` |
+| `WIFI` | **`cyw43`**, `none` | `cyw43` powers up the Pico W radio and its driver task; `none` leaves the radio off | `_wifi` / *(nothing)* | `TM_WIFI_CYW43` |
+| `NET` | **`lwip`** (with `WIFI=cyw43`), `none` | `lwip` adds the lwIP network stack to the radio task, which joins the network in `config/wifi_secrets.h` (needs that file). Defaults to `none` when `WIFI=none` | `_lwip` / *(nothing)* | `TM_NET_LWIP` |
+| `TEST` | **`0`**, `1` | `1` compiles every `<name>_test.c` and runs the tests at power-up | `_test` / *(nothing)* | `APP_TEST` (1 or 0) |
+| `CRASH_REPORT` | **`0`**, `1` | `1` also copies the console to UART0 on **GP0 (TX) / GP1 (RX)**, 115200 baud, so you can see the last messages and the kernel's crash report (see below). **Uses GP0/GP1.** `CONSOLE=uart` always does this. | `_crash` / *(nothing)* | `TM_CONSOLE_UART` (1 or 0) |
+
+**Why `CRASH_REPORT` exists.** USB output is not sent the moment you call
+`tm_printf`: it waits in a buffer until the kernel's USB task sends it. If the
+program crashes, no task runs again, so the last messages and the kernel's
+crash report never reach your USB terminal. The terminal just goes quiet.
+UART output *is* sent at once, even inside the crash handler. So when you
+need to know why the Pico crashed or froze, build with `CRASH_REPORT=1`,
+connect a USB-serial adapter (adapter RX → GP0, adapter GND → GND), and read
+it at 115200 baud. Normal `tm_printf` output on USB works the same with
+either setting. If a subsystem has claimed GP0/GP1 in `TEAM.md`, unplug that
+hardware before using `CRASH_REPORT=1`.
+
+The options are part of the image name, e.g.
+`mtk3pico_smp1_usb_cdc_wifi_lwip_test.uf2`, so you can always tell which build
+you are flashing. Switching options needs no `make clean`: the makefile
+notices and recompiles everything.
+
+Using an option in C code:
+
+```c
+#if TK_SUPPORT_SMP
+    ctsk.tskatr |= TA_ASSPRC; /* Core affinity only exists on the dual-core build. */
+#endif
+
+#if APP_TEST
+    /* Code that only exists in the test build. */
+#endif
+```
+
+### Where the options live in the makefile
+
+All of them are handled in **`build_make/pico_rp2040.mk`**. To find each piece, search the file for the
+names in the left column (e.g. `grep -n "TEST" build_make/pico_rp2040.mk`).
+Each option goes through the same steps:
+
+| Step | What to look for | Example for `TEST` |
+|---|---|---|
+| 1. Default value | `NAME ?= value` near the top of the file | `TEST ?= 0` |
+| 2. Allowed values | an `$(error Unknown ...)` check just below it | `$(error Unknown TEST '$(TEST)'; use 0 or 1)` |
+| 3. Image-name suffix | `NAME_SUFFIX :=` and the `EXE_FILE :=` line | `TEST_SUFFIX := _test` |
+| 4. C macro for the code | a `CFLAGS += -D...` line | `CFLAGS += -DAPP_TEST=$(TEST)` |
+| 5. Rebuild on change | the `PROFILE_ID :=` line | `...-test$(TEST)` |
+| 6. Extra source files (`CONSOLE`, `WIFI`, `NET` only) | an `ifeq ($(CONSOLE),usb_cdc)`, `ifeq ($(WIFI),cyw43)` or `ifeq ($(NET),lwip)` block that adds the USB/radio/network files and SDK include paths | — |
+
+- **Changing a default:** edit the `?=` line from step 1, e.g.
+  `CONSOLE ?= uart`. Every `make` without that option then uses the new value.
+- **Adding your own option** (say `DEBUG=1` to turn on extra prints): copy
+  how `TEST` is done. Add steps 1 to 5 next to the `TEST` lines, then
+  use `#if APP_DEBUG` in your code. **Step 5 matters:** without it, switching
+  the option can quietly link files that were compiled with the old setting.
+- **Kernel settings** such as the maximum number of tasks, semaphores or
+  mailboxes are not make options. They are in `config/config.h` (`CNF_MAX_...`).
+  Which kernel device drivers start at boot is in `config/config_device.h`.
+
+The makefile also has `MQTT=1` (MQTT over the `NET=lwip` stack). It reads the
+broker address and topic from the same `config/wifi_secrets.h`. This guide
+does not cover it.
+
+---
+
+*micro T-Kernel 3.0 © Ken Sakamura / TRON Forum, distributed under the
+T-License 2.2. This dual-core RP2040 port is derived from the official
+μT-Kernel 3.0 BSP (`tron-forum/mtk3_bsp`, branch `pico_rp2040`).*
