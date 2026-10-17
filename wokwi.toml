@@ -1,4 +1,0 @@
-[wokwi]
-version = 1
-firmware = "build/vehicle_controller.uf2"
-elf = "build/vehicle_controller.elf"

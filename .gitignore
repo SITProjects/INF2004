@@ -1,6 +1,16 @@
 build
-*.cmake
-**/diagram.json
 
-# Local application credentials
-/app/credentials.h
+# Local Wi-Fi credentials; copy config/wifi_secrets.example.h
+config/wifi_secrets.h
+
+# Build profile marker (build_make/.gitignore covers the other outputs)
+build_make/.build_profile
+
+# Videos are shared as unlisted YouTube links, never committed
+# (videos/README.md)
+*.mp4
+*.mov
+*.m4v
+*.avi
+*.mkv
+*.webm

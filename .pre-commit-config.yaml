@@ -22,4 +22,4 @@ repos:
         name: Check C formatting (BARR-C style subset)
         entry: clang-format --dry-run --Werror
         language: system
-        files: '^(app|drivers|modules|shared|templates)/.*\.(c|h)$'
+        files: '^(app_program|templates)/.*\.(c|h)$'
