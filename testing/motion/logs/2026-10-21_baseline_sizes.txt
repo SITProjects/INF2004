@@ -1,0 +1,12 @@
+== Section sizes (bytes)
+   text	   data	    bss	    dec	    hex	filename
+    496	      0	     32	    528	    210	build_make/mtkernel_3/app_program/motion/drv_motor.o
+    127	      0	      0	    127	     7f	build_make/mtkernel_3/app_program/motion/motion.o
+    404	      0	      1	    405	    195	build_make/mtkernel_3/app_program/motion/motion_drive.o
+
+== Static RAM symbols (size in hex bytes, b = file-local, B = global)
+drv_motor.o 00000000 00000002 b pwm_full
+drv_motor.o 00000000 00000002 b pwm_wrap
+drv_motor.o 00000000 00000004 b pwm_divider
+drv_motor.o 00000000 00000018 b motors
+motion_drive.o 00000000 00000001 b b_initialised

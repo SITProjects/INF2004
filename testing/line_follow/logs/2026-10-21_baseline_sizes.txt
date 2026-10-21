@@ -1,0 +1,12 @@
+== Section sizes (bytes)
+   text	   data	    bss	    dec	    hex	filename
+    173	      0	      5	    178	     b2	build_make/mtkernel_3/app_program/line_follow/drv_ir_sensor.o
+    233	      0	      2	    235	     eb	build_make/mtkernel_3/app_program/line_follow/line_command.o
+    405	      0	      4	    409	    199	build_make/mtkernel_3/app_program/line_follow/line_follow.o
+
+== Static RAM symbols (size in hex bytes, b = file-local, B = global)
+drv_ir_sensor.o 00000000 00000001 b b_adc_open
+drv_ir_sensor.o 00000000 00000004 b adc_dd
+line_command.o 00000000 00000001 b junction_sample_count
+line_command.o 00000000 00000001 b state
+line_follow.o 00000000 00000004 B line_follow_tid_sense
