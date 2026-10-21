@@ -1,0 +1,8 @@
+== Section sizes (bytes)
+   text	   data	    bss	    dec	    hex	filename
+     83	      0	      4	     87	     57	build_make/mtkernel_3/app_program/communication/communication.o
+    338	      0	      1	    339	    153	build_make/mtkernel_3/app_program/communication/connectivity.o
+
+== Static RAM symbols (size in hex bytes, b = file-local, B = global)
+communication.o 00000000 00000004 B communication_tid_wifi
+connectivity.o 00000000 00000001 b state

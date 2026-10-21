@@ -1,0 +1,27 @@
+== Section sizes (bytes)
+   text	   data	    bss	    dec	    hex	filename
+    636	      0	      7	    643	    283	build_make/mtkernel_3/app_program/terrain/drv_imu.o
+    309	      0	      5	    314	    13a	build_make/mtkernel_3/app_program/terrain/drv_imu_bus.o
+    326	      0	      4	    330	    14a	build_make/mtkernel_3/app_program/terrain/terrain.o
+   1684	      0	    343	   2027	    7eb	build_make/mtkernel_3/app_program/terrain/terrain_monitor.o
+    111	      0	      4	    115	     73	build_make/mtkernel_3/app_program/terrain/terrain_platform.o
+   1060	      0	      0	   1060	    424	build_make/mtkernel_3/app_program/terrain/terrain_process.o
+
+== Static RAM symbols (size in hex bytes, b = file-local, B = global)
+drv_imu_bus.o 00000000 00000001 b b_bus_open
+drv_imu_bus.o 00000000 00000004 b bus_dd
+drv_imu.o 00000000 00000001 b accel_addr
+drv_imu.o 00000000 00000001 b b_accel_fifo
+drv_imu.o 00000000 00000001 b b_accel_ready
+drv_imu.o 00000000 00000004 b accel_scale_mps2
+terrain_monitor.o 00000000 00000001 b b_ready
+terrain_monitor.o 00000000 00000001 b b_recal_request
+terrain_monitor.o 00000000 00000001 b calib_state
+terrain_monitor.o 00000000 00000004 b fail_streak
+terrain_monitor.o 00000000 0000000c b bias
+terrain_monitor.o 00000000 00000028 b calib_acc
+terrain_monitor.o 00000000 0000002c b calib_info
+terrain_monitor.o 00000000 00000030 b latest
+terrain_monitor.o 00000000 000000c0 b buf.0
+terrain.o 00000000 00000004 B terrain_tid_monitor
+terrain_platform.o 00000000 00000004 b terrain_lock
