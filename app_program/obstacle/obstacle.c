@@ -9,6 +9,7 @@
 
 #include "obstacle.h"
 #include "obstacle_scan.h"
+#include <stdbool.h>
 
 /* Private types, constants, and macros. */
 
@@ -16,6 +17,11 @@
 #define SCAN_PERIOD_MS 10
 
 /* Static data. */
+
+/* Preserve the one-second wait until travel and settling are measured. */
+static const obstacle_servo_timing_t servo_timing = {
+    .travel_ms_per_60_degrees = 0u, .settle_margin_ms = 1000u};
+
 ID obstacle_tid_scan;
 
 /* Private function declarations. */
@@ -47,23 +53,35 @@ scan_task (INT stacd, void * p_exinf)
     (void)p_exinf;
 
     if (obstacle_scan_init(OBSTACLE_TRIG_PIN, OBSTACLE_ECHO_PIN,
-                           OBSTACLE_SERVO_PIN) != 0)
+                           OBSTACLE_SERVO_PIN, &servo_timing) != 0)
     {
         tm_printf((UB *)"obstacle: failed to initialize obstacle scanning\n");
         tk_ext_tsk();
     }
     tm_printf((UB *)"obstacle: scanning started\n");
 
-    /* An impossible angle, so the first result is always printed. */
-    obstacle_scan_result_t last = {OBSTACLE_SCANNING, -2};
+    uint32_t last_sequence = 0u;
     for (;;)
     {
         obstacle_scan_result_t scan = obstacle_scan_update();
-        if ((scan.status != last.status) || (scan.angle != last.angle))
+        bool new_result = scan.sequence != last_sequence;
+        last_sequence = scan.sequence;
+        if (new_result)
         {
             tm_printf((UB *)"obstacle: %s, angle %d\n",
-                      obstacle_scan_status_name(scan.status), scan.angle);
-            last = scan;
+                      obstacle_scan_status_name(scan.status),
+                      scan.path_found_angle);
+            if (scan.sampled_span_cm >= 0.0f)
+            {
+                /* The kernel console does not support floating-point output. */
+                int span_mm = (int)(scan.sampled_span_cm * 10.0f + 0.5f);
+                tm_printf((UB *)"obstacle: sampled span %d mm (%u sides)\n",
+                          span_mm, (unsigned int)scan.contributing_sides);
+            }
+            else
+            {
+                tm_printf((UB *)"obstacle: sampled span unavailable\n");
+            }
         }
 
         switch (scan.status)
@@ -72,7 +90,11 @@ scan_task (INT stacd, void * p_exinf)
                 /* TODO: Allow forward motion. */
                 break;
             case OBSTACLE_PATH_FOUND:
-                /* TODO: Turn toward scan.angle before moving forward. */
+                if (!new_result)
+                {
+                    break;
+                }
+                /* TODO: Start a turn toward scan.path_found_angle once. */
                 break;
             case OBSTACLE_SCANNING:
             case OBSTACLE_BLOCKED:
