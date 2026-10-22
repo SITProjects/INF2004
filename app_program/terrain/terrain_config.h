@@ -189,6 +189,33 @@
 #error "TERRAIN_FAULT_RETRY_UPDATES must be at least 1"
 #endif
 
+/*
+ * Time between accelerometer samples, in seconds. Must match
+ * TERRAIN_ACCEL_ODR: 0.01 s at 100 Hz. Filters are set in seconds and
+ * use this, so they keep their timing if the rate changes.
+ */
+#ifndef TERRAIN_SAMPLE_PERIOD_S
+#define TERRAIN_SAMPLE_PERIOD_S 0.01f
+#endif
+
+/*
+ * Tilt smoothing time constant, in seconds. After a change of angle,
+ * pitch and roll cover about two thirds of it in this time and 95 % in
+ * three times it. Larger is smoother but slower.
+ */
+#ifndef TERRAIN_TILT_TAU_S
+#define TERRAIN_TILT_TAU_S 0.15f
+#endif
+
+/*
+ * Bench debugging: the terrain task prints pitch and roll every this
+ * many milliseconds once calibrated. 0 turns it off; keep 0 in commits
+ * so the shared console stays quiet.
+ */
+#ifndef TERRAIN_DEBUG_PRINT_MS
+#define TERRAIN_DEBUG_PRINT_MS 0
+#endif
+
 /* Public function declarations. */
 
 #endif /* TERRAIN_CONFIG_H */

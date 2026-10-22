@@ -7,8 +7,9 @@
  * output to testing/terrain/logs/ and record the result in
  * testing/terrain/TEST_LOG.md. Test IDs: TER-U01, TER-U02, ...
  *
- * Both tests need the GY-511 connected; TER-U02 also needs the car
- * standing still on level ground during power-up.
+ * All tests need the GY-511 connected; TER-U02 and TER-U04 also need the
+ * car standing still on level ground during power-up. No test waits for
+ * a person: every wait is bounded.
  */
 
 #include "terrain.h"
@@ -22,6 +23,8 @@
 #define MIN_SAMPLES 25u /* Half the 50 expected at 100 Hz in 500 ms. */
 #define CALIB_TIMEOUT_MS 5000
 #define POLL_MS 100
+#define TILT_SETTLE_MS 500 /* Over three smoothing time constants. */
+#define LEVEL_TOL_DEG 1.0f
 
 /* Public function definitions. */
 
@@ -55,6 +58,17 @@ terrain_test (void)
     }
     TEST_CHECK("TER-U02", info.state == TERRAIN_CALIB_VALID,
                "calibration VALID with the car still and level");
+
+    /* TER-U04: still and level after calibration, so tilt reads 0. */
+    terrain_data_t rest = {0};
+    (void)tk_dly_tsk(TILT_SETTLE_MS);
+    terrain_status_t status = terrain_monitor_get_latest(&rest);
+    TEST_CHECK("TER-U04",
+               (status == TERRAIN_OK) && (rest.pitch_deg < LEVEL_TOL_DEG) &&
+                   (rest.pitch_deg > -LEVEL_TOL_DEG) &&
+                   (rest.roll_deg < LEVEL_TOL_DEG) &&
+                   (rest.roll_deg > -LEVEL_TOL_DEG),
+               "pitch and roll within 1 degree of 0 at rest");
 
     TEST_SUMMARY("terrain");
 }

@@ -1,11 +1,12 @@
 /**
  * @file terrain_process.h
  * @brief IMU processing: axis mapping, calibration, tilt, motion state,
- *        impacts, bumps.
+ *        collisions, humps.
  *
  * Pure C with no Pico SDK or kernel calls, so the same file can run on
- * the car or be tested on a PC. Phase 1 adds axis mapping and Phase 2
- * calibration; detection algorithms follow from Phase 3.
+ * the car or be tested on a PC. Phase 1 adds axis mapping, Phase 2
+ * calibration and Phase 3 tilt; detection algorithms follow in later
+ * phases.
  *
  * Internal to the terrain module; other modules should use terrain_monitor.h.
  *
@@ -17,6 +18,7 @@
 #define TERRAIN_PROCESS_H
 
 /* Public includes. */
+#include <stdbool.h>
 #include <stdint.h>
 
 /* Public types, constants, and macros. */
@@ -83,6 +85,31 @@ typedef struct
     float spread_mps2;   /**< Largest (max - min) of any axis. */
     float tilt_deg;      /**< Angle between mean and level reference. */
 } terrain_calib_out_t;
+
+/**
+ * @brief First-order low-pass filter on a 3-D vector.
+ * Each sample moves the value a fraction alpha of the way towards it.
+ */
+typedef struct
+{
+    terrain_vec3_t value; /**< Smoothed vector. */
+    bool b_primed;        /**< False until the first sample. */
+} terrain_lowpass_t;
+
+/**
+ * @brief Tilt of the car, in degrees.
+ * Pitch and roll have separate filters so that each can be held on its
+ * own: speeding up or braking fakes pitch, turning fakes roll.
+ */
+typedef struct
+{
+    terrain_lowpass_t pitch_filter; /**< Smoothed acceleration for pitch. */
+    terrain_lowpass_t roll_filter;  /**< Smoothed acceleration for roll. */
+    float pitch_deg;                /**< Nose up is positive. */
+    float roll_deg;                 /**< Right side up is positive. */
+    bool b_pitch_held;              /**< Pitch held by the last update. */
+    bool b_roll_held;               /**< Roll held by the last update. */
+} terrain_tilt_t;
 
 /* Public function declarations. */
 
@@ -151,5 +178,72 @@ float terrain_process_angle_deg (terrain_vec3_t const * p_a,
  */
 terrain_vec3_t terrain_process_correct (terrain_vec3_t const * p_sample,
                                         terrain_vec3_t const * p_bias);
+
+/**
+ * @brief Filter weight for a smoothing time constant.
+ * @param tau_s Time constant, s: the filter covers about two thirds of a
+ *        step in this time and 95 % in three times it.
+ * @param period_s Time between samples, s.
+ * @return Weight for terrain_process_lowpass_step(), 0 to 1. 1 (no
+ *         smoothing) if @p tau_s is not positive; 0 if @p period_s is not
+ *         positive.
+ */
+float terrain_process_lowpass_alpha (float tau_s, float period_s);
+
+/**
+ * @brief Empty a filter; the next sample seeds it.
+ * @param p_filter Filter to clear; ignored if NULL.
+ */
+void terrain_process_lowpass_reset (terrain_lowpass_t * p_filter);
+
+/**
+ * @brief Add one sample to a filter.
+ * @param p_filter Filter to update.
+ * @param p_sample New sample.
+ * @param alpha Weight from terrain_process_lowpass_alpha().
+ * The first sample after a reset is taken as it is, so the output does
+ * not creep up from zero. Does nothing if either pointer is NULL.
+ */
+void terrain_process_lowpass_step (terrain_lowpass_t * p_filter,
+                                   terrain_vec3_t const * p_sample,
+                                   float alpha);
+
+/**
+ * @brief Pitch from an acceleration in car axes.
+ * @param p_accel Acceleration, m/s^2, with only gravity acting.
+ * @return Degrees, -90 to 90; nose up is positive. Unaffected by roll.
+ *         0 if @p p_accel is NULL.
+ */
+float terrain_process_pitch_deg (terrain_vec3_t const * p_accel);
+
+/**
+ * @brief Roll from an acceleration in car axes.
+ * @param p_accel Acceleration, m/s^2, with only gravity acting.
+ * @return Degrees, -180 to 180; right side up is positive. Pairs with
+ *         terrain_process_pitch_deg(). 0 if @p p_accel is NULL.
+ */
+float terrain_process_roll_deg (terrain_vec3_t const * p_accel);
+
+/**
+ * @brief Clear the tilt: angles 0, nothing held, filters empty.
+ * @param p_tilt Tilt to clear; ignored if NULL.
+ */
+void terrain_process_tilt_reset (terrain_tilt_t * p_tilt);
+
+/**
+ * @brief Update pitch and roll from one corrected sample.
+ * @param p_tilt Tilt to update.
+ * @param p_accel Corrected sample in car axes, m/s^2.
+ * @param alpha Weight from terrain_process_lowpass_alpha().
+ * @param b_hold_pitch True while the car speeds up or brakes: pitch and
+ *        its filter keep their values.
+ * @param b_hold_roll True while the car turns: roll and its filter keep
+ *        their values.
+ * Pausing a held filter avoids a jump when the hold ends. Does nothing
+ * if either pointer is NULL.
+ */
+void terrain_process_tilt_update (terrain_tilt_t * p_tilt,
+                                  terrain_vec3_t const * p_accel, float alpha,
+                                  bool b_hold_pitch, bool b_hold_roll);
 
 #endif /* TERRAIN_PROCESS_H */
