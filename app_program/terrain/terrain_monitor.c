@@ -45,6 +45,7 @@ static bool b_ready = false;
 /* Owned by the caller of terrain_monitor_update(). */
 static terrain_calib_state_t calib_state = TERRAIN_CALIB_CALIBRATING;
 static terrain_calib_acc_t calib_acc;
+static uint32_t settle_left = 0u;
 static terrain_vec3_t bias;
 static uint32_t fail_streak = 0u;
 static terrain_tilt_t tilt;
@@ -141,7 +142,14 @@ terrain_monitor_update (void)
 
         if (calib_state == TERRAIN_CALIB_CALIBRATING)
         {
-            calib_add(&sample);
+            if (settle_left > 0u)
+            {
+                settle_left--;
+            }
+            else
+            {
+                calib_add(&sample);
+            }
         }
 
         /* Not "else": the sample that completes calibration counts too. */
@@ -332,6 +340,7 @@ calib_start (void)
     terrain_calib_info_t const empty_info = {0};
 
     calib_state = TERRAIN_CALIB_CALIBRATING;
+    settle_left = TERRAIN_CALIB_SETTLE_SAMPLES;
     bias = zero;
     terrain_process_calib_reset(&calib_acc);
     terrain_process_tilt_reset(&tilt);

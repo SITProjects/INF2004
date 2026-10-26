@@ -8,7 +8,8 @@
  * and hump height follow in later phases.
  *
  * Call terrain_monitor_init() once, then terrain_monitor_update()
- * regularly (about every 10 ms) from one place only. Calibration then takes
+ * regularly (about every 10 ms) from one place only. Calibration then skips
+ * TERRAIN_CALIB_SETTLE_SAMPLES samples (0.5 s) and takes
  * TERRAIN_CALIB_SAMPLES samples (2 s) with the car standing still on
  * level ground; an attempt in which the car moved is repeated. Readings
  * are given out only once the calibration state is TERRAIN_CALIB_VALID.
@@ -126,7 +127,8 @@ terrain_status_t terrain_monitor_init (void);
  * data: if no new sample is ready it returns immediately. Each I2C
  * transfer is bounded by TERRAIN_I2C_TIMEOUT_US.
  *
- * While calibrating, samples are collected instead of given out. An
+ * While calibrating, samples are collected instead of given out, after
+ * the first TERRAIN_CALIB_SETTLE_SAMPLES are skipped. An
  * attempt in which the car moved is retried without limit. Once VALID,
  * every sample also updates pitch and roll. After
  * TERRAIN_FAULT_RETRY_UPDATES failed reads in a row, the bus and sensor
@@ -159,7 +161,7 @@ terrain_status_t terrain_monitor_get_calibration (terrain_calib_info_t * p_out);
  * The state becomes TERRAIN_CALIB_CALIBRATING at once; the following
  * terrain_monitor_update() calls do the measuring. Does not touch the sensor,
  * so it is safe to call from other tasks, for example on a mission
- * reset. The car must stand still on level ground for 2 s afterwards.
+ * reset. The car must stand still on level ground for 2.5 s afterwards.
  */
 terrain_status_t terrain_monitor_recalibrate (void);
 

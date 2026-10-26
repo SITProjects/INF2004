@@ -151,6 +151,16 @@
 #endif
 
 /*
+ * Samples skipped at the start of every calibration (power-up and each
+ * recalibration), so a hand leaving the car or the car rocking on its
+ * wheels is not averaged in: 50 is 0.5 s at 100 Hz. Not repeated
+ * between the attempts of one calibration.
+ */
+#ifndef TERRAIN_CALIB_SETTLE_SAMPLES
+#define TERRAIN_CALIB_SETTLE_SAMPLES 50u
+#endif
+
+/*
  * Stillness: largest allowed (max - min) on any axis during an attempt,
  * in m/s^2. Readings move in steps of about 0.16 m/s^2, so this allows
  * about four steps of noise.
@@ -214,6 +224,16 @@
  */
 #ifndef TERRAIN_DEBUG_PRINT_MS
 #define TERRAIN_DEBUG_PRINT_MS 0
+#endif
+
+/*
+ * Bench tests: 1 adds TER-U06 (record the level reference) and TER-U07
+ * (check the axes after mounting) to make TEST=1. They need a person to
+ * move the car on cue and take about 40 s. Keep 0 in commits: the whole
+ * team's TEST=1 run must not wait for anyone.
+ */
+#ifndef TERRAIN_TEST_BENCH
+#define TERRAIN_TEST_BENCH 0
 #endif
 
 /* Public function declarations. */
