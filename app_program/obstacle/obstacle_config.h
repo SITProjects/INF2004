@@ -10,6 +10,7 @@
 #define OBSTACLE_CONFIG_H
 
 /* Public includes. */
+#include "../robot_types.h"
 
 /* Public types, constants, and macros. */
 
@@ -23,15 +24,12 @@
 #define OBSTACLE_UPDATE_PERIOD_MS 10u
 
 /* Mechanically permitted sweep. Verify the complete arc on the car. */
-#define OBSTACLE_SWEEP_FIRST_DEG 60u
-#define OBSTACLE_SWEEP_LAST_DEG 120u
-#define OBSTACLE_SWEEP_STEP_DEG 5u
+#define OBSTACLE_SWEEP_FIRST_DEG ROBOT_OBSTACLE_SWEEP_FIRST_DEG
+#define OBSTACLE_SWEEP_LAST_DEG ROBOT_OBSTACLE_SWEEP_LAST_DEG
+#define OBSTACLE_SWEEP_STEP_DEG ROBOT_OBSTACLE_SWEEP_STEP_DEG
 #define OBSTACLE_CENTRE_DEG 90u
 
-#define OBSTACLE_SWEEP_POINTS                                                  \
-    (((OBSTACLE_SWEEP_LAST_DEG - OBSTACLE_SWEEP_FIRST_DEG) /                   \
-      OBSTACLE_SWEEP_STEP_DEG) +                                               \
-     1u)
+#define OBSTACLE_SWEEP_POINTS ROBOT_OBSTACLE_SWEEP_POINTS
 
 #define OBSTACLE_CENTRE_INDEX                                                  \
     ((OBSTACLE_CENTRE_DEG - OBSTACLE_SWEEP_FIRST_DEG) / OBSTACLE_SWEEP_STEP_DEG)
@@ -64,8 +62,10 @@
  * Two-part measurement timeout.
  *
  * Start timeout: provisional; measure trigger-to-rise delay on the scope.
- * Pulse timeout: retains the existing 23 ms duration limit, but now starts
- * at the rising edge. Total transaction time can therefore be longer.
+ * Pulse timeout: maximum measurable in-range pulse, from the rising edge.
+ * Crossing it reports NO_ECHO (beyond range) under the team policy. Some
+ * modules may hold ECHO high longer in open space; scope validation is open.
+ * A high input at a later trigger attempt remains a separate FAULT.
  */
 #define ULTRASONIC_START_TIMEOUT_US 2000u
 #define ULTRASONIC_PULSE_TIMEOUT_US 23000u
@@ -155,8 +155,8 @@
 #error "Critical distance must be below the detection distance"
 #endif
 
-#define OBSTACLE_VEHICLE_WIDTH_MM 200u
-#define OBSTACLE_VEHICLE_LENGTH_MM 300u
+#define OBSTACLE_VEHICLE_WIDTH_MM 127u
+#define OBSTACLE_VEHICLE_LENGTH_MM 162u
 
 /* Public function declarations. */
 

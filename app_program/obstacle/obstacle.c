@@ -13,14 +13,12 @@
 
 /* Private types, constants, and macros. */
 
-/* obstacle_scan_update() never waits, so poll it once per kernel tick. */
-#define SCAN_PERIOD_MS 10
-
 /* Static data. */
 
-/* Preserve the one-second wait until travel and settling are measured. */
+/* Use configured travel and settling values; calibration remains pending. */
 static const obstacle_servo_timing_t servo_timing = {
-    .travel_ms_per_60_degrees = 0u, .settle_margin_ms = 1000u};
+    .travel_ms_per_60_degrees = OBSTACLE_SERVO_TRAVEL_MS_PER_60_DEG,
+    .settle_margin_ms = OBSTACLE_SERVO_SETTLE_MARGIN_MS};
 
 ID obstacle_tid_scan;
 
@@ -103,6 +101,6 @@ scan_task (INT stacd, void * p_exinf)
                 /* TODO: Keep motion stopped until a direction is available. */
                 break;
         }
-        (void)tk_dly_tsk(SCAN_PERIOD_MS);
+        (void)tk_dly_tsk(OBSTACLE_UPDATE_PERIOD_MS);
     }
 }

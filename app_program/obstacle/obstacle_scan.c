@@ -4,6 +4,7 @@
  */
 
 #include "obstacle_scan.h"
+#include "obstacle_config.h"
 #include "drv_servo.h"
 #include "drv_ultrasonic.h"
 /* Use the toolchain size_t for both libm and the kernel headers. */
@@ -17,8 +18,8 @@
 
 #define GPIO_COUNT 30
 #define DEG_TO_RAD (3.14159265358979323846f / 180.0f)
-#define OBSTACLE_THRESHOLD_CM 5.0f
-#define CENTRE_ANGLE 90
+#define OBSTACLE_THRESHOLD_CM ((float)OBSTACLE_DETECT_DISTANCE_MM / 10.0f)
+#define CENTRE_ANGLE ((int)OBSTACLE_CENTRE_DEG)
 #define MAX_SERVO_TRAVEL_DEGREES 180u
 #define ACCEPTABLE_RESULT_FROM_SIDES 1.3f
 typedef enum
@@ -31,7 +32,8 @@ typedef enum
 /* Static data. */
 
 /* Servo should scan these angles to the left and right of centre. */
-static const int scan_angles[] = {60, 120};
+static const int scan_angles[] = {OBSTACLE_SWEEP_FIRST_DEG,
+                                  OBSTACLE_SWEEP_LAST_DEG};
 static float scan_offset_cosines[sizeof(scan_angles) / sizeof(scan_angles[0])];
 static obstacle_servo_timing_t servo_timing;
 static int sensor_angle;
@@ -47,11 +49,12 @@ static float farthest_clear_distance_cm;
 static int path_found_angle;
 static bool scanning_sides;
 static bool scan_had_invalid_echo;
+static bool selected_side_no_echo;
 
 /* Private function declarations. */
 
-static void scan_centre (float distance_cm);
-static void scan_sides (float distance_cm);
+static void scan_centre (float distance_cm, bool no_echo);
+static void scan_sides (float distance_cm, bool no_echo);
 static float calculate_sample_span (float centre_distance_cm,
                                     float side_distance_cm,
                                     float offset_cosine);
@@ -156,32 +159,37 @@ obstacle_scan_status_name (obstacle_status_t status)
 static obstacle_scan_result_t
 read_result (void)
 {
-    float distance_cm;
-    /* False means no completed measurement; invalid echoes return -1 cm. */
-    if (!ultrasonic_read(&distance_cm))
+    uint16_t echo_us;
+    ultrasonic_result_t measurement = ultrasonic_read(&echo_us);
+    if (measurement == ULTRASONIC_PENDING)
     {
         return result;
     }
+    /* Keep no-return separate from faulty data; do not invent a distance. */
+    bool no_echo = measurement == ULTRASONIC_NO_ECHO;
+    float distance_cm = (measurement == ULTRASONIC_VALID)
+                            ? (float)echo_us * OBSTACLE_MM_PER_ECHO_US / 10.0f
+                            : -1.0f;
     if (scanning_sides)
     {
-        scan_sides(distance_cm);
+        scan_sides(distance_cm, no_echo);
     }
     else
     {
-        scan_centre(distance_cm);
+        scan_centre(distance_cm, no_echo);
     }
     return result;
 }
 
 static void
-scan_centre (float distance_cm)
+scan_centre (float distance_cm, bool no_echo)
 {
-    if (distance_cm <= 0.0f)
+    if (!no_echo && distance_cm <= 0.0f)
     {
         publish_result(OBSTACLE_UNKNOWN, -1.0f, -1, 0u);
         scan_phase = SCAN_READY;
     }
-    else if (distance_cm >= OBSTACLE_THRESHOLD_CM)
+    else if (no_echo || distance_cm >= OBSTACLE_THRESHOLD_CM)
     {
         publish_result(OBSTACLE_CLEAR, -1.0f, CENTRE_ANGLE, 0u);
         scan_phase = SCAN_READY;
@@ -199,6 +207,7 @@ scan_centre (float distance_cm)
         sampled_span_cm = 0.0f;
         contributing_sides = 0u;
         scan_had_invalid_echo = false;
+        selected_side_no_echo = false;
         side_index = 0;
         farthest_clear_distance_cm = -1.0f;
         move_sensor(scan_angles[side_index]);
@@ -206,9 +215,18 @@ scan_centre (float distance_cm)
 }
 
 static void
-scan_sides (float distance_cm)
+scan_sides (float distance_cm, bool no_echo)
 {
-    if (distance_cm <= 0.0f)
+    if (no_echo)
+    {
+        /* No return ranks beyond finite ranges; first side wins a tie. */
+        if (!selected_side_no_echo)
+        {
+            selected_side_no_echo = true;
+            path_found_angle = scan_angles[side_index];
+        }
+    }
+    else if (distance_cm <= 0.0f)
     {
         /* An invalid echo provides neither a span nor a clear direction. */
         scan_had_invalid_echo = true;
@@ -216,7 +234,7 @@ scan_sides (float distance_cm)
     else if (distance_cm >= OBSTACLE_THRESHOLD_CM)
     {
         /* A clear side contributes zero span, even inside the filter. */
-        if (distance_cm > farthest_clear_distance_cm)
+        if (!selected_side_no_echo && distance_cm > farthest_clear_distance_cm)
         {
             farthest_clear_distance_cm = distance_cm;
             path_found_angle = scan_angles[side_index];

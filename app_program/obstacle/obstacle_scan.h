@@ -40,7 +40,7 @@ typedef struct
      */
     uint32_t sequence;
     /** Sum of centre-to-side spans in cm. Invalid readings and clear sides
-     * (>= 5 cm) contribute zero. Remaining readings contribute only when
+     * (>= configured detection threshold) contribute zero. Remaining readings contribute only when
      * <= 1.3 times the centre distance. One contributing side is retained
      * without doubling. A zero total is reported as -1 (unavailable), as is
      * the span while scanning. Assumes contributing echoes hit the same
@@ -52,8 +52,9 @@ typedef struct
      */
     uint8_t contributing_sides;
     /** Direction in degrees: 90 for CLEAR, 60 or 120 for PATH_FOUND,
-     * -1 otherwise. PATH_FOUND selects the farthest valid clear side;
-     * equal distances select the left side (60 degrees).
+     * -1 otherwise. PATH_FOUND selects the farthest clear candidate side.
+     * NO_ECHO ranks beyond finite ranges; ties select the left side.
+     * Malformed readings provide neither a clear side nor a sample span.
      */
     int path_found_angle;
 } obstacle_scan_result_t;
@@ -71,7 +72,7 @@ typedef struct
  * has turned or that a vehicle-width corridor has been measured.
  * @return The current scan result:
  *       OBSTACLE_SCANNING: still scanning, no path found yet
- *       OBSTACLE_CLEAR: no obstacle detected in front
+ *       OBSTACLE_CLEAR: forward range is clear, including NO_ECHO by policy
  *       OBSTACLE_PATH_FOUND: obstacle detected, but a path is available
  *       OBSTACLE_BLOCKED: obstacle detected, no path available
  *       OBSTACLE_UNKNOWN: sensor error or invalid reading

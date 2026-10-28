@@ -49,8 +49,8 @@ fixed.
 | GP23, GP24, GP25, GP29 | *reserved* | Pico W radio |
 | GP0 | | (taken whenever the team builds with `CRASH_REPORT=1`) |
 | GP1 | | (taken whenever the team builds with `CRASH_REPORT=1`) |
-| GP2 | obstacle | ultrasonic echo (input, edge interrupt) |
-| GP3 | obstacle | ultrasonic trigger (output) |
+| GP2 | motion (reserved) | planned left encoder A; released by obstacle |
+| GP3 | motion (reserved) | planned left encoder B; released by obstacle |
 | GP4 | terrain | I2C0 SDA to the GY-511 (Robo Pico Grove 3), claimed by the kernel I2C driver at boot |
 | GP5 | terrain | I2C0 SCL to the GY-511 (Robo Pico Grove 3), claimed by the kernel I2C driver at boot |
 | GP6 | | |
@@ -63,8 +63,8 @@ fixed.
 | GP13 | | (shares PWM slice 6 with the servo: 50 Hz only) |
 | GP14 | | |
 | GP15 | | |
-| GP16 | | |
-| GP17 | | |
+| GP16 | obstacle | ultrasonic trigger (output) |
+| GP17 | obstacle | ultrasonic echo (input, edge interrupt) |
 | GP18 | | |
 | GP19 | | |
 | GP20 | | |
@@ -73,6 +73,12 @@ fixed.
 | GP26 | line_follow | left IR sensor (ADC0), set to analogue by the kernel ADC driver at boot |
 | GP27 | line_follow | right IR sensor (ADC1), set to analogue by the kernel ADC driver at boot |
 | GP28 | | (ADC2 capable) |
+
+Application settings live in `app_program/obstacle/obstacle_config.h`.
+Shared application payloads live in `app_program/robot_types.h`; their sweep
+geometry is the decoding contract and must be agreed with telemetry users.
+The `config/` folder remains kernel configuration. GPIO bank dispatch is
+still obstacle-owned; encoder IRQ integration remains a coordinated change.
 
 ## 3. Peripherals
 
@@ -111,7 +117,7 @@ the drivers have no locking to stop it.
 | SPI1 | | | |
 | ADC | line_follow | `line_follow_task` (kernel driver `"adca"`) | GP26, GP27 (GP28 free) |
 | PWM slices (list) | obstacle: slice 6. motion: slices 4, 5 | obstacle: `obstacle_scan_task`. motion: none yet; `motion_start()` configures them and holds the motors braked | GP12 (obstacle); GP8–GP11 (motion) |
-| GPIO bank interrupt (`IO_IRQ_BANK0`, all GPIOs) | obstacle | `obstacle_scan_task`, core 0 only | GP2 echo edges. Ask the obstacle owner before enabling any other GPIO interrupt |
+| GPIO bank interrupt (`IO_IRQ_BANK0`, all GPIOs) | obstacle | `obstacle_scan_task`, core 0 only | GP17 echo edges. Ask the obstacle owner before enabling any other GPIO interrupt |
 | TIMER (free-running 1 MHz counter) | *shared, read only* | any | — Read by obstacle and terrain; never write it |
 | WiFi radio, TCP/IP, MQTT | *kernel* | `cyw43_utk_task` (built in) | GP23–25, GP29 |
 
