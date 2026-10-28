@@ -60,9 +60,19 @@ scan_task (INT stacd, void * p_exinf)
     tm_printf((UB *)"obstacle: scanning started\n");
 
     uint8_t last_sequence = 0u;
+    bool b_last_stop_requested = obstacle_scan_stop_requested();
+    tm_printf((UB *)"obstacle: stop request ACTIVE (sensing output only)\n");
     for (;;)
     {
         robot_obstacle_result_t scan = obstacle_scan_update();
+        bool b_stop = obstacle_scan_stop_requested();
+        if (b_stop != b_last_stop_requested)
+        {
+            tm_printf((UB *)"obstacle: stop request %s\n",
+                      b_stop ? "ACTIVE" : "RELEASED");
+            b_last_stop_requested = b_stop;
+        }
+        /* Integration: send the stop request to the motor owner here. */
         robot_obstacle_status_t status = robot_obstacle_get_status(scan.flags);
         robot_obstacle_direction_t direction =
             robot_obstacle_get_direction(scan.flags);
@@ -76,25 +86,6 @@ scan_task (INT stacd, void * p_exinf)
                       direction_degrees(direction));
         }
 
-        switch (status)
-        {
-            case ROBOT_OBSTACLE_CLEAR:
-                /* TODO: Allow forward motion. */
-                break;
-            case ROBOT_OBSTACLE_PATH_FOUND:
-                if (!new_result)
-                {
-                    break;
-                }
-                /* TODO: Request a turn toward the decoded direction once. */
-                break;
-            case ROBOT_OBSTACLE_SCANNING:
-            case ROBOT_OBSTACLE_BLOCKED:
-            case ROBOT_OBSTACLE_UNKNOWN:
-            default:
-                /* TODO: Keep motion stopped until a direction is available. */
-                break;
-        }
         (void)tk_dly_tsk(OBSTACLE_UPDATE_PERIOD_MS);
     }
 }

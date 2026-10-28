@@ -63,6 +63,10 @@ static uint32_t settle_start_ms;
 static uint32_t settle_duration_ms;
 static uint16_t pings_us[OBSTACLE_PINGS_PER_ANGLE];
 static uint16_t left_echo_us;
+static uint8_t centre_near_count;
+static bool b_stop_requested = true;
+static bool b_forward_triggered;
+static uint32_t last_forward_trigger_ms;
 static robot_obstacle_result_t result;
 
 /* Private function declarations. */
@@ -72,7 +76,9 @@ static void state_set (uint16_t mask, uint8_t shift, uint16_t value);
 static bool state_has (uint16_t mask);
 static void state_flag (uint16_t mask, bool enabled);
 static void reset_position (void);
-static void scan_centre (ultrasonic_result_t measurement, uint16_t echo_us);
+static void read_centre (ultrasonic_result_t measurement, uint16_t echo_us);
+static void request_stop (void);
+static void scan_centre (obstacle_centre_action_t action);
 static void scan_sides (ultrasonic_result_t measurement, uint16_t echo_us);
 static void move_sensor (int angle);
 static uint32_t now_ms (void);
@@ -105,6 +111,9 @@ obstacle_scan_init (int trig_pin, int echo_pin, int servo_pin,
     sensor_angle = -1;
     scan_state = 0u;
     left_echo_us = 0u;
+    b_stop_requested = true;
+    b_forward_triggered = false;
+    last_forward_trigger_ms = 0u;
     result = (robot_obstacle_result_t){
         .flags = robot_obstacle_pack_flags(
             ROBOT_OBSTACLE_SCANNING, ROBOT_OBSTACLE_DIR_NONE, false, false),
@@ -130,22 +139,44 @@ obstacle_scan_update (void)
             state_set(SCAN_PHASE_MASK, SCAN_PHASE_SHIFT, SCAN_READY);
             return result;
         case SCAN_READY:
-            /* Trigger ultrasonic measurement. */
+        {
+            bool b_centre = !state_has(SCAN_SCANNING_SIDES);
+            uint32_t trigger_ms = now_ms();
+            if (b_centre && b_forward_triggered &&
+                ((uint32_t)(trigger_ms - last_forward_trigger_ms) <
+                 OBSTACLE_FORWARD_PERIOD_MS))
+            {
+                return result;
+            }
+            /* The driver also enforces minimum spacing across all angles. */
             if (ultrasonic_trigger())
             {
+                if (b_centre)
+                {
+                    last_forward_trigger_ms = trigger_ms;
+                    b_forward_triggered = true;
+                }
                 state_set(SCAN_PHASE_MASK, SCAN_PHASE_SHIFT, SCAN_MEASURING);
             }
             return result;
+        }
         case SCAN_MEASURING:
             return read_result();
         default:
             /* Recover with an unknown position and a fresh fault result. */
             scan_state = 0u;
+            b_stop_requested = true;
             sensor_angle = -1;
             publish_result(ROBOT_OBSTACLE_UNKNOWN, ROBOT_OBSTACLE_DIR_NONE);
             move_sensor(CENTRE_ANGLE);
             return result;
     }
+}
+
+bool
+obstacle_scan_stop_requested (void)
+{
+    return b_stop_requested;
 }
 
 char const *
@@ -209,6 +240,7 @@ reset_position (void)
     state_set(SCAN_PING_MASK, SCAN_PING_SHIFT, 0u);
     state_set(SCAN_RETRY_MASK, SCAN_RETRY_SHIFT, 0u);
     state_flag(SCAN_POSITION_INVALID, false);
+    centre_near_count = 0u;
     for (size_t index = 0u; index < OBSTACLE_PINGS_PER_ANGLE; ++index)
     {
         pings_us[index] = 0u;
@@ -222,6 +254,11 @@ read_result (void)
     ultrasonic_result_t measurement = ultrasonic_read(&echo_us);
     if (measurement == ULTRASONIC_PENDING)
     {
+        return result;
+    }
+    if (!state_has(SCAN_SCANNING_SIDES))
+    {
+        read_centre(measurement, echo_us);
         return result;
     }
     if ((measurement != ULTRASONIC_VALID) &&
@@ -257,23 +294,76 @@ read_result (void)
     echo_us = obstacle_decision_median(pings_us, OBSTACLE_PINGS_PER_ANGLE);
     measurement =
         obstacle_decision_position(echo_us, state_has(SCAN_POSITION_INVALID));
-    if (state_has(SCAN_SCANNING_SIDES))
-    {
-        scan_sides(measurement, echo_us);
-    }
-    else
-    {
-        scan_centre(measurement, echo_us);
-    }
+    scan_sides(measurement, echo_us);
     return result;
 }
 
+/* Centre faults consume retries, never votes. A group has three usable
+ * pings; the triggering near ping is its first vote during clear monitoring.
+ */
 static void
-scan_centre (ultrasonic_result_t measurement, uint16_t echo_us)
+read_centre (ultrasonic_result_t measurement, uint16_t echo_us)
 {
-    switch (obstacle_decision_centre(measurement, echo_us))
+    obstacle_centre_action_t action =
+        obstacle_decision_centre(measurement, echo_us);
+    if (action == OBSTACLE_CENTRE_UNKNOWN)
+    {
+        request_stop();
+        uint16_t retries = state_get(SCAN_RETRY_MASK, SCAN_RETRY_SHIFT);
+        if (retries < OBSTACLE_EXTRA_ATTEMPTS_PER_ANGLE)
+        {
+            state_set(SCAN_RETRY_MASK, SCAN_RETRY_SHIFT, retries + 1u);
+            state_set(SCAN_PHASE_MASK, SCAN_PHASE_SHIFT, SCAN_READY);
+        }
+        else
+        {
+            /* Discard the incomplete group; recovery needs three new votes. */
+            scan_centre(OBSTACLE_CENTRE_UNKNOWN);
+        }
+        return;
+    }
+
+    if (action == OBSTACLE_CENTRE_SCAN_SIDES)
+    {
+        request_stop();
+        ++centre_near_count;
+    }
+    if (!b_stop_requested)
+    {
+        /* While already clear, each individual clear ping refreshes status. */
+        scan_centre(OBSTACLE_CENTRE_CLEAR);
+        return;
+    }
+
+    uint16_t count = state_get(SCAN_PING_MASK, SCAN_PING_SHIFT) + 1u;
+    state_set(SCAN_PING_MASK, SCAN_PING_SHIFT, count);
+    if (count < OBSTACLE_CENTRE_CONFIRM_PINGS)
+    {
+        state_set(SCAN_PHASE_MASK, SCAN_PHASE_SHIFT, SCAN_READY);
+        return;
+    }
+    scan_centre((centre_near_count >= OBSTACLE_CENTRE_NEAR_VOTES)
+                    ? OBSTACLE_CENTRE_SCAN_SIDES
+                    : OBSTACLE_CENTRE_CLEAR);
+}
+
+static void
+request_stop (void)
+{
+    if (!b_stop_requested)
+    {
+        b_stop_requested = true;
+        publish_result(ROBOT_OBSTACLE_SCANNING, ROBOT_OBSTACLE_DIR_NONE);
+    }
+}
+
+static void
+scan_centre (obstacle_centre_action_t action)
+{
+    switch (action)
     {
         case OBSTACLE_CENTRE_CLEAR:
+            b_stop_requested = false;
             publish_result(ROBOT_OBSTACLE_CLEAR, ROBOT_OBSTACLE_DIR_CENTRE_90);
             reset_position();
             state_set(SCAN_PHASE_MASK, SCAN_PHASE_SHIFT, SCAN_READY);
@@ -291,6 +381,7 @@ scan_centre (ultrasonic_result_t measurement, uint16_t echo_us)
             break;
         case OBSTACLE_CENTRE_UNKNOWN:
         default:
+            b_stop_requested = true;
             publish_result(ROBOT_OBSTACLE_UNKNOWN, ROBOT_OBSTACLE_DIR_NONE);
             reset_position();
             state_set(SCAN_PHASE_MASK, SCAN_PHASE_SHIFT, SCAN_READY);

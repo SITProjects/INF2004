@@ -34,16 +34,22 @@
 #define OBSTACLE_CENTRE_INDEX                                                  \
     ((OBSTACLE_CENTRE_DEG - OBSTACLE_SWEEP_FIRST_DEG) / OBSTACLE_SWEEP_STEP_DEG)
 
-/* Three measurements per angle; median/filter behavior is in code. */
+/* Side positions retain the median of nonzero samples. */
 #define OBSTACLE_PINGS_PER_ANGLE 3u
 
+/* Centre confirmation: first near ping plus two usable pings, majority wins. */
+#define OBSTACLE_CENTRE_CONFIRM_PINGS 3u
+#define OBSTACLE_CENTRE_NEAR_VOTES 2u
+
 /*
- * Proposed retry budget: two extra attempts per angle, not per ping.
+ * Two extra attempts per side position or centre group, not per ping.
  * Invalid measurements must not cause an unbounded scan.
  */
 #define OBSTACLE_EXTRA_ATTEMPTS_PER_ANGLE 2u
 
-/* Forward monitoring and minimum spacing between any two triggers. */
+/* Centre trigger-to-trigger schedule; late polls do not replay missed pings.
+ * The driver independently enforces minimum spacing across all angles.
+ */
 #define OBSTACLE_FORWARD_PERIOD_MS 60u
 #define ULTRASONIC_PING_INTERVAL_US 60000u
 
@@ -113,6 +119,14 @@
 #define OBSTACLE_FORWARD_MAX_AGE_MS 200u
 
 /* Compile-time consistency checks. */
+
+#if (OBSTACLE_CENTRE_CONFIRM_PINGS != 3u) || (OBSTACLE_CENTRE_NEAR_VOTES != 2u)
+#error "Centre confirmation requires two of three usable pings"
+#endif
+
+#if OBSTACLE_FORWARD_PERIOD_MS < ((ULTRASONIC_PING_INTERVAL_US + 999u) / 1000u)
+#error "Forward period cannot be shorter than the driver ping interval"
+#endif
 
 #if OBSTACLE_SWEEP_STEP_DEG == 0u
 #error "Sweep step must be nonzero"
