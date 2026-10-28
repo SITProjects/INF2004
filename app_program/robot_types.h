@@ -209,4 +209,28 @@ robot_obstacle_clamp_width (uint32_t width_mm)
                : (uint16_t)width_mm;
 }
 
+/**
+ * @brief Set or clear the critical flag in a copied flags byte.
+ * @param flags Encoded flags byte; other fields are ignored.
+ * @param b_critical True to set the critical flag, false to clear it.
+ * @return Updated flags byte with the critical bit set or cleared.
+ */
+static inline uint8_t
+robot_obstacle_set_critical (uint8_t flags, bool b_critical)
+{
+    return b_critical ? (flags | ROBOT_OBSTACLE_CRITICAL)
+                      : (flags & ~ROBOT_OBSTACLE_CRITICAL);
+}
+
+/**
+ * @brief Get the critical flag from a copied flags byte.
+ * @param flags Encoded flags byte; other fields are ignored.
+ * @return true if the critical flag is set, false otherwise.
+ */
+static inline bool
+robot_obstacle_get_critical (uint8_t flags)
+{
+    return (flags & ROBOT_OBSTACLE_CRITICAL) != 0u;
+}
+
 #endif /* ROBOT_TYPES_H */
