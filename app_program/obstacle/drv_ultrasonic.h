@@ -56,11 +56,11 @@ bool ultrasonic_trigger (void);
  * Completed results are consumed once. The scanner applies no-return policy.
  * @return ULTRASONIC_PENDING: no completed result.
  *         ULTRASONIC_VALID: a valid pulse was captured.
- *         ULTRASONIC_NO_ECHO: no rise before the start timeout, or a pulse
- *         reaching the measurable range/storage limit. Late edges are ignored.
- *         ULTRASONIC_FAULT: malformed edges, zero pulse or ECHO already high
- *         when a new trigger is attempted. A pulse range expiry alone is not
- *         a FAULT; hardware no-return behavior still needs scope validation.
+ *         ULTRASONIC_NO_ECHO: a pulse that rose but reached the measurable
+ *         range/storage limit (nothing in range). Late edges are ignored.
+ *         ULTRASONIC_FAULT: no rise before the start timeout (sensor did not
+ *         answer), malformed edges, zero pulse or ECHO already high when a
+ *         new trigger is attempted.
  *
  * Only the sensor-owning task may call this function.
  */
