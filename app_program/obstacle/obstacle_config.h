@@ -14,6 +14,10 @@
 
 /* Public types, constants, and macros. */
 
+/* Vehicle dimensions. */
+#define OBSTACLE_VEHICLE_WIDTH_MM 127u
+#define OBSTACLE_VEHICLE_LENGTH_MM 162u
+
 /* Wiring: planned allocation; confirm before changing the hardware. */
 #define OBSTACLE_TRIG_PIN 16u
 #define OBSTACLE_ECHO_PIN 17u
@@ -34,6 +38,7 @@
 #define OBSTACLE_CENTRE_INDEX                                                  \
     ((OBSTACLE_CENTRE_DEG - OBSTACLE_SWEEP_FIRST_DEG) / OBSTACLE_SWEEP_STEP_DEG)
 
+#define OBSTACLE_STALE_MISSED_PINGS 3u
 /* Side positions retain the median of nonzero samples. */
 #define OBSTACLE_PINGS_PER_ANGLE 3u
 
@@ -84,10 +89,13 @@
  * Echo equivalents are rounded using the conversion above.
  */
 #define OBSTACLE_DETECT_DISTANCE_MM 300u
-#define OBSTACLE_DETECT_ECHO_US 1749u
+#define OBSTACLE_DETECT_ECHO_US(OBSTACLE_DETECT_DISTANCE_MM) (1750)
 
 #define OBSTACLE_CRITICAL_DISTANCE_MM 80u
-#define OBSTACLE_CRITICAL_ECHO_US 466u
+#define OBSTACLE_CRITICAL_ECHO_US(OBSTACLE_CRITICAL_DISTANCE_MM) (467)
+#define OBSTACLE_CRITICAL_RELEASE_DISTANCE_MM 100u
+#define OBSTACLE_CRITICAL_RELEASE_ECHO_US                                      \
+    = OBSTACLE_MM_TO_ECHO_US(OBSTACLE_CRITICAL_RELEASE_DISTANCE_MM)(584)
 
 /* Candidate edge discontinuity: approximately 80 mm in radial range. */
 #define OBSTACLE_EDGE_JUMP_US 466u
@@ -116,9 +124,39 @@
  */
 #define OBSTACLE_STOP_ACK_TIMEOUT_MS 500u
 #define OBSTACLE_SCAN_TIMEOUT_MS 20000u
-#define OBSTACLE_FORWARD_MAX_AGE_MS 200u
+#define OBSTACLE_FORWARD_MAX_AGE_MS                                            \
+    ((OBSTACLE_STALE_MISSED_PINGS * OBSTACLE_FORWARD_PERIOD_MS) +              \
+     (2u * OBSTACLE_TICK_MS))
 
-/* Compile-time consistency checks. */
+/* Needs to match CNF_TIMER_PERIOD*/
+#define OBSTACLE_TICK_MS 10u
+#define OBSTACLE_MM_TO_ECHO_US(mm) (((mm)*10000u) + 1714u) / 1715u
+
+#define OBSTACLE_TRANSACTION_MS                                                \
+    ((ULTRASONIC_START_TIMEOUT_US + ULTRASONIC_PULSE_TIMEOUT_US + 999u) /      \
+     1000u) /* = 25 ms */
+
+#define OBSTACLE_PING_INTERVAL_MS                                              \
+    ((ULTRASONIC_PING_INTERVAL_US + 999u) / 1000u) /* = 60 ms */
+
+#define OBSTACLE_SETTLE_MS(deg)                                                \
+    ((((deg) * OBSTACLE_SERVO_TRAVEL_MS_PER_60_DEG) + 59u) / 60u +
+     OBSTACLE_SERVO_SETTLE_MARGIN_MS)
+
+#define OBSTACLE_SIDE_POSITION_WORST_MS                                        \
+    (((OBSTACLE_PINGS_PER_ANGLE + OBSTACLE_EXTRA_ATTEMPTS_PER_ANGLE) *         \
+      (OBSTACLE_PING_INTERVAL_MS + OBSTACLE_TICK_MS)) +                        \
+     OBSTACLE_TRANSACTION_MS +                                                 \
+     OBSTACLE_TICK_MS) /* = 5 × 70 + 25 + 10 = 385 */
+
+#define OBSTACLE_SIDE_SCAN_WORST_MS                                            \
+    (OBSTACLE_SETTLE_MS(OBSTACLE_CENTRE_DEG - OBSTACLE_SWEEP_FIRST_DEG) +      \
+     OBSTACLE_SETTLE_MS(OBSTACLE_SWEEP_LAST_DEG - OBSTACLE_SWEEP_FIRST_DEG) +  \
+     (2u * OBSTACLE_SIDE_POSITION_WORST_MS))
+
+#define OBSTACLE_SCAN_TIMEOUT_MS (2u * OBSTACLE_SIDE_SCAN_WORST_MS)
+
+     /* Compile-time consistency checks. */
 
 #if (OBSTACLE_CENTRE_CONFIRM_PINGS != 3u) || (OBSTACLE_CENTRE_NEAR_VOTES != 2u)
 #error "Centre confirmation requires two of three usable pings"
@@ -169,9 +207,26 @@
 #error "Critical distance must be below the detection distance"
 #endif
 
-#define OBSTACLE_VEHICLE_WIDTH_MM 127u
-#define OBSTACLE_VEHICLE_LENGTH_MM 162u
+#if OBSTACLE_ECHO_US < OBSTACLE_CRITICAL_RELEASE_ECHO_US <                     \
+    OBSTACLE_DETECT_ECHO_US
+#error "Critical release must be between critical and detection distances"
+#endif
 
-/* Public function declarations. */
+#if OBSTACLE_FORWARD_MAX_AGE_MS > OBSTACLE_FORWARD_PERIOD_MS +                 \
+                                      OBSTACLE_TRANSACTION_MS +                \
+                                      OBSTACLE_TICK_MS(200 > 95)
+#error                                                                         \
+    "Forward max age must be less than the forward period plus transaction time"
+#endif
+
+#if OBSTACLE_SERVO_SETTLE_MARGIN_MS >= OBSTACLE_TRANSACTION_MS
+#error "Servo settle margin must be less than the transaction time"
+#endif
+
+#if OBSTACLE_TICK_MS == 10u
+#error "Tick period must be the same as CNF_TIMER_PERIOD"
+#endif
+
+     /* Public function declarations. */
 
 #endif /* OBSTACLE_CONFIG_H */
