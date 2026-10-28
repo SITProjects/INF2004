@@ -24,6 +24,7 @@ ID obstacle_tid_scan;
 
 /* Private function declarations. */
 static void scan_task (INT stacd, void * p_exinf);
+static int direction_degrees (robot_obstacle_direction_t direction);
 
 /* Public function definitions. */
 
@@ -58,49 +59,60 @@ scan_task (INT stacd, void * p_exinf)
     }
     tm_printf((UB *)"obstacle: scanning started\n");
 
-    uint32_t last_sequence = 0u;
+    uint8_t last_sequence = 0u;
     for (;;)
     {
-        obstacle_scan_result_t scan = obstacle_scan_update();
+        robot_obstacle_result_t scan = obstacle_scan_update();
+        robot_obstacle_status_t status = robot_obstacle_get_status(scan.flags);
+        robot_obstacle_direction_t direction =
+            robot_obstacle_get_direction(scan.flags);
         bool new_result = scan.sequence != last_sequence;
         last_sequence = scan.sequence;
         if (new_result)
         {
-            tm_printf((UB *)"obstacle: %s, angle %d\n",
-                      obstacle_scan_status_name(scan.status),
-                      scan.path_found_angle);
-            if (scan.sampled_span_cm >= 0.0f)
-            {
-                /* The kernel console does not support floating-point output. */
-                int span_mm = (int)(scan.sampled_span_cm * 10.0f + 0.5f);
-                tm_printf((UB *)"obstacle: sampled span %d mm (%u sides)\n",
-                          span_mm, (unsigned int)scan.contributing_sides);
-            }
-            else
-            {
-                tm_printf((UB *)"obstacle: sampled span unavailable\n");
-            }
+            tm_printf((UB *)"obstacle: [0x%02X] %s dir %d\n",
+                      (unsigned int)scan.flags,
+                      obstacle_scan_status_name(status),
+                      direction_degrees(direction));
         }
 
-        switch (scan.status)
+        switch (status)
         {
-            case OBSTACLE_CLEAR:
+            case ROBOT_OBSTACLE_CLEAR:
                 /* TODO: Allow forward motion. */
                 break;
-            case OBSTACLE_PATH_FOUND:
+            case ROBOT_OBSTACLE_PATH_FOUND:
                 if (!new_result)
                 {
                     break;
                 }
-                /* TODO: Start a turn toward scan.path_found_angle once. */
+                /* TODO: Request a turn toward the decoded direction once. */
                 break;
-            case OBSTACLE_SCANNING:
-            case OBSTACLE_BLOCKED:
-            case OBSTACLE_UNKNOWN:
+            case ROBOT_OBSTACLE_SCANNING:
+            case ROBOT_OBSTACLE_BLOCKED:
+            case ROBOT_OBSTACLE_UNKNOWN:
             default:
                 /* TODO: Keep motion stopped until a direction is available. */
                 break;
         }
         (void)tk_dly_tsk(OBSTACLE_UPDATE_PERIOD_MS);
+    }
+}
+
+/* Convert the packed direction code only for logging, without geometry. */
+static int
+direction_degrees (robot_obstacle_direction_t direction)
+{
+    switch (direction)
+    {
+        case ROBOT_OBSTACLE_DIR_LEFT_60:
+            return (int)OBSTACLE_SWEEP_FIRST_DEG;
+        case ROBOT_OBSTACLE_DIR_CENTRE_90:
+            return (int)OBSTACLE_CENTRE_DEG;
+        case ROBOT_OBSTACLE_DIR_RIGHT_120:
+            return (int)OBSTACLE_SWEEP_LAST_DEG;
+        case ROBOT_OBSTACLE_DIR_NONE:
+        default:
+            return -1;
     }
 }

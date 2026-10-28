@@ -1,13 +1,13 @@
 /**
  * @file obstacle_scan.h
- * @brief Nonblocking obstacle detection and directional scanning.
+ * @brief Nonblocking three-position sensing with packed obstacle results.
  */
 
 #ifndef OBSTACLE_SCAN_H
 #define OBSTACLE_SCAN_H
 
 /* Public includes. */
-
+#include "../robot_types.h"
 #include <stdint.h>
 
 /* Public types, constants, and macros. */
@@ -21,82 +21,56 @@ typedef struct
     uint16_t settle_margin_ms;
 } obstacle_servo_timing_t;
 
-typedef enum
-{
-    OBSTACLE_SCANNING,
-    OBSTACLE_CLEAR,
-    OBSTACLE_PATH_FOUND,
-    OBSTACLE_BLOCKED,
-    OBSTACLE_UNKNOWN
-} obstacle_status_t;
-
-typedef struct
-{
-    /** The current status of the obstacle detection. */
-    obstacle_status_t status;
-    /** Starts at zero; increments for each completed centre or side scan,
-     * or a state recovery fault. Wraps modulo 2^32. Unchanged while waiting
-     * or SCANNING. Compare with the last consumed sequence for fresh results.
-     */
-    uint32_t sequence;
-    /** Sum of centre-to-side spans in cm. Invalid readings and clear sides
-     * (>= configured detection threshold) contribute zero. Remaining readings contribute only when
-     * <= 1.3 times the centre distance. One contributing side is retained
-     * without doubling. A zero total is reported as -1 (unavailable), as is
-     * the span while scanning. Assumes contributing echoes hit the same
-     * object as the centre echo; does not locate the object's edges.
-     */
-    float sampled_span_cm;
-    /** Number of sides contributing to sampled_span_cm: 0, 1, or 2.
-     * One contribution is a partial span; even two do not locate edges.
-     */
-    uint8_t contributing_sides;
-    /** Direction in degrees: 90 for CLEAR, 60 or 120 for PATH_FOUND,
-     * -1 otherwise. PATH_FOUND selects the farthest clear candidate side.
-     * NO_ECHO ranks beyond finite ranges; ties select the left side.
-     * Malformed readings provide neither a clear side nor a sample span.
-     */
-    int path_found_angle;
-} obstacle_scan_result_t;
-
 /* Public function declarations. */
 
 /**
- * @brief Perform nonblocking obstacle detection and directional scanning.
- * Complete both side measurements before publishing a side scan result,
- * including when the first side is clear. Call regularly from the initializing
- * task on core 0 after obstacle_scan_init() succeeds. Completed results persist
- * while returning to centre; subsequent scans start with zero accumulated span.
- * Only act on a
- * completed result once per sequence. PATH_FOUND does not mean the vehicle
- * has turned or that a vehicle-width corridor has been measured.
- * @return The current scan result:
- *       OBSTACLE_SCANNING: still scanning, no path found yet
- *       OBSTACLE_CLEAR: forward range is clear, including NO_ECHO by policy
- *       OBSTACLE_PATH_FOUND: obstacle detected, but a path is available
- *       OBSTACLE_BLOCKED: obstacle detected, no path available
- *       OBSTACLE_UNKNOWN: sensor error or invalid reading
+ * @brief Advance forward sensing and both side measurements without waiting.
+ *
+ * Call regularly from the initializing scan task on core 0. Each position
+ * collects the configured ping count. NO_ECHO is zero for filtering; the
+ * median ignores zeros and averages the two remaining readings when needed.
+ * An exhausted fault retry invalidates that position. Retry allowance resets
+ * per position, not per ping. A fully valid zero median means NO_ECHO/CLEAR.
+ *
+ * A blocked centre starts left then right sensing; a completed side result
+ * is published only after both positions. NO_ECHO ranks beyond finite clear
+ * readings, finite readings use the configured detection threshold, and ties
+ * select left. If neither side is clear, publish BLOCKED, or UNKNOWN if a
+ * side was invalid. A clear side can still be selected when the other failed.
+ *
+ * Width is not measured: width_mm is always WIDTH_UNAVAILABLE, both edge
+ * indices are EDGE_NONE and both edge-found flags are false. See robot_types.h
+ * for the bit layout. Sequence wraps modulo 256 and advances only on a
+ * completed result or state-recovery fault. Consume each sequence once;
+ * fewer than 256 unseen results must separate comparisons. Results persist
+ * while returning to centre. The function requests no vehicle movement and
+ * a selected direction does not establish vehicle clearance.
+ * @return Current packed snapshot, including SCANNING while sensing sides.
  */
-obstacle_scan_result_t obstacle_scan_update (void);
+robot_obstacle_result_t obstacle_scan_update (void);
 
 /**
- * @brief Initialise the sensor and centre the servo before scanning.
+ * @brief Initialize the sensor and centre the servo before sensing.
  * @param trig_pin Ultrasonic trigger GPIO number.
  * @param echo_pin Ultrasonic echo GPIO number, distinct from trig_pin.
  * @param servo_pin Servo GPIO number, distinct from both ultrasonic pins.
  * @param timing Non-null timing configuration, copied during this call.
  * At least one timing field must be nonzero. Travel time is rounded up and
- * added to the settling margin. Startup assumes up to 180 degrees of travel
- * because the physical position is unknown. A travel time of zero with a
- * 1000 ms margin preserves the original, uncalibrated one-second wait.
- * @return 0 on success, 1 for invalid pins/timing, an unsupported system clock,
- * or a call not on core 0. Initialise once; call obstacle_scan_update() from
- * the initializing task on core 0.
+ * added to the settling margin. Startup allows up to 180 degrees of travel
+ * because physical position is unknown. Existing calibration is unchanged.
+ * @return 0 on success; 1 for invalid pins/timing, unsupported system clock
+ * or initialization outside core 0. Initialize once from the scan task and
+ * call obstacle_scan_update() only from that task on core 0.
  */
 int obstacle_scan_init (int trig_pin, int echo_pin, int servo_pin,
                         const obstacle_servo_timing_t * timing);
 
-/** Printable status name; never NULL. */
-char const * obstacle_scan_status_name (obstacle_status_t status);
+/**
+ * @brief Convert a decoded status to a printable name, without shared access.
+ * @param status Decoded robot status from robot_obstacle_get_status().
+ * @return Static string, never NULL; unknown enum values return "INVALID".
+ * May be called on either core; no initialization is required.
+ */
+char const * obstacle_scan_status_name (robot_obstacle_status_t status);
 
 #endif /* OBSTACLE_SCAN_H */
