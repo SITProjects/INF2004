@@ -86,7 +86,7 @@ typedef enum
  */
 typedef struct
 {
-    /** Status 0..2, direction 3..4, left/right edge flags 5/6; bit 7 zero. */
+    /** Status 0..2, direction 3..4, left/right edge flags 5/6, critical 7. */
     uint8_t flags;
     /** Left index in bits 0..3, right in 4..7; 15 means unavailable. */
     uint8_t edges;
@@ -99,7 +99,8 @@ typedef struct
 /* Public inline function definitions. */
 
 /**
- * @brief Encode a flags byte, leaving reserved bit 7 zero.
+ * @brief Encode a flags byte with the critical bit 7 clear.
+ * Set bit 7 afterwards with robot_obstacle_set_critical().
  * @param status Result status; unsupported values become UNKNOWN.
  * @param direction Candidate direction; unsupported values become NONE.
  * @param left_edge_found Whether the left object edge was established.
@@ -211,15 +212,15 @@ robot_obstacle_clamp_width (uint32_t width_mm)
 
 /**
  * @brief Set or clear the critical flag in a copied flags byte.
- * @param flags Encoded flags byte; other fields are ignored.
+ * @param flags Encoded flags byte; every other bit is returned unchanged.
  * @param b_critical True to set the critical flag, false to clear it.
  * @return Updated flags byte with the critical bit set or cleared.
  */
 static inline uint8_t
 robot_obstacle_set_critical (uint8_t flags, bool b_critical)
 {
-    return b_critical ? (flags | ROBOT_OBSTACLE_CRITICAL)
-                      : (flags & ~ROBOT_OBSTACLE_CRITICAL);
+    return b_critical ? (uint8_t)(flags | ROBOT_OBSTACLE_CRITICAL)
+                      : (uint8_t)(flags & (uint8_t)~ROBOT_OBSTACLE_CRITICAL);
 }
 
 /**
