@@ -140,3 +140,28 @@ clear_rank (ultrasonic_result_t measurement, uint16_t echo_us)
     }
     return 0u;
 }
+
+bool
+obstacle_decision_is_critical (ultrasonic_result_t measurement,
+                               uint16_t echo_us)
+{
+
+    return (measurement == ULTRASONIC_VALID &&
+            echo_us < OBSTACLE_CRITICAL_ECHO_US);
+}
+
+bool
+obstacle_decision_blocks_critical_release (ultrasonic_result_t measurement,
+                                           uint16_t echo_us)
+{
+
+    return (measurement == ULTRASONIC_VALID &&
+            echo_us < OBSTACLE_CRITICAL_RELEASE_ECHO_US);
+}
+
+bool
+obstacle_decision_elapsed_exceeds (uint32_t now_ms, uint32_t since_ms,
+                                   uint32_t limit_ms)
+{
+    return (now_ms - since_ms) > limit_ms;
+}
