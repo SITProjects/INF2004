@@ -8,6 +8,7 @@
 
 /* Public includes. */
 #include "../robot_types.h"
+#include <stdbool.h>
 #include <stdint.h>
 
 /* Public types, constants, and macros. */
@@ -26,13 +27,23 @@ typedef struct
 /**
  * @brief Advance forward sensing and both side measurements without waiting.
  *
- * Call regularly from the initializing scan task on core 0. Each position
- * collects the configured ping count. NO_ECHO is zero for filtering; the
- * median ignores zeros and averages the two remaining readings when needed.
- * This is not majority voting: {0, 0, 300} produces 300 us. Without an
- * exhausted fault retry, a single near echo can therefore start a side scan.
- * An exhausted fault retry invalidates that position. Retry allowance resets
- * per position, not per ping. A fully valid zero median means NO_ECHO/CLEAR.
+ * Call regularly from the initializing scan task on core 0. Centre triggers
+ * use OBSTACLE_FORWARD_PERIOD_MS (nominal 60 ms); polling/driver delays can
+ * lengthen this interval. Missed periods are not replayed. A first near ping
+ * asserts the separate stop request immediately when consumed. It and the
+ * next two usable pings confirm an obstacle with at least two near votes.
+ * NO_ECHO and echoes at/beyond the threshold count as clear. While already
+ * clear, each clear centre ping publishes a fresh result without grouping.
+ *
+ * Faults assert/retain the stop request and consume the group's two extra
+ * attempts, never votes. Exhaustion publishes UNKNOWN, discards the group
+ * and starts recovery. Only a full group with at least two clear votes can
+ * release the stop request. Startup also requires this clear confirmation.
+ *
+ * Side positions retain the configured ping count and nonzero median:
+ * zeros are ignored, two nonzero values are averaged, all-zero is NO_ECHO.
+ * Exhausted side retries invalidate the position. Retry budgets reset per
+ * side position or centre group, not per ping.
  *
  * A blocked centre starts left then right sensing; a completed side result
  * is published only after both positions. NO_ECHO ranks beyond finite clear
@@ -42,14 +53,27 @@ typedef struct
  *
  * Width is not measured: width_mm is always WIDTH_UNAVAILABLE, both edge
  * indices are EDGE_NONE and both edge-found flags are false. See robot_types.h
- * for the bit layout. Sequence wraps modulo 256 and advances only on a
- * completed result or state-recovery fault. Consume each sequence once;
+ * for the bit layout. Sequence wraps modulo 256 and advances on a
+ * completed result, newly asserted stop request or state-recovery fault.
+ * Consume each sequence once;
  * fewer than 256 unseen results must separate comparisons. Results persist
  * while returning to centre. The function requests no vehicle movement and
  * a selected direction does not establish vehicle clearance.
- * @return Current packed snapshot, including SCANNING while sensing sides.
+ * @return Packed snapshot; SCANNING also covers initial near confirmation.
  */
 robot_obstacle_result_t obstacle_scan_update (void);
+
+/**
+ * @brief Read the latched obstacle stop request from the owning scan task.
+ * @return True before initialization, during startup confirmation, after a
+ * near ping/fault and throughout side scanning. Only a complete centre group
+ * with two clear votes releases it; PATH_FOUND does not release it.
+ * Call from the same task as obstacle_scan_update(), normally immediately
+ * after each update. This output neither brakes nor starts motors. It is
+ * separate from the packed telemetry layout and is not synchronized for
+ * cross-task access; the motion transport remains an integration task.
+ */
+bool obstacle_scan_stop_requested (void);
 
 /**
  * @brief Initialize the sensor and centre the servo before sensing.

@@ -45,8 +45,8 @@ typedef struct
  *
  * This filter does not use a majority vote. One nonzero echo determines the
  * value even when every other ping is NO_ECHO: {0, 0, 300} returns 300 us.
- * For a position without exhausted faults, that single echo is VALID and
- * starts a side scan if it is below the forward detection threshold.
+ * Used for side positions. Centre confirmation uses a separate two-of-three
+ * vote, so a single near echo cannot by itself confirm an obstacle.
  * @param echo_us Samples in microseconds; zero marks no echo. May be NULL
  *        only when count is zero.
  * @param count Number of samples; values above OBSTACLE_DECISION_MEDIAN_MAX
@@ -67,12 +67,13 @@ ultrasonic_result_t obstacle_decision_position (uint16_t median_us,
                                                 bool b_invalid);
 
 /**
- * @brief Decide the next step from the forward (90 degree) position.
- * @param measurement Position result; anything other than VALID or NO_ECHO
+ * @brief Classify one forward ping before scanner confirmation.
+ * @param measurement Ping result; anything other than VALID or NO_ECHO
  *        is treated as a fault.
- * @param echo_us Median echo in microseconds, used only when VALID.
+ * @param echo_us Raw echo in microseconds, used only when VALID.
  * @return CLEAR for NO_ECHO or an echo at or beyond
- *         OBSTACLE_DETECT_ECHO_US; SCAN_SIDES for a nearer echo; UNKNOWN
+ *         OBSTACLE_DETECT_ECHO_US; SCAN_SIDES is a near vote, subject to
+ *         scanner confirmation before servo movement; UNKNOWN
  *         for a fault.
  */
 obstacle_centre_action_t
