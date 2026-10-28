@@ -5,6 +5,7 @@
 
 #include "obstacle_scan.h"
 #include "obstacle_config.h"
+#include "obstacle_decision.h"
 #include "drv_servo.h"
 #include "drv_ultrasonic.h"
 /* Use the toolchain size_t alongside the kernel headers. */
@@ -20,8 +21,8 @@
 #define MAX_SERVO_TRAVEL_DEGREES 180u
 
 /* Packed scan_state: phase 0..1, count 2..3, side 4, scanning 5,
- * retries 6..7, invalid position 8, invalid side scan 9, no-return winner 10,
- * candidate direction 11..12. Bits 13..15 are unused.
+ * retries 6..7, invalid position 8, left side result 9..10.
+ * Bits 11..15 are unused.
  */
 #define SCAN_PHASE_MASK 0x0003u
 #define SCAN_PHASE_SHIFT 0u
@@ -33,13 +34,13 @@
 #define SCAN_RETRY_MASK 0x00C0u
 #define SCAN_RETRY_SHIFT 6u
 #define SCAN_POSITION_INVALID 0x0100u
-#define SCAN_HAD_INVALID_ECHO 0x0200u
-#define SCAN_SELECTED_NO_ECHO 0x0400u
-#define SCAN_DIRECTION_MASK 0x1800u
-#define SCAN_DIRECTION_SHIFT 11u
+#define SCAN_LEFT_RESULT_MASK 0x0600u
+#define SCAN_LEFT_RESULT_SHIFT 9u
 
 _Static_assert(OBSTACLE_PINGS_PER_ANGLE >= 1u && OBSTACLE_PINGS_PER_ANGLE <= 3u,
                "Ping count must fit two bits and the small median helper");
+_Static_assert(ULTRASONIC_FAULT <= 3u,
+               "Ultrasonic results must fit the two-bit left result field");
 _Static_assert(OBSTACLE_EXTRA_ATTEMPTS_PER_ANGLE <= 3u,
                "Extra attempts must fit the two-bit retry field");
 
@@ -61,7 +62,7 @@ static uint16_t scan_state;
 static uint32_t settle_start_ms;
 static uint32_t settle_duration_ms;
 static uint16_t pings_us[OBSTACLE_PINGS_PER_ANGLE];
-static uint16_t farthest_clear_echo_us;
+static uint16_t left_echo_us;
 static robot_obstacle_result_t result;
 
 /* Private function declarations. */
@@ -71,7 +72,6 @@ static void state_set (uint16_t mask, uint8_t shift, uint16_t value);
 static bool state_has (uint16_t mask);
 static void state_flag (uint16_t mask, bool enabled);
 static void reset_position (void);
-static uint16_t position_median (void);
 static void scan_centre (ultrasonic_result_t measurement, uint16_t echo_us);
 static void scan_sides (ultrasonic_result_t measurement, uint16_t echo_us);
 static void move_sensor (int angle);
@@ -104,7 +104,7 @@ obstacle_scan_init (int trig_pin, int echo_pin, int servo_pin,
     servo_timing = *timing;
     sensor_angle = -1;
     scan_state = 0u;
-    farthest_clear_echo_us = 0u;
+    left_echo_us = 0u;
     result = (robot_obstacle_result_t){
         .flags = robot_obstacle_pack_flags(
             ROBOT_OBSTACLE_SCANNING, ROBOT_OBSTACLE_DIR_NONE, false, false),
@@ -215,37 +215,6 @@ reset_position (void)
     }
 }
 
-/* Ignore no-return samples, retaining the duration rather than distance. */
-static uint16_t
-position_median (void)
-{
-    uint16_t valid_us[OBSTACLE_PINGS_PER_ANGLE];
-    size_t count = 0u;
-    for (size_t index = 0u; index < OBSTACLE_PINGS_PER_ANGLE; ++index)
-    {
-        if (pings_us[index] != 0u)
-        {
-            size_t insert = count;
-            while ((insert > 0u) && (valid_us[insert - 1u] > pings_us[index]))
-            {
-                valid_us[insert] = valid_us[insert - 1u];
-                --insert;
-            }
-            valid_us[insert] = pings_us[index];
-            ++count;
-        }
-    }
-    if (count == 0u)
-    {
-        return 0u;
-    }
-    if (count == 2u)
-    {
-        return (uint16_t)(((uint32_t)valid_us[0] + valid_us[1]) / 2u);
-    }
-    return valid_us[count / 2u];
-}
-
 static robot_obstacle_result_t
 read_result (void)
 {
@@ -266,7 +235,6 @@ read_result (void)
             return result;
         }
         state_flag(SCAN_POSITION_INVALID, true);
-        state_flag(SCAN_HAD_INVALID_ECHO, true);
         echo_us = 0u;
     }
     else if (measurement == ULTRASONIC_NO_ECHO)
@@ -285,15 +253,10 @@ read_result (void)
         return result;
     }
 
-    echo_us = position_median();
-    if (state_has(SCAN_POSITION_INVALID))
-    {
-        measurement = ULTRASONIC_FAULT;
-    }
-    else
-    {
-        measurement = (echo_us == 0u) ? ULTRASONIC_NO_ECHO : ULTRASONIC_VALID;
-    }
+    /* No-echo pings are stored as zero, which the median ignores. */
+    echo_us = obstacle_decision_median(pings_us, OBSTACLE_PINGS_PER_ANGLE);
+    measurement =
+        obstacle_decision_position(echo_us, state_has(SCAN_POSITION_INVALID));
     if (state_has(SCAN_SCANNING_SIDES))
     {
         scan_sides(measurement, echo_us);
@@ -308,84 +271,53 @@ read_result (void)
 static void
 scan_centre (ultrasonic_result_t measurement, uint16_t echo_us)
 {
-    if ((measurement != ULTRASONIC_VALID) &&
-        (measurement != ULTRASONIC_NO_ECHO))
+    switch (obstacle_decision_centre(measurement, echo_us))
     {
-        publish_result(ROBOT_OBSTACLE_UNKNOWN, ROBOT_OBSTACLE_DIR_NONE);
-        reset_position();
-        state_set(SCAN_PHASE_MASK, SCAN_PHASE_SHIFT, SCAN_READY);
-    }
-    else if ((measurement == ULTRASONIC_NO_ECHO) ||
-             (echo_us >= OBSTACLE_DETECT_ECHO_US))
-    {
-        publish_result(ROBOT_OBSTACLE_CLEAR, ROBOT_OBSTACLE_DIR_CENTRE_90);
-        reset_position();
-        state_set(SCAN_PHASE_MASK, SCAN_PHASE_SHIFT, SCAN_READY);
-    }
-    else
-    {
-        /* Retain the sequence while both sides are being sampled. */
-        result.flags = robot_obstacle_pack_flags(
-            ROBOT_OBSTACLE_SCANNING, ROBOT_OBSTACLE_DIR_NONE, false, false);
-        state_flag(SCAN_SCANNING_SIDES, true);
-        state_flag(SCAN_HAD_INVALID_ECHO, false);
-        state_flag(SCAN_SELECTED_NO_ECHO, false);
-        state_set(SCAN_SIDE_MASK, SCAN_SIDE_SHIFT, 0u);
-        state_set(SCAN_DIRECTION_MASK, SCAN_DIRECTION_SHIFT,
-                  ROBOT_OBSTACLE_DIR_NONE);
-        farthest_clear_echo_us = 0u;
-        move_sensor(scan_angles[0]);
+        case OBSTACLE_CENTRE_CLEAR:
+            publish_result(ROBOT_OBSTACLE_CLEAR, ROBOT_OBSTACLE_DIR_CENTRE_90);
+            reset_position();
+            state_set(SCAN_PHASE_MASK, SCAN_PHASE_SHIFT, SCAN_READY);
+            break;
+        case OBSTACLE_CENTRE_SCAN_SIDES:
+            /* Retain the sequence while both sides are being sampled. */
+            result.flags = robot_obstacle_pack_flags(
+                ROBOT_OBSTACLE_SCANNING, ROBOT_OBSTACLE_DIR_NONE, false, false);
+            state_flag(SCAN_SCANNING_SIDES, true);
+            state_set(SCAN_SIDE_MASK, SCAN_SIDE_SHIFT, 0u);
+            state_set(SCAN_LEFT_RESULT_MASK, SCAN_LEFT_RESULT_SHIFT,
+                      ULTRASONIC_PENDING);
+            left_echo_us = 0u;
+            move_sensor(scan_angles[0]);
+            break;
+        case OBSTACLE_CENTRE_UNKNOWN:
+        default:
+            publish_result(ROBOT_OBSTACLE_UNKNOWN, ROBOT_OBSTACLE_DIR_NONE);
+            reset_position();
+            state_set(SCAN_PHASE_MASK, SCAN_PHASE_SHIFT, SCAN_READY);
+            break;
     }
 }
 
 static void
 scan_sides (ultrasonic_result_t measurement, uint16_t echo_us)
 {
-    uint16_t side = state_get(SCAN_SIDE_MASK, SCAN_SIDE_SHIFT);
-    robot_obstacle_direction_t direction = (side == 0u)
-                                               ? ROBOT_OBSTACLE_DIR_LEFT_60
-                                               : ROBOT_OBSTACLE_DIR_RIGHT_120;
-    if (measurement == ULTRASONIC_NO_ECHO)
+    if (state_get(SCAN_SIDE_MASK, SCAN_SIDE_SHIFT) == 0u)
     {
-        /* No return ranks beyond finite ranges; first side wins a tie. */
-        if (!state_has(SCAN_SELECTED_NO_ECHO))
-        {
-            state_flag(SCAN_SELECTED_NO_ECHO, true);
-            state_set(SCAN_DIRECTION_MASK, SCAN_DIRECTION_SHIFT, direction);
-        }
-    }
-    else if (measurement != ULTRASONIC_VALID)
-    {
-        state_flag(SCAN_HAD_INVALID_ECHO, true);
-    }
-    else if ((echo_us >= OBSTACLE_DETECT_ECHO_US) &&
-             !state_has(SCAN_SELECTED_NO_ECHO) &&
-             (echo_us > farthest_clear_echo_us))
-    {
-        farthest_clear_echo_us = echo_us;
-        state_set(SCAN_DIRECTION_MASK, SCAN_DIRECTION_SHIFT, direction);
-    }
-
-    if (side == 0u)
-    {
+        /* Keep the left reading until the right position completes. */
+        state_set(SCAN_LEFT_RESULT_MASK, SCAN_LEFT_RESULT_SHIFT,
+                  (uint16_t)measurement);
+        left_echo_us = echo_us;
         state_set(SCAN_SIDE_MASK, SCAN_SIDE_SHIFT, 1u);
         move_sensor(scan_angles[1]);
         return;
     }
 
     /* Publish only after both positions, even if the first side was clear. */
-    robot_obstacle_status_t status = ROBOT_OBSTACLE_BLOCKED;
-    direction = (robot_obstacle_direction_t)state_get(SCAN_DIRECTION_MASK,
-                                                      SCAN_DIRECTION_SHIFT);
-    if (direction != ROBOT_OBSTACLE_DIR_NONE)
-    {
-        status = ROBOT_OBSTACLE_PATH_FOUND;
-    }
-    else if (state_has(SCAN_HAD_INVALID_ECHO))
-    {
-        status = ROBOT_OBSTACLE_UNKNOWN;
-    }
-    publish_result(status, direction);
+    obstacle_side_decision_t decision = obstacle_decision_sides(
+        (ultrasonic_result_t)state_get(SCAN_LEFT_RESULT_MASK,
+                                       SCAN_LEFT_RESULT_SHIFT),
+        left_echo_us, measurement, echo_us);
+    publish_result(decision.status, decision.direction);
     state_flag(SCAN_SCANNING_SIDES, false);
     move_sensor(CENTRE_ANGLE);
 }

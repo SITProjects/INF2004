@@ -24,6 +24,10 @@ Additional regression cases (U05–U09 and U11 remain reserved for the sweep pla
 | OBS-U13 | malformed or stuck-high echo | driver → scanner | manual | Check ECHO high before trigger, duplicate/ambiguous edges and a zero pulse using controlled input. | FAULT; never classed as a no-return clear reading |
 | OBS-U14 | directional no-return ranking | scanner | manual | Compare a no-return side against a finite clear side, swap sides, then test two no-return sides. | No-return side wins; two no-return sides select left; width remains unavailable and edge flags remain clear |
 | OBS-U15 | active pin allocation | config → hardware | manual | Scope trigger output and inject ECHO on GP17; verify GP2/GP3 are not configured by obstacle. | TRIG GP16, ECHO GP17, servo GP12; one configured scan priority |
+| OBS-U16 | ping median | `obstacle_decision.c` | auto | `obstacle_test.c`: zeros ignored, two nonzero samples averaged without overflow, all-zero gives 0, NULL/zero count gives 0, only the first 3 samples used | `[TEST] OBS-U16 PASS` |
+| OBS-U17 | position result after its pings | `obstacle_decision.c` | auto | `obstacle_test.c`: exhausted retries give FAULT regardless of median; zero median gives NO_ECHO; otherwise VALID | `[TEST] OBS-U17 PASS` |
+| OBS-U18 | centre decision at the detection threshold | `obstacle_decision.c` | auto | `obstacle_test.c`: NO_ECHO, echo at and above `OBSTACLE_DETECT_ECHO_US` → CLEAR; one below and 1 µs → scan sides; FAULT/PENDING → UNKNOWN | `[TEST] OBS-U18 PASS` |
+| OBS-U19 | side selection | `obstacle_decision.c` | auto | `obstacle_test.c`: 14 cases covering both near, threshold boundary, ties, farther side, no-echo ranking, faults with and without a clear side | `[TEST] OBS-U19 PASS`; on failure the console names the failing case number |
 
 Compile and simulated regression results are software evidence only. Physical
 scope observations, voltage checks and actual sensor behavior remain pending.
