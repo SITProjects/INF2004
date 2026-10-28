@@ -25,8 +25,17 @@ ID obstacle_tid_scan;
 /* Private function declarations. */
 static void scan_task (INT stacd, void * p_exinf);
 static int direction_degrees (robot_obstacle_direction_t direction);
+static uint32_t log_time_ms (void);
 
 /* Public function definitions. */
+
+static uint32_t
+log_time_ms (void)
+{
+    SYSTIM tim;
+    (void)tk_get_otm(&tim);
+    return (uint32_t)tim.lo;
+}
 
 ER
 obstacle_init (void)
@@ -54,22 +63,26 @@ scan_task (INT stacd, void * p_exinf)
     if (obstacle_scan_init(OBSTACLE_TRIG_PIN, OBSTACLE_ECHO_PIN,
                            OBSTACLE_SERVO_PIN, &servo_timing) != 0)
     {
-        tm_printf((UB *)"obstacle: failed to initialize obstacle scanning\n");
+        tm_printf(
+            (UB *)"[%lu ms]obstacle: failed to initialize obstacle scanning\n",
+            log_time_ms());
         tk_ext_tsk();
     }
-    tm_printf((UB *)"obstacle: scanning started\n");
+    tm_printf((UB *)"[%lu ms]obstacle: scanning started\n", log_time_ms());
 
     uint8_t last_sequence = 0u;
     bool b_last_stop_requested = obstacle_scan_stop_requested();
-    tm_printf((UB *)"obstacle: stop request ACTIVE (sensing output only)\n");
+    tm_printf(
+        (UB *)"[%lu ms]obstacle: stop request ACTIVE (sensing output only)\n",
+        log_time_ms());
     for (;;)
     {
         robot_obstacle_result_t scan = obstacle_scan_update();
         bool b_stop = obstacle_scan_stop_requested();
         if (b_stop != b_last_stop_requested)
         {
-            tm_printf((UB *)"obstacle: stop request %s\n",
-                      b_stop ? "ACTIVE" : "RELEASED");
+            tm_printf((UB *)"[%lu ms]obstacle: stop request %s\n",
+                      log_time_ms(), b_stop ? "ACTIVE" : "RELEASED");
             b_last_stop_requested = b_stop;
         }
         /* Integration: send the stop request to the motor owner here. */
@@ -80,8 +93,8 @@ scan_task (INT stacd, void * p_exinf)
         last_sequence = scan.sequence;
         if (new_result)
         {
-            tm_printf((UB *)"obstacle: [0x%02X] %s dir %d\n",
-                      (unsigned int)scan.flags,
+            tm_printf((UB *)"[%lu ms]obstacle: [0x%02X] %s dir %d\n",
+                      log_time_ms(), (unsigned int)scan.flags,
                       obstacle_scan_status_name(status),
                       direction_degrees(direction));
         }

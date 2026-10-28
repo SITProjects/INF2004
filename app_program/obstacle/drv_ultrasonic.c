@@ -305,13 +305,13 @@ invalidate_measurement (uint32_t now)
         return;
     }
 
-    /* Past the measurable pulse range is NO_ECHO under the team policy.
-     * A high input without a captured rise is still a malformed transaction.
+    /* After a rise, passing the measurable range is NO_ECHO
+     * No rise before the start timeout means the sensor never
+     * answered, which is a FAULT
      */
-    ultrasonic_result_t result = (!flag_is_set(ULTRASONIC_FLAG_ECHO_ACTIVE) &&
-                                  (gpio_get_val(ultrasonic_echo_pin) != 0u))
-                                     ? ULTRASONIC_FAULT
-                                     : ULTRASONIC_NO_ECHO;
+    ultrasonic_result_t result = flag_is_set(ULTRASONIC_FLAG_ECHO_ACTIVE)
+                                     ? ULTRASONIC_NO_ECHO
+                                     : ULTRASONIC_FAULT;
     complete_measurement(result, 0u);
 }
 
