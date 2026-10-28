@@ -97,4 +97,33 @@ obstacle_side_decision_t obstacle_decision_sides (ultrasonic_result_t left,
                                                   ultrasonic_result_t right,
                                                   uint16_t right_echo_us);
 
+/**
+ * @brief Determine if a measurement is critical.
+ * @param measurement Ping result.
+ * @param echo_us Raw echo in microseconds.
+ * @return true if the measurement is valid and echo is below
+ *         OBSTACLE_CRITICAL_ECHO_US, otherwise false.
+ */
+bool obstacle_decision_is_critical (ultrasonic_result_t measurement,
+                                    uint16_t echo_us);
+
+/**
+ * @brief Determine if a measurement blocks critical release.
+ * @param measurement Ping result.
+ * @param echo_us Raw echo in microseconds.
+ * @return true if the measurement is valid and echo is below OBSTACLE_CRITICAL_ECHO_US, otherwise false.
+ */
+bool obstacle_decision_blocks_critical_release (ultrasonic_result_t measurement,
+                                                uint16_t echo_us);
+
+/**
+ * @brief Determine if the elapsed time exceeds a limit.
+ * @param now_ms Current time in milliseconds.
+ * @param since_ms Start time in milliseconds.
+ * @param limit_ms Time limit in milliseconds.
+ * @return true if the elapsed time (now_ms - since_ms) exceeds limit_ms,
+ */
+bool obstacle_decision_elapsed_exceeds (uint32_t now_ms, uint32_t since_ms,
+                                        uint32_t limit_ms);
+
 #endif /* OBSTACLE_DECISION_H */

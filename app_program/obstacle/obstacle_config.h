@@ -11,8 +11,13 @@
 
 /* Public includes. */
 #include "../robot_types.h"
+#include "config.h"
 
 /* Public types, constants, and macros. */
+
+/* Vehicle dimensions. */
+#define OBSTACLE_VEHICLE_WIDTH_MM 127u
+#define OBSTACLE_VEHICLE_LENGTH_MM 162u
 
 /* Wiring: planned allocation; confirm before changing the hardware. */
 #define OBSTACLE_TRIG_PIN 16u
@@ -79,15 +84,39 @@
 /* Existing conversion factor, expressed in millimetres per microsecond. */
 #define OBSTACLE_MM_PER_ECHO_US 0.1715f
 
+/* Kernel timer period; must match CNF_TIMER_PERIOD in config/config.h. */
+#define OBSTACLE_TICK_MS 10u
+
 /*
- * Candidate thresholds, pending stopping-distance tests.
- * Echo equivalents are rounded using the conversion above.
+ * Millimetres to echo microseconds, rounded up (10000 / 1715 = 1 / 0.1715).
+ * Rounding up makes "echo < threshold" trip at or just beyond the distance.
+ * Exact in 32-bit unsigned arithmetic for distances up to 400000 mm.
+ */
+#define OBSTACLE_MM_TO_ECHO_US(mm) ((((mm)*10000u) + 1714u) / 1715u)
+
+/*
+ * Candidate thresholds, pending stopping-distance tests. Edit only the
+ * millimetre values; the echo equivalents are derived.
+ *
+ * Detection: 300 mm -> 1750 us. A nearer centre reading requests a stop.
  */
 #define OBSTACLE_DETECT_DISTANCE_MM 300u
-#define OBSTACLE_DETECT_ECHO_US 1749u
+#define OBSTACLE_DETECT_ECHO_US                                                \
+    OBSTACLE_MM_TO_ECHO_US(OBSTACLE_DETECT_DISTANCE_MM)
 
+/* Critical: 80 mm -> 467 us. One nearer centre reading sets the flag. */
 #define OBSTACLE_CRITICAL_DISTANCE_MM 80u
-#define OBSTACLE_CRITICAL_ECHO_US 466u
+#define OBSTACLE_CRITICAL_ECHO_US                                              \
+    OBSTACLE_MM_TO_ECHO_US(OBSTACLE_CRITICAL_DISTANCE_MM)
+
+/*
+ * Critical release: 100 mm -> 584 us, the Week 6 minimum stopping gap.
+ * The flag clears only after a complete centre group with no VALID reading
+ * nearer than this. 80..100 mm is the hysteresis band.
+ */
+#define OBSTACLE_CRITICAL_RELEASE_DISTANCE_MM 100u
+#define OBSTACLE_CRITICAL_RELEASE_ECHO_US                                      \
+    OBSTACLE_MM_TO_ECHO_US(OBSTACLE_CRITICAL_RELEASE_DISTANCE_MM)
 
 /* Candidate edge discontinuity: approximately 80 mm in radial range. */
 #define OBSTACLE_EDGE_JUMP_US 466u
@@ -111,12 +140,55 @@
 #define OBSTACLE_EDGE_CORRECTION_DEG 0.0f
 
 /*
- * Proposed watchdog limits; validate with the integration owners.
- * The sweep limit accommodates the current slow settling default.
+ * Freshness. While the stop request is released, going longer than this
+ * without a usable centre reading re-asserts it. Three missed forward pings
+ * plus two ticks of scheduling jitter: 3 * 60 + 2 * 10 = 200 ms. A healthy
+ * sensor peaks at forward period + transaction + tick = 95 ms.
+ */
+#define OBSTACLE_STALE_MISSED_PINGS 3u
+#define OBSTACLE_FORWARD_MAX_AGE_MS                                            \
+    ((OBSTACLE_STALE_MISSED_PINGS * OBSTACLE_FORWARD_PERIOD_MS) +              \
+     (2u * OBSTACLE_TICK_MS))
+
+/* One ultrasonic transaction (start + pulse timeout), rounded up: 25 ms. */
+#define OBSTACLE_TRANSACTION_MS                                                \
+    ((ULTRASONIC_START_TIMEOUT_US + ULTRASONIC_PULSE_TIMEOUT_US + 999u) / 1000u)
+
+/* Driver ping spacing, rounded up to milliseconds: 60 ms. */
+#define OBSTACLE_PING_INTERVAL_MS ((ULTRASONIC_PING_INTERVAL_US + 999u) / 1000u)
+
+/* Servo wait for a move of deg degrees, as computed by move_sensor(). */
+#define OBSTACLE_SETTLE_MS(deg)                                                \
+    (((((deg)*OBSTACLE_SERVO_TRAVEL_MS_PER_60_DEG) + 59u) / 60u) +             \
+     OBSTACLE_SERVO_SETTLE_MARGIN_MS)
+
+/*
+ * Worst case for one side position: every allowed trigger used (pings plus
+ * extra attempts), each spaced by the ping interval plus one polling tick,
+ * then the last transaction and one more tick: 5 * 70 + 25 + 10 = 385 ms.
+ */
+#define OBSTACLE_SIDE_POSITION_WORST_MS                                        \
+    (((OBSTACLE_PINGS_PER_ANGLE + OBSTACLE_EXTRA_ATTEMPTS_PER_ANGLE) *         \
+      (OBSTACLE_PING_INTERVAL_MS + OBSTACLE_TICK_MS)) +                        \
+     OBSTACLE_TRANSACTION_MS + OBSTACLE_TICK_MS)
+
+/*
+ * Worst case for a side scan: centre-to-left move, left position,
+ * left-to-right move, right position. The return to centre happens after
+ * the result is published. Today: 1000 + 1000 + 2 * 385 = 2770 ms.
+ */
+#define OBSTACLE_SIDE_SCAN_WORST_MS                                            \
+    (OBSTACLE_SETTLE_MS(OBSTACLE_CENTRE_DEG - OBSTACLE_SWEEP_FIRST_DEG) +      \
+     OBSTACLE_SETTLE_MS(OBSTACLE_SWEEP_LAST_DEG - OBSTACLE_SWEEP_FIRST_DEG) +  \
+     (2u * OBSTACLE_SIDE_POSITION_WORST_MS))
+
+/*
+ * Watchdog limits. The stop acknowledgement timeout belongs to the motion
+ * handshake (integration). The side-scan timeout is twice the worst case:
+ * 5540 ms today, about 2240 ms once the servo is calibrated.
  */
 #define OBSTACLE_STOP_ACK_TIMEOUT_MS 500u
-#define OBSTACLE_SCAN_TIMEOUT_MS 20000u
-#define OBSTACLE_FORWARD_MAX_AGE_MS 200u
+#define OBSTACLE_SCAN_TIMEOUT_MS (2u * OBSTACLE_SIDE_SCAN_WORST_MS)
 
 /* Compile-time consistency checks. */
 
@@ -169,8 +241,28 @@
 #error "Critical distance must be below the detection distance"
 #endif
 
-#define OBSTACLE_VEHICLE_WIDTH_MM 127u
-#define OBSTACLE_VEHICLE_LENGTH_MM 162u
+#if !((OBSTACLE_CRITICAL_ECHO_US < OBSTACLE_CRITICAL_RELEASE_ECHO_US) &&       \
+      (OBSTACLE_CRITICAL_RELEASE_ECHO_US < OBSTACLE_DETECT_ECHO_US))
+#error "Thresholds must satisfy critical < critical release < detection"
+#endif
+
+#if (OBSTACLE_DETECT_ECHO_US >= ULTRASONIC_PULSE_TIMEOUT_US) ||                \
+    (OBSTACLE_DETECT_ECHO_US > ULTRASONIC_ECHO_MAX_US)
+#error "Detection threshold must lie inside the measurable echo range"
+#endif
+
+#if OBSTACLE_FORWARD_MAX_AGE_MS <=                                             \
+    (OBSTACLE_FORWARD_PERIOD_MS + OBSTACLE_TRANSACTION_MS + OBSTACLE_TICK_MS)
+#error "Freshness limit must exceed the age of a healthy forward reading"
+#endif
+
+#if OBSTACLE_SERVO_SETTLE_MARGIN_MS < OBSTACLE_TRANSACTION_MS
+#error "Settle margin must outlast an in-flight measurement (drain rule)"
+#endif
+
+#if OBSTACLE_TICK_MS != CNF_TIMER_PERIOD
+#error "Tick must match CNF_TIMER_PERIOD in config/config.h"
+#endif
 
 /* Public function declarations. */
 

@@ -13,6 +13,7 @@
 #include <stddef.h>
 #include <tk/tkernel.h>
 #include <stdbool.h>
+#include <tm/tmonitor.h>
 
 /* Private types, constants, and macros. */
 
@@ -21,8 +22,8 @@
 #define MAX_SERVO_TRAVEL_DEGREES 180u
 
 /* Packed scan_state: phase 0..1, count 2..3, side 4, scanning 5,
- * retries 6..7, invalid position 8, left side result 9..10.
- * Bits 11..15 are unused.
+ * retries 6..7, invalid position 8, left side result 9..10. critical 11, critical hold 12.
+ * Bits 13..15 are unused.
  */
 #define SCAN_PHASE_MASK 0x0003u
 #define SCAN_PHASE_SHIFT 0u
@@ -36,6 +37,8 @@
 #define SCAN_POSITION_INVALID 0x0100u
 #define SCAN_LEFT_RESULT_MASK 0x0600u
 #define SCAN_LEFT_RESULT_SHIFT 9u
+#define SCAN_CRITICAL 0x0800u
+#define SCAN_CRITICAL_HOLD 0x1000u
 
 _Static_assert(OBSTACLE_PINGS_PER_ANGLE >= 1u && OBSTACLE_PINGS_PER_ANGLE <= 3u,
                "Ping count must fit two bits and the small median helper");
@@ -68,6 +71,8 @@ static bool b_stop_requested = true;
 static bool b_forward_triggered;
 static uint32_t last_forward_trigger_ms;
 static robot_obstacle_result_t result;
+static uint32_t last_usable_centre_ms;
+static uint32_t side_scan_start_ms;
 
 /* Private function declarations. */
 
@@ -85,6 +90,9 @@ static uint32_t now_ms (void);
 static robot_obstacle_result_t read_result (void);
 static void publish_result (robot_obstacle_status_t status,
                             robot_obstacle_direction_t direction);
+static void check_watchdogs (void);
+static void cancel_side_scan (void);
+static void update_critical (ultrasonic_result_t measurement, uint16_t echo_us);
 
 /* Public function definitions. */
 
@@ -114,6 +122,8 @@ obstacle_scan_init (int trig_pin, int echo_pin, int servo_pin,
     b_stop_requested = true;
     b_forward_triggered = false;
     last_forward_trigger_ms = 0u;
+    last_usable_centre_ms = now_ms();
+    side_scan_start_ms = 0u;
     result = (robot_obstacle_result_t){
         .flags = robot_obstacle_pack_flags(
             ROBOT_OBSTACLE_SCANNING, ROBOT_OBSTACLE_DIR_NONE, false, false),
@@ -128,16 +138,21 @@ obstacle_scan_init (int trig_pin, int echo_pin, int servo_pin,
 robot_obstacle_result_t
 obstacle_scan_update (void)
 {
+    check_watchdogs();
     switch ((scan_phase_t)state_get(SCAN_PHASE_MASK, SCAN_PHASE_SHIFT))
     {
         case SERVO_SETTLING:
+        {
             if ((uint32_t)(now_ms() - settle_start_ms) < settle_duration_ms)
             {
                 return result;
             }
-            /* Servo has settled, start scanning. */
+            /* Drop any reading still in flight from before the move. */
+            uint16_t discard_us;
+            (void)ultrasonic_read(&discard_us);
             state_set(SCAN_PHASE_MASK, SCAN_PHASE_SHIFT, SCAN_READY);
             return result;
+        }
         case SCAN_READY:
         {
             bool b_centre = !state_has(SCAN_SCANNING_SIDES);
@@ -163,12 +178,9 @@ obstacle_scan_update (void)
         case SCAN_MEASURING:
             return read_result();
         default:
-            /* Recover with an unknown position and a fresh fault result. */
-            scan_state = 0u;
-            b_stop_requested = true;
+            tm_printf((UB *)"obstacle: state recovery\n");
             sensor_angle = -1;
-            publish_result(ROBOT_OBSTACLE_UNKNOWN, ROBOT_OBSTACLE_DIR_NONE);
-            move_sensor(CENTRE_ANGLE);
+            cancel_side_scan();
             return result;
     }
 }
@@ -240,6 +252,7 @@ reset_position (void)
     state_set(SCAN_PING_MASK, SCAN_PING_SHIFT, 0u);
     state_set(SCAN_RETRY_MASK, SCAN_RETRY_SHIFT, 0u);
     state_flag(SCAN_POSITION_INVALID, false);
+    state_flag(SCAN_CRITICAL_HOLD, false);
     centre_near_count = 0u;
     for (size_t index = 0u; index < OBSTACLE_PINGS_PER_ANGLE; ++index)
     {
@@ -323,14 +336,17 @@ read_centre (ultrasonic_result_t measurement, uint16_t echo_us)
         return;
     }
 
+    last_usable_centre_ms = now_ms();
     if (action == OBSTACLE_CENTRE_SCAN_SIDES)
     {
         request_stop();
         ++centre_near_count;
     }
+    update_critical(measurement, echo_us);
     if (!b_stop_requested)
     {
-        /* While already clear, each individual clear ping refreshes status. */
+        /* A clear ping is beyond the release distance, so it clears too. */
+        state_flag(SCAN_CRITICAL, false);
         scan_centre(OBSTACLE_CENTRE_CLEAR);
         return;
     }
@@ -341,6 +357,11 @@ read_centre (ultrasonic_result_t measurement, uint16_t echo_us)
     {
         state_set(SCAN_PHASE_MASK, SCAN_PHASE_SHIFT, SCAN_READY);
         return;
+    }
+    /* A complete group with nothing inside 100 mm clears the flag. */
+    if (!state_has(SCAN_CRITICAL_HOLD))
+    {
+        state_flag(SCAN_CRITICAL, false);
     }
     scan_centre((centre_near_count >= OBSTACLE_CENTRE_NEAR_VOTES)
                     ? OBSTACLE_CENTRE_SCAN_SIDES
@@ -370,13 +391,17 @@ scan_centre (obstacle_centre_action_t action)
             break;
         case OBSTACLE_CENTRE_SCAN_SIDES:
             /* Retain the sequence while both sides are being sampled. */
-            result.flags = robot_obstacle_pack_flags(
-                ROBOT_OBSTACLE_SCANNING, ROBOT_OBSTACLE_DIR_NONE, false, false);
+            result.flags = robot_obstacle_set_critical(
+                robot_obstacle_pack_flags(ROBOT_OBSTACLE_SCANNING,
+                                          ROBOT_OBSTACLE_DIR_NONE, false,
+                                          false),
+                state_has(SCAN_CRITICAL));
             state_flag(SCAN_SCANNING_SIDES, true);
             state_set(SCAN_SIDE_MASK, SCAN_SIDE_SHIFT, 0u);
             state_set(SCAN_LEFT_RESULT_MASK, SCAN_LEFT_RESULT_SHIFT,
                       ULTRASONIC_PENDING);
             left_echo_us = 0u;
+            side_scan_start_ms = now_ms();
             move_sensor(scan_angles[0]);
             break;
         case OBSTACLE_CENTRE_UNKNOWN:
@@ -437,7 +462,9 @@ publish_result (robot_obstacle_status_t status,
                 robot_obstacle_direction_t direction)
 {
     result = (robot_obstacle_result_t){
-        .flags = robot_obstacle_pack_flags(status, direction, false, false),
+        .flags = robot_obstacle_set_critical(
+            robot_obstacle_pack_flags(status, direction, false, false),
+            state_has(SCAN_CRITICAL)),
         .edges = robot_obstacle_pack_edges(ROBOT_OBSTACLE_EDGE_NONE,
                                            ROBOT_OBSTACLE_EDGE_NONE),
         .width_mm = ROBOT_OBSTACLE_WIDTH_UNAVAILABLE,
@@ -452,4 +479,61 @@ now_ms (void)
     SYSTIM tim;
     (void)tk_get_otm(&tim);
     return (uint32_t)tim.lo;
+}
+
+static void
+check_watchdogs (void)
+{
+    uint32_t now = now_ms();
+    if (state_has(SCAN_SCANNING_SIDES))
+    {
+        if (obstacle_decision_elapsed_exceeds(now, side_scan_start_ms,
+                                              OBSTACLE_SCAN_TIMEOUT_MS))
+        {
+            tm_printf((UB *)"obstacle: side scan timed out after %lu ms\n",
+                      (unsigned long)(now - side_scan_start_ms));
+            cancel_side_scan();
+        }
+    }
+    else if (!b_stop_requested &&
+             obstacle_decision_elapsed_exceeds(now, last_usable_centre_ms,
+                                               OBSTACLE_FORWARD_MAX_AGE_MS))
+    {
+        tm_printf((UB *)"obstacle: forward data stale (%lu ms old)\n",
+                  (unsigned long)(now - last_usable_centre_ms));
+        b_stop_requested = true;
+        publish_result(ROBOT_OBSTACLE_UNKNOWN, ROBOT_OBSTACLE_DIR_NONE);
+        reset_position();
+    }
+}
+
+static void
+cancel_side_scan (void)
+{
+    b_stop_requested = true;
+    state_flag(SCAN_SCANNING_SIDES, false);
+    state_set(SCAN_SIDE_MASK, SCAN_SIDE_SHIFT, 0u);
+    state_set(SCAN_LEFT_RESULT_MASK, SCAN_LEFT_RESULT_SHIFT,
+              ULTRASONIC_PENDING);
+    left_echo_us = 0u;
+    publish_result(ROBOT_OBSTACLE_UNKNOWN, ROBOT_OBSTACLE_DIR_NONE);
+    move_sensor(CENTRE_ANGLE);
+}
+
+static void
+update_critical (ultrasonic_result_t measurement, uint16_t echo_us)
+{
+    /* One critical reading sets the flag at once; no voting. */
+    if (obstacle_decision_is_critical(measurement, echo_us) &&
+        !state_has(SCAN_CRITICAL))
+    {
+        state_flag(SCAN_CRITICAL, true);
+        /* Flag only, no new decision: keep the sequence unchanged. */
+        result.flags = robot_obstacle_set_critical(result.flags, true);
+    }
+    /* Any reading inside the release distance holds it for this group. */
+    if (obstacle_decision_blocks_critical_release(measurement, echo_us))
+    {
+        state_flag(SCAN_CRITICAL_HOLD, true);
+    }
 }

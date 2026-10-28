@@ -51,11 +51,19 @@ typedef struct
  * select left. If neither side is clear, publish BLOCKED, or UNKNOWN if a
  * side was invalid. A clear side can still be selected when the other failed.
  *
+ * Critical (flags bit 7): one VALID centre echo below
+ * OBSTACLE_CRITICAL_ECHO_US (80 mm) sets it at once, without voting. It
+ * clears after a complete centre group with no VALID echo below
+ * OBSTACLE_CRITICAL_RELEASE_ECHO_US (100 mm), or on a clear centre ping
+ * once the stop request is released. Side readings never change it. A
+ * change to this bit alone does not advance the sequence, so read it on
+ * every poll, like the stop request.
+ *
  * Width is not measured: width_mm is always WIDTH_UNAVAILABLE, both edge
  * indices are EDGE_NONE and both edge-found flags are false. See robot_types.h
  * for the bit layout. Sequence wraps modulo 256 and advances on a
- * completed result, newly asserted stop request or state-recovery fault.
- * Consume each sequence once;
+ * completed result, newly asserted stop request, stale forward data,
+ * side-scan timeout or state-recovery fault. Consume each sequence once;
  * fewer than 256 unseen results must separate comparisons. Results persist
  * while returning to centre. The function requests no vehicle movement and
  * a selected direction does not establish vehicle clearance.
