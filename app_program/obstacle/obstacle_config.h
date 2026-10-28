@@ -11,6 +11,7 @@
 
 /* Public includes. */
 #include "../robot_types.h"
+#include "config.h"
 
 /* Public types, constants, and macros. */
 
@@ -259,7 +260,7 @@
 #error "Settle margin must outlast an in-flight measurement (drain rule)"
 #endif
 
-#if OBSTACLE_TICK_MS != 10u
+#if OBSTACLE_TICK_MS != CNF_TIMER_PERIOD
 #error "Tick must match CNF_TIMER_PERIOD in config/config.h"
 #endif
 

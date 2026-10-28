@@ -101,7 +101,8 @@ obstacle_side_decision_t obstacle_decision_sides (ultrasonic_result_t left,
  * @brief Determine if a measurement is critical.
  * @param measurement Ping result.
  * @param echo_us Raw echo in microseconds.
- * @return true if the measurement is valid and echo is below OBSTACLE_CRITICAL_RELEASE_ECHO_US, otherwise false.
+ * @return true if the measurement is valid and echo is below
+ *         OBSTACLE_CRITICAL_ECHO_US, otherwise false.
  */
 bool obstacle_decision_is_critical (ultrasonic_result_t measurement,
                                     uint16_t echo_us);
