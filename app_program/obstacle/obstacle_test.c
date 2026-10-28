@@ -113,6 +113,7 @@ median_valid (void)
     const uint16_t three[] = {1458u, 1399u, 1516u};
     const uint16_t none[] = {0u, 0u, 0u};
     const uint16_t one[] = {0u, 0u, 700u};
+    const uint16_t lone_near[] = {0u, 0u, 300u};
     const uint16_t largest[] = {0u, UINT16_MAX, UINT16_MAX};
     const uint16_t single[] = {500u};
     const uint16_t extra[] = {100u, 200u, 300u, 1u};
@@ -121,6 +122,8 @@ median_valid (void)
            (obstacle_decision_median(three, 3u) == 1458u) &&
            (obstacle_decision_median(none, 3u) == 0u) &&
            (obstacle_decision_median(one, 3u) == 700u) &&
+           /* A single echo dominates two no-return samples; not a vote. */
+           (obstacle_decision_median(lone_near, 3u) == 300u) &&
            /* Averaging two maximum samples must not overflow. */
            (obstacle_decision_median(largest, 3u) == UINT16_MAX) &&
            (obstacle_decision_median(single, 1u) == 500u) &&

@@ -29,6 +29,8 @@ typedef struct
  * Call regularly from the initializing scan task on core 0. Each position
  * collects the configured ping count. NO_ECHO is zero for filtering; the
  * median ignores zeros and averages the two remaining readings when needed.
+ * This is not majority voting: {0, 0, 300} produces 300 us. Without an
+ * exhausted fault retry, a single near echo can therefore start a side scan.
  * An exhausted fault retry invalidates that position. Retry allowance resets
  * per position, not per ping. A fully valid zero median means NO_ECHO/CLEAR.
  *

@@ -42,6 +42,11 @@ typedef struct
 
 /**
  * @brief Median of the nonzero echo samples.
+ *
+ * This filter does not use a majority vote. One nonzero echo determines the
+ * value even when every other ping is NO_ECHO: {0, 0, 300} returns 300 us.
+ * For a position without exhausted faults, that single echo is VALID and
+ * starts a side scan if it is below the forward detection threshold.
  * @param echo_us Samples in microseconds; zero marks no echo. May be NULL
  *        only when count is zero.
  * @param count Number of samples; values above OBSTACLE_DECISION_MEDIAN_MAX

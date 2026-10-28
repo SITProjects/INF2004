@@ -15,8 +15,8 @@
 /* Public types, constants, and macros. */
 
 /* Wiring: planned allocation; confirm before changing the hardware. */
-#define OBSTACLE_TRIG_PIN 8u
-#define OBSTACLE_ECHO_PIN 9u
+#define OBSTACLE_TRIG_PIN 16u
+#define OBSTACLE_ECHO_PIN 17u
 #define OBSTACLE_SERVO_PIN 12u
 
 /* Task configuration: preserve the current priority and polling period. */
