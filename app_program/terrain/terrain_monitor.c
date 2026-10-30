@@ -12,6 +12,7 @@
 #include "drv_imu.h"
 #include "drv_imu_bus.h"
 #include "terrain_config.h"
+#include "terrain_hint.h"
 #include "terrain_platform.h"
 #include "terrain_process.h"
 
@@ -44,8 +45,11 @@ static bool b_ready = false;
 /* Owned by the caller of terrain_monitor_update(). */
 static terrain_calib_state_t calib_state = TERRAIN_CALIB_CALIBRATING;
 static terrain_calib_acc_t calib_acc;
+static uint32_t settle_left = 0u;
 static terrain_vec3_t bias;
 static uint32_t fail_streak = 0u;
+static terrain_tilt_t tilt;
+static float tilt_alpha = 1.0f;
 
 /* Private function declarations. */
 static terrain_status_t setup_sensor (void);
@@ -82,6 +86,8 @@ terrain_monitor_init (void)
     terrain_platform_unlock(saved);
 
     fail_streak = 0u;
+    tilt_alpha = terrain_process_lowpass_alpha(TERRAIN_TILT_TAU_S,
+                                               TERRAIN_SAMPLE_PERIOD_S);
     calib_start();
 
     b_ready = true;
@@ -122,6 +128,12 @@ terrain_monitor_update (void)
     float scale = imu_accel_scale_mps2();
     terrain_vec3_t accel = {0.0f, 0.0f, 0.0f};
 
+    /* Speed changes fake pitch and turns fake roll: hold them then. */
+    terrain_hint_t hint;
+    terrain_hint_read(&hint);
+    bool const b_hold_pitch = hint.b_speed_known && hint.b_speed_changing;
+    bool const b_hold_roll = hint.b_turn_known && hint.b_turning;
+
     for (uint32_t i = 0u; i < count; i++)
     {
         int16_t const board[TERRAIN_AXES] = {buf[i].x, buf[i].y, buf[i].z};
@@ -130,13 +142,22 @@ terrain_monitor_update (void)
 
         if (calib_state == TERRAIN_CALIB_CALIBRATING)
         {
-            calib_add(&sample);
+            if (settle_left > 0u)
+            {
+                settle_left--;
+            }
+            else
+            {
+                calib_add(&sample);
+            }
         }
 
         /* Not "else": the sample that completes calibration counts too. */
         if (calib_state == TERRAIN_CALIB_VALID)
         {
             accel = terrain_process_correct(&sample, &bias);
+            terrain_process_tilt_update(&tilt, &accel, tilt_alpha, b_hold_pitch,
+                                        b_hold_roll);
         }
     }
 
@@ -206,6 +227,10 @@ terrain_monitor_recalibrate (void)
     latest.ax_mps2 = 0.0f;
     latest.ay_mps2 = 0.0f;
     latest.az_mps2 = 0.0f;
+    latest.pitch_deg = 0.0f;
+    latest.roll_deg = 0.0f;
+    latest.b_pitch_held = false;
+    latest.b_roll_held = false;
     calib_info = empty_info;
     calib_info.state = TERRAIN_CALIB_CALIBRATING;
     terrain_platform_unlock(saved);
@@ -315,8 +340,10 @@ calib_start (void)
     terrain_calib_info_t const empty_info = {0};
 
     calib_state = TERRAIN_CALIB_CALIBRATING;
+    settle_left = TERRAIN_CALIB_SETTLE_SAMPLES;
     bias = zero;
     terrain_process_calib_reset(&calib_acc);
+    terrain_process_tilt_reset(&tilt);
 
     uint32_t saved = terrain_platform_lock();
     calib_info = empty_info;
@@ -417,6 +444,10 @@ publish (terrain_vec3_t const * p_accel, uint32_t new_samples, bool b_overrun)
     latest.ax_mps2 = b_valid ? p_accel->x : 0.0f;
     latest.ay_mps2 = b_valid ? p_accel->y : 0.0f;
     latest.az_mps2 = b_valid ? p_accel->z : 0.0f;
+    latest.pitch_deg = b_valid ? tilt.pitch_deg : 0.0f;
+    latest.roll_deg = b_valid ? tilt.roll_deg : 0.0f;
+    latest.b_pitch_held = b_valid && tilt.b_pitch_held;
+    latest.b_roll_held = b_valid && tilt.b_roll_held;
     latest.calib_state = state;
     latest.timestamp_us = now_us;
     latest.sample_count += new_samples;

@@ -4,11 +4,12 @@
  *
  * Phase 1: initialise the GY-511 and read acceleration in the car's
  * axes. Phase 2: calibrate at every start, then correct every reading.
- * Tilt, motion state, bump height and events (terrain_poll_event) are
- * added in Phases 3 to 4.
+ * Phase 3: pitch and roll. Events, turn rate, collisions, motion state
+ * and hump height follow in later phases.
  *
  * Call terrain_monitor_init() once, then terrain_monitor_update()
- * regularly (about every 10 ms) from one place only. Calibration then takes
+ * regularly (about every 10 ms) from one place only. Calibration then skips
+ * TERRAIN_CALIB_SETTLE_SAMPLES samples (0.5 s) and takes
  * TERRAIN_CALIB_SAMPLES samples (2 s) with the car standing still on
  * level ground; an attempt in which the car moved is repeated. Readings
  * are given out only once the calibration state is TERRAIN_CALIB_VALID.
@@ -25,6 +26,7 @@
 #define TERRAIN_MONITOR_H
 
 /* Public includes. */
+#include <stdbool.h>
 #include <stdint.h>
 
 /* Public types, constants, and macros. */
@@ -54,14 +56,25 @@ typedef enum
  * Acceleration is in the car's axes: X right, Y forward, Z up, with
  * gains and calibration bias applied. A car sitting still on level
  * ground reads 0, 0, +9.81, because the sensor feels the ground pushing
- * up against gravity. The acceleration fields are 0 unless calib_state
- * is TERRAIN_CALIB_VALID.
+ * up against gravity.
+ *
+ * Pitch and roll are smoothed over TERRAIN_TILT_TAU_S. While the car
+ * speeds up or brakes, pitch keeps its last value and b_pitch_held is
+ * true; while it turns, the same goes for roll. Those hints come from
+ * other subsystems; until they exist, nothing is held.
+ *
+ * The acceleration and tilt fields are 0 (and nothing is held) unless
+ * calib_state is TERRAIN_CALIB_VALID.
  */
 typedef struct
 {
     float ax_mps2;               /**< Acceleration along X, m/s^2. */
     float ay_mps2;               /**< Acceleration along Y, m/s^2. */
     float az_mps2;               /**< Acceleration along Z, m/s^2. */
+    float pitch_deg;             /**< Nose up (+) or down (-), degrees. */
+    float roll_deg;              /**< Right side up (+) or down, degrees. */
+    bool b_pitch_held;           /**< Pitch held: speeding up/braking. */
+    bool b_roll_held;            /**< Roll held: the car is turning. */
     uint64_t timestamp_us;       /**< When the newest sample was read. */
     uint32_t sample_count;       /**< Samples processed since init. */
     uint32_t overrun_count;      /**< Times the sensor buffer overflowed. */
@@ -114,8 +127,10 @@ terrain_status_t terrain_monitor_init (void);
  * data: if no new sample is ready it returns immediately. Each I2C
  * transfer is bounded by TERRAIN_I2C_TIMEOUT_US.
  *
- * While calibrating, samples are collected instead of given out. An
- * attempt in which the car moved is retried without limit. After
+ * While calibrating, samples are collected instead of given out, after
+ * the first TERRAIN_CALIB_SETTLE_SAMPLES are skipped. An
+ * attempt in which the car moved is retried without limit. Once VALID,
+ * every sample also updates pitch and roll. After
  * TERRAIN_FAULT_RETRY_UPDATES failed reads in a row, the bus and sensor
  * are set up again; the calibration is kept.
  */
@@ -146,7 +161,7 @@ terrain_status_t terrain_monitor_get_calibration (terrain_calib_info_t * p_out);
  * The state becomes TERRAIN_CALIB_CALIBRATING at once; the following
  * terrain_monitor_update() calls do the measuring. Does not touch the sensor,
  * so it is safe to call from other tasks, for example on a mission
- * reset. The car must stand still on level ground for 2 s afterwards.
+ * reset. The car must stand still on level ground for 2.5 s afterwards.
  */
 terrain_status_t terrain_monitor_recalibrate (void);
 
