@@ -25,7 +25,7 @@ ID terrain_tid_monitor;
 static void monitor_task (INT stacd, void * p_exinf);
 #if TERRAIN_DEBUG_PRINT_MS > 0
 static void print_tilt (void);
-static void print_angle (char const * p_name, float deg, bool b_held);
+static void print_angle (char const * p_name, int16_t ddeg, bool b_held);
 #endif
 
 /* Public function definitions. */
@@ -80,12 +80,16 @@ monitor_task (INT stacd, void * p_exinf)
         (void)terrain_monitor_update();
 
         terrain_calib_info_t info;
-        if ((terrain_monitor_get_calibration(&info) == TERRAIN_OK) &&
-            (info.state != last_state))
+        if (terrain_monitor_get_calibration(&info) == TERRAIN_OK)
         {
-            tm_printf((UB *)"terrain: calibration %s\n",
-                      terrain_monitor_calib_text(info.state));
-            last_state = info.state;
+            terrain_calib_state_t const state =
+                terrain_monitor_calib_state(&info);
+            if (state != last_state)
+            {
+                tm_printf((UB *)"terrain: calibration %s\n",
+                          terrain_monitor_calib_text(state));
+                last_state = state;
+            }
         }
 
 #if TERRAIN_DEBUG_PRINT_MS > 0
@@ -112,17 +116,18 @@ print_tilt (void)
     }
 
     tm_printf((UB *)"terrain:");
-    print_angle("pitch", data.pitch_deg, data.b_pitch_held);
-    print_angle("roll", data.roll_deg, data.b_roll_held);
+    print_angle("pitch", terrain_monitor_data_pitch_ddeg(&data),
+                terrain_monitor_data_is_pitch_held(&data));
+    print_angle("roll", terrain_monitor_data_roll_ddeg(&data),
+                terrain_monitor_data_is_roll_held(&data));
     tm_printf((UB *)"\n");
 }
 
-/* tm_printf has no %f: print the angle as whole degrees and tenths. */
+/* tm_printf has no %f: print tenths as whole degrees and tenths. */
 static void
-print_angle (char const * p_name, float deg, bool b_held)
+print_angle (char const * p_name, int16_t ddeg, bool b_held)
 {
-    float const rounding = (deg < 0.0f) ? -0.5f : 0.5f;
-    INT tenths = (INT)((deg * (float)TENTHS_PER_UNIT) + rounding);
+    INT tenths = (INT)ddeg;
     char const * p_sign = "";
     if (tenths < 0)
     {

@@ -30,7 +30,7 @@
 #define CALIB_TIMEOUT_MS 5000
 #define POLL_MS 100
 #define TILT_SETTLE_MS 500 /* Over three smoothing time constants. */
-#define LEVEL_TOL_DEG 1.0f
+#define LEVEL_TOL_DDEG 10  /* 1 degree. */
 
 #if TERRAIN_TEST_BENCH
 #define COUNTDOWN_S 5
@@ -67,7 +67,9 @@ terrain_test (void)
     TEST_CHECK("TER-U01",
                (first != TERRAIN_ERR_NOT_INIT) &&
                    (second != TERRAIN_ERR_NOT_INIT) &&
-                   ((after.sample_count - before.sample_count) >= MIN_SAMPLES),
+                   ((uint16_t)(terrain_monitor_data_sample_count(&after) -
+                               terrain_monitor_data_sample_count(&before)) >=
+                    MIN_SAMPLES),
                "IMU delivers samples at about 100 Hz");
 
     /* TER-U02: calibration becomes VALID within 5 s of power-up. */
@@ -75,24 +77,27 @@ terrain_test (void)
     for (INT waited = 0; waited < CALIB_TIMEOUT_MS; waited += POLL_MS)
     {
         if ((terrain_monitor_get_calibration(&info) == TERRAIN_OK) &&
-            (info.state == TERRAIN_CALIB_VALID))
+            (terrain_monitor_calib_state(&info) == TERRAIN_CALIB_VALID))
         {
             break;
         }
         (void)tk_dly_tsk(POLL_MS);
     }
-    TEST_CHECK("TER-U02", info.state == TERRAIN_CALIB_VALID,
+    TEST_CHECK("TER-U02",
+               terrain_monitor_calib_state(&info) == TERRAIN_CALIB_VALID,
                "calibration VALID with the car still and level");
 
     /* TER-U04: still and level after calibration, so tilt reads 0. */
     terrain_data_t rest = {0};
     (void)tk_dly_tsk(TILT_SETTLE_MS);
     terrain_status_t status = terrain_monitor_get_latest(&rest);
+    INT const pitch_ddeg = terrain_monitor_data_pitch_ddeg(&rest);
+    INT const roll_ddeg = terrain_monitor_data_roll_ddeg(&rest);
     TEST_CHECK("TER-U04",
-               (status == TERRAIN_OK) && (rest.pitch_deg < LEVEL_TOL_DEG) &&
-                   (rest.pitch_deg > -LEVEL_TOL_DEG) &&
-                   (rest.roll_deg < LEVEL_TOL_DEG) &&
-                   (rest.roll_deg > -LEVEL_TOL_DEG),
+               (status == TERRAIN_OK) && (pitch_ddeg < LEVEL_TOL_DDEG) &&
+                   (pitch_ddeg > -LEVEL_TOL_DDEG) &&
+                   (roll_ddeg < LEVEL_TOL_DDEG) &&
+                   (roll_ddeg > -LEVEL_TOL_DDEG),
                "pitch and roll within 1 degree of 0 at rest");
 
 #if TERRAIN_TEST_BENCH
@@ -201,7 +206,7 @@ measure_still (terrain_calib_info_t * p_out)
     {
         (void)tk_dly_tsk(POLL_MS);
         if ((terrain_monitor_get_calibration(p_out) == TERRAIN_OK) &&
-            (p_out->state != TERRAIN_CALIB_CALIBRATING))
+            (terrain_monitor_calib_state(p_out) != TERRAIN_CALIB_CALIBRATING))
         {
             return true;
         }
