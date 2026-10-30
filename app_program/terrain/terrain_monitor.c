@@ -12,6 +12,7 @@
 #include "drv_imu.h"
 #include "drv_imu_bus.h"
 #include "terrain_config.h"
+#include "terrain_fault.h"
 #include "terrain_hint.h"
 #include "terrain_platform.h"
 #include "terrain_process.h"
@@ -173,8 +174,10 @@ terrain_monitor_init (void)
     terrain_status_t status = setup_sensor();
     if (status != TERRAIN_OK)
     {
+        terrain_fault_set();
         return status;
     }
+    terrain_fault_clear();
 
     terrain_data_t const empty_data = {0};
     uint32_t saved = terrain_platform_lock();
@@ -216,6 +219,7 @@ terrain_monitor_update (void)
         return status;
     }
     own_put(OWN_FAIL_SHIFT, OWN_FAIL_BITS, 0u);
+    terrain_fault_clear();
 
     if (count == 0u)
     {
@@ -647,6 +651,8 @@ handle_fault (void)
     uint32_t streak = own_get(OWN_FAIL_SHIFT, OWN_FAIL_BITS) + 1u;
     if (streak >= TERRAIN_FAULT_RETRY_UPDATES)
     {
+        /* A real fault, not a glitch: raise it until a read succeeds. */
+        terrain_fault_set();
         streak = 0u;
         b_reset = (setup_sensor() == TERRAIN_OK);
     }

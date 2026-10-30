@@ -107,7 +107,8 @@ typedef struct
  * @return TERRAIN_OK, or the reason it failed; see
  *         terrain_monitor_status_text().
  * Does not wait for calibration: terrain_monitor_update() collects the
- * samples. Clears all counters. Safe to call again to retry, for example
+ * samples. Clears all counters. Raises the IMU fault (terrain_fault.h) if
+ * setup fails and clears it if setup succeeds. Safe to call again to retry, for example
  * after plugging the sensor in, but only from the task that calls
  * terrain_monitor_update(); use terrain_monitor_recalibrate() from other
  * tasks.
@@ -125,8 +126,10 @@ terrain_status_t terrain_monitor_init (void);
  * the first TERRAIN_CALIB_SETTLE_SAMPLES are skipped. An
  * attempt in which the car moved is retried without limit. Once VALID,
  * every sample also updates pitch and roll. After
- * TERRAIN_FAULT_RETRY_UPDATES failed reads in a row, the bus and sensor
- * are set up again; the calibration is kept.
+ * TERRAIN_FAULT_RETRY_UPDATES failed reads in a row, the IMU fault is
+ * raised and the bus and sensor are set up again; the calibration is kept.
+ * The next successful read clears the fault; a shorter run of failures
+ * does not raise it.
  */
 terrain_status_t terrain_monitor_update (void);
 

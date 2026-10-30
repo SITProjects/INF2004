@@ -4,12 +4,14 @@
  *
  * The terrain task owns I2C0 (TEAM.md section 3). It sets up the GY-511,
  * retrying while the sensor is missing, then calls
- * terrain_monitor_update() every 10 ms and reports calibration changes.
+ * terrain_monitor_update() every 10 ms and reports calibration and IMU
+ * fault changes.
  * With TERRAIN_DEBUG_PRINT_MS set it also prints pitch and roll.
  */
 
 #include "terrain.h"
 #include "terrain_config.h"
+#include "terrain_fault.h"
 #include "terrain_monitor.h"
 #include "terrain_platform.h"
 
@@ -72,6 +74,7 @@ monitor_task (INT stacd, void * p_exinf)
                     "on level ground\n");
 
     terrain_calib_state_t last_state = TERRAIN_CALIB_CALIBRATING;
+    bool b_last_fault = false;
 #if TERRAIN_DEBUG_PRINT_MS > 0
     INT since_print_ms = 0;
 #endif
@@ -90,6 +93,14 @@ monitor_task (INT stacd, void * p_exinf)
                           terrain_monitor_calib_text(state));
                 last_state = state;
             }
+        }
+
+        bool const b_fault = terrain_fault_is_active();
+        if (b_fault != b_last_fault)
+        {
+            tm_printf((UB *)"terrain: IMU fault %s\n",
+                      b_fault ? "raised" : "cleared");
+            b_last_fault = b_fault;
         }
 
 #if TERRAIN_DEBUG_PRINT_MS > 0
