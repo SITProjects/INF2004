@@ -8,7 +8,7 @@ Summary:
 
 | Subsystem | Device | Pins | RP2040 block |
 |---|---|---|---|
-| obstacle | HC-SR04-style ultrasonic sensor | GP2 echo, GP3 trigger | SIO, GPIO edge interrupt, TIMER |
+| obstacle | HC-SR04-style ultrasonic sensor | GP17 echo, GP16 trigger | SIO, GPIO edge interrupt, TIMER |
 | obstacle | hobby servo (500–2500 µs at 50 Hz) | GP12 | PWM slice 6 A |
 | motion | two DC motors on the Robo Pico H-bridge (M1, M2) | GP8/GP9, GP10/GP11 | PWM slices 4 and 5 at 10 kHz |
 | line_follow | two reflective IR sensors, analogue outputs | GP26, GP27 | ADC channels 0 and 1 |

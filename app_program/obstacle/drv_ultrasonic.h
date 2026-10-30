@@ -13,8 +13,17 @@
 
 /* Public includes. */
 #include <stdbool.h>
+#include <stdint.h>
 
 /* Public types, constants, and macros. */
+
+typedef enum
+{
+    ULTRASONIC_PENDING = 0,
+    ULTRASONIC_VALID,
+    ULTRASONIC_NO_ECHO,
+    ULTRASONIC_FAULT
+} ultrasonic_result_t;
 
 /* Public function declarations. */
 
@@ -30,18 +39,31 @@ int ultrasonic_init (int trig_pin, int echo_pin);
 
 /**
  * @brief Start a measurement on the configured trigger pin.
+ * Uses the trigger timing and minimum ping interval in obstacle_config.h.
  * @return False while a measurement is pending, unread, or within the
- *         minimum ping interval.
+ *         minimum ping interval. True accepts a transaction; if ECHO is
+ *         already high, read returns FAULT without sending a trigger.
  */
 bool ultrasonic_trigger (void);
 
 /**
- * @brief Consume a completed measurement, expiring missing echoes after
- *        23 ms.
- * @param distance_cm Non-null; receives the distance in cm, or -1 for an
- *        invalid echo. Unchanged when the function returns false.
- * @return True when a result was consumed.
+ * @brief Poll and consume a measurement.
+ *
+ * @param echo_us Non-null output. Receives the pulse duration for VALID,
+ *        zero for NO_ECHO or FAULT, and remains unchanged for PENDING.
+ *
+ * Start timeout is measured from the trigger; pulse timeout from the rise.
+ * Completed results are consumed once. The scanner applies no-return policy.
+ * @return ULTRASONIC_PENDING: no completed result.
+ *         ULTRASONIC_VALID: a valid pulse was captured.
+ *         ULTRASONIC_NO_ECHO: a pulse that rose but reached the measurable
+ *         range/storage limit (nothing in range). Late edges are ignored.
+ *         ULTRASONIC_FAULT: no rise before the start timeout (sensor did not
+ *         answer), malformed edges, zero pulse or ECHO already high when a
+ *         new trigger is attempted.
+ *
+ * Only the sensor-owning task may call this function.
  */
-bool ultrasonic_read (float * distance_cm);
+ultrasonic_result_t ultrasonic_read (uint16_t * echo_us);
 
 #endif /* DRV_ULTRASONIC_H */
