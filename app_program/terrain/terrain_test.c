@@ -183,8 +183,9 @@ countdown (void)
 
 /*
  * Start a calibration and wait for one attempt in which the car did not
- * move. Its average is in p_out whether the result was VALID or
- * NOT_LEVEL, so this works with a level reference that is out of date.
+ * move: the state then leaves CALIBRATING. Its average is in p_out whether
+ * the result was VALID or NOT_LEVEL, so this works with a level reference
+ * that is out of date.
  */
 static bool
 measure_still (terrain_calib_info_t * p_out)
@@ -200,7 +201,7 @@ measure_still (terrain_calib_info_t * p_out)
     {
         (void)tk_dly_tsk(POLL_MS);
         if ((terrain_monitor_get_calibration(p_out) == TERRAIN_OK) &&
-            (p_out->attempt_count > p_out->retry_count))
+            (p_out->state != TERRAIN_CALIB_CALIBRATING))
         {
             return true;
         }

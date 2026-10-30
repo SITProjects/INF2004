@@ -35,7 +35,11 @@ static terrain_calib_limits_t const calib_limits = {
     TERRAIN_CALIB_MAX_SPREAD_MPS2, TERRAIN_CALIB_MAX_GRAVITY_ERR_MPS2,
     TERRAIN_LEVEL_MAX_DEG};
 
-/* Shared with other tasks; access only under terrain_platform_lock(). */
+/*
+ * Shared with other tasks; access only under terrain_platform_lock().
+ * Only the caller of terrain_monitor_update() writes latest and calib_info;
+ * other tasks write only b_recal_request.
+ */
 static terrain_data_t latest;
 static terrain_calib_info_t calib_info;
 static bool b_recal_request = false;
@@ -59,6 +63,8 @@ static bool take_recal_request (void);
 static void calib_start (void);
 static void calib_add (terrain_vec3_t const * p_sample);
 static void handle_fault (void);
+static void show_calibrating (terrain_data_t * p_data);
+static void clear_calib_info (terrain_calib_info_t * p_info);
 static terrain_calib_state_t shared_state (void);
 static void publish (terrain_vec3_t const * p_accel, uint32_t new_samples,
                      bool b_overrun);
@@ -78,10 +84,10 @@ terrain_monitor_init (void)
     }
 
     terrain_data_t const empty_data = {0};
-    terrain_calib_info_t const empty_info = {0};
     uint32_t saved = terrain_platform_lock();
     latest = empty_data;
-    calib_info = empty_info;
+    show_calibrating(&latest);
+    clear_calib_info(&calib_info);
     b_recal_request = false;
     terrain_platform_unlock(saved);
 
@@ -179,7 +185,14 @@ terrain_monitor_get_latest (terrain_data_t * p_out)
 
     uint32_t saved = terrain_platform_lock();
     *p_out = latest;
+    bool const b_pending = b_recal_request;
     terrain_platform_unlock(saved);
+
+    /* The old results stand until the next update resets them: hide them. */
+    if (b_pending)
+    {
+        show_calibrating(p_out);
+    }
 
     if (p_out->calib_state != TERRAIN_CALIB_VALID)
     {
@@ -202,7 +215,13 @@ terrain_monitor_get_calibration (terrain_calib_info_t * p_out)
 
     uint32_t saved = terrain_platform_lock();
     *p_out = calib_info;
+    bool const b_pending = b_recal_request;
     terrain_platform_unlock(saved);
+
+    if (b_pending)
+    {
+        clear_calib_info(p_out);
+    }
     return TERRAIN_OK;
 }
 
@@ -216,23 +235,11 @@ terrain_monitor_recalibrate (void)
 
     /*
      * Only flag the request: terrain_monitor_update() does the work in its own
-     * task, so the sensor is never used by two tasks at once. The shared
-     * copies change now so no caller sees the old VALID state.
+     * task, so the sensor and the shared copies have one user. Until then the
+     * getters hide the old results, so no caller sees the old VALID state.
      */
-    terrain_calib_info_t const empty_info = {0};
-
     uint32_t saved = terrain_platform_lock();
     b_recal_request = true;
-    latest.calib_state = TERRAIN_CALIB_CALIBRATING;
-    latest.ax_mps2 = 0.0f;
-    latest.ay_mps2 = 0.0f;
-    latest.az_mps2 = 0.0f;
-    latest.pitch_deg = 0.0f;
-    latest.roll_deg = 0.0f;
-    latest.b_pitch_held = false;
-    latest.b_roll_held = false;
-    calib_info = empty_info;
-    calib_info.state = TERRAIN_CALIB_CALIBRATING;
     terrain_platform_unlock(saved);
     return TERRAIN_OK;
 }
@@ -321,13 +328,22 @@ read_samples (imu_accel_raw_t * p_buf, uint32_t * p_count, bool * p_overrun)
     return (status == IMU_OK) ? TERRAIN_OK : TERRAIN_ERR_SENSOR;
 }
 
-/* Return and clear a request made by terrain_monitor_recalibrate(). */
+/*
+ * Return and clear a request made by terrain_monitor_recalibrate(). The
+ * shared copies are reset in the same locked section, so a getter never
+ * finds the request gone while the old results are still there.
+ */
 static bool
 take_recal_request (void)
 {
     uint32_t saved = terrain_platform_lock();
     bool b_request = b_recal_request;
-    b_recal_request = false;
+    if (b_request)
+    {
+        b_recal_request = false;
+        show_calibrating(&latest);
+        clear_calib_info(&calib_info);
+    }
     terrain_platform_unlock(saved);
     return b_request;
 }
@@ -337,19 +353,12 @@ static void
 calib_start (void)
 {
     terrain_vec3_t const zero = {0.0f, 0.0f, 0.0f};
-    terrain_calib_info_t const empty_info = {0};
 
     calib_state = TERRAIN_CALIB_CALIBRATING;
     settle_left = TERRAIN_CALIB_SETTLE_SAMPLES;
     bias = zero;
     terrain_process_calib_reset(&calib_acc);
     terrain_process_tilt_reset(&tilt);
-
-    uint32_t saved = terrain_platform_lock();
-    calib_info = empty_info;
-    calib_info.state = shared_state();
-    latest.calib_state = shared_state();
-    terrain_platform_unlock(saved);
 }
 
 /* Collect one sample; after a full attempt, judge it. */
@@ -421,6 +430,33 @@ handle_fault (void)
         latest.sensor_reset_count++;
     }
     terrain_platform_unlock(saved);
+}
+
+/*
+ * What the shared snapshot shows while calibrating: no readings, counters
+ * and time kept. Used for the real reset and by the getters while a
+ * request is pending, so both always agree.
+ */
+static void
+show_calibrating (terrain_data_t * p_data)
+{
+    p_data->calib_state = TERRAIN_CALIB_CALIBRATING;
+    p_data->ax_mps2 = 0.0f;
+    p_data->ay_mps2 = 0.0f;
+    p_data->az_mps2 = 0.0f;
+    p_data->pitch_deg = 0.0f;
+    p_data->roll_deg = 0.0f;
+    p_data->b_pitch_held = false;
+    p_data->b_roll_held = false;
+}
+
+/* Calibration details at the start of a run of attempts. */
+static void
+clear_calib_info (terrain_calib_info_t * p_info)
+{
+    terrain_calib_info_t const empty_info = {0};
+    *p_info = empty_info;
+    p_info->state = TERRAIN_CALIB_CALIBRATING;
 }
 
 /*

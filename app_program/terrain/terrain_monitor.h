@@ -158,10 +158,13 @@ terrain_status_t terrain_monitor_get_calibration (terrain_calib_info_t * p_out);
 /**
  * @brief Throw away the current calibration and measure again.
  * @return TERRAIN_OK or TERRAIN_ERR_NOT_INIT.
- * The state becomes TERRAIN_CALIB_CALIBRATING at once; the following
- * terrain_monitor_update() calls do the measuring. Does not touch the sensor,
- * so it is safe to call from other tasks, for example on a mission
- * reset. The car must stand still on level ground for 2.5 s afterwards.
+ * Only records the request: the next terrain_monitor_update() resets the
+ * results and the following ones do the measuring. Until that reset the
+ * getters already report TERRAIN_CALIB_CALIBRATING, with zero readings and
+ * empty calibration details, so no caller sees the old results. Does not
+ * touch the sensor, so it is safe to call from other tasks, for example on
+ * a mission reset. The car must stand still on level ground for 2.5 s
+ * afterwards.
  */
 terrain_status_t terrain_monitor_recalibrate (void);
 
