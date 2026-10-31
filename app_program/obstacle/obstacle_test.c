@@ -8,15 +8,20 @@
  * testing/obstacle/TEST_LOG.md. Test IDs: OBS-U01, OBS-U02, ...
  */
 
+#include "../test_report.h"
 #include "obstacle.h"
 #include "obstacle_decision.h"
-#include "../test_report.h"
+#include "obstacle_scan.h"
 
 #if APP_TEST
 
 /* Private types, constants, and macros. */
 #define SAMPLES 10
-#define SAMPLE_GAP_MS 97 /* Not a multiple of the scan period. */
+#define SAMPLE_GAP_MS (10u * OBSTACLE_UPDATE_PERIOD_MS)
+#define TEST_POLL_MS OBSTACLE_TICK_MS
+#define TEST_MARGIN_MS (8u * (OBSTACLE_TICK_MS + OBSTACLE_UPDATE_PERIOD_MS))
+#define TEST_ACK_MS (OBSTACLE_TRANSACTION_MS + TEST_MARGIN_MS)
+#define TEST_RECOVERY_MS (OBSTACLE_SCAN_TIMEOUT_MS + 15000u)
 #define PWM_SLICE_STRIDE 0x14u
 #define SERVO_SLICE (((UW)OBSTACLE_SERVO_PIN / 2u) % 8u)
 #define SERVO_WRAP 19999u
@@ -47,6 +52,17 @@ static bool median_valid (void);
 static bool position_valid (void);
 static bool centre_valid (void);
 static bool sides_valid (void);
+static bool sleeping_valid (void);
+static void sleep_sampler (INT stacd, void * p_exinf);
+static bool critical_valid (void);
+static bool critical_release_valid (void);
+static bool elapsed_valid (void);
+static bool staleness_valid (void);
+static bool scan_timeout_valid (void);
+static bool wait_snapshot (obstacle_scan_test_snapshot_t * p_snapshot,
+                           bool hold, bool clear, bool sides,
+                           uint32_t timeout_ms);
+static bool release_hold (void);
 
 /* Public function definitions. */
 
@@ -60,27 +76,17 @@ obstacle_test (void)
     TEST_INIT();
 
     /*
-     * OBS-U01: the scan task started (so obstacle_scan_init() succeeded)
-     * and sleeps between scans instead of busy-looping.
-     */
-    INT waiting = 0;
-    for (INT i = 0; i < SAMPLES; i++)
-    {
-        T_RTSK rtsk;
-        (void)tk_dly_tsk(SAMPLE_GAP_MS);
-        if ((tk_ref_tsk(obstacle_tid_scan, &rtsk) == E_OK) &&
-            ((rtsk.tskstat & TTS_WAI) != 0u))
-        {
-            waiting++;
-        }
-    }
-    TEST_CHECK("OBS-U01", waiting >= (SAMPLES - 1),
+   * OBS-U01: the scan task started (so obstacle_scan_init() succeeded)
+   * and sleeps between scans instead of busy-looping.
+   */
+    TEST_CHECK("OBS-U01", sleeping_valid(),
                "scan task runs and sleeps between scans");
 
     /* OBS-U02: the servo slice runs a 1 MHz counter that wraps at 20 ms. */
     UW base = PWM_BASE + (PWM_SLICE_STRIDE * SERVO_SLICE);
     TEST_CHECK("OBS-U02",
-               ((in_w(base + PWM_CHx_CSR) & PWM_CH_CSR_EN) != 0u) &&
+               (OBSTACLE_CALIBRATION_MODE == OBSTACLE_CAL_MODE_OFF) &&
+                   ((in_w(base + PWM_CHx_CSR) & PWM_CH_CSR_EN) != 0u) &&
                    (in_w(base + PWM_CHx_TOP) == SERVO_WRAP) &&
                    (in_w(base + PWM_CHx_DIV) == SERVO_DIV_1MHZ),
                "servo PWM slice runs at 50 Hz");
@@ -100,10 +106,280 @@ obstacle_test (void)
     TEST_CHECK("OBS-U19", sides_valid(),
                "sides: farther clear wins, no echo first, ties go left");
 
+    tm_printf((UB *)"[TEST] OBS-U20 critical boundary %lu mm (%lu us)\n",
+              (UW)OBSTACLE_CRITICAL_DISTANCE_MM, (UW)OBSTACLE_CRITICAL_ECHO_US);
+    TEST_CHECK("OBS-U20", critical_valid(),
+               "critical: VALID below configured threshold only");
+    tm_printf((UB *)"[TEST] OBS-U21 release boundary %lu mm (%lu us)\n",
+              (UW)OBSTACLE_CRITICAL_RELEASE_DISTANCE_MM,
+              (UW)OBSTACLE_CRITICAL_RELEASE_ECHO_US);
+    TEST_CHECK("OBS-U21", critical_release_valid(),
+               "critical release: configured boundary is exclusive");
+    TEST_CHECK("OBS-U22", elapsed_valid(), "elapsed limit: strict, wrap-safe");
+    TEST_CHECK("OBS-U23", staleness_valid(),
+               "stale watchdog event, UNKNOWN, and clear-path recovery");
+    TEST_CHECK("OBS-U24", scan_timeout_valid(),
+               "side timeout event, UNKNOWN, and clear-path recovery");
+
     TEST_SUMMARY("obstacle");
 }
 
 /* Private function definitions. */
+
+/* Same-core lower-priority sampling cannot pre-empt a READY scanner.
+ * The initial task's bounded flag wait also detects a scanner busy loop.
+ * No sampler result is shared outside the kernel event-flag protocol. */
+static void
+sleep_sampler (INT stacd, void * p_exinf)
+{
+    (void)p_exinf;
+    obstacle_scan_test_snapshot_t before;
+    obstacle_scan_test_snapshot_t after;
+    INT waiting = 0;
+    bool ok = obstacle_scan_test_snapshot(&before) == 0;
+    for (INT i = 0; i < SAMPLES; ++i)
+    {
+        T_RTSK state;
+        if ((tk_dly_tsk(SAMPLE_GAP_MS) != E_OK) ||
+            (tk_ref_tsk(obstacle_tid_scan, &state) != E_OK))
+        {
+            ok = false;
+            break;
+        }
+        if ((state.tskstat & TTS_WAI) != 0u)
+        {
+            ++waiting;
+        }
+    }
+    ok = ok && obstacle_scan_test_snapshot(&after) == 0 && after.initialized &&
+         after.heartbeat != before.heartbeat;
+    ER error =
+        tk_set_flg((ID)stacd, (ok && (waiting >= SAMPLES - 1)) ? 1u : 2u);
+    app_check(error, "obstacle sampler completion");
+    tk_ext_tsk();
+}
+
+static bool
+sleeping_valid (void)
+{
+#if OBSTACLE_CALIBRATION_MODE != OBSTACLE_CAL_MODE_OFF
+    tm_printf((UB *)"[TEST] OBS-U01 normal scanner disabled by calibration\n");
+    return false;
+#endif
+    T_CFLG flag = {0};
+    ID flag_id = tk_cre_flg(&flag);
+    if (flag_id < E_OK)
+    {
+        app_check(flag_id, "obstacle sampler flag");
+        return false;
+    }
+    T_CTSK task = {0};
+    task.task = (FP)sleep_sampler;
+    task.tskatr = TA_HLNG | TA_RNG3;
+    task.itskpri = OBSTACLE_PRI_SCAN + 1;
+    task.stksz = TASK_STACK_SIZE;
+#if TK_SUPPORT_SMP
+    task.tskatr |= TA_ASSPRC;
+    task.assprc = TP_PRC1;
+#endif
+    ID task_id = tk_cre_tsk(&task);
+    bool ok = false;
+    if (task_id >= E_OK)
+    {
+        ER started = tk_sta_tsk(task_id, flag_id);
+        if (started == E_OK)
+        {
+            UINT result = 0u;
+            ER waited =
+                tk_wai_flg(flag_id, 3u, TWF_ORW, &result,
+                           (SAMPLES * SAMPLE_GAP_MS) + TEST_MARGIN_MS + 1000u);
+            ok = (waited == E_OK) && (result == 1u);
+            app_check(waited, "obstacle sampler bounded wait");
+            /* E_OBJ means the worker has already become dormant. */
+            ER stopped = tk_ter_tsk(task_id);
+            if ((stopped != E_OK) && (stopped != E_OBJ))
+            {
+                app_check(stopped, "obstacle sampler terminate");
+                ok = false;
+            }
+        }
+        else
+        {
+            app_check(started, "obstacle sampler start");
+        }
+        ER deleted = tk_del_tsk(task_id);
+        app_check(deleted, "obstacle sampler delete");
+        ok = (deleted == E_OK) && ok;
+    }
+    else
+    {
+        app_check(task_id, "obstacle sampler create");
+    }
+    ER deleted = tk_del_flg(flag_id);
+    app_check(deleted, "obstacle sampler flag delete");
+    return (deleted == E_OK) && ok;
+}
+
+static bool
+critical_valid (void)
+{
+    return obstacle_decision_is_critical(ULTRASONIC_VALID,
+                                         OBSTACLE_CRITICAL_ECHO_US - 1u) &&
+           !obstacle_decision_is_critical(ULTRASONIC_VALID,
+                                          OBSTACLE_CRITICAL_ECHO_US) &&
+           !obstacle_decision_is_critical(ULTRASONIC_VALID, UINT16_MAX) &&
+           !obstacle_decision_is_critical(ULTRASONIC_NO_ECHO, 0u) &&
+           !obstacle_decision_is_critical(ULTRASONIC_FAULT, 0u) &&
+           !obstacle_decision_is_critical(ULTRASONIC_PENDING, 1u);
+}
+
+static bool
+critical_release_valid (void)
+{
+    return obstacle_decision_blocks_critical_release(
+               ULTRASONIC_VALID, OBSTACLE_CRITICAL_RELEASE_ECHO_US - 1u) &&
+           !obstacle_decision_blocks_critical_release(
+               ULTRASONIC_VALID, OBSTACLE_CRITICAL_RELEASE_ECHO_US) &&
+           !obstacle_decision_blocks_critical_release(ULTRASONIC_NO_ECHO, 0u) &&
+           !obstacle_decision_blocks_critical_release(ULTRASONIC_FAULT, 0u) &&
+           !obstacle_decision_blocks_critical_release(ULTRASONIC_PENDING, 1u);
+}
+
+static bool
+elapsed_valid (void)
+{
+    return !obstacle_decision_elapsed_exceeds(1200u, 1000u, 200u) &&
+           obstacle_decision_elapsed_exceeds(1201u, 1000u, 200u) &&
+           obstacle_decision_elapsed_exceeds(5u, 0xFFFFFFF0u, 20u) &&
+           !obstacle_decision_elapsed_exceeds(5u, 0xFFFFFFF0u, 21u);
+}
+
+/* All fields come from one synchronized owner snapshot. No driver getters.
+ * A poll budget bounds both setup and recovery, even if the owner stops. */
+static bool
+wait_snapshot (obstacle_scan_test_snapshot_t * p_snapshot, bool hold,
+               bool clear, bool sides, uint32_t timeout_ms)
+{
+#if OBSTACLE_CALIBRATION_MODE != OBSTACLE_CAL_MODE_OFF
+    tm_printf((UB *)"[TEST] normal scanner disabled by calibration\n");
+    return false;
+#endif
+    SYSTIM start;
+    if (tk_get_otm(&start) != E_OK)
+    {
+        return false;
+    }
+    for (;;)
+    {
+        SYSTIM now;
+        if ((tk_get_otm(&now) != E_OK) ||
+            ((uint32_t)(now.lo - start.lo) > timeout_ms))
+        {
+            return false;
+        }
+        if (obstacle_scan_test_snapshot(p_snapshot) != 0)
+        {
+            return false;
+        }
+        if (p_snapshot->initialized && (p_snapshot->hold_requested == hold) &&
+            (p_snapshot->hold_acknowledged == hold) &&
+            (!clear || (!p_snapshot->stop_requested &&
+                        p_snapshot->status == ROBOT_OBSTACLE_CLEAR)) &&
+            (!sides || p_snapshot->scanning_sides))
+        {
+            return true;
+        }
+        if (tk_dly_tsk(TEST_POLL_MS) != E_OK)
+        {
+            return false;
+        }
+    }
+}
+
+static bool
+release_hold (void)
+{
+    obstacle_scan_test_snapshot_t snapshot;
+    bool released = obstacle_scan_test_request(false) == 0;
+    if (!released)
+    {
+        tm_printf((UB *)"[TEST] obstacle hold release request failed\n");
+    }
+    bool recovered = released && wait_snapshot(&snapshot, false, true, false,
+                                               TEST_RECOVERY_MS);
+    if (!recovered)
+    {
+        tm_printf((UB *)"[TEST] obstacle clear-path recovery timed out\n");
+    }
+    return recovered;
+}
+
+static bool
+staleness_valid (void)
+{
+    obstacle_scan_test_snapshot_t before;
+    obstacle_scan_test_snapshot_t after;
+    bool ok = false;
+    tm_printf((UB *)"[TEST] OBS-U23 keep path clear beyond %lu mm\n",
+              (UW)(OBSTACLE_DETECT_DISTANCE_MM + 100u));
+    if (wait_snapshot(&before, false, true, false, 5000u) &&
+        obstacle_scan_test_request(true) == 0 &&
+        wait_snapshot(&before, true, false, false, TEST_ACK_MS) &&
+        !before.stop_requested &&
+        tk_dly_tsk(OBSTACLE_FORWARD_MAX_AGE_MS + TEST_MARGIN_MS) == E_OK &&
+        obstacle_scan_test_snapshot(&after) == 0)
+    {
+        uint32_t age = after.stale_ms - before.last_usable_centre_ms;
+        ok = after.hold_acknowledged && after.stop_requested &&
+             after.status == ROBOT_OBSTACLE_UNKNOWN &&
+             after.stale_count - before.stale_count == 1u &&
+             after.last_usable_centre_ms == before.last_usable_centre_ms &&
+             age > OBSTACLE_FORWARD_MAX_AGE_MS &&
+             age <= OBSTACLE_FORWARD_MAX_AGE_MS + TEST_MARGIN_MS;
+        tm_printf((UB *)"[TEST] OBS-U23 stale event age %lu ms delta %lu\n",
+                  (UW)age, (UW)(after.stale_count - before.stale_count));
+    }
+    else
+    {
+        tm_printf((UB *)"[TEST] OBS-U23 setup/hold/snapshot failed\n");
+    }
+    bool recovered = release_hold();
+    return recovered && ok;
+}
+
+static bool
+scan_timeout_valid (void)
+{
+    obstacle_scan_test_snapshot_t before;
+    obstacle_scan_test_snapshot_t after;
+    bool ok = false;
+    tm_printf((UB *)"[TEST] OBS-U24 place board between %lu and %lu mm "
+                    "within 15 s\n",
+              (UW)OBSTACLE_CRITICAL_RELEASE_DISTANCE_MM,
+              (UW)OBSTACLE_DETECT_DISTANCE_MM);
+    if (wait_snapshot(&before, false, false, true, 15000u) &&
+        obstacle_scan_test_request(true) == 0 &&
+        wait_snapshot(&before, true, false, true, TEST_ACK_MS) &&
+        tk_dly_tsk(OBSTACLE_SCAN_TIMEOUT_MS + TEST_MARGIN_MS) == E_OK &&
+        obstacle_scan_test_snapshot(&after) == 0)
+    {
+        uint32_t age = after.timeout_ms - before.side_scan_start_ms;
+        ok = after.hold_acknowledged && !after.scanning_sides &&
+             after.stop_requested && after.status == ROBOT_OBSTACLE_UNKNOWN &&
+             after.timeout_count - before.timeout_count == 1u &&
+             age > OBSTACLE_SCAN_TIMEOUT_MS &&
+             age <= OBSTACLE_SCAN_TIMEOUT_MS + TEST_MARGIN_MS;
+        tm_printf((UB *)"[TEST] OBS-U24 timeout event age %lu ms delta %lu\n",
+                  (UW)age, (UW)(after.timeout_count - before.timeout_count));
+    }
+    else
+    {
+        tm_printf((UB *)"[TEST] OBS-U24 setup/hold/snapshot failed\n");
+    }
+    tm_printf((UB *)"[TEST] OBS-U24 remove board; keep path clear\n");
+    bool recovered = release_hold();
+    return recovered && ok;
+}
 
 /* OBS-U16: median of the nonzero samples; zero means no echo. */
 static bool

@@ -1,0 +1,1023 @@
+
+
+
+
+microT-Kernel Version 3.00
+
+
+
+
+
+=== micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+
+dual-core (SMP) build, usermain on core 0
+
+motion: motors initialized and braked
+
+line_follow: IR line-following dry run started. Motors disabled.
+
+all subsystems started
+
+
+
+[TEST] === test run start ===
+
+Wi-Fi: the kernel radio service joins the network from config/wifi_secrets.h
+
+wifi: cyw43_utk_task starting (proc 1)
+
+terrain: setup failed: accelerometer not found: check the cable, Grove port and 3.3 V power; retrying
+
+wifi: cyw43_init() ...
+
+wifi: cyw43_init() returned, bringing interface up ...
+
+Left AO: 44 | Right AO: 42 | Command: SEARCH
+
+[0 ms]obstacle: scanning started
+
+[0 ms]obstacle: stop request ACTIVE (sensing output only)
+
+Left AO: 54 | Right AO: 53 | Command: SEARCH
+
+Left AO: 49 | Right AO: 40 | Command: SEARCH
+
+Left AO: 44 | Right AO: 46 | Command: SEARCH
+
+[1220 ms]obstacle: stop request RELEASED
+
+[1220 ms]obstacle: [0x11] CLEAR dir 90
+
+[TEST] OBS-U01 PASS  scan task runs and sleeps between scans
+
+[TEST] OBS-U02 PASS  servo PWM slice runs at 50 Hz
+
+[TEST] OBS-U10 PASS  packed obstacle fields clamp without changing neighbours
+
+[TEST] OBS-U16 PASS  ping median ignores no-echo samples and averages two
+
+[TEST] OBS-U17 PASS  position result is FAULT, NO_ECHO or VALID
+
+[TEST] OBS-U18 PASS  centre: no echo or far is CLEAR, near scans, fault UNKNOWN
+
+[TEST] OBS-U19 PASS  sides: farther clear wins, no echo first, ties go left
+
+[TEST] OBS-U20 critical boundary 80 mm (467 us)
+
+[TEST] OBS-U20 PASS  critical: VALID below configured threshold only
+
+[TEST] OBS-U21 release boundary 100 mm (584 us)
+
+[TEST] OBS-U21 PASS  critical release: configured boundary is exclusive
+
+[TEST] OBS-U22 PASS  elapsed limit: strict, wrap-safe
+
+[TEST] OBS-U23 keep path clear beyond 400 mm
+
+Left AO: 51 | Right AO: 52 | Command: SEARCH
+
+wifi: joining "your-network-name" ...
+
+[1440 ms]obstacle: forward data stale (220 ms old)
+
+[1440 ms]obstacle: stop request ACTIVE
+
+[1440 ms]obstacle: [0x04] UNKNOWN dir -1
+
+wifi: link status -> joined AP, waiting for IP (1)
+
+[TEST] OBS-U23 stale event age 220 ms delta 1
+
+Left AO: 49 | Right AO: 49 | Command: SEARCH
+
+[1820 ms]obstacle: stop request RELEASED
+
+[1820 ms]obstacle: [0x11] CLEAR dir 90
+
+[TEST] OBS-U23 PASS  stale watchdog event, UNKNOWN, and clear-path recovery
+
+[TEST] OBS-U24 place board between 100 and 300 mm within 15 s
+
+[1880 ms]obstacle: [0x11] CLEAR dir 90
+
+[1960 ms]obstacle: [0x11] CLEAR dir 90
+
+Left AO: 49 | Right AO: 51 | Command: SEARCH
+
+[2040 ms]obstacle: [0x11] CLEAR dir 90
+
+[2120 ms]obstacle: [0x11] CLEAR dir 90
+
+[2180 ms]obstacle: [0x11] CLEAR dir 90
+
+[2240 ms]obstacle: [0x11] CLEAR dir 90
+
+wifi: link status -> FAILED: SSID not found (out of range, wrong name, or 5GHz-only network -- this chip is 2.4GHz only) (-2)
+
+[2300 ms]obstacle: [0x11] CLEAR dir 90
+
+Left AO: 52 | Right AO: 53 | Command: SEARCH
+
+[2380 ms]obstacle: [0x11] CLEAR dir 90
+
+[2440 ms]obstacle: [0x11] CLEAR dir 90
+
+[2500 ms]obstacle: [0x11] CLEAR dir 90
+
+[2560 ms]obstacle: stop request ACTIVE
+
+[2560 ms]obstacle: [0x00] SCANNING dir -1
+
+[2720 ms]obstacle: side scan started
+
+Left AO: 51 | Right AO: 54 | Command: SEARCH
+
+Left AO: 49 | Right AO: 51 | Command: SEARCH
+
+Left AO: 50 | Right AO: 52 | Command: SEARCH
+
+Left AO: 50 | Right AO: 51 | Command: SEARCH
+
+Left AO: 50 | Right AO: 52 | Command: SEARCH
+
+Left AO: 50 | Right AO: 51 | Command: SEARCH
+
+Left AO: 50 | Right AO: 52 | Command: SEARCH
+
+Left AO: 50 | Right AO: 51 | Command: SEARCH
+
+Left AO: 50 | Right AO: 51 | Command: SEARCH
+
+Left AO: 50 | Right AO: 51 | Command: SEARCH
+
+Left AO: 49 | Right AO: 51 | Command: SEARCH
+
+Left AO: 50 | Right AO: 53 | Command: SEARCH
+
+wifi: joining "your-network-name" ...
+
+Left AO: 51 | Right AO: 52 | Command: SEARCH
+
+wifi: link status -> joined AP, waiting for IP (1)
+
+Left AO: 50 | Right AO: 51 | Command: SEARCH
+
+Left AO: 49 | Right AO: 51 | Command: SEARCH
+
+wifi: link status -> FAILED: SSID not found (out of range, wrong name, or 5GHz-only network -- this chip is 2.4GHz only) (-2)
+
+[8280 ms]obstacle: side scan timed out after 5560 ms
+
+[8280 ms]obstacle: [0x04] UNKNOWN dir -1
+
+[TEST] OBS-U24 timeout event age 5560 ms delta 1
+
+[TEST] OBS-U24 remove board; keep path clear
+
+Left AO: 50 | Right AO: 53 | Command: SEARCH
+
+Left AO: 50 | Right AO: 52 | Command: SEARCH
+
+Left AO: 50 | Right AO: 52 | Command: SEARCH
+
+Left AO: 49 | Right AO: 52 | Command: SEARCH
+
+[9480 ms]obstacle: stop request RELEASED
+
+[9480 ms]obstacle: [0x11] CLEAR dir 90
+
+[TEST] OBS-U24 PASS  side timeout event, UNKNOWN, and clear-path recovery
+
+[TEST] obstacle SUMMARY 12 passed, 0 failed
+
+[TEST] MOT-U01 PASS  both motors run 10 kHz PWM and are braked
+
+[TEST] motion SUMMARY 1 passed, 0 failed
+
+[9540 ms]obstacle: [0x11] CLEAR dir 90
+
+[9620 ms]obstacle: [0x11] CLEAR dir 90
+
+[9680 ms]obstacle: [0x11] CLEAR dir 90
+
+[9740 ms]obstacle: [0x11] CLEAR dir 90
+
+Left AO: 48 | Right AO: 41 | Command: SEARCH
+
+[9820 ms]obstacle: [0x11] CLEAR dir 90
+
+[9900 ms]obstacle: [0x11] CLEAR dir 90
+
+[9980 ms]obstacle: [0x11] CLEAR dir 90
+
+[10040 ms]obstacle: [0x11] CLEAR dir 90
+
+[10120 ms]obstacle: [0x11] CLEAR dir 90
+
+Left AO: 50 | Right AO: 48 | Command: SEARCH
+
+[10180 ms]obstacle: [0x11] CLEAR dir 90
+
+[10260 ms]obstacle: [0x11] CLEAR dir 90
+
+[10320 ms]obstacle: [0x11] CLEAR dir 90
+
+[10380 ms]obstacle: [0x11] CLEAR dir 90
+
+[10480 ms]obstacle: [0x11] CLEAR dir 90
+
+Left AO: 49 | Right AO: 41 | Command: SEARCH
+
+[10560 ms]obstacle: [0x11] CLEAR dir 90
+
+[TEST] LINE-U01 FAIL  line task runs and sleeps between samples   (../app_program/line_follow/line_follow_test.c:42)
+
+[TEST] line_follow SUMMARY 0 passed, 1 failed
+
+[10640 ms]obstacle: [0x11] CLEAR dir 90
+
+[10680 ms]obstacle: [0x11] CLEAR dir 90
+
+[10780 ms]obstacle: [0x11] CLEAR dir 90
+
+[10840 ms]obstacle: [0x11] CLEAR dir 90
+
+[10900 ms]obstacle: [0x11] CLEAR dir 90
+
+Left AO: 50 | Right AO: 49 | Command: SEARCH
+
+[10980 ms]obstacle: [0x11] CLEAR dir 90
+
+[11060 ms]obstacle: [0x11] CLEAR dir 90
+
+[TEST] TER-U01 FAIL  IMU delivers samples at about 100 Hz   (../app_program/terrain/terrain_test.c:39)
+
+[11140 ms]obstacle: [0x11] CLEAR dir 90
+
+[11220 ms]obstacle: [0x11] CLEAR dir 90
+
+[11300 ms]obstacle: [0x11] CLEAR dir 90
+
+Left AO: 50 | Right AO: 48 | Command: SEARCH
+
+[11360 ms]obstacle: [0x11] CLEAR dir 90
+
+[11460 ms]obstacle: [0x11] CLEAR dir 90
+
+[11540 ms]obstacle: [0x11] CLEAR dir 90
+
+[11620 ms]obstacle: [0x11] CLEAR dir 90
+
+Left AO: 51 | Right AO: 52 | Command: SEARCH
+
+[11700 ms]obstacle: [0x11] CLEAR dir 90
+
+[11740 ms]obstacle: stop request ACTIVE
+
+[11740 ms]obstacle: [0x00] SCANNING dir -1
+
+[11900 ms]obstacle: side scan started
+
+Left AO: 49 | Right AO: 52 | Command: SEARCH
+
+Left AO: 52 | Right AO: 52 | Command: SEARCH
+
+Left AO: 49 | Right AO: 40 | Command: SEARCH
+
+wifi: joining "your-network-name" ...
+
+Left AO: 42 | Right AO: 47 | Command: SEARCH
+
+wifi: link status -> joined AP, waiting for IP (1)
+
+Left AO: 49 | Right AO: 52 | Command: SEARCH
+
+Left AO: 50 | Right AO: 51 | Command: SEARCH
+
+wifi: link status -> FAILED: SSID not found (out of range, wrong name, or 5GHz-only network -- this chip is 2.4GHz only) (-2)
+
+[14260 ms]obstacle: side scan completed after 2360 ms
+
+[14260 ms]obstacle: [0x03] BLOCKED dir -1
+
+Left AO: 49 | Right AO: 51 | Command: SEARCH
+
+Left AO: 50 | Right AO: 52 | Command: SEARCH
+
+Left AO: 50 | Right AO: 52 | Command: SEARCH
+
+[15480 ms]obstacle: stop request RELEASED
+
+[15480 ms]obstacle: [0x11] CLEAR dir 90
+
+[15560 ms]obstacle: [0x11] CLEAR dir 90
+
+Left AO: 49 | Right AO: 48 | Command: SEARCH
+
+[15640 ms]obstacle: [0x11] CLEAR dir 90
+
+[15720 ms]obstacle: [0x11] CLEAR dir 90
+
+[15800 ms]obstacle: [0x11] CLEAR dir 90
+
+[15880 ms]obstacle: [0x11] CLEAR dir 90
+
+[15940 ms]obstacle: [0x11] CLEAR dir 90
+
+Left AO: 50 | Right AO: 48 | Command: SEARCH
+
+[16020 ms]obstacle: [0x11] CLEAR dir 90
+
+[16100 ms]obstacle: [0x11] CLEAR dir 90
+
+[16160 ms]obstacle: [0x11] CLEAR dir 90
+
+[16240 ms]obstacle: [0x11] CLEAR dir 90
+
+Left AO: 52 | Right AO: 53 | Command: SEARCH
+
+[16320 ms]obstacle: [0x11] CLEAR dir 90
+
+[16380 ms]obstacle: [0x11] CLEAR dir 90
+
+[16460 ms]obstacle: [0x11] CLEAR dir 90
+
+[16540 ms]obstacle: [0x11] CLEAR dir 90
+
+[16600 ms]obstacle: [0x11] CLEAR dir 90
+
+[TEST] TER-U02 FAIL  calibration VALID with the car still and level   (../app_program/terrain/terrain_test.c:56)
+
+[TEST] terrain SUMMARY 0 passed, 2 failed
+
+[TEST] COM-U01 PASS  radio ready within 10 s
+
+[16680 ms]obstacle: [0x11] CLEAR dir 90
+
+Left AO: 49 | Right AO: 48 | Command: SEARCH
+
+[16760 ms]obstacle: [0x11] CLEAR dir 90
+
+[16840 ms]obstacle: [0x11] CLEAR dir 90
+
+[16920 ms]obstacle: [0x11] CLEAR dir 90
+
+[17000 ms]obstacle: [0x11] CLEAR dir 90
+
+[17080 ms]obstacle: [0x11] CLEAR dir 90
+
+Left AO: 50 | Right AO: 48 | Command: SEARCH
+
+[17160 ms]obstacle: [0x11] CLEAR dir 90
+
+[17240 ms]obstacle: [0x11] CLEAR dir 90
+
+[17320 ms]obstacle: [0x11] CLEAR dir 90
+
+[17400 ms]obstacle: [0x11] CLEAR dir 90
+
+[17480 ms]obstacle: [0x11] CLEAR dir 90
+
+Left AO: 50 | Right AO: 48 | Command: SEARCH
+
+[17560 ms]obstacle: [0x11] CLEAR dir 90
+
+[17640 ms]obstacle: [0x11] CLEAR dir 90
+
+[17720 ms]obstacle: [0x11] CLEAR dir 90
+
+[17800 ms]obstacle: [0x11] CLEAR dir 90
+
+[17880 ms]obstacle: [0x11] CLEAR dir 90
+
+Left AO: 40 | Right AO: 52 | Command: SEARCH
+
+[17960 ms]obstacle: [0x11] CLEAR dir 90
+
+[18040 ms]obstacle: [0x11] CLEAR dir 90
+
+[18120 ms]obstacle: [0x11] CLEAR dir 90
+
+[18180 ms]obstacle: [0x11] CLEAR dir 90
+
+[18240 ms]obstacle: [0x11] CLEAR dir 90
+
+Left AO: 50 | Right AO: 48 | Command: SEARCH
+
+[18300 ms]obstacle: [0x11] CLEAR dir 90
+
+[18360 ms]obstacle: [0x11] CLEAR dir 90
+
+[18440 ms]obstacle: [0x11] CLEAR dir 90
+
+[18500 ms]obstacle: stop request ACTIVE
+
+[18500 ms]obstacle: [0x00] SCANNING dir -1
+
+obstacle test: critical event 1 echo 441 us receipt 18709701 us flag 18709721 us elapsed 20 us
+
+[18580 ms]obstacle: CRITICAL set
+
+Left AO: 50 | Right AO: 41 | Command: SEARCH
+
+[18660 ms]obstacle: side scan started
+
+Left AO: 49 | Right AO: 40 | Command: SEARCH
+
+wifi: joining "your-network-name" ...
+
+wifi: link status -> joined AP, waiting for IP (1)
+
+Left AO: 49 | Right AO: 51 | Command: SEARCH
+
+Left AO: 53 | Right AO: 52 | Command: SEARCH
+
+wifi: link status -> FAILED: SSID not found (out of range, wrong name, or 5GHz-only network -- this chip is 2.4GHz only) (-2)
+
+Left AO: 49 | Right AO: 52 | Command: SEARCH
+
+Left AO: 50 | Right AO: 51 | Command: SEARCH
+
+Left AO: 50 | Right AO: 52 | Command: SEARCH
+
+[21020 ms]obstacle: side scan completed after 2360 ms
+
+[21020 ms]obstacle: [0x9A] PATH_FOUND dir 120
+
+Left AO: 50 | Right AO: 51 | Command: SEARCH
+
+Left AO: 50 | Right AO: 51 | Command: SEARCH
+
+Left AO: 52 | Right AO: 51 | Command: SEARCH
+
+[22200 ms]obstacle: stop request RELEASED
+
+[22200 ms]obstacle: [0x91] CLEAR dir 90
+
+[22260 ms]obstacle: stop request ACTIVE
+
+[22260 ms]obstacle: [0x80] SCANNING dir -1
+
+Left AO: 53 | Right AO: 52 | Command: SEARCH
+
+[22400 ms]obstacle: side scan started
+
+Left AO: 49 | Right AO: 51 | Command: SEARCH
+
+Left AO: 51 | Right AO: 52 | Command: SEARCH
+
+Left AO: 49 | Right AO: 41 | Command: SEARCH
+
+Left AO: 50 | Right AO: 52 | Command: SEARCH
+
+Left AO: 50 | Right AO: 51 | Command: SEARCH
+
+Left AO: 51 | Right AO: 52 | Command: SEARCH
+
+[24780 ms]obstacle: side scan completed after 2380 ms
+
+[24780 ms]obstacle: [0x9A] PATH_FOUND dir 120
+
+wifi: joining "your-network-name" ...
+
+Left AO: 47 | Right AO: 50 | Command: SEARCH
+
+wifi: link status -> joined AP, waiting for IP (1)
+
+Left AO: 50 | Right AO: 51 | Command: SEARCH
+
+Left AO: 52 | Right AO: 52 | Command: SEARCH
+
+wifi: link status -> FAILED: SSID not found (out of range, wrong name, or 5GHz-only network -- this chip is 2.4GHz only) (-2)
+
+[25960 ms]obstacle: stop request RELEASED
+
+[25960 ms]obstacle: [0x91] CLEAR dir 90
+
+[26020 ms]obstacle: stop request ACTIVE
+
+[26020 ms]obstacle: [0x80] SCANNING dir -1
+
+Left AO: 50 | Right AO: 51 | Command: SEARCH
+
+[26180 ms]obstacle: side scan started
+
+Left AO: 51 | Right AO: 52 | Command: SEARCH
+
+Left AO: 49 | Right AO: 52 | Command: SEARCH
+
+Left AO: 50 | Right AO: 52 | Command: SEARCH
+
+Left AO: 50 | Right AO: 52 | Command: SEARCH
+
+Left AO: 50 | Right AO: 51 | Command: SEARCH
+
+Left AO: 52 | Right AO: 52 | Command: SEARCH
+
+[28560 ms]obstacle: side scan completed after 2380 ms
+
+[28560 ms]obstacle: [0x83] BLOCKED dir -1
+
+Left AO: 51 | Right AO: 52 | Command: SEARCH
+
+Left AO: 49 | Right AO: 51 | Command: SEARCH
+
+Left AO: 50 | Right AO: 40 | Command: SEARCH
+
+[29780 ms]obstacle: CRITICAL cleared
+
+[29780 ms]obstacle: stop request RELEASED
+
+[29780 ms]obstacle: [0x11] CLEAR dir 90
+
+[29860 ms]obstacle: [0x11] CLEAR dir 90
+
+[29920 ms]obstacle: [0x11] CLEAR dir 90
+
+[30000 ms]obstacle: [0x11] CLEAR dir 90
+
+Left AO: 49 | Right AO: 40 | Command: SEARCH
+
+[30080 ms]obstacle: [0x11] CLEAR dir 90
+
+[30160 ms]obstacle: [0x11] CLEAR dir 90
+
+[30240 ms]obstacle: [0x11] CLEAR dir 90
+
+[30320 ms]obstacle: [0x11] CLEAR dir 90
+
+obstacle test: critical event 2 echo 356 us receipt 30509700 us flag 30509721 us elapsed 21 us
+
+[30380 ms]obstacle: CRITICAL set
+
+[30380 ms]obstacle: stop request ACTIVE
+
+[30380 ms]obstacle: [0x80] SCANNING dir -1
+
+Left AO: 49 | Right AO: 40 | Command: SEARCH
+
+[30540 ms]obstacle: side scan started
+
+Left AO: 50 | Right AO: 52 | Command: SEARCH
+
+wifi: joining "your-network-name" ...
+
+wifi: link status -> joined AP, waiting for IP (1)
+
+Left AO: 50 | Right AO: 51 | Command: SEARCH
+
+wifi: link status -> FAILED: SSID not found (out of range, wrong name, or 5GHz-only network -- this chip is 2.4GHz only) (-2)
+
+[32900 ms]obstacle: side scan completed after 2360 ms
+
+[32900 ms]obstacle: [0x9A] PATH_FOUND dir 120
+
+[34120 ms]obstacle: CRITICAL cleared
+
+[34120 ms]obstacle: stop request RELEASED
+
+[34120 ms]obstacle: [0x11] CLEAR dir 90
+
+[34180 ms]obstacle: [0x11] CLEAR dir 90
+
+obstacle test: critical event 3 echo 340 us receipt 34369693 us flag 34369714 us elapsed 21 us
+
+[34240 ms]obstacle: CRITICAL set
+
+[34240 ms]obstacle: stop request ACTIVE
+
+[34240 ms]obstacle: [0x80] SCANNING dir -1
+
+[34380 ms]obstacle: side scan started
+
+wifi: joining "your-network-name" ...
+
+[36740 ms]obstacle: side scan completed after 2360 ms
+
+[36740 ms]obstacle: [0x9A] PATH_FOUND dir 120
+
+wifi: link status -> joined AP, waiting for IP (1)
+
+wifi: link status -> FAILED: SSID not found (out of range, wrong name, or 5GHz-only network -- this chip is 2.4GHz only) (-2)
+
+[37920 ms]obstacle: CRITICAL cleared
+
+[37920 ms]obstacle: stop request RELEASED
+
+[37920 ms]obstacle: [0x11] CLEAR dir 90
+
+[38000 ms]obstacle: [0x11] CLEAR dir 90
+
+[38060 ms]obstacle: [0x11] CLEAR dir 90
+
+[38140 ms]obstacle: [0x11] CLEAR dir 90
+
+[38180 ms]obstacle: [0x11] CLEAR dir 90
+
+[38260 ms]obstacle: [0x11] CLEAR dir 90
+
+[38340 ms]obstacle: [0x11] CLEAR dir 90
+
+[38400 ms]obstacle: [0x11] CLEAR dir 90
+
+[38480 ms]obstacle: [0x11] CLEAR dir 90
+
+[38540 ms]obstacle: [0x11] CLEAR dir 90
+
+[38600 ms]obstacle: [0x11] CLEAR dir 90
+
+[38680 ms]obstacle: [0x11] CLEAR dir 90
+
+[38740 ms]obstacle: [0x11] CLEAR dir 90
+
+[38800 ms]obstacle: [0x11] CLEAR dir 90
+
+[38880 ms]obstacle: [0x11] CLEAR dir 90
+
+[38920 ms]obstacle: [0x11] CLEAR dir 90
+
+[39020 ms]obstacle: [0x11] CLEAR dir 90
+
+[39060 ms]obstacle: [0x11] CLEAR dir 90
+
+[39160 ms]obstacle: [0x11] CLEAR dir 90
+
+[39220 ms]obstacle: [0x11] CLEAR dir 90
+
+[39280 ms]obstacle: [0x11] CLEAR dir 90
+
+[39360 ms]obstacle: [0x11] CLEAR dir 90
+
+[39420 ms]obstacle: [0x11] CLEAR dir 90
+
+[39480 ms]obstacle: [0x11] CLEAR dir 90
+
+[39560 ms]obstacle: [0x11] CLEAR dir 90
+
+[39620 ms]obstacle: [0x11] CLEAR dir 90
+
+[39700 ms]obstacle: [0x11] CLEAR dir 90
+
+[39760 ms]obstacle: [0x11] CLEAR dir 90
+
+[39820 ms]obstacle: [0x11] CLEAR dir 90
+
+[39900 ms]obstacle: [0x11] CLEAR dir 90
+
+[39960 ms]obstacle: [0x11] CLEAR dir 90
+
+[40040 ms]obstacle: [0x11] CLEAR dir 90
+
+[40120 ms]obstacle: [0x11] CLEAR dir 90
+
+[40180 ms]obstacle: [0x11] CLEAR dir 90
+
+[40240 ms]obstacle: [0x11] CLEAR dir 90
+
+[40320 ms]obstacle: [0x11] CLEAR dir 90
+
+[40380 ms]obstacle: [0x11] CLEAR dir 90
+
+[40460 ms]obstacle: [0x11] CLEAR dir 90
+
+[40520 ms]obstacle: [0x11] CLEAR dir 90
+
+[40580 ms]obstacle: [0x11] CLEAR dir 90
+
+[40640 ms]obstacle: [0x11] CLEAR dir 90
+
+[40720 ms]obstacle: [0x11] CLEAR dir 90
+
+[40780 ms]obstacle: [0x11] CLEAR dir 90
+
+[40840 ms]obstacle: [0x11] CLEAR dir 90
+
+[40900 ms]obstacle: [0x11] CLEAR dir 90
+
+[40980 ms]obstacle: [0x11] CLEAR dir 90
+
+[41020 ms]obstacle: [0x11] CLEAR dir 90
+
+[41120 ms]obstacle: [0x11] CLEAR dir 90
+
+[41180 ms]obstacle: [0x11] CLEAR dir 90
+
+[41240 ms]obstacle: [0x11] CLEAR dir 90
+
+[41320 ms]obstacle: [0x11] CLEAR dir 90
+
+[41380 ms]obstacle: [0x11] CLEAR dir 90
+
+[41460 ms]obstacle: [0x11] CLEAR dir 90
+
+[41520 ms]obstacle: [0x11] CLEAR dir 90
+
+[41560 ms]obstacle: [0x11] CLEAR dir 90
+
+[41640 ms]obstacle: [0x11] CLEAR dir 90
+
+[41720 ms]obstacle: [0x11] CLEAR dir 90
+
+[41780 ms]obstacle: [0x11] CLEAR dir 90
+
+[41860 ms]obstacle: [0x11] CLEAR dir 90
+
+[41940 ms]obstacle: [0x11] CLEAR dir 90
+
+[42000 ms]obstacle: [0x11] CLEAR dir 90
+
+[42060 ms]obstacle: [0x11] CLEAR dir 90
+
+[42120 ms]obstacle: [0x11] CLEAR dir 90
+
+[42200 ms]obstacle: [0x11] CLEAR dir 90
+
+[42240 ms]obstacle: [0x11] CLEAR dir 90
+
+[42340 ms]obstacle: [0x11] CLEAR dir 90
+
+[42400 ms]obstacle: [0x11] CLEAR dir 90
+
+[42480 ms]obstacle: [0x11] CLEAR dir 90
+
+[42540 ms]obstacle: [0x11] CLEAR dir 90
+
+[42580 ms]obstacle: [0x11] CLEAR dir 90
+
+wifi: joining "your-network-name" ...
+
+[42660 ms]obstacle: [0x11] CLEAR dir 90
+
+[42740 ms]obstacle: [0x11] CLEAR dir 90
+
+[42820 ms]obstacle: [0x11] CLEAR dir 90
+
+[42880 ms]obstacle: [0x11] CLEAR dir 90
+
+wifi: link status -> joined AP, waiting for IP (1)
+
+[42960 ms]obstacle: [0x11] CLEAR dir 90
+
+[43040 ms]obstacle: [0x11] CLEAR dir 90
+
+[43120 ms]obstacle: [0x11] CLEAR dir 90
+
+[43160 ms]obstacle: [0x11] CLEAR dir 90
+
+[43240 ms]obstacle: [0x11] CLEAR dir 90
+
+[43320 ms]obstacle: [0x11] CLEAR dir 90
+
+[43360 ms]obstacle: [0x11] CLEAR dir 90
+
+[43460 ms]obstacle: [0x11] CLEAR dir 90
+
+[43520 ms]obstacle: [0x11] CLEAR dir 90
+
+wifi: link status -> FAILED: SSID not found (out of range, wrong name, or 5GHz-only network -- this chip is 2.4GHz only) (-2)
+
+[43560 ms]obstacle: [0x11] CLEAR dir 90
+
+[43660 ms]obstacle: [0x11] CLEAR dir 90
+
+[43720 ms]obstacle: [0x11] CLEAR dir 90
+
+[43780 ms]obstacle: stop request ACTIVE
+
+[43780 ms]obstacle: [0x00] SCANNING dir -1
+
+obstacle test: critical event 4 echo 371 us receipt 44049689 us flag 44049700 us elapsed 11 us
+
+[43920 ms]obstacle: side scan started
+
+[43920 ms]obstacle: CRITICAL set
+
+[46280 ms]obstacle: side scan completed after 2360 ms
+
+[46280 ms]obstacle: [0x83] BLOCKED dir -1
+
+[47460 ms]obstacle: CRITICAL cleared
+
+[47460 ms]obstacle: stop request RELEASED
+
+[47460 ms]obstacle: [0x11] CLEAR dir 90
+
+[47520 ms]obstacle: [0x11] CLEAR dir 90
+
+[47600 ms]obstacle: [0x11] CLEAR dir 90
+
+[47660 ms]obstacle: [0x11] CLEAR dir 90
+
+[47720 ms]obstacle: [0x11] CLEAR dir 90
+
+[47800 ms]obstacle: [0x11] CLEAR dir 90
+
+[TEST] COM-U02 FAIL  joined Wi-Fi with an IP within 30 s   (../app_program/communication/communication_test.c:61)
+
+[TEST] communication SUMMARY 1 passed, 1 failed
+
+[TEST] === test run end ===
+
+[47840 ms]obstacle: [0x11] CLEAR dir 90
+
+[47920 ms]obstacle: [0x11] CLEAR dir 90
+
+[48000 ms]obstacle: [0x11] CLEAR dir 90
+
+obstacle test: critical event 5 echo 370 us receipt 48169723 us flag 48169742 us elapsed 19 us
+
+[48040 ms]obstacle: CRITICAL set
+
+[48040 ms]obstacle: stop request ACTIVE
+
+[48040 ms]obstacle: [0x80] SCANNING dir -1
+
+[48200 ms]obstacle: side scan started
+
+wifi: joining "your-network-name" ...
+
+wifi: link status -> joined AP, waiting for IP (1)
+
+wifi: link status -> FAILED: SSID not found (out of range, wrong name, or 5GHz-only network -- this chip is 2.4GHz only) (-2)
+
+[50580 ms]obstacle: side scan completed after 2380 ms
+
+[50580 ms]obstacle: [0x9A] PATH_FOUND dir 120
+
+[51780 ms]obstacle: CRITICAL cleared
+
+[51780 ms]obstacle: stop request RELEASED
+
+[51780 ms]obstacle: [0x11] CLEAR dir 90
+
+[51840 ms]obstacle: [0x11] CLEAR dir 90
+
+[51880 ms]obstacle: [0x11] CLEAR dir 90
+
+[51980 ms]obstacle: [0x11] CLEAR dir 90
+
+[52040 ms]obstacle: [0x11] CLEAR dir 90
+
+[52120 ms]obstacle: [0x11] CLEAR dir 90
+
+[52180 ms]obstacle: [0x11] CLEAR dir 90
+
+[52240 ms]obstacle: [0x11] CLEAR dir 90
+
+[52300 ms]obstacle: [0x11] CLEAR dir 90
+
+[52380 ms]obstacle: [0x11] CLEAR dir 90
+
+[52440 ms]obstacle: [0x11] CLEAR dir 90
+
+[52520 ms]obstacle: [0x11] CLEAR dir 90
+
+[52560 ms]obstacle: [0x11] CLEAR dir 90
+
+[52660 ms]obstacle: [0x11] CLEAR dir 90
+
+[52700 ms]obstacle: [0x11] CLEAR dir 90
+
+[52780 ms]obstacle: [0x11] CLEAR dir 90
+
+[52840 ms]obstacle: [0x11] CLEAR dir 90
+
+[52920 ms]obstacle: [0x11] CLEAR dir 90
+
+[52980 ms]obstacle: [0x11] CLEAR dir 90
+
+[53040 ms]obstacle: [0x11] CLEAR dir 90
+
+[53120 ms]obstacle: [0x11] CLEAR dir 90
+
+[53180 ms]obstacle: [0x11] CLEAR dir 90
+
+[53240 ms]obstacle: [0x11] CLEAR dir 90
+
+[53300 ms]obstacle: [0x11] CLEAR dir 90
+
+[53380 ms]obstacle: [0x11] CLEAR dir 90
+
+[53440 ms]obstacle: [0x11] CLEAR dir 90
+
+[53520 ms]obstacle: [0x11] CLEAR dir 90
+
+[53580 ms]obstacle: [0x11] CLEAR dir 90
+
+[53660 ms]obstacle: [0x11] CLEAR dir 90
+
+[53720 ms]obstacle: [0x11] CLEAR dir 90
+
+[53780 ms]obstacle: [0x11] CLEAR dir 90
+
+[53840 ms]obstacle: [0x11] CLEAR dir 90
+
+[53920 ms]obstacle: [0x11] CLEAR dir 90
+
+[53980 ms]obstacle: [0x11] CLEAR dir 90
+
+[54020 ms]obstacle: [0x11] CLEAR dir 90
+
+[54080 ms]obstacle: [0x11] CLEAR dir 90
+
+[54180 ms]obstacle: [0x11] CLEAR dir 90
+
+[54240 ms]obstacle: [0x11] CLEAR dir 90
+
+[54320 ms]obstacle: [0x11] CLEAR dir 90
+
+[54360 ms]obstacle: [0x11] CLEAR dir 90
+
+[54460 ms]obstacle: [0x11] CLEAR dir 90
+
+wifi: joining "your-network-name" ...
+
+[54520 ms]obstacle: [0x11] CLEAR dir 90
+
+[54580 ms]obstacle: [0x11] CLEAR dir 90
+
+[54660 ms]obstacle: [0x11] CLEAR dir 90
+
+[54720 ms]obstacle: [0x11] CLEAR dir 90
+
+wifi: link status -> joined AP, waiting for IP (1)
+
+[54800 ms]obstacle: [0x11] CLEAR dir 90
+
+[54880 ms]obstacle: [0x11] CLEAR dir 90
+
+[54940 ms]obstacle: [0x11] CLEAR dir 90
+
+[55000 ms]obstacle: [0x11] CLEAR dir 90
+
+[55060 ms]obstacle: [0x11] CLEAR dir 90
+
+[55100 ms]obstacle: [0x11] CLEAR dir 90
+
+[55180 ms]obstacle: [0x11] CLEAR dir 90
+
+[55260 ms]obstacle: [0x11] CLEAR dir 90
+
+[55320 ms]obstacle: [0x11] CLEAR dir 90
+
+wifi: link status -> FAILED: SSID not found (out of range, wrong name, or 5GHz-only network -- this chip is 2.4GHz only) (-2)
+
+[55400 ms]obstacle: [0x11] CLEAR dir 90
+
+[55460 ms]obstacle: [0x11] CLEAR dir 90
+
+[55540 ms]obstacle: [0x11] CLEAR dir 90
+
+[55600 ms]obstacle: [0x11] CLEAR dir 90
+
+[55660 ms]obstacle: [0x11] CLEAR dir 90
+
+[55740 ms]obstacle: [0x11] CLEAR dir 90
+
+[55800 ms]obstacle: [0x11] CLEAR dir 90
+
+[55880 ms]obstacle: [0x11] CLEAR dir 90
+
+[55940 ms]obstacle: [0x11] CLEAR dir 90
+
+[56020 ms]obstacle: [0x11] CLEAR dir 90
+
+[56080 ms]obstacle: [0x11] CLEAR dir 90
+
+[56140 ms]obstacle: [0x11] CLEAR dir 90
+
+[56220 ms]obstacle: [0x11] CLEAR dir 90
+
+[56280 ms]obstacle: [0x11] CLEAR dir 90
+
+[56340 ms]obstacle: [0x11] CLEAR dir 90
+
+[56400 ms]obstacle: [0x11] CLEAR dir 90
+
+[56480 ms]obstacle: [0x11] CLEAR dir 90
+
+[56520 ms]obstacle: [0x11] CLEAR dir 90
+
+[56600 ms]obstacle: [0x11] CLEAR dir 90
+
+[56680 ms]obstacle: [0x11] CLEAR dir 90
+
+[56740 ms]obstacle: [0x11] CLEAR dir 90
+
+[56780 ms]obstacle: [0x11] CLEAR dir 90
+
+[56880 ms]obstacle: [0x11] CLEAR dir 90
+
+[56940 ms]obstacle: [0x11] CLEAR dir 90
+
+[57000 ms]obstacle: [0x11] CLEAR dir 90
+
+[57040 ms]obstacle: [0x11] CLEAR dir 90
+
+[57120 ms]obstacle: [0x11] CLEAR dir 90
+
+[57200 ms]obstacle: [0x11] CLEAR dir 90
+
+[57260 ms]obstacle: [0x11] CLEAR dir 90
+
+[57340 ms]obstacle: [0x11] CLEAR dir 90
