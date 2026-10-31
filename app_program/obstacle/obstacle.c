@@ -8,6 +8,7 @@
  */
 
 #include "obstacle.h"
+#include "obstacle_calibration.h"
 #include "obstacle_scan.h"
 #include <stdbool.h>
 
@@ -15,27 +16,25 @@
 
 /* Static data. */
 
+#if OBSTACLE_CALIBRATION_MODE == OBSTACLE_CAL_MODE_OFF
 /* Use configured travel and settling values; calibration remains pending. */
 static const obstacle_servo_timing_t servo_timing = {
     .travel_ms_per_60_degrees = OBSTACLE_SERVO_TRAVEL_MS_PER_60_DEG,
     .settle_margin_ms = OBSTACLE_SERVO_SETTLE_MARGIN_MS};
+#endif
 
 ID obstacle_tid_scan;
 
 /* Private function declarations. */
 static void scan_task (INT stacd, void * p_exinf);
+
+#if OBSTACLE_CALIBRATION_MODE == OBSTACLE_CAL_MODE_OFF
 static int direction_degrees (robot_obstacle_direction_t direction);
 static uint32_t log_time_ms (void);
 
-/* Public function definitions. */
+#endif
 
-static uint32_t
-log_time_ms (void)
-{
-    SYSTIM tim;
-    (void)tk_get_otm(&tim);
-    return (uint32_t)tim.lo;
-}
+/* Public function definitions. */
 
 ER
 obstacle_init (void)
@@ -54,12 +53,26 @@ obstacle_start (void)
 
 /* Private function definitions. */
 
+#if OBSTACLE_CALIBRATION_MODE == OBSTACLE_CAL_MODE_OFF
+static uint32_t
+log_time_ms (void)
+{
+    SYSTIM tim;
+    (void)tk_get_otm(&tim);
+    return (uint32_t)tim.lo;
+}
+#endif
+
 static void
 scan_task (INT stacd, void * p_exinf)
 {
     (void)stacd;
     (void)p_exinf;
 
+#if OBSTACLE_CALIBRATION_MODE != OBSTACLE_CAL_MODE_OFF
+    obstacle_calibration_run(OBSTACLE_TRIG_PIN, OBSTACLE_ECHO_PIN,
+                             OBSTACLE_SERVO_PIN);
+#else
     if (obstacle_scan_init(OBSTACLE_TRIG_PIN, OBSTACLE_ECHO_PIN,
                            OBSTACLE_SERVO_PIN, &servo_timing) != 0)
     {
@@ -72,6 +85,7 @@ scan_task (INT stacd, void * p_exinf)
 
     uint8_t last_sequence = 0u;
     bool b_last_stop_requested = obstacle_scan_stop_requested();
+    bool b_last_critical = false;
     tm_printf(
         (UB *)"[%lu ms]obstacle: stop request ACTIVE (sensing output only)\n",
         log_time_ms());
@@ -79,6 +93,13 @@ scan_task (INT stacd, void * p_exinf)
     {
         robot_obstacle_result_t scan = obstacle_scan_update();
         bool b_stop = obstacle_scan_stop_requested();
+        bool b_critical = robot_obstacle_get_critical(scan.flags);
+        if (b_critical != b_last_critical)
+        {
+            tm_printf((UB *)"[%lu ms]obstacle: CRITICAL %s\n", log_time_ms(),
+                      b_critical ? "set" : "cleared");
+            b_last_critical = b_critical;
+        }
         if (b_stop != b_last_stop_requested)
         {
             tm_printf((UB *)"[%lu ms]obstacle: stop request %s\n",
@@ -101,8 +122,10 @@ scan_task (INT stacd, void * p_exinf)
 
         (void)tk_dly_tsk(OBSTACLE_UPDATE_PERIOD_MS);
     }
+#endif
 }
 
+#if OBSTACLE_CALIBRATION_MODE == OBSTACLE_CAL_MODE_OFF
 /* Convert the packed direction code only for logging, without geometry. */
 static int
 direction_degrees (robot_obstacle_direction_t direction)
@@ -120,3 +143,5 @@ direction_degrees (robot_obstacle_direction_t direction)
             return -1;
     }
 }
+
+#endif

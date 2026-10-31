@@ -29,6 +29,26 @@ Additional regression cases (U05–U09 and U11 remain reserved for the sweep pla
 | OBS-U18 | centre decision at the detection threshold | `obstacle_decision.c` | auto | `obstacle_test.c`: NO_ECHO, echo at and above `OBSTACLE_DETECT_ECHO_US` → CLEAR; one below and 1 µs → scan sides; FAULT/PENDING → UNKNOWN | `[TEST] OBS-U18 PASS` |
 | OBS-U19 | side selection | `obstacle_decision.c` | auto | `obstacle_test.c`: 14 cases covering both near, threshold boundary, ties, farther side, no-echo ranking, faults with and without a clear side | `[TEST] OBS-U19 PASS`; on failure the console names the failing case number |
 
+Calibration procedures are in [CALIBRATION.md](CALIBRATION.md). OBS-U20–U27
+remain reserved for the critical/freshness plan. These hardware tests are
+pending; firmware builds do not constitute a measurement or PASS.
+
+| ID | What is tested | Requirement / interface | Method | Steps / how | Expected result |
+|---|---|---|---|---|---|
+| OBS-U28 | Distance scale and offset | raw echo → distance | manual, mode 1 | Nine distances 50–1000 mm; record outcome counts, valid medians and fit residuals; see calibration procedure | Residuals within ±max(5 mm, 2%); VALID spread ≤35 us through 500 mm; invalid samples investigated |
+| OBS-U29 | Centre trim and side angles | logical → servo command | manual, modes 2/4 | Mechanically measure centre and 60/90/120; wall sweep is coarse only; trim = raw centre command −90 | Actual angles within ±3 degrees; record wall asymmetry and mounting effects |
+| OBS-U30 | Servo travel and settle margin | move → usable ping | manual, video/modes 3/4 | Measure command-to-settled in both directions; resting reference and ten trials per margin; record actual trigger delays | All ten VALID echoes within ±30 us at selected and larger margins; uncertainty and reverse-direction validation recorded |
+| OBS-U31 | Critical distance geometry | vehicle envelope | manual, ruler | Measure a, s, W; confirm pivot/envelope assumptions and calculate proposed critical/release thresholds | Measurements and calculation recorded; thresholds ordered; no claim of braking validation |
+| OBS-U32 | Sensor limits | echo result semantics | manual, mode 1 | Minimum range, angled board, narrow and soft targets; record individual results and VALID percentages | Blind spots and demo-course risks documented; no automatic claim of reliable detection |
+
+For OBS-U12 additionally capture 20 open-space and 20 300 mm scope samples,
+record missing rises and the driver's result, and reconcile the driver's
+pre-pulse timeout origin with TRIG-falling measurements. Do not require an
+unobserved all-rise response or presume every pulse below 23000 us is clear.
+The current no-rise FAULT policy remains until hardware evidence supports a
+separate decision. All calibration observations and normal-mode follow-up
+verification are pending.
+
 Compile and simulated regression results are software evidence only. Physical
 scope observations, voltage checks and actual sensor behavior remain pending.
 

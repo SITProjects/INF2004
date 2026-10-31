@@ -81,18 +81,27 @@
 #define ULTRASONIC_START_TIMEOUT_US 2000u
 #define ULTRASONIC_PULSE_TIMEOUT_US 23000u
 
-/* Existing conversion factor, expressed in millimetres per microsecond. */
-#define OBSTACLE_MM_PER_ECHO_US 0.1715f
-
 /* Kernel timer period; must match CNF_TIMER_PERIOD in config/config.h. */
 #define OBSTACLE_TICK_MS 10u
 
 /*
- * Millimetres to echo microseconds, rounded up (10000 / 1715 = 1 / 0.1715).
- * Rounding up makes "echo < threshold" trip at or just beyond the distance.
- * Exact in 32-bit unsigned arithmetic for distances up to 400000 mm.
+ * Provisional sound scale: millimetres per 10000 echo microseconds.
+ * Replace scale and signed offset only after the OBS-U28 distance fit.
  */
-#define OBSTACLE_MM_TO_ECHO_US(mm) ((((mm)*10000u) + 1714u) / 1715u)
+#define OBSTACLE_SOUND_MM_PER_10K_US 1715u
+#define OBSTACLE_ECHO_OFFSET_MM 0
+
+/*
+ * Convert D to ceil((D - offset) * 10000 / scale), for 0..400000 mm
+ * with D strictly above offset. Signed 64-bit promotion before subtraction
+ * handles negative offsets even when D is unsigned. The checked scale and
+ * offset bounds keep the numerator below 13 billion, avoiding overflow.
+ * Keep this cast-free: compile-time threshold checks also use it in #if.
+ */
+#define OBSTACLE_MM_TO_ECHO_US(mm)                                             \
+    (((((mm) + 0LL - OBSTACLE_ECHO_OFFSET_MM) * 10000LL) +                     \
+      (OBSTACLE_SOUND_MM_PER_10K_US - 1LL)) /                                  \
+     OBSTACLE_SOUND_MM_PER_10K_US)
 
 /*
  * Candidate thresholds, pending stopping-distance tests. Edit only the
@@ -190,7 +199,62 @@
 #define OBSTACLE_STOP_ACK_TIMEOUT_MS 500u
 #define OBSTACLE_SCAN_TIMEOUT_MS (2u * OBSTACLE_SIDE_SCAN_WORST_MS)
 
+/*
+ * Calibration uses the scan task instead of normal obstacle scanning.
+ * Keep OFF in committed configuration; select 1..4 only for bench runs.
+ */
+#define OBSTACLE_CAL_MODE_OFF 0u
+#define OBSTACLE_CAL_MODE_RANGING 1u    /* Fixed 90 degree ping bursts. */
+#define OBSTACLE_CAL_MODE_TRIM_SWEEP 2u /* 80..100 degrees, one degree steps. */
+#define OBSTACLE_CAL_MODE_SETTLE 3u /* Settling trials in either direction. */
+#define OBSTACLE_CAL_MODE_ANGLES 4u /* Holds, including 60 to 120 moves. */
+
+#define OBSTACLE_CALIBRATION_MODE OBSTACLE_CAL_MODE_OFF
+#define OBSTACLE_CAL_PINGS 20u
+
+/* Mode 3 destination; move from the opposite side after fully settling. */
+#define OBSTACLE_CAL_SETTLE_TARGET_DEG 60
+
+/* Signed command correction: physical centre command minus 90 degrees. */
+#define OBSTACLE_SERVO_TRIM_DEG 0
+
 /* Compile-time consistency checks. */
+
+#if (OBSTACLE_SOUND_MM_PER_10K_US <= 0LL) ||                                   \
+    (OBSTACLE_SOUND_MM_PER_10K_US > 4294967295LL)
+#error "Echo scale must be positive and fit 32 bits"
+#endif
+
+#if (OBSTACLE_ECHO_OFFSET_MM < -400000LL) ||                                   \
+    (OBSTACLE_ECHO_OFFSET_MM > 400000LL)
+#error "Echo offset must lie within -400000..400000 mm"
+#endif
+
+#if ((OBSTACLE_CRITICAL_DISTANCE_MM + 0LL) < 0LL) ||                           \
+    ((OBSTACLE_CRITICAL_RELEASE_DISTANCE_MM + 0LL) < 0LL) ||                   \
+    ((OBSTACLE_DETECT_DISTANCE_MM + 0LL) < 0LL) ||                             \
+    (OBSTACLE_CRITICAL_DISTANCE_MM > 400000LL) ||                              \
+    (OBSTACLE_CRITICAL_RELEASE_DISTANCE_MM > 400000LL) ||                      \
+    (OBSTACLE_DETECT_DISTANCE_MM > 400000LL)
+#error "Threshold distances must lie within 0..400000 mm"
+#endif
+
+/*
+ * In #if, unsigned distances promote even LL operands to uintmax_t.
+ * Compare only nonnegative offsets to avoid interpreting negatives as huge.
+ */
+#if OBSTACLE_ECHO_OFFSET_MM >= 0
+#if (OBSTACLE_CRITICAL_DISTANCE_MM <= OBSTACLE_ECHO_OFFSET_MM) ||              \
+    (OBSTACLE_CRITICAL_RELEASE_DISTANCE_MM <= OBSTACLE_ECHO_OFFSET_MM) ||      \
+    (OBSTACLE_DETECT_DISTANCE_MM <= OBSTACLE_ECHO_OFFSET_MM)
+#error "Thresholds must lie above the echo offset"
+#endif
+#endif
+
+#if (OBSTACLE_CAL_SETTLE_TARGET_DEG != 60) &&                                  \
+    (OBSTACLE_CAL_SETTLE_TARGET_DEG != 120)
+#error "Calibration settle destination must be 60 or 120 degrees"
+#endif
 
 #if (OBSTACLE_CENTRE_CONFIRM_PINGS != 3u) || (OBSTACLE_CENTRE_NEAR_VOTES != 2u)
 #error "Centre confirmation requires two of three usable pings"
@@ -262,6 +326,23 @@
 
 #if OBSTACLE_TICK_MS != CNF_TIMER_PERIOD
 #error "Tick must match CNF_TIMER_PERIOD in config/config.h"
+#endif
+
+#if (OBSTACLE_CALIBRATION_MODE < OBSTACLE_CAL_MODE_OFF) ||                     \
+    (OBSTACLE_CALIBRATION_MODE > OBSTACLE_CAL_MODE_ANGLES)
+#error "OBSTACLE_CALIBRATION_MODE must be one of the OBSTACLE_CAL_MODE_ values"
+#endif
+
+#if OBSTACLE_CALIBRATION_MODE != OBSTACLE_CAL_MODE_OFF
+#warning "Calibration build: obstacle scanning disabled"
+#endif
+
+#if (OBSTACLE_CAL_PINGS == 0u) || (OBSTACLE_CAL_PINGS > 255u)
+#error "Calibration ping count must be 1..255"
+#endif
+
+#if (OBSTACLE_SERVO_TRIM_DEG < -10) || (OBSTACLE_SERVO_TRIM_DEG > 10)
+#error "Servo trim beyond 10 degrees: re-seat the horn instead"
 #endif
 
 /* Public function declarations. */

@@ -178,7 +178,20 @@ obstacle_scan_update (void)
         case SCAN_MEASURING:
             return read_result();
         default:
-            tm_printf((UB *)"obstacle: state recovery\n");
+            if (state_has(SCAN_SCANNING_SIDES))
+            {
+                uint32_t recovery_ms = now_ms();
+                tm_printf((UB *)"[%lu ms]obstacle: side scan aborted for state "
+                                "recovery after %lu ms\n",
+                          (unsigned long)recovery_ms,
+                          (unsigned long)(uint32_t)(recovery_ms -
+                                                    side_scan_start_ms));
+            }
+            else
+            {
+                tm_printf((UB *)"[%lu ms]obstacle: state recovery\n",
+                          (unsigned long)now_ms());
+            }
             sensor_angle = -1;
             cancel_side_scan();
             return result;
@@ -403,6 +416,8 @@ scan_centre (obstacle_centre_action_t action)
             left_echo_us = 0u;
             side_scan_start_ms = now_ms();
             move_sensor(scan_angles[0]);
+            tm_printf((UB *)"[%lu ms]obstacle: side scan started\n",
+                      (unsigned long)side_scan_start_ms);
             break;
         case OBSTACLE_CENTRE_UNKNOWN:
         default:
@@ -433,7 +448,11 @@ scan_sides (ultrasonic_result_t measurement, uint16_t echo_us)
         (ultrasonic_result_t)state_get(SCAN_LEFT_RESULT_MASK,
                                        SCAN_LEFT_RESULT_SHIFT),
         left_echo_us, measurement, echo_us);
+    uint32_t complete_ms = now_ms();
     publish_result(decision.status, decision.direction);
+    tm_printf((UB *)"[%lu ms]obstacle: side scan completed after %lu ms\n",
+              (unsigned long)complete_ms,
+              (unsigned long)(uint32_t)(complete_ms - side_scan_start_ms));
     state_flag(SCAN_SCANNING_SIDES, false);
     move_sensor(CENTRE_ANGLE);
 }
@@ -450,7 +469,7 @@ move_sensor (int angle)
     uint32_t travel_ms =
         (travel_degrees * servo_timing.travel_ms_per_60_degrees + 59u) / 60u;
     reset_position();
-    servo_set_angle(angle);
+    servo_set_angle(angle + OBSTACLE_SERVO_TRIM_DEG);
     sensor_angle = angle;
     settle_start_ms = now_ms();
     settle_duration_ms = travel_ms + servo_timing.settle_margin_ms;
@@ -490,8 +509,10 @@ check_watchdogs (void)
         if (obstacle_decision_elapsed_exceeds(now, side_scan_start_ms,
                                               OBSTACLE_SCAN_TIMEOUT_MS))
         {
-            tm_printf((UB *)"obstacle: side scan timed out after %lu ms\n",
-                      (unsigned long)(now - side_scan_start_ms));
+            tm_printf(
+                (UB *)"[%lu ms]obstacle: side scan timed out after %lu ms\n",
+                (unsigned long)now,
+                (unsigned long)(uint32_t)(now - side_scan_start_ms));
             cancel_side_scan();
         }
     }
