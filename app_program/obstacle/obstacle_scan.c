@@ -4,16 +4,20 @@
  */
 
 #include "obstacle_scan.h"
-#include "obstacle_config.h"
-#include "obstacle_decision.h"
 #include "drv_servo.h"
 #include "drv_ultrasonic.h"
+#include "obstacle_config.h"
+#include "obstacle_decision.h"
 /* Use the toolchain size_t alongside the kernel headers. */
 #define PROHIBIT_DEF_SIZE_T
+#include <stdbool.h>
 #include <stddef.h>
 #include <tk/tkernel.h>
-#include <stdbool.h>
 #include <tm/tmonitor.h>
+#if APP_TEST
+#include <bsp/libbsp.h>
+#include <tk/syslib.h>
+#endif
 
 /* Private types, constants, and macros. */
 
@@ -22,8 +26,8 @@
 #define MAX_SERVO_TRAVEL_DEGREES 180u
 
 /* Packed scan_state: phase 0..1, count 2..3, side 4, scanning 5,
- * retries 6..7, invalid position 8, left side result 9..10. critical 11, critical hold 12.
- * Bits 13..15 are unused.
+ * retries 6..7, invalid position 8, left side result 9..10. critical 11,
+ * critical hold 12. Bits 13..15 are unused.
  */
 #define SCAN_PHASE_MASK 0x0003u
 #define SCAN_PHASE_SHIFT 0u
@@ -74,7 +78,29 @@ static robot_obstacle_result_t result;
 static uint32_t last_usable_centre_ms;
 static uint32_t side_scan_start_ms;
 
+#if APP_TEST
+/* Created before either task starts; no ISR uses this mutex or mailbox. */
+static ID test_mutex;
+static obstacle_scan_test_snapshot_t test_snapshot;
+static bool test_hold_requested;
+static uint32_t test_hold_epoch;
+static bool test_inflight;
+static bool test_initialized;
+static uint32_t test_receipt_us;
+static uint32_t test_critical_count;
+static uint32_t test_critical_receipt_us;
+static uint32_t test_critical_flag_us;
+static uint16_t test_critical_echo_us;
+static uint32_t test_stale_count;
+static uint32_t test_stale_ms;
+static uint32_t test_timeout_count;
+static uint32_t test_timeout_ms;
+#endif
+
 /* Private function declarations. */
+#if APP_TEST
+static robot_obstacle_result_t scan_update (void);
+#endif
 
 static uint16_t state_get (uint16_t mask, uint8_t shift);
 static void state_set (uint16_t mask, uint8_t shift, uint16_t value);
@@ -132,11 +158,116 @@ obstacle_scan_init (int trig_pin, int echo_pin, int servo_pin,
         .width_mm = ROBOT_OBSTACLE_WIDTH_UNAVAILABLE,
         .sequence = 0u};
     move_sensor(CENTRE_ANGLE);
+#if APP_TEST
+    test_initialized = true;
+#endif
+    return 0;
+}
+
+#if APP_TEST
+int
+obstacle_scan_test_init (void)
+{
+    T_CMTX params = {.mtxatr = TA_INHERIT};
+    test_mutex = tk_cre_mtx(&params);
+    return test_mutex > 0 ? 0 : 1;
+}
+
+int
+obstacle_scan_test_request (bool hold)
+{
+    if (test_mutex <= 0 || tk_loc_mtx(test_mutex, TMO_FEVR) != E_OK)
+    {
+        return 1;
+    }
+    if (test_hold_requested != hold)
+    {
+        test_snapshot.hold_acknowledged = false;
+        ++test_hold_epoch;
+    }
+    test_hold_requested = hold;
+    (void)tk_unl_mtx(test_mutex);
+    return 0;
+}
+
+int
+obstacle_scan_test_snapshot (obstacle_scan_test_snapshot_t * snapshot)
+{
+    if (snapshot == NULL || test_mutex <= 0 ||
+        tk_loc_mtx(test_mutex, TMO_FEVR) != E_OK)
+    {
+        return 1;
+    }
+    *snapshot = test_snapshot;
+    snapshot->hold_requested = test_hold_requested;
+    (void)tk_unl_mtx(test_mutex);
     return 0;
 }
 
 robot_obstacle_result_t
 obstacle_scan_update (void)
+{
+    bool hold;
+    uint32_t hold_epoch;
+    if (tk_loc_mtx(test_mutex, TMO_FEVR) != E_OK)
+    {
+        return result;
+    }
+    hold = test_hold_requested;
+    hold_epoch = test_hold_epoch;
+    (void)tk_unl_mtx(test_mutex);
+    if (hold)
+    {
+        /* Freeze new triggers, consuming any old transaction before ack. */
+        if (test_inflight)
+        {
+            uint16_t discard_us;
+            if (ultrasonic_read(&discard_us) != ULTRASONIC_PENDING)
+            {
+                test_inflight = false;
+                if (state_get(SCAN_PHASE_MASK, SCAN_PHASE_SHIFT) ==
+                    SCAN_MEASURING)
+                {
+                    state_set(SCAN_PHASE_MASK, SCAN_PHASE_SHIFT, SCAN_READY);
+                }
+            }
+        }
+        check_watchdogs();
+    }
+    else
+    {
+        (void)scan_update();
+    }
+    if (tk_loc_mtx(test_mutex, TMO_FEVR) == E_OK)
+    {
+        test_snapshot.initialized = test_initialized;
+        ++test_snapshot.heartbeat;
+        test_snapshot.stop_requested = b_stop_requested;
+        test_snapshot.scanning_sides = state_has(SCAN_SCANNING_SIDES);
+        test_snapshot.status = robot_obstacle_get_status(result.flags);
+        test_snapshot.hold_acknowledged =
+            hold && !test_inflight && hold_epoch == test_hold_epoch;
+        test_snapshot.last_usable_centre_ms = last_usable_centre_ms;
+        test_snapshot.side_scan_start_ms = side_scan_start_ms;
+        test_snapshot.stale_count = test_stale_count;
+        test_snapshot.stale_ms = test_stale_ms;
+        test_snapshot.timeout_count = test_timeout_count;
+        test_snapshot.timeout_ms = test_timeout_ms;
+        test_snapshot.critical_count = test_critical_count;
+        test_snapshot.critical_receipt_us = test_critical_receipt_us;
+        test_snapshot.critical_flag_us = test_critical_flag_us;
+        test_snapshot.critical_echo_us = test_critical_echo_us;
+        (void)tk_unl_mtx(test_mutex);
+    }
+    return result;
+}
+
+static robot_obstacle_result_t
+scan_update (void)
+#else
+robot_obstacle_result_t
+obstacle_scan_update (void)
+#endif
 {
     check_watchdogs();
     switch ((scan_phase_t)state_get(SCAN_PHASE_MASK, SCAN_PHASE_SHIFT))
@@ -149,7 +280,16 @@ obstacle_scan_update (void)
             }
             /* Drop any reading still in flight from before the move. */
             uint16_t discard_us;
+#if APP_TEST
+            ultrasonic_result_t discarded = ultrasonic_read(&discard_us);
+            if (test_inflight && discarded == ULTRASONIC_PENDING)
+            {
+                return result;
+            }
+            test_inflight = false;
+#else
             (void)ultrasonic_read(&discard_us);
+#endif
             state_set(SCAN_PHASE_MASK, SCAN_PHASE_SHIFT, SCAN_READY);
             return result;
         }
@@ -166,6 +306,9 @@ obstacle_scan_update (void)
             /* The driver also enforces minimum spacing across all angles. */
             if (ultrasonic_trigger())
             {
+#if APP_TEST
+                test_inflight = true;
+#endif
                 if (b_centre)
                 {
                     last_forward_trigger_ms = trigger_ms;
@@ -282,6 +425,10 @@ read_result (void)
     {
         return result;
     }
+#if APP_TEST
+    test_inflight = false;
+    test_receipt_us = (uint32_t)in_w(TIMER_TIMERAWL);
+#endif
     if (!state_has(SCAN_SCANNING_SIDES))
     {
         read_centre(measurement, echo_us);
@@ -334,8 +481,18 @@ read_centre (ultrasonic_result_t measurement, uint16_t echo_us)
         obstacle_decision_centre(measurement, echo_us);
     if (action == OBSTACLE_CENTRE_UNKNOWN)
     {
-        request_stop();
         uint16_t retries = state_get(SCAN_RETRY_MASK, SCAN_RETRY_SHIFT);
+#if APP_TEST
+        /* Software consumption trace, not the physical disconnect instant. */
+        if (measurement == ULTRASONIC_FAULT)
+        {
+            tm_printf((UB *)"[%lu ms]obstacle test: centre FAULT consumed "
+                            "retry %u attempt %u\n",
+                      (unsigned long)now_ms(), (unsigned int)retries,
+                      (unsigned int)(retries + 1u));
+        }
+#endif
+        request_stop();
         if (retries < OBSTACLE_EXTRA_ATTEMPTS_PER_ANGLE)
         {
             state_set(SCAN_RETRY_MASK, SCAN_RETRY_SHIFT, retries + 1u);
@@ -513,6 +670,10 @@ check_watchdogs (void)
                 (UB *)"[%lu ms]obstacle: side scan timed out after %lu ms\n",
                 (unsigned long)now,
                 (unsigned long)(uint32_t)(now - side_scan_start_ms));
+#if APP_TEST
+            ++test_timeout_count;
+            test_timeout_ms = now;
+#endif
             cancel_side_scan();
         }
     }
@@ -520,8 +681,13 @@ check_watchdogs (void)
              obstacle_decision_elapsed_exceeds(now, last_usable_centre_ms,
                                                OBSTACLE_FORWARD_MAX_AGE_MS))
     {
-        tm_printf((UB *)"obstacle: forward data stale (%lu ms old)\n",
+        tm_printf((UB *)"[%lu ms]obstacle: forward data stale (%lu ms old)\n",
+                  (unsigned long)now,
                   (unsigned long)(now - last_usable_centre_ms));
+#if APP_TEST
+        ++test_stale_count;
+        test_stale_ms = now;
+#endif
         b_stop_requested = true;
         publish_result(ROBOT_OBSTACLE_UNKNOWN, ROBOT_OBSTACLE_DIR_NONE);
         reset_position();
@@ -551,6 +717,19 @@ update_critical (ultrasonic_result_t measurement, uint16_t echo_us)
         state_flag(SCAN_CRITICAL, true);
         /* Flag only, no new decision: keep the sequence unchanged. */
         result.flags = robot_obstacle_set_critical(result.flags, true);
+#if APP_TEST
+        test_critical_flag_us = (uint32_t)in_w(TIMER_TIMERAWL);
+        ++test_critical_count;
+        test_critical_receipt_us = test_receipt_us;
+        test_critical_echo_us = echo_us;
+        tm_printf((UB *)"obstacle test: critical event %lu echo %u us "
+                        "receipt %lu us flag %lu us elapsed %lu us\n",
+                  (unsigned long)test_critical_count, (unsigned int)echo_us,
+                  (unsigned long)test_critical_receipt_us,
+                  (unsigned long)test_critical_flag_us,
+                  (unsigned long)(uint32_t)(test_critical_flag_us -
+                                            test_critical_receipt_us));
+#endif
     }
     /* Any reading inside the release distance holds it for this group. */
     if (obstacle_decision_blocks_critical_release(measurement, echo_us))

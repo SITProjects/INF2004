@@ -39,7 +39,13 @@ static uint32_t log_time_ms (void);
 ER
 obstacle_init (void)
 {
-    /* No kernel objects; the scan task sets up its own hardware. */
+#if APP_TEST
+    if (obstacle_scan_test_init() != 0)
+    {
+        return E_SYS;
+    }
+#endif
+    /* The scan task sets up its own hardware. */
     return E_OK;
 }
 

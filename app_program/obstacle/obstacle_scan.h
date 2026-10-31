@@ -107,4 +107,51 @@ int obstacle_scan_init (int trig_pin, int echo_pin, int servo_pin,
  */
 char const * obstacle_scan_status_name (robot_obstacle_status_t status);
 
+#if APP_TEST
+/** Coherent test evidence, published by the sensor-owning task only. */
+typedef struct
+{
+    bool initialized;
+    uint32_t heartbeat;
+    bool stop_requested;
+    bool scanning_sides;
+    robot_obstacle_status_t status;
+    bool hold_requested;
+    bool hold_acknowledged;
+    uint32_t last_usable_centre_ms;
+    uint32_t side_scan_start_ms;
+    uint32_t stale_count;
+    uint32_t stale_ms;
+    uint32_t timeout_count;
+    uint32_t timeout_ms;
+    uint32_t critical_count;
+    uint32_t critical_receipt_us;
+    uint32_t critical_flag_us;
+    /** Event is always ULTRASONIC_VALID; captured centre pulse in us. */
+    uint16_t critical_echo_us;
+} obstacle_scan_test_snapshot_t;
+
+/**
+ * @brief Create mailbox mutex once before starting scanner or tests.
+ * Initial task only, on either core.
+ * @return 0 on success, 1 on failure.
+ */
+int obstacle_scan_test_init (void);
+/**
+ * @brief Request/release trigger hold after test_init, from any task/core.
+ * @param hold True to freeze triggers; false to resume sensing.
+ * @return 0 on success, 1 on synchronization failure. Acknowledgement means
+ * all pending measurements were drained. Watchdogs continue during holds.
+ */
+int obstacle_scan_test_request (bool hold);
+/**
+ * @brief Copy evidence from any task/core after test_init.
+ * @param snapshot Non-null output receiving the synchronized snapshot.
+ * @return 0 on success, 1 on synchronization failure or null output.
+ * Critical timestamps measure software receipt-to-flag only, in microseconds,
+ * modulo 2^32; they do not measure physical arrival or interrupt latency.
+ */
+int obstacle_scan_test_snapshot (obstacle_scan_test_snapshot_t * snapshot);
+#endif
+
 #endif /* OBSTACLE_SCAN_H */
