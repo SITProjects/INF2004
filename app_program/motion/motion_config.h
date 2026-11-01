@@ -79,6 +79,13 @@
 #define MOTION_FF_OFFSET 0.20f
 #define MOTION_FF_GAIN 0.0012f
 
+/*
+ * Set 1 to add the manual bench steps (MOT-U04..U06) to make TEST=1. They
+ * spin each wheel under power and block the test run for about 33 s, so
+ * keep this 0 except on a lifted car during a motion test session.
+ */
+#define MOTION_MANUAL_TESTS 0
+
 /* Public function declarations. */
 
 #endif /* MOTION_CONFIG_H */

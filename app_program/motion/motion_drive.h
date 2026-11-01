@@ -35,7 +35,9 @@ typedef struct
 /**
  * @brief Configure both motors and encoders, then hold both wheels braked.
  * @return MOTION_OK, or MOTION_ERR_PARAM for an invalid pin or clock
- * configuration in motion_config.h, or a repeated call.
+ * configuration in motion_config.h, PIO0 already running another program,
+ * or a repeated call. Each motor is braked once configured, so a failure
+ * leaves both wheels still.
  * Call once, from the task that will call motion_drive_get_counts().
  */
 motion_status_t motion_drive_init (void);

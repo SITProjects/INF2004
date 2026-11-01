@@ -30,6 +30,8 @@
 #define PIO0_SM3_ADDR 0x5020011cu
 
 #define REST_CHECK_MS 200
+
+#if MOTION_MANUAL_TESTS
 #define TURN_WINDOW_MS 20000
 #define TURN_PRINT_MS 500
 
@@ -45,13 +47,16 @@ typedef struct
     float duty;
     char const * p_name;
 } spin_step_t;
+#endif /* MOTION_MANUAL_TESTS */
 
 /* Private function declarations. */
 static BOOL slice_braked (UW pin);
 static BOOL encoders_steady (void);
+#if MOTION_MANUAL_TESTS
 static void print_counts_while_turning (void);
 static void spin_each_wheel (void);
 static UW pin_level (UW levels, UW pin);
+#endif
 
 /* Public function definitions. */
 
@@ -72,11 +77,13 @@ motion_test (void)
                    encoders_steady(),
                "both encoders count on PIO0 and hold still at rest");
 
+#if MOTION_MANUAL_TESTS
     /* MOT-U06: manual; see testing/motion/TEST_LOG.md. */
     spin_each_wheel();
 
     /* MOT-U04, MOT-U05: manual; see testing/motion/TEST_LOG.md. */
     print_counts_while_turning();
+#endif
 
     TEST_SUMMARY("motion");
 }
@@ -111,6 +118,7 @@ encoders_steady (void)
            (before.right_count == after.right_count);
 }
 
+#if MOTION_MANUAL_TESTS
 /* Print both counts while a tester turns the wheels by hand. */
 static void
 print_counts_while_turning (void)
@@ -187,5 +195,6 @@ pin_level (UW levels, UW pin)
 {
     return (levels >> pin) & 1u;
 }
+#endif /* MOTION_MANUAL_TESTS */
 
 #endif /* APP_TEST */
