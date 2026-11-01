@@ -8,7 +8,9 @@
 
 #include "motion_drive.h"
 #include <math.h>
+#include <stddef.h>
 #include "motion_config.h"
+#include "drv_encoder.h"
 #include "drv_motor.h"
 
 /* Private types, constants, and macros. */
@@ -30,10 +32,17 @@ static float clamp_float (float value, float minimum, float maximum);
 motion_status_t
 motion_drive_init (void)
 {
-    if (!motor_init(MOTOR_LEFT, MOTION_LEFT_MOTOR_PIN_A,
+    if (b_initialised ||
+        !motor_init(MOTOR_LEFT, MOTION_LEFT_MOTOR_PIN_A,
                     MOTION_LEFT_MOTOR_PIN_B, MOTION_LEFT_MOTOR_INVERTED) ||
         !motor_init(MOTOR_RIGHT, MOTION_RIGHT_MOTOR_PIN_A,
-                    MOTION_RIGHT_MOTOR_PIN_B, MOTION_RIGHT_MOTOR_INVERTED))
+                    MOTION_RIGHT_MOTOR_PIN_B, MOTION_RIGHT_MOTOR_INVERTED) ||
+        !encoder_init(ENCODER_LEFT, MOTION_LEFT_ENCODER_PIN_A,
+                      MOTION_LEFT_ENCODER_PIN_B,
+                      MOTION_LEFT_ENCODER_INVERTED) ||
+        !encoder_init(ENCODER_RIGHT, MOTION_RIGHT_ENCODER_PIN_A,
+                      MOTION_RIGHT_ENCODER_PIN_B,
+                      MOTION_RIGHT_ENCODER_INVERTED))
     {
         return MOTION_ERR_PARAM;
     }
@@ -68,6 +77,23 @@ motion_drive_stop (void)
     }
 
     brake_all();
+    return MOTION_OK;
+}
+
+motion_status_t
+motion_drive_get_counts (motion_counts_t * p_counts)
+{
+    if (NULL == p_counts)
+    {
+        return MOTION_ERR_PARAM;
+    }
+    if (!b_initialised)
+    {
+        return MOTION_ERR_NOT_INIT;
+    }
+
+    p_counts->left_count = encoder_get_count(ENCODER_LEFT);
+    p_counts->right_count = encoder_get_count(ENCODER_RIGHT);
     return MOTION_OK;
 }
 
