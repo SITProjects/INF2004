@@ -33,7 +33,8 @@ typedef enum
     MOTION_STATE_STOPPED = 0, /**< Braked, no command. */
     MOTION_STATE_MOVE,        /**< Distance move in progress. */
     MOTION_STATE_STALLED,     /**< Braked after a stall; needs a stop. */
-    MOTION_STATE_TURN         /**< Turn in place in progress. */
+    MOTION_STATE_TURN,        /**< Turn in place in progress. */
+    MOTION_STATE_TIMED_OUT    /**< Braked, target not reached in time. */
 } motion_state_t;
 
 /** @brief Chassis odometry since motion_move_init(). */
@@ -57,9 +58,10 @@ motion_status_t motion_move_init (void);
 
 /**
  * @brief Read the encoders, update odometry, and run the current move or
- * turn. Ends it once its distance or angle is reached (state STOPPED), and
+ * turn. Ends it once its distance or angle is reached (state STOPPED). It
  * brakes and enters MOTION_STATE_STALLED when a wheel shows no encoder
- * change for MOTION_STALL_TIMEOUT_MS during it.
+ * change for MOTION_STALL_TIMEOUT_MS during it, or MOTION_STATE_TIMED_OUT
+ * when it runs MOTION_TIMEOUT_FACTOR times longer than expected.
  * @return MOTION_OK or MOTION_ERR_NOT_INIT.
  * Call every MOTION_UPDATE_PERIOD_MS: speeds and the stall timeout assume
  * that period.
@@ -70,7 +72,8 @@ motion_status_t motion_move_update (void);
  * @brief Drive forward @p distance_mm, then brake.
  * @param distance_mm Distance in mm, 1 or more.
  * @return MOTION_OK, MOTION_ERR_PARAM for 0, MOTION_ERR_STALLED while
- * stalled (call motion_move_stop() first), or MOTION_ERR_NOT_INIT.
+ * stalled or MOTION_ERR_TIMED_OUT after a timeout (call motion_move_stop()
+ * first), or MOTION_ERR_NOT_INIT.
  * Replaces a move or turn already in progress, measuring from the current
  * place.
  */
@@ -85,12 +88,14 @@ motion_status_t motion_move_backward (uint16_t distance_mm);
 
 /**
  * @brief Turn left (counter-clockwise) in place by @p angle_deg, then brake.
- * @param angle_deg Angle in degrees, 1 or more; above 360 is allowed for
- * calibration (MBF_MOTION_CMD itself carries only 0-180).
- * @return MOTION_OK, MOTION_ERR_PARAM for 0, MOTION_ERR_STALLED while
- * stalled (call motion_move_stop() first), or MOTION_ERR_NOT_INIT.
+ * @param angle_deg Angle in degrees, 1 to MOTION_MAX_TURN_DEG; above 180
+ * is for calibration (MBF_MOTION_CMD itself carries only 0-180).
+ * @return MOTION_OK, MOTION_ERR_PARAM for 0 or above MOTION_MAX_TURN_DEG,
+ * MOTION_ERR_STALLED or MOTION_ERR_TIMED_OUT (call motion_move_stop()
+ * first), or MOTION_ERR_NOT_INIT.
  * Replaces a move or turn already in progress, measuring from the current
- * heading.
+ * heading. The angle is right, but a turn that replaces a fast move pivots
+ * about a point shifted ahead while the car's momentum dies away.
  */
 motion_status_t motion_move_turn_left (uint16_t angle_deg);
 
@@ -108,7 +113,8 @@ motion_status_t motion_move_turn_right (uint16_t angle_deg);
 motion_status_t motion_move_u_turn (void);
 
 /**
- * @brief Brake both wheels, end any move or turn, and clear a stall.
+ * @brief Brake both wheels, end any move or turn, and clear a stall or
+ * timeout.
  * @return MOTION_OK or MOTION_ERR_NOT_INIT.
  * Leaves the state MOTION_STATE_STOPPED with the move and stall timers
  * reset; odometry keeps counting.

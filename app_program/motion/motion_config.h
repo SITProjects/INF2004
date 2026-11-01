@@ -67,9 +67,10 @@
 /*
  * Distance between the two wheels' contact points (tyre centres), in mm.
  * Measured 127 mm outside to outside, less one 19.5 mm tyre width.
- * TODO(calibrate): tune with MOT-U11 (turn left 360 degrees three times):
- * new = old * 1080 / measured total angle. Calibrate the wheel diameter
- * (MOT-U08) first, since turns depend on track width / mm per count.
+ * TODO(calibrate): tune with MOT-U11 and MOT-U12 (360 degrees three times
+ * each way) on the demo floor: new = old * 1080 / mean of the two measured
+ * total angles. Calibrate the wheel diameter (MOT-U08) first, since turns
+ * depend on track width / mm per count.
  */
 #define MOTION_TRACK_WIDTH_MM 107.5f
 
@@ -117,6 +118,22 @@
  * overshoot (the "coast" in the MOT-U13 lines).
  */
 #define MOTION_TURN_STOP_EARLY_DEG 0.0f
+
+/*
+ * Largest turn one call accepts, in degrees: enough for calibration turns,
+ * small enough to catch a mistaken angle.
+ */
+#define MOTION_MAX_TURN_DEG 720u
+
+/*
+ * A move or turn still short of its target after MOTION_TIMEOUT_FACTOR
+ * times its expected time, plus MOTION_TIMEOUT_MARGIN_MS for start-up,
+ * brakes and enters MOTION_STATE_TIMED_OUT. The wheels are turning, so it
+ * is not a stall: an encoder counting the wrong way (MOT-U17) or wheels
+ * slipping on the spot.
+ */
+#define MOTION_TIMEOUT_FACTOR 3u
+#define MOTION_TIMEOUT_MARGIN_MS 500u
 
 /*
  * A wheel with no encoder change for this long during a move or turn

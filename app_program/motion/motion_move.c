@@ -54,12 +54,16 @@ static int32_t move_dir = 1;
 static int32_t move_target = 0;
 static uint32_t still_updates[WHEEL_COUNT];
 
+/* Updates the current move or turn has run, and its timeout in updates. */
+static uint32_t move_updates = 0u;
+static uint32_t move_limit_updates = 0u;
+
 /* Private function declarations. */
 static motion_status_t start_move (uint16_t distance_mm, int32_t dir);
 static motion_status_t start_turn (uint16_t angle_deg, int32_t dir);
-static motion_status_t check_can_start (uint16_t amount);
+static motion_status_t check_can_start (uint16_t amount, uint16_t maximum);
 static void begin (motion_state_t new_state, int32_t start, int32_t dir,
-                   int32_t target);
+                   int32_t target, uint32_t expected_ms);
 static int32_t tick_sum (void);
 static int32_t tick_difference (void);
 static void enter_stopped (void);
@@ -123,6 +127,15 @@ motion_move_update (void)
     if ((move_dir * (position - move_start)) >= move_target)
     {
         enter_stopped();
+        return MOTION_OK;
+    }
+
+    /* Wheels turning but no progress: e.g. an encoder counting backward. */
+    move_updates++;
+    if (move_updates >= move_limit_updates)
+    {
+        (void)motion_drive_stop();
+        state = MOTION_STATE_TIMED_OUT;
     }
     return MOTION_OK;
 }
@@ -208,7 +221,7 @@ motion_move_get_odometry (motion_odometry_t * p_odometry)
 static motion_status_t
 start_move (uint16_t distance_mm, int32_t dir)
 {
-    motion_status_t status = check_can_start(distance_mm);
+    motion_status_t status = check_can_start(distance_mm, UINT16_MAX);
 
     if (status != MOTION_OK)
     {
@@ -217,7 +230,8 @@ start_move (uint16_t distance_mm, int32_t dir)
 
     /* Target in the sum of both wheels' counts, rounded to nearest. */
     begin(MOTION_STATE_MOVE, tick_sum(), dir,
-          (int32_t)(((2.0f * (float)distance_mm) / MM_PER_TICK) + 0.5f));
+          (int32_t)(((2.0f * (float)distance_mm) / MM_PER_TICK) + 0.5f),
+          ((uint32_t)distance_mm * 1000u) / (uint32_t)MOTION_MOVE_SPEED_MM_S);
     (void)motion_drive_set_velocity(
         (int16_t)(dir * (int32_t)MOTION_MOVE_SPEED_MM_S), 0);
     return MOTION_OK;
@@ -227,7 +241,7 @@ start_move (uint16_t distance_mm, int32_t dir)
 static motion_status_t
 start_turn (uint16_t angle_deg, int32_t dir)
 {
-    motion_status_t status = check_can_start(angle_deg);
+    motion_status_t status = check_can_start(angle_deg, MOTION_MAX_TURN_DEG);
 
     if (status != MOTION_OK)
     {
@@ -247,21 +261,25 @@ start_turn (uint16_t angle_deg, int32_t dir)
     {
         target = 1;
     }
-    begin(MOTION_STATE_TURN, tick_difference(), dir, target);
+    begin(MOTION_STATE_TURN, tick_difference(), dir, target,
+          ((uint32_t)angle_deg * 1000u) / (uint32_t)MOTION_TURN_SPEED_DEG_S);
     (void)motion_drive_set_velocity(
         0, (int16_t)(dir * (int32_t)MOTION_TURN_SPEED_DEG_S));
     return MOTION_OK;
 }
 
-/* Refuse a move or turn of @p amount before init, of 0, or while stalled. */
+/*
+ * Refuse a move or turn of @p amount before init, of 0 or above
+ * @p maximum, or while stalled or timed out.
+ */
 static motion_status_t
-check_can_start (uint16_t amount)
+check_can_start (uint16_t amount, uint16_t maximum)
 {
     if (!b_initialised)
     {
         return MOTION_ERR_NOT_INIT;
     }
-    if (0u == amount)
+    if ((0u == amount) || (amount > maximum))
     {
         return MOTION_ERR_PARAM;
     }
@@ -269,17 +287,26 @@ check_can_start (uint16_t amount)
     {
         return MOTION_ERR_STALLED;
     }
+    if (MOTION_STATE_TIMED_OUT == state)
+    {
+        return MOTION_ERR_TIMED_OUT;
+    }
     return MOTION_OK;
 }
 
 /*
- * Replace any move or turn with a new one, measured from @p start; the
- * stall timers restart so the old command's still time does not carry
- * over.
+ * Replace any move or turn with a new one, measured from @p start and
+ * expected to take @p expected_ms; the stall and timeout timers restart so
+ * the old command's time does not carry over.
  */
 static void
-begin (motion_state_t new_state, int32_t start, int32_t dir, int32_t target)
+begin (motion_state_t new_state, int32_t start, int32_t dir, int32_t target,
+       uint32_t expected_ms)
 {
+    move_updates = 0u;
+    move_limit_updates =
+        ((MOTION_TIMEOUT_FACTOR * expected_ms) + MOTION_TIMEOUT_MARGIN_MS) /
+        MOTION_UPDATE_PERIOD_MS;
     move_start = start;
     move_dir = dir;
     move_target = target;
@@ -302,7 +329,7 @@ tick_difference (void)
     return total_ticks[WHEEL_RIGHT] - total_ticks[WHEEL_LEFT];
 }
 
-/* Brake, end any move, turn or stall, and reset the command state. */
+/* Brake, end any move, turn, stall or timeout; reset the command state. */
 static void
 enter_stopped (void)
 {
@@ -311,6 +338,8 @@ enter_stopped (void)
     move_start = 0;
     move_dir = 1;
     move_target = 0;
+    move_updates = 0u;
+    move_limit_updates = 0u;
     still_updates[WHEEL_LEFT] = 0u;
     still_updates[WHEEL_RIGHT] = 0u;
 }
