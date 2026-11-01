@@ -76,19 +76,44 @@
 
 /*
  * Highest wheel speed any command may request, in mm/s.
- * TODO(calibrate): measure top speed, wheels in the air at full duty
- * (plan step 5; also confirms the 16-bit counter margin).
+ * TODO(calibrate): about 10-15 % below the slower wheel's speed at duty
+ * 1000 in MOT-U19, so the speed loop always has duty in hand (also
+ * confirms the 16-bit counter margin).
  */
 #define MOTION_MAX_SPEED_MM_S 500.0f
 
 /*
- * Open-loop duty = MOTION_FF_OFFSET + MOTION_FF_GAIN * speed_mm_s.
+ * Feed-forward duty = MOTION_FF_OFFSET + MOTION_FF_GAIN * speed_mm_s; the
+ * speed PI loop corrects what this misses.
  * OFFSET: smallest duty that just starts the wheel turning.
  * GAIN: duty per mm/s above that.
- * TODO(calibrate): measure both in plan step 5.
+ * TODO(calibrate): fit a straight line to the MOT-U19 duty/speed lines of
+ * both wheels: GAIN = duty change / speed change between two lines above
+ * the start-up duty, OFFSET = duty - GAIN * speed at either of them.
  */
 #define MOTION_FF_OFFSET 0.20f
 #define MOTION_FF_GAIN 0.0012f
+
+/*
+ * Speed PI loop of each wheel, on top of the feed-forward duty (report
+ * 8.1). KP: duty per mm/s of speed error. KI: duty per mm/s of error per
+ * second. TODO(calibrate) with MOT-U20 (lifted): with KI 0, raise KP until
+ * the speed overshoots a step, then halve it; then raise KI until the
+ * speed settles on the setpoint within about 0.5 s without oscillating.
+ * Check on the floor with MOT-U21.
+ */
+#define MOTION_SPEED_KP 0.001f
+#define MOTION_SPEED_KI 0.003f
+
+/*
+ * Updates over which each wheel's speed is averaged. At 2 mm per count
+ * and 200 mm/s a wheel moves only about 2 counts per update, so one
+ * update's speed is too coarse to control on. More updates are smoother
+ * but slower to respond.
+ * TODO(calibrate): choose once MOT-U04 gives the counts per revolution;
+ * fewer if each update sees 10 or more counts at 200 mm/s.
+ */
+#define MOTION_SPEED_WINDOW_UPDATES 5u
 
 /*
  * Period between motion_move_update() calls, in ms (CYC_MOTION in the
@@ -164,6 +189,14 @@
  * session.
  */
 #define MOTION_TURN_TESTS 0
+
+/*
+ * Set 1 to add the manual speed-loop steps (MOT-U19..U21) to make TEST=1.
+ * They spin the lifted car's wheels, then drive it on the floor, and block
+ * the test run for about two minutes; keep this 0 except during a motion
+ * test session.
+ */
+#define MOTION_SPEED_TESTS 0
 
 /* Public function declarations. */
 

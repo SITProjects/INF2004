@@ -1,12 +1,14 @@
 /**
  * @file motion_move.c
- * @brief Odometry, open-loop distance moves, turns and stall detection.
+ * @brief Odometry, wheel speeds, distance moves, turns and stall detection.
  *
  * Odometry adds the wrap-safe 16-bit encoder change of each update to
  * this module's own 32-bit running totals (Tribunal 1), so the raw 16-bit
  * counts never need to be compared directly. A move is measured by the
  * sum of both wheels' totals, a turn by their difference (right - left),
- * which is the heading change times the track width.
+ * which is the heading change times the track width. Each update also
+ * measures each wheel's speed over the last MOTION_SPEED_WINDOW_UPDATES
+ * updates and passes both speeds to the drive's speed loop.
  *
  * Copyright (c) 2026 10x Slackers
  * SPDX-License-Identifier: MIT
@@ -43,7 +45,15 @@ static motion_state_t state = MOTION_STATE_STOPPED;
 /* Last raw counts, and running totals since motion_move_init(). */
 static motion_counts_t last_counts;
 static int32_t total_ticks[WHEEL_COUNT];
-static int16_t speed_mm_s = 0;
+
+/*
+ * Each wheel's count changes over the last MOTION_SPEED_WINDOW_UPDATES
+ * updates, their sum, and the speed that sum gives.
+ */
+static int16_t window_deltas[WHEEL_COUNT][MOTION_SPEED_WINDOW_UPDATES];
+static int32_t window_sum[WHEEL_COUNT];
+static uint32_t window_index = 0u;
+static int16_t wheel_speed_mm_s[WHEEL_COUNT];
 
 /*
  * Current move or turn: start, direction and target, in the sum of both
@@ -68,6 +78,7 @@ static int32_t tick_sum (void);
 static int32_t tick_difference (void);
 static void enter_stopped (void);
 static bool wheel_stalled (wheel_t wheel, int16_t delta);
+static void update_speeds (int16_t delta_left, int16_t delta_right);
 
 /* Public function definitions. */
 
@@ -79,9 +90,17 @@ motion_move_init (void)
         return MOTION_ERR_NOT_INIT;
     }
 
-    total_ticks[WHEEL_LEFT] = 0;
-    total_ticks[WHEEL_RIGHT] = 0;
-    speed_mm_s = 0;
+    for (uint32_t wheel = 0u; wheel < (uint32_t)WHEEL_COUNT; wheel++)
+    {
+        total_ticks[wheel] = 0;
+        window_sum[wheel] = 0;
+        wheel_speed_mm_s[wheel] = 0;
+        for (uint32_t i = 0u; i < MOTION_SPEED_WINDOW_UPDATES; i++)
+        {
+            window_deltas[wheel][i] = 0;
+        }
+    }
+    window_index = 0u;
     b_initialised = true;
     enter_stopped();
     return MOTION_OK;
@@ -103,9 +122,9 @@ motion_move_update (void)
     last_counts = now;
     total_ticks[WHEEL_LEFT] += delta_left;
     total_ticks[WHEEL_RIGHT] += delta_right;
-    speed_mm_s =
-        (int16_t)(((float)(delta_left + delta_right) * MM_PER_TICK * 1000.0f) /
-                  (2.0f * (float)MOTION_UPDATE_PERIOD_MS));
+    update_speeds(delta_left, delta_right);
+    (void)motion_drive_control(wheel_speed_mm_s[WHEEL_LEFT],
+                               wheel_speed_mm_s[WHEEL_RIGHT]);
 
     if (!motion_move_is_busy())
     {
@@ -208,7 +227,12 @@ motion_move_get_odometry (motion_odometry_t * p_odometry)
 
     p_odometry->distance_mm =
         (int32_t)(((float)tick_sum() * MM_PER_TICK) / 2.0f);
-    p_odometry->speed_mm_s = speed_mm_s;
+    p_odometry->speed_mm_s =
+        (int16_t)(((int32_t)wheel_speed_mm_s[WHEEL_LEFT] +
+                   (int32_t)wheel_speed_mm_s[WHEEL_RIGHT]) /
+                  2);
+    p_odometry->left_speed_mm_s = wheel_speed_mm_s[WHEEL_LEFT];
+    p_odometry->right_speed_mm_s = wheel_speed_mm_s[WHEEL_RIGHT];
     p_odometry->heading_deg =
         (int32_t)(((float)tick_difference() * MM_PER_TICK) /
                   (MOTION_TRACK_WIDTH_MM * DEG_TO_RAD));
@@ -356,4 +380,23 @@ wheel_stalled (wheel_t wheel, int16_t delta)
 
     still_updates[wheel]++;
     return (still_updates[wheel] >= STALL_UPDATES);
+}
+
+/* Slide each wheel's speed window on by this update's count changes. */
+static void
+update_speeds (int16_t delta_left, int16_t delta_right)
+{
+    int16_t const deltas[WHEEL_COUNT] = {delta_left, delta_right};
+
+    for (uint32_t wheel = 0u; wheel < (uint32_t)WHEEL_COUNT; wheel++)
+    {
+        window_sum[wheel] += (int32_t)deltas[wheel] -
+                             (int32_t)window_deltas[wheel][window_index];
+        window_deltas[wheel][window_index] = deltas[wheel];
+        wheel_speed_mm_s[wheel] =
+            (int16_t)(((float)window_sum[wheel] * MM_PER_TICK * 1000.0f) /
+                      (float)(MOTION_SPEED_WINDOW_UPDATES *
+                              MOTION_UPDATE_PERIOD_MS));
+    }
+    window_index = (window_index + 1u) % MOTION_SPEED_WINDOW_UPDATES;
 }
