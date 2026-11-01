@@ -24,9 +24,9 @@ Each subsystem folder holds:
   `<name>_start()` starts the tasks; the header is the public interface.
 - `<name>_test.c`: on-target tests, compiled only with `make TEST=1`.
 - `drv_<name>.c/.h`: drivers for the hardware the subsystem owns.
-- Feature modules: `obstacle_scan`, `motion_drive` and `motion_config.h`,
-  `line_command`, `terrain_monitor`, `terrain_process`, `terrain_platform`
-  and `terrain_config.h`, `connectivity`.
+- Feature modules: `obstacle_scan`, `motion_drive`, `motion_move` and
+  `motion_config.h`, `line_command`, `terrain_monitor`, `terrain_process`,
+  `terrain_platform` and `terrain_config.h`, `connectivity`.
 
 Start-up: the kernel calls `usermain()` in the initial task. It calls every
 `<name>_init()`, then every `<name>_start()`, then (test build only) every
