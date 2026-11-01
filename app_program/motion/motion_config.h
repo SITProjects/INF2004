@@ -67,7 +67,9 @@
 /*
  * Distance between the two wheels' contact points (tyre centres), in mm.
  * Measured 127 mm outside to outside, less one 19.5 mm tyre width.
- * TODO(calibrate): tune with turn_left(360) x3 in plan step 4.
+ * TODO(calibrate): tune with MOT-U11 (turn left 360 degrees three times):
+ * new = old * 1080 / measured total angle. Calibrate the wheel diameter
+ * (MOT-U08) first, since turns depend on track width / mm per count.
  */
 #define MOTION_TRACK_WIDTH_MM 107.5f
 
@@ -100,9 +102,26 @@
 #define MOTION_MOVE_SPEED_MM_S 200
 
 /*
- * A wheel with no encoder change for this long during a move means a
- * stall (FR12): both wheels brake and the state becomes STALLED. A
- * multiple of MOTION_UPDATE_PERIOD_MS.
+ * Turn rate of turns in place, in degrees per second; each wheel moves at
+ * rate * track / 2 (about 84 mm/s at 90 deg/s). The MBF_MOTION_CMD
+ * packing has no speed field, so every turn uses this rate.
+ * TODO(calibrate): the slowest rate that turns smoothly on the floor
+ * without stalling (MOT-U11); slower skids and overshoots less.
+ */
+#define MOTION_TURN_SPEED_DEG_S 90
+
+/*
+ * Degrees to brake before a turn's target, for the coast after braking.
+ * TODO(calibrate): leave 0 unless MOT-U13 shows every 90 degree turn off
+ * by about the same amount once MOT-U11 is right; then set it to that
+ * overshoot (the "coast" in the MOT-U13 lines).
+ */
+#define MOTION_TURN_STOP_EARLY_DEG 0.0f
+
+/*
+ * A wheel with no encoder change for this long during a move or turn
+ * means a stall (FR12): both wheels brake and the state becomes STALLED.
+ * A multiple of MOTION_UPDATE_PERIOD_MS.
  */
 #define MOTION_STALL_TIMEOUT_MS 300u
 
@@ -120,6 +139,14 @@
  * session.
  */
 #define MOTION_MOVE_TESTS 0
+
+/*
+ * Set 1 to add the manual turn steps (MOT-U11..U16) to make TEST=1. They
+ * turn the car on the floor, then spin it lifted, and block the test run
+ * for about four minutes; keep this 0 except during a motion test
+ * session.
+ */
+#define MOTION_TURN_TESTS 0
 
 /* Public function declarations. */
 
