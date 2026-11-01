@@ -6,9 +6,10 @@
  * Open loop: a move drives both wheels at MOTION_MOVE_SPEED_MM_S, and a
  * turn spins the car in place at MOTION_TURN_SPEED_DEG_S, through
  * motion_drive_set_velocity(); each brakes once the encoders show the
- * distance or angle. The module is RTOS-free; its owner calls motion_move_update()
- * every MOTION_UPDATE_PERIOD_MS. All functions must be called from that
- * one task, because reading the encoders empties their FIFOs.
+ * distance or angle. The module is RTOS-free; its owner calls
+ * motion_move_update() every MOTION_UPDATE_PERIOD_MS. All functions must
+ * be called from that one task, because reading the encoders empties their
+ * FIFOs.
  *
  * Copyright (c) 2026 10x Slackers
  * SPDX-License-Identifier: MIT
