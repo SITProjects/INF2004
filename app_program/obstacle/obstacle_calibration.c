@@ -171,7 +171,14 @@ static void
 cal_run_mode (void)
 {
     const int destination = OBSTACLE_CAL_SETTLE_TARGET_DEG;
-    const int origin = 180 - destination;
+    /* Start each trial inside 60..120, one configured move away. */
+    const int origin = (destination == 60)
+                           ? (destination + OBSTACLE_CAL_SETTLE_MOVE_DEG)
+                           : (destination - OBSTACLE_CAL_SETTLE_MOVE_DEG);
+    const uint32_t travel_ms = (((uint32_t)OBSTACLE_CAL_SETTLE_MOVE_DEG *
+                                 OBSTACLE_SERVO_TRAVEL_MS_PER_60_DEG) +
+                                59u) /
+                               60u;
     for (;;)
     {
         tm_printf((UB *)"CALMETA,CONTEXT,reference,%d,0,0\n", destination);
@@ -186,8 +193,7 @@ cal_run_mode (void)
                 tm_printf((UB *)"CALMETA,CONTEXT,margin,%d,%d,%u\n",
                           destination, margin, repeat);
                 cal_move(origin, OBSTACLE_SETTLE_MS(60u));
-                cal_move(destination, OBSTACLE_SERVO_TRAVEL_MS_PER_60_DEG +
-                                          (uint32_t)margin);
+                cal_move(destination, travel_ms + (uint32_t)margin);
                 cal_ping_point(destination, 1u);
             }
         }

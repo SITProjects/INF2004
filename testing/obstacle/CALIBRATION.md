@@ -10,8 +10,8 @@ Stopping-distance validation belongs to integration.
 
 Configuration remains provisional until physical measurements support each
 replacement. Keep the final configuration at `OBSTACLE_CAL_MODE_OFF`. Check
-formatting, the host calibration harness, default/SMP=0/TEST=1 builds and all
-four calibration branches before bench use. Building verifies software only.
+formatting, default/SMP=0/TEST=1 builds and all four calibration branches
+before bench use. Building verifies software only.
 
 For each calibration run, select the named mode in `obstacle_config.h`, then
 build inside the dev container:
@@ -106,7 +106,7 @@ actual waits. Preserve the full log as well as extracted numeric rows.
 | 0 | Normal scanner; calibration disabled |
 | 1 | Hold logical 90 degrees; repeated 20-ping bursts with 5 s board-change gaps |
 | 2 | Sweep logical 80 through 100 degrees, 1 degree steps, 1 s waits and 20 pings per point |
-| 3 | Resting reference at selected 60 or 120 degree target; ten trials per margin 300, 250, ... 0 ms; fully settle at opposite angle before each trial |
+| 3 | Resting reference at selected 60 or 120 degree target; ten trials per margin 300, 250, ... 0 ms; fully settle at the trial origin, 60 degrees (opposite end) or 5 degrees (one fine-sweep step) away, before each trial |
 | 4 | Repeated holds at 60, 120, 60, 90, 120 degrees, including direct travel in both directions; stationary pings during each hold of at least 10 s |
 
 Mode4 hold timing starts at the command and includes initial settling; a
@@ -227,8 +227,15 @@ target alignment, sensor noise, supply, reference quality and mechanical
 motion; failure does not prove travel time alone is too short. Repeat or
 extend the test after identifying the cause. Test both directions using the
 selectable mode 3 target described above, and representative shorter moves;
-normal-mode scanning alone is not a reverse-direction accuracy test. The
-configured settle margin must remain at least OBSTACLE_TRANSACTION_MS (the
+normal-mode scanning alone is not a reverse-direction accuracy test.
+
+The width sweep (#48) moves 5 degrees between fine angles. Repeat both mode 3
+runs with `OBSTACLE_CAL_SETTLE_MOVE_DEG` set to 5: each trial then starts one
+step inside the sweep (65 degrees towards a 60 degree target, 115 towards
+120) and waits the proportional 5 degree travel plus the margin. Apply the
+same pass rule. If 5 degree moves settle with a clearly smaller margin, a
+separate small-step margin may be proposed; until then one margin covers
+every move. Restore the setting to 60 afterwards. The configured settle margin must remain at least OBSTACLE_TRANSACTION_MS (the
 existing in-flight measurement drain constraint). No measured timing is
 supplied here; current values remain provisional.
 
