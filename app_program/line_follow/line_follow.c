@@ -4,7 +4,8 @@
  *
  * The line task reads both IR sensors and runs the line-following logic
  * at a nominal 20 ms interval, and prints a snapshot every 200 ms. It
- * owns the ADC (TEAM.md section 3). It does not drive the motors.
+ * owns the ADC and submits decisions to the motion task, which owns
+ * the motors. It never calls the motor driver directly.
  * APP_TEST prints raw readings and provisional edge-band labels every
  * ~100 ms. These hand-measured bands require fixed-height validation
  * and are shared with the provisional navigation decisions.
@@ -12,6 +13,7 @@
 
 #include "line_follow.h"
 #include "line_command.h"
+#include "../motion/motion_command.h"
 
 /* Private types, constants, and macros. */
 #define SAMPLE_INTERVAL_MS 20
@@ -62,8 +64,8 @@ sense_task (INT stacd, void * p_exinf)
         tk_ext_tsk();
     }
     line_command_init();
-    tm_printf((UB *)"line_follow: IR line-following dry run started. "
-                    "Motors disabled.\n");
+    tm_printf((UB *)"line_follow: IR line sensing started. "
+                    "Submitting commands to motion.\n");
 
     uint32_t sample = 0u;
     for (;;)
@@ -75,6 +77,8 @@ sense_task (INT stacd, void * p_exinf)
         {
             command = line_command_update(reading);
         }
+
+        app_check(motion_command_submit(command), "line motion submission");
 
         if ((sample % SAMPLES_PER_PRINT) == 0u)
         {
