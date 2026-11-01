@@ -3,7 +3,8 @@
  * @brief Public motion-control API.
  *
  * Open-loop drive. Wheel speeds are estimated from duty cycle, not
- * measured, so actual speed varies with battery level and load.
+ * measured, so actual speed varies with battery level and load. Wheel
+ * encoders are counted but not yet used for control.
  */
 
 #ifndef MOTION_DRIVE_H
@@ -20,9 +21,22 @@ typedef enum
 } motion_status_t;
 
 /**
- * @brief Configure both motors, then hold both wheels braked.
+ * @brief Both wheels' encoder counts, read together.
+ * Each count wraps at 16 bits (Tribunal 1 minimum-bit decision): use
+ * only the change between two reads, (int16_t)(now - prev), never the
+ * raw total.
+ */
+typedef struct
+{
+    int16_t left_count;  /**< Left encoder edges, mod 2^16; + is forward. */
+    int16_t right_count; /**< Right encoder edges, mod 2^16; + is forward. */
+} motion_counts_t;
+
+/**
+ * @brief Configure both motors and encoders, then hold both wheels braked.
  * @return MOTION_OK, or MOTION_ERR_PARAM for an invalid pin or clock
- * configuration in motion_config.h.
+ * configuration in motion_config.h, or a repeated call.
+ * Call once, from the task that will call motion_drive_get_counts().
  */
 motion_status_t motion_drive_init (void);
 
@@ -43,5 +57,14 @@ motion_status_t motion_drive_set_velocity (int16_t linear_mm_s,
  * @return MOTION_OK or MOTION_ERR_NOT_INIT.
  */
 motion_status_t motion_drive_stop (void);
+
+/**
+ * @brief Read both wheels' encoder counts.
+ * @param p_counts Caller-owned snapshot to fill.
+ * @return MOTION_OK, MOTION_ERR_PARAM for a NULL pointer, or
+ * MOTION_ERR_NOT_INIT.
+ * Call from one task only: reading the encoders empties their FIFOs.
+ */
+motion_status_t motion_drive_get_counts (motion_counts_t * p_counts);
 
 #endif /* MOTION_DRIVE_H */

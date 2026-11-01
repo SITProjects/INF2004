@@ -26,6 +26,28 @@
 #define MOTION_LEFT_MOTOR_INVERTED false
 #define MOTION_RIGHT_MOTOR_INVERTED false
 
+/*
+ * Quadrature encoder phases A/B, counted by PIO0 (drv_encoder.c): left on
+ * Grove P2, right on the GP13/GP14 servo header signal pins. B must be the
+ * pin after A. Power the encoders from 3.3 V: the RP2040 inputs are not
+ * 5 V tolerant.
+ */
+#define MOTION_LEFT_ENCODER_PIN_A 2u
+#define MOTION_LEFT_ENCODER_PIN_B 3u
+#define MOTION_RIGHT_ENCODER_PIN_A 13u
+#define MOTION_RIGHT_ENCODER_PIN_B 14u
+
+/* Set true for an encoder that counts down when its wheel drives forward. */
+#define MOTION_LEFT_ENCODER_INVERTED false
+#define MOTION_RIGHT_ENCODER_INVERTED false
+
+/*
+ * Encoder counts per wheel turn, counting all 4 edges per encoder cycle.
+ * Placeholder: measure by turning each wheel one revolution by hand
+ * (testing/motion/TEST_LOG.md, MOT-U04).
+ */
+#define MOTION_ENCODER_TICKS_PER_REV 1000u
+
 /* Distance between the two wheels' contact points, in mm. Calibrate. */
 #define MOTION_TRACK_WIDTH_MM 115.0f
 
