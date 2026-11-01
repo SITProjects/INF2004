@@ -58,10 +58,18 @@
 #define MOTION_ENCODER_TICKS_PER_REV 1000u
 
 /*
- * Distance between the two wheels' contact points, in mm.
+ * Wheel diameter in mm; odometry uses pi * diameter / ticks per rev.
+ * Measured 64 mm. TODO(calibrate): tune with MOT-U08 (move_forward(1000)
+ * against a ruler) until the distance is within about one count.
+ */
+#define MOTION_WHEEL_DIAMETER_MM 64.0f
+
+/*
+ * Distance between the two wheels' contact points (tyre centres), in mm.
+ * Measured 127 mm outside to outside, less one 19.5 mm tyre width.
  * TODO(calibrate): tune with turn_left(360) x3 in plan step 4.
  */
-#define MOTION_TRACK_WIDTH_MM 115.0f
+#define MOTION_TRACK_WIDTH_MM 107.5f
 
 /*
  * Highest wheel speed any command may request, in mm/s.
@@ -80,11 +88,38 @@
 #define MOTION_FF_GAIN 0.0012f
 
 /*
+ * Period between motion_move_update() calls, in ms (CYC_MOTION in the
+ * design review). Speeds and the stall timeout are based on it.
+ */
+#define MOTION_UPDATE_PERIOD_MS 20u
+
+/*
+ * Chassis speed of distance moves, in mm/s. The MBF_MOTION_CMD packing
+ * has no speed field, so every move uses this speed.
+ */
+#define MOTION_MOVE_SPEED_MM_S 200
+
+/*
+ * A wheel with no encoder change for this long during a move means a
+ * stall (FR12): both wheels brake and the state becomes STALLED. A
+ * multiple of MOTION_UPDATE_PERIOD_MS.
+ */
+#define MOTION_STALL_TIMEOUT_MS 300u
+
+/*
  * Set 1 to add the manual bench steps (MOT-U04..U06) to make TEST=1. They
  * spin each wheel under power and block the test run for about 33 s, so
  * keep this 0 except on a lifted car during a motion test session.
  */
 #define MOTION_MANUAL_TESTS 0
+
+/*
+ * Set 1 to add the manual move and stall steps (MOT-U08..U10) to make
+ * TEST=1. They drive the car on the floor, then spin it lifted, and block
+ * the test run for about a minute; keep this 0 except during a motion test
+ * session.
+ */
+#define MOTION_MOVE_TESTS 0
 
 /* Public function declarations. */
 

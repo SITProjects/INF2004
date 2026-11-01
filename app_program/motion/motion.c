@@ -5,12 +5,14 @@
  *
  * The motion subsystem owns PWM slices 4 and 5 (GP8-GP11) and PIO0
  * (encoders on GP2/GP3 and GP13/GP14, TEAM.md section 3). There is no
- * motion task yet, so nothing drives the motors or reads the encoders
- * after start-up; a task that does must take over ownership of them.
+ * motion task yet, so nothing calls motion_move_update() or drives the
+ * motors after start-up; a task that does must take over ownership of
+ * them.
  */
 
 #include "motion.h"
 #include "motion_drive.h"
+#include "motion_move.h"
 
 /* Private types, constants, and macros. */
 
@@ -30,7 +32,7 @@ motion_init (void)
 ER
 motion_start (void)
 {
-    if (motion_drive_init() != MOTION_OK)
+    if ((motion_drive_init() != MOTION_OK) || (motion_move_init() != MOTION_OK))
     {
         tm_printf(
             (UB *)"motion: failed to initialize the motors or encoders\n");
