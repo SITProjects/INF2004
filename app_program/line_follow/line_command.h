@@ -10,65 +10,62 @@
 
 /* Public types, constants, and macros. */
 
+/** Provisional hand-measured ADC bands; revalidate at fixed 6-7 mm height. */
+#define LINE_LEFT_EDGE_MIN 700u
+#define LINE_LEFT_EDGE_MAX 900u
+#define LINE_RIGHT_EDGE_MIN 1100u
+#define LINE_RIGHT_EDGE_MAX 1200u
+/** Lower bounds of the measured full-black ranges, in ADC counts. */
+#define LINE_LEFT_BLACK_MIN 1300u
+#define LINE_RIGHT_BLACK_MIN 3200u
+
 /**
  * @brief Navigation requests; this module does not operate the motors.
  */
 typedef enum
 {
-    /** Both WHITE with alignment unknown; request line acquisition. */
+    /** Both readings below their edge bands; request acquisition. */
     LINE_COMMAND_SEARCH = 0,
-    /** Both WHITE after the caller has established line alignment. */
+    /** Both readings inside their inclusive edge bands; on course. */
     LINE_COMMAND_FORWARD,
-    /** Left BLACK and right WHITE; request steering left. */
+    /** Left above its band or right below its band; steer left. */
     LINE_COMMAND_STEER_LEFT,
-    /** Left WHITE and right BLACK; request steering right. */
+    /** Left below its band or right above its band; steer right. */
     LINE_COMMAND_STEER_RIGHT,
     /** Sustained both BLACK; junction candidate, not confirmed geometry. */
     LINE_COMMAND_JUNCTION,
-    /** Both BLACK awaiting consecutive-sample confirmation; request stop. */
+    /** Both above their bands without confirmed full BLACK; stop. */
     LINE_COMMAND_STOP
 } line_command_t;
 
 /* Public function declarations. */
 
 /**
- * @brief Reset line alignment to unknown and clear junction confirmation.
- * @note Both WHITE returns SEARCH until line_command_start_following() is
- *       called. Sensor readings alone never establish alignment.
- *       State belongs to one sensor pair; calls must be serialized.
+ * @brief Clear consecutive full-black junction confirmation.
+ * @note State belongs to one sensor pair; calls must be serialized.
  */
 void line_command_init (void);
 
 /**
- * @brief Enter FOLLOWING after the caller has established line alignment.
- * @pre Call line_command_init() first; serialize with all other module calls.
- * @note This records the caller's decision; it does not detect alignment.
- *       A future acquisition controller must decide when to call it. Do not
- *       call solely because one or more sensor samples contain BLACK.
- *       Repeated calls are harmless and preserve junction confirmation.
- */
-void line_command_start_following (void);
-
-/**
- * @brief Convert IR sensor readings into a navigation decision.
- *
- * @pre Call line_command_init() before the first update or to restart seeking.
+ * @brief Compare two raw readings with their measured edge bands.
+ * @pre Call line_command_init() before the first update.
  * @param reading Left and right ADC counts, each in the range 0 to 4095.
- * @note Counts >= 700 mean BLACK; lower counts mean WHITE. Left-only BLACK
- *       steers left and right-only BLACK steers right in either state.
- *       Sensor readings never switch UNKNOWN to FOLLOWING automatically.
- *       Both BLACK returns STOP for the first two consecutive samples, then
- *       JUNCTION while both remain BLACK. Any non-BB sample resets this count.
- *       JUNCTION indicates sustained black coverage, not confirmed geometry.
- *       Both WHITE returns SEARCH in UNKNOWN, or FORWARD in FOLLOWING.
- *       SEARCH requests acquisition; this module implements no search motion.
- *       FOLLOWING records caller-established alignment; both WHITE can still
- *       mean centred or lost. Call init to reset the state to UNKNOWN.
- *       Call once per fresh reading pair at a regular sampling interval.
- *       Three BB samples span two intervals (about 40 ms at 20 ms cadence);
- *       confirmation counts require validation at the actual control rate.
+ * @note Assumes the left sensor straddles the left boundary and the right
+ *       sensor straddles the right boundary of the same 18 mm black line.
+ *       Both inside their inclusive bands returns FORWARD, including at
+ *       startup. Both below returns SEARCH, including after tracking.
+ *       Both above returns STOP, or JUNCTION after three consecutive pairs
+ *       at or above both full-black minimums. Other pairs steer left when
+ *       left is above or right is below; otherwise they steer right.
+ *       A non-full-black pair resets junction confirmation. JUNCTION is a
+ *       candidate, not proof of junction geometry. SEARCH requests acquisition
+ *       only; autonomous search and recovery motion are not implemented.
+ *       These provisional readings require validation on the actual robot;
+ *       an edge-band pair alone does not prove robot position or heading.
+ *       Call once per fresh pair at a regular interval; three samples span
+ *       two intervals (about 40 ms at the nominal 20 ms cadence).
  *       Commands, including STOP, are requests only; no motors are controlled.
- * @return Navigation decision for the motion controller.
+ * @return Requested navigation command.
  */
 line_command_t line_command_update (ir_sensor_reading_t reading);
 
