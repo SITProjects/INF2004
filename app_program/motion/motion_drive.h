@@ -18,7 +18,8 @@ typedef enum
     MOTION_OK = 0,
     MOTION_ERR_PARAM,
     MOTION_ERR_NOT_INIT,
-    MOTION_ERR_STALLED /**< Refused while stalled; stop clears it. */
+    MOTION_ERR_STALLED,  /**< Refused while stalled; stop clears it. */
+    MOTION_ERR_TIMED_OUT /**< Refused after a timeout; stop clears it. */
 } motion_status_t;
 
 /**
