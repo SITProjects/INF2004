@@ -13,21 +13,36 @@ Define a test here before running it. Test IDs never change.
 | OBS-U01 | scan task started (obstacle module initialised) and sleeps between scans | | auto | `obstacle_test.c` | `[TEST] OBS-U01 PASS` |
 | OBS-U02 | servo PWM slice runs at 50 Hz (1 MHz counter, wrap 19999) | | auto | `obstacle_test.c` | `[TEST] OBS-U02 PASS` |
 | OBS-U03 | clear path ahead reports CLEAR | | manual | 1. Flash normal image. 2. Keep at least 40 cm in front of the sensor clear (30 cm candidate threshold). 3. Watch the console. | `obstacle: [0x11] CLEAR dir 90` |
-| OBS-U04 | obstacle inside the configured detection threshold starts a side scan | | manual | 1. Place a flat board at 150 mm (inside the configured detection distance and above critical release). 2. Watch the servo and console through both side positions and return to centre. | servo turns to 60° then 120°; console reports `PATH_FOUND` or `BLOCKED` after both side positions finish |
+| OBS-U04 | obstacle inside the configured detection threshold starts a side scan | | manual | 1. Place a flat board at 150 mm (inside the configured detection distance and above critical release). 2. Watch the servo and console through both side positions and return to centre. | servo turns to 60° then 120°, then steps inward 5° from each end that missed the board; console reports `PATH_FOUND` or `BLOCKED`, with a width when measured, once after the sweep |
 | OBS-U10 | packed obstacle fields at boundaries and invalid values | robot_types.h | auto | `obstacle_test.c`: valid flags, min/max/one-beyond/invalid fields, edge sentinels, width saturation and sequence wrap | `[TEST] OBS-U10 PASS`; neighbouring fields unchanged |
 
-Additional regression cases (U05–U09 and U11 remain reserved for the sweep plan):
+Additional regression cases:
 
 | ID | What is tested | Requirement / interface | Method | Steps / how | Expected result |
 |---|---|---|---|---|---|
 | OBS-U12 | no-return and beyond-range policy | driver → scanner | manual | Scope TRIG/ECHO in open space; include a pulse lasting about 38 ms, if produced by this module. Record trigger-to-rise, pulse duration, driver outcome and scanner status. | NO_ECHO then CLEAR; late falling edge does not overwrite a result; next trigger waits for configured interval |
 | OBS-U13 | malformed or stuck-high echo | driver → scanner | manual | Check ECHO high before trigger, duplicate/ambiguous edges and a zero pulse using controlled input. | FAULT; never classed as a no-return clear reading |
-| OBS-U14 | directional no-return ranking | scanner | manual | Compare a no-return side against a finite clear side, swap sides, then test two no-return sides. | No-return side wins; two no-return sides select left; width remains unavailable and edge flags remain clear |
+| OBS-U14 | directional no-return ranking | scanner | manual | Compare a no-return side against a finite clear side, swap sides, then test two no-return sides. | No-return side wins; two no-return sides select left. Width and edge flags follow the sweep rules (OBS-U33), not checked here |
 | OBS-U15 | active pin allocation | config → hardware | manual | Scope GP16 TRIG width and nominal forward trigger cadence in a stable clear-path centre scan (allow polling jitter; side scans have different cadence); scope GP12 servo period/centre width. Confirm GP17 input changes with sensor distance. Inspect GPIO function/output-enable registers or debugger pinmux state and obstacle source to establish ownership of GP2/GP3; quiet pins alone do not establish pin allocation. | TRIG GP16, ECHO GP17, servo GP12; one configured scan priority |
 | OBS-U16 | ping median | `obstacle_decision.c` | auto | `obstacle_test.c`: zeros ignored (not majority voting: `{0, 0, 300}` gives 300 us), two nonzero samples averaged without overflow, all-zero gives 0, NULL/zero count gives 0, only the first 3 samples used | `[TEST] OBS-U16 PASS` |
 | OBS-U17 | position result after its pings | `obstacle_decision.c` | auto | `obstacle_test.c`: exhausted retries give FAULT regardless of median; zero median gives NO_ECHO; otherwise VALID | `[TEST] OBS-U17 PASS` |
 | OBS-U18 | centre decision at the detection threshold | `obstacle_decision.c` | auto | `obstacle_test.c`: NO_ECHO, echo at and above `OBSTACLE_DETECT_ECHO_US` → CLEAR; one below and 1 µs → scan sides; FAULT/PENDING → UNKNOWN | `[TEST] OBS-U18 PASS` |
 | OBS-U19 | side selection | `obstacle_decision.c` | auto | `obstacle_test.c`: 14 cases covering both near, threshold boundary, ties, farther side, no-echo ranking, faults with and without a clear side | `[TEST] OBS-U19 PASS`; on failure the console names the failing case number |
+
+Width sweep cases (#48). Synthetic geometry uses a fixed fixture (scale 1715,
+no offsets, correction 0 unless stated), so production calibration cannot
+change the expected values.
+
+| ID | What is tested | Requirement / interface | Method | Steps / how | Expected result |
+|---|---|---|---|---|---|
+| OBS-U05 | sweep classification | `obstacle_width.c` | auto | Centre 1458 us: VALID 1923, 1924 and 1; NO_ECHO; FAULT; PENDING; centre 65500 with VALID 65535 | HIT, MISS, HIT, MISS, INVALID, INVALID, HIT (the sum does not wrap) |
+| OBS-U06 | wall wider than the sweep | `obstacle_width.c` | auto | Hits at indices 0 and 12, 2020 us each | 346 ±2 mm; both edges not found; edges 0/12 |
+| OBS-U07 | centred box | `obstacle_width.c` | auto | 200 mm box at 250 mm: hits at indices 2 and 10, 1551 us | 204 ±2 mm; both found; boundaries 67.5° and 112.5° |
+| OBS-U08 | shifted box | `obstacle_width.c` | auto | Same box 80 mm left: hits 0 (1683 us) and 6 (1458 us) | 155 ±2 mm lower bound; left not found, right found |
+| OBS-U09 | pole and collapsed edges | `obstacle_width.c` | auto | 20 mm pole at 250 mm: both hits at 6, 1458 us; then correction 5° | 22 ±2 mm, not collapsed; then 1 mm, collapsed, both boundaries 90.0° |
+| OBS-U11 | saturation and rejected input | `obstacle_width.c` | auto | Ends at 3499 us; left index 7, right index 5, index 13, zero echo, NULL config, scale 0, correction NaN/infinite/−1/16, radial offset −500 mm and infinite | 511 mm; every rejected case unavailable (0 mm, EDGE_NONE, flags false) |
+| OBS-U33 | width accuracy and edge correction | scanner → obstacle word | manual | After OBS-U28/U29/U30 and the pivot measurement, with the car unable to move: fit the edge correction on centred 200 mm boxes at 200 and 250 mm (c = 0 build, boundary angles from the log), then run the validation matrix in the #48 plan, 5 runs per case. Measure d from the servo axis | Eligible cases (\|x0\| + W/2 < 0.577 d, 10 mm margin): both edges found and every run within 10 %; a missed edge is a FAIL. Clipped cases: clipped side not found, width ≤ visible width ±10 mm. Two-box case recorded as a limitation |
+| OBS-U34 | sweep time | scanner | manual | 200 mm box at 250 mm, 10 runs: `side scan started` to `side scan completed after N ms` | Every run below `OBSTACLE_SIDE_SCAN_WORST_MS`; mean and max recorded. Does not show the whole-bypass < 3 s target (integration) |
 
 Critical/freshness cases (all on-target and physical results remain pending):
 

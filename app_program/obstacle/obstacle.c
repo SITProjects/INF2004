@@ -30,6 +30,7 @@ static void scan_task (INT stacd, void * p_exinf);
 
 #if OBSTACLE_CALIBRATION_MODE == OBSTACLE_CAL_MODE_OFF
 static int direction_degrees (robot_obstacle_direction_t direction);
+static int edge_degrees (uint8_t index);
 static uint32_t log_time_ms (void);
 
 #endif
@@ -118,7 +119,23 @@ scan_task (INT stacd, void * p_exinf)
             robot_obstacle_get_direction(scan.flags);
         bool new_result = scan.sequence != last_sequence;
         last_sequence = scan.sequence;
-        if (new_result)
+        if (new_result && (scan.width_mm != ROBOT_OBSTACLE_WIDTH_UNAVAILABLE))
+        {
+            tm_printf((UB *)"[%lu ms]obstacle: [0x%02X] %s dir %d width %u mm "
+                            "hits %d..%d (L %s, R %s)\n",
+                      log_time_ms(), (unsigned int)scan.flags,
+                      obstacle_scan_status_name(status),
+                      direction_degrees(direction), (unsigned int)scan.width_mm,
+                      edge_degrees(robot_obstacle_get_left_edge(scan.edges)),
+                      edge_degrees(robot_obstacle_get_right_edge(scan.edges)),
+                      ((scan.flags & ROBOT_OBSTACLE_LEFT_EDGE_FOUND) != 0u)
+                          ? "found"
+                          : "not found",
+                      ((scan.flags & ROBOT_OBSTACLE_RIGHT_EDGE_FOUND) != 0u)
+                          ? "found"
+                          : "not found");
+        }
+        else if (new_result)
         {
             tm_printf((UB *)"[%lu ms]obstacle: [0x%02X] %s dir %d\n",
                       log_time_ms(), (unsigned int)scan.flags,
@@ -148,6 +165,16 @@ direction_degrees (robot_obstacle_direction_t direction)
         default:
             return -1;
     }
+}
+
+/* Convert a packed edge index to its grid angle for logging, -1 if none. */
+static int
+edge_degrees (uint8_t index)
+{
+    return (index == ROBOT_OBSTACLE_EDGE_NONE)
+               ? -1
+               : (int)(OBSTACLE_SWEEP_FIRST_DEG +
+                       (OBSTACLE_SWEEP_STEP_DEG * index));
 }
 
 #endif

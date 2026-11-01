@@ -12,6 +12,7 @@
 #include "obstacle.h"
 #include "obstacle_decision.h"
 #include "obstacle_scan.h"
+#include "obstacle_width.h"
 
 #if APP_TEST
 
@@ -34,6 +35,16 @@
 #define FARTHER_US ((uint16_t)(OBSTACLE_DETECT_ECHO_US + 200u))
 
 #define ARRAY_COUNT(array) (sizeof(array) / sizeof((array)[0]))
+
+/* math.h would redefine the kernel's size_t here; use the compiler's. */
+#define TEST_NAN_F __builtin_nanf("")
+#define TEST_INFINITY_F __builtin_inff()
+
+/* Width cases: the expected values follow from the fixture's fixed scale. */
+#define WIDTH_FIXTURE_SCALE 1715u
+#define WIDTH_TOLERANCE_MM 2u
+#define CENTRE_EDGE_INDEX ((uint8_t)OBSTACLE_CENTRE_INDEX)
+#define LAST_EDGE_INDEX ((uint8_t)(OBSTACLE_SWEEP_POINTS - 1u))
 
 /** One side-selection case: both inputs and the expected decision. */
 typedef struct
@@ -63,6 +74,17 @@ static bool wait_snapshot (obstacle_scan_test_snapshot_t * p_snapshot,
                            bool hold, bool clear, bool sides,
                            uint32_t timeout_ms);
 static bool release_hold (void);
+static obstacle_width_config_t width_fixture (float correction_deg);
+static bool width_matches (obstacle_width_result_t width, uint16_t width_mm,
+                           uint8_t left, uint8_t right, bool b_left_found,
+                           bool b_right_found);
+static bool width_unavailable (obstacle_width_result_t width);
+static bool classify_valid (void);
+static bool width_wall_valid (void);
+static bool width_box_valid (void);
+static bool width_shifted_valid (void);
+static bool width_pole_valid (void);
+static bool width_limits_valid (void);
 
 /* Public function definitions. */
 
@@ -90,6 +112,19 @@ obstacle_test (void)
                    (in_w(base + PWM_CHx_TOP) == SERVO_WRAP) &&
                    (in_w(base + PWM_CHx_DIV) == SERVO_DIV_1MHZ),
                "servo PWM slice runs at 50 Hz");
+
+    TEST_CHECK("OBS-U05", classify_valid(),
+               "sweep classify: HIT, MISS, INVALID without echo wrap");
+    TEST_CHECK("OBS-U06", width_wall_valid(),
+               "width: wall past both ends is a 346 mm lower bound");
+    TEST_CHECK("OBS-U07", width_box_valid(),
+               "width: centred 200 mm box at 250 mm reads 204 mm");
+    TEST_CHECK("OBS-U08", width_shifted_valid(),
+               "width: shifted box, left not found, 155 mm lower bound");
+    TEST_CHECK("OBS-U09", width_pole_valid(),
+               "width: 20 mm pole reads 22 mm; over-correction collapses");
+    TEST_CHECK("OBS-U11", width_limits_valid(),
+               "width: saturates at 511 mm; invalid input unavailable");
 
     TEST_CHECK("OBS-U10", packed_obstacle_fields_valid(),
                "packed obstacle fields clamp without changing neighbours");
@@ -379,6 +414,180 @@ scan_timeout_valid (void)
     tm_printf((UB *)"[TEST] OBS-U24 remove board; keep path clear\n");
     bool recovered = release_hold();
     return recovered && ok;
+}
+
+static obstacle_width_config_t
+width_fixture (float correction_deg)
+{
+    obstacle_width_config_t config = {.scale_mm_per_10k = WIDTH_FIXTURE_SCALE,
+                                      .echo_offset_mm = 0,
+                                      .radial_offset_mm = 0.0f,
+                                      .edge_correction_deg = correction_deg};
+    return config;
+}
+
+static bool
+width_matches (obstacle_width_result_t width, uint16_t width_mm, uint8_t left,
+               uint8_t right, bool b_left_found, bool b_right_found)
+{
+    return (width.width_mm + WIDTH_TOLERANCE_MM >= width_mm) &&
+           (width.width_mm <= width_mm + WIDTH_TOLERANCE_MM) &&
+           (robot_obstacle_get_left_edge(width.edges) == left) &&
+           (robot_obstacle_get_right_edge(width.edges) == right) &&
+           (width.b_left_found == b_left_found) &&
+           (width.b_right_found == b_right_found);
+}
+
+static bool
+width_unavailable (obstacle_width_result_t width)
+{
+    return (width.width_mm == ROBOT_OBSTACLE_WIDTH_UNAVAILABLE) &&
+           (robot_obstacle_get_left_edge(width.edges) ==
+            ROBOT_OBSTACLE_EDGE_NONE) &&
+           (robot_obstacle_get_right_edge(width.edges) ==
+            ROBOT_OBSTACLE_EDGE_NONE) &&
+           !width.b_left_found && !width.b_right_found && !width.b_collapsed;
+}
+
+/* OBS-U05: centre 1458 us gives a HIT limit of 1924 us (exclusive). */
+static bool
+classify_valid (void)
+{
+    return (obstacle_width_classify(ULTRASONIC_VALID, 1923u, 1458u) ==
+            OBSTACLE_WIDTH_HIT) &&
+           (obstacle_width_classify(ULTRASONIC_VALID, 1924u, 1458u) ==
+            OBSTACLE_WIDTH_MISS) &&
+           (obstacle_width_classify(ULTRASONIC_VALID, 1u, 1458u) ==
+            OBSTACLE_WIDTH_HIT) &&
+           (obstacle_width_classify(ULTRASONIC_NO_ECHO, 0u, 1458u) ==
+            OBSTACLE_WIDTH_MISS) &&
+           (obstacle_width_classify(ULTRASONIC_FAULT, 0u, 1458u) ==
+            OBSTACLE_WIDTH_INVALID) &&
+           (obstacle_width_classify(ULTRASONIC_PENDING, 1u, 1458u) ==
+            OBSTACLE_WIDTH_INVALID) &&
+           /* 65500 + 466 exceeds 16 bits; the sum must not wrap. */
+           (obstacle_width_classify(ULTRASONIC_VALID, UINT16_MAX, 65500u) ==
+            OBSTACLE_WIDTH_HIT);
+}
+
+/* OBS-U06: flat wall 300 mm ahead covers both ends (346 mm at 60/120). */
+static bool
+width_wall_valid (void)
+{
+    obstacle_width_config_t config = width_fixture(0.0f);
+    obstacle_width_edge_t left = {.index = 0u, .echo_us = 2020u};
+    obstacle_width_edge_t right = {.index = LAST_EDGE_INDEX, .echo_us = 2020u};
+    return width_matches(obstacle_width_estimate(left, right, &config), 346u,
+                         0u, LAST_EDGE_INDEX, false, false);
+}
+
+/* OBS-U07: 200 mm box centred 250 mm ahead hits 70..110 degrees. */
+static bool
+width_box_valid (void)
+{
+    obstacle_width_config_t config = width_fixture(0.0f);
+    obstacle_width_edge_t left = {.index = 2u, .echo_us = 1551u};
+    obstacle_width_edge_t right = {.index = 10u, .echo_us = 1551u};
+    obstacle_width_result_t width =
+        obstacle_width_estimate(left, right, &config);
+    return width_matches(width, 204u, 2u, 10u, true, true) &&
+           (width.left_bound_ddeg == 675u) && (width.right_bound_ddeg == 1125u);
+}
+
+/* OBS-U08: the same box 80 mm left continues past 60 degrees. */
+static bool
+width_shifted_valid (void)
+{
+    obstacle_width_config_t config = width_fixture(0.0f);
+    obstacle_width_edge_t left = {.index = 0u, .echo_us = 1683u};
+    obstacle_width_edge_t right = {.index = CENTRE_EDGE_INDEX,
+                                   .echo_us = 1458u};
+    return width_matches(obstacle_width_estimate(left, right, &config), 155u,
+                         0u, CENTRE_EDGE_INDEX, false, true);
+}
+
+/* OBS-U09: a 20 mm pole at 250 mm hits only the centre. */
+static bool
+width_pole_valid (void)
+{
+    obstacle_width_config_t config = width_fixture(0.0f);
+    obstacle_width_edge_t centre = {.index = CENTRE_EDGE_INDEX,
+                                    .echo_us = 1458u};
+    obstacle_width_result_t width =
+        obstacle_width_estimate(centre, centre, &config);
+    if (!width_matches(width, 22u, CENTRE_EDGE_INDEX, CENTRE_EDGE_INDEX, true,
+                       true) ||
+        width.b_collapsed)
+    {
+        return false;
+    }
+    /* 5 degrees inward from 87.5/92.5 crosses: both move to 90 degrees. */
+    config = width_fixture(5.0f);
+    width = obstacle_width_estimate(centre, centre, &config);
+    return (width.width_mm == 1u) && width.b_collapsed &&
+           (width.left_bound_ddeg == 900u) && (width.right_bound_ddeg == 900u);
+}
+
+/* OBS-U11: saturation and every rejected input. */
+static bool
+width_limits_valid (void)
+{
+    obstacle_width_config_t config = width_fixture(0.0f);
+    obstacle_width_edge_t far_left = {.index = 0u, .echo_us = 3499u};
+    obstacle_width_edge_t far_right = {.index = LAST_EDGE_INDEX,
+                                       .echo_us = 3499u};
+    if (obstacle_width_estimate(far_left, far_right, &config).width_mm !=
+        ROBOT_OBSTACLE_WIDTH_MAX_MM)
+    {
+        return false;
+    }
+
+    obstacle_width_edge_t centre = {.index = CENTRE_EDGE_INDEX,
+                                    .echo_us = 1458u};
+    obstacle_width_edge_t left_past_centre = {.index = CENTRE_EDGE_INDEX + 1u,
+                                              .echo_us = 1458u};
+    obstacle_width_edge_t right_past_centre = {.index = CENTRE_EDGE_INDEX - 1u,
+                                               .echo_us = 1458u};
+    obstacle_width_edge_t beyond = {.index = LAST_EDGE_INDEX + 1u,
+                                    .echo_us = 1458u};
+    obstacle_width_edge_t silent = {.index = CENTRE_EDGE_INDEX, .echo_us = 0u};
+    if (!width_unavailable(
+            obstacle_width_estimate(left_past_centre, centre, &config)) ||
+        !width_unavailable(
+            obstacle_width_estimate(centre, right_past_centre, &config)) ||
+        !width_unavailable(obstacle_width_estimate(centre, beyond, &config)) ||
+        !width_unavailable(obstacle_width_estimate(silent, centre, &config)) ||
+        !width_unavailable(obstacle_width_estimate(centre, centre, NULL)) ||
+        !width_unavailable(obstacle_width_unavailable()))
+    {
+        return false;
+    }
+
+    const float bad_correction[] = {TEST_NAN_F, TEST_INFINITY_F, -1.0f, 16.0f};
+    for (unsigned int index = 0u; index < ARRAY_COUNT(bad_correction); ++index)
+    {
+        config = width_fixture(bad_correction[index]);
+        if (!width_unavailable(
+                obstacle_width_estimate(centre, centre, &config)))
+        {
+            return false;
+        }
+    }
+    config = width_fixture(0.0f);
+    config.scale_mm_per_10k = 0u;
+    if (!width_unavailable(obstacle_width_estimate(centre, centre, &config)))
+    {
+        return false;
+    }
+    /* 1458 us is 250 mm; a -500 mm offset leaves no positive range. */
+    config = width_fixture(0.0f);
+    config.radial_offset_mm = -500.0f;
+    if (!width_unavailable(obstacle_width_estimate(centre, centre, &config)))
+    {
+        return false;
+    }
+    config.radial_offset_mm = TEST_INFINITY_F;
+    return width_unavailable(obstacle_width_estimate(centre, centre, &config));
 }
 
 /* OBS-U16: median of the nonzero samples; zero means no echo. */
