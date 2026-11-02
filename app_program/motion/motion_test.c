@@ -15,6 +15,7 @@
 #include "motion_move.h"
 #include "motion_pid.h"
 #include "drv_motor.h"
+#include "config.h"
 
 #if APP_TEST
 

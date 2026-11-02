@@ -26,7 +26,7 @@
 
 /*
  * Set true for a wheel that spins backward on a forward command.
- * MOT-U06 (2026-11-02): FORWARD turns both wheels forward.
+ * MOT-U06 (2026-11-03): FORWARD turns both wheels forward.
  */
 #define MOTION_LEFT_MOTOR_INVERTED false
 #define MOTION_RIGHT_MOTOR_INVERTED false

@@ -4,10 +4,10 @@
  * and starts the wheel encoders counting.
  *
  * The motion subsystem owns PWM slices 4 and 5 (GP8-GP11) and PIO0
- * (encoders on GP2/GP3 and GP13/GP14, TEAM.md section 3). There is no
- * motion task yet, so nothing calls motion_move_update() or drives the
- * motors after start-up; a task that does must take over ownership of
- * them.
+ * (encoders: left on GP13/GP14, right on GP2/GP3; TEAM.md section 3).
+ * There is no motion task yet, so nothing calls motion_move_update() or
+ * drives the motors after start-up; a task that does must take over
+ * ownership of them.
  */
 
 #include "motion.h"
