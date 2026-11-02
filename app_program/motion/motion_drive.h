@@ -76,7 +76,10 @@ motion_status_t motion_drive_set_velocity (int16_t linear_mm_s,
  * @param right_mm_s Measured right wheel speed in mm/s; + is forward.
  * Sets each driven wheel's duty to its feed-forward duty plus a PI
  * correction, kept between 0 and full duty in the setpoint's direction.
- * Braked wheels are left alone.
+ * For the first MOTION_SPEED_WINDOW_UPDATES - 1 calls after a wheel
+ * starts or reverses, the measured speed still includes the time before,
+ * so the wheel gets the feed-forward duty alone. Braked wheels are left
+ * alone.
  * @return MOTION_OK or MOTION_ERR_NOT_INIT.
  * Call every MOTION_UPDATE_PERIOD_MS: the integral assumes that period.
  */

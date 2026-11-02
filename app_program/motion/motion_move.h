@@ -66,10 +66,11 @@ motion_status_t motion_move_init (void);
 
 /**
  * @brief Read the encoders, update odometry and wheel speeds, run one
- * speed-loop step, and run the current move or turn. Ends it once its distance or angle is reached (state STOPPED). It
- * brakes and enters MOTION_STATE_STALLED when a wheel shows no encoder
- * change for MOTION_STALL_TIMEOUT_MS during it, or MOTION_STATE_TIMED_OUT
- * when it runs MOTION_TIMEOUT_FACTOR times longer than expected.
+ * speed-loop step, and run the current move or turn. Ends it once its
+ * distance or angle is reached (state STOPPED). It brakes and enters
+ * MOTION_STATE_STALLED when a wheel shows no encoder change for
+ * MOTION_STALL_TIMEOUT_MS during it, or MOTION_STATE_TIMED_OUT when it runs
+ * MOTION_TIMEOUT_FACTOR times longer than expected.
  * @return MOTION_OK or MOTION_ERR_NOT_INIT.
  * Call every MOTION_UPDATE_PERIOD_MS: speeds and the stall timeout assume
  * that period.

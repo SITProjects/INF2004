@@ -32,6 +32,7 @@ typedef struct
     float setpoint_mm_s; /* 0 while braked. */
     float correction;    /* Last PI output, added to the feed-forward. */
     float duty;          /* Duty last applied. */
+    uint32_t hold;       /* Updates left before the PI loop may run. */
     motion_pid_t pid;
 } wheel_control_t;
 
@@ -181,8 +182,10 @@ motion_drive_get_command (motion_command_t * p_command)
 
 /*
  * Set one wheel's speed and apply its feed-forward duty at once, plus the
- * PI correction it had. Stopping or reversing restarts the PI loop: its
- * integral belongs to the old direction.
+ * PI correction it had. Starting or reversing restarts the PI loop: its
+ * integral belongs to the old direction. The loop then waits until the
+ * speed window holds only updates since the start, so it does not wind
+ * the integral up on the stopped or reversed speeds still in the window.
  */
 static void
 set_wheel (motor_id_t id, float speed_mm_s)
@@ -202,6 +205,7 @@ set_wheel (motor_id_t id, float speed_mm_s)
     {
         motion_pid_reset(&p_wheel->pid);
         p_wheel->correction = 0.0f;
+        p_wheel->hold = MOTION_SPEED_WINDOW_UPDATES - 1u;
     }
     p_wheel->setpoint_mm_s = speed_mm_s;
 
@@ -226,7 +230,11 @@ control_wheel (motor_id_t id, float measured_mm_s)
     }
 
     float ff = feed_forward(p_wheel->setpoint_mm_s);
-    if (b_speed_pid)
+    if (p_wheel->hold > 0u)
+    {
+        p_wheel->hold--;
+    }
+    else if (b_speed_pid)
     {
         limit_correction(id, ff);
         p_wheel->correction = motion_pid_update(
@@ -265,6 +273,7 @@ reset_wheel (motor_id_t id)
     wheels[id].setpoint_mm_s = 0.0f;
     wheels[id].correction = 0.0f;
     wheels[id].duty = 0.0f;
+    wheels[id].hold = 0u;
     motion_pid_reset(&wheels[id].pid);
 }
 
