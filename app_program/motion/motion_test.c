@@ -512,8 +512,8 @@ sync_idle_at_rest (void)
 /*
  * Stopped: follow and the line input refuse out-of-range values,
  * stop-at-line needs a move, the line counts as seen (and as gone) only
- * after MOTION_LINE_SEEN_SAMPLES readings agree, and nothing drives the
- * motors.
+ * after MOTION_LINE_SEEN_SAMPLES readings agree, follow refuses a stale
+ * line reading, and nothing drives the motors.
  */
 static BOOL
 follow_idle_at_rest (void)
@@ -552,6 +552,15 @@ follow_idle_at_rest (void)
             b_debounced = b_debounced && (follow.b_line_seen == b_expected);
         }
     }
+
+    /* Let the last reading go stale: following must refuse to start. */
+    for (UW i = 0u; i <= (MOTION_LINE_TIMEOUT_MS / MOTION_UPDATE_PERIOD_MS);
+         i++)
+    {
+        (void)motion_move_update();
+    }
+    b_refused = b_refused && (motion_move_follow(MOTION_FOLLOW_SPEED_MM_S) ==
+                              MOTION_ERR_PARAM);
 
     return b_idle && b_refused && b_debounced &&
            ((UW)MOTION_STATE_FOLLOW <= 7u) &&

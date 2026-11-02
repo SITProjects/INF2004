@@ -162,7 +162,9 @@
 /*
  * Largest turn rate the line loop asks for, in deg/s. Each wheel's
  * setpoint changes by rate * track / 2 (about 113 mm/s at 120 deg/s), so
- * at MOTION_FOLLOW_SPEED_MM_S the inner wheel nearly stops.
+ * at MOTION_FOLLOW_SPEED_MM_S the inner wheel nearly stops. Following
+ * also caps the rate at 2 * speed / track (128 deg/s at 120 mm/s), so the
+ * inner wheel never reverses at a slower follow speed or a wider track.
  * TODO(calibrate): at least the follow speed / the tightest curve radius
  * (in rad/s), so the car can hold that curve (MOT-U31).
  */

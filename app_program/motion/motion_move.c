@@ -214,9 +214,14 @@ motion_move_update (void)
         {
             enter_stopped();
         }
+        else if (1u == line_age_updates)
+        {
+            /* A new reading since the last update: one line step. */
+            follow_line();
+        }
         else
         {
-            follow_line();
+            /* No new reading: hold the turn rate, so D sees no step. */
         }
     }
     else
@@ -317,6 +322,24 @@ motion_move_follow (uint16_t speed_mm_s)
     {
         return status;
     }
+    if (line_age_updates > LINE_TIMEOUT_UPDATES)
+    {
+        /* It would stop on the next update: refuse before driving. */
+        return MOTION_ERR_PARAM;
+    }
+
+    /*
+     * Turn no faster than 2 * speed / track (whole deg/s, rounded down),
+     * so the inner wheel slows at most to 0 and never reverses: a reversal
+     * resets that wheel's speed loop and jerks the car.
+     */
+    float max_deg_s = (float)(int32_t)((2.0f * (float)speed_mm_s) /
+                                       (MOTION_TRACK_WIDTH_MM * DEG_TO_RAD));
+    if (max_deg_s > MOTION_FOLLOW_MAX_DEG_S)
+    {
+        max_deg_s = MOTION_FOLLOW_MAX_DEG_S;
+    }
+    motion_pid_set_limits(&follow_pid, -max_deg_s, max_deg_s);
 
     /* No target or timeout: following runs until replaced or stopped. */
     begin(MOTION_STATE_FOLLOW, 0, 1, 0, 0u);

@@ -174,16 +174,20 @@ motion_status_t motion_move_u_turn (void);
 
 /**
  * @brief Follow the line forward at @p speed_mm_s until replaced or
- * stopped (FOLLOW mode). Each update steers by the line PD loop on the
- * last motion_move_set_line() error.
+ * stopped (FOLLOW mode). Each update after a new motion_move_set_line()
+ * reading steers by the line PD loop on its error; other updates hold the
+ * turn rate. The turn rate is limited to MOTION_FOLLOW_MAX_DEG_S and to
+ * 2 * @p speed_mm_s / MOTION_TRACK_WIDTH_MM (in deg/s), so the inner wheel
+ * never reverses.
  * @param speed_mm_s Chassis speed in mm/s, 1 to MOTION_MAX_SPEED_MM_S.
- * @return MOTION_OK, MOTION_ERR_PARAM for 0 or above the maximum,
+ * @return MOTION_OK, MOTION_ERR_PARAM for 0, above the maximum, or no
+ * line reading within MOTION_LINE_TIMEOUT_MS (nothing driven),
  * MOTION_ERR_STALLED or MOTION_ERR_TIMED_OUT (call motion_move_stop()
  * first), or MOTION_ERR_NOT_INIT.
- * Replaces a move or turn already in progress. Pass a line error before
- * the next update: following stops if the last one is older than
- * MOTION_LINE_TIMEOUT_MS. Losing the line does not stop it; the caller
- * decides when to search.
+ * Replaces a move or turn already in progress. Call
+ * motion_move_set_line() first, then once per reading: following stops if
+ * the last one is older than MOTION_LINE_TIMEOUT_MS. Losing the line does
+ * not stop it; the caller decides when to search.
  */
 motion_status_t motion_move_follow (uint16_t speed_mm_s);
 
@@ -192,14 +196,19 @@ motion_status_t motion_move_follow (uint16_t speed_mm_s);
  * motion_move_stop_at_line().
  * @param error Line position from -MOTION_LINE_ERROR_MAX to
  * MOTION_LINE_ERROR_MAX; + means the line is left of the car's centre (so
- * the car must turn left), 0 centred.
- * @param b_seen True if either sensor sees the line. It counts as
- * seen, or as gone, only after MOTION_LINE_SEEN_SAMPLES calls in a row
- * agree.
+ * the car must turn left), 0 centred. With both sensors on white (line
+ * lost), pass the sign of the last error at full scale
+ * (+/-MOTION_LINE_ERROR_MAX), never 0: a lost line must steer back towards
+ * the side it was last seen, not straight ahead as if centred.
+ * @param b_seen False only when both sensors read white (below their edge
+ * bands); true when the line is under either sensor, even partly, as it
+ * is when centred between edge-straddling sensors. It counts as seen, or
+ * as gone, only after MOTION_LINE_SEEN_SAMPLES calls in a row agree.
  * @return MOTION_OK, MOTION_ERR_PARAM for an error out of range (nothing
  * stored), or MOTION_ERR_NOT_INIT.
- * Call once per new sensor reading, in every state, before
- * motion_move_update(); the loop's D term assumes one call per update.
+ * Call from the owner task (as every function here) once per new sensor
+ * reading, in every state, before motion_move_update(). An update with no
+ * new reading since the last one holds the turn rate.
  */
 motion_status_t motion_move_set_line (int16_t error, bool b_seen);
 
