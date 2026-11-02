@@ -1,12 +1,14 @@
 /**
  * @file motion_move.h
- * @brief Odometry, distance moves, turns and stall detection (plan steps
- * 3 and 4).
+ * @brief Odometry, wheel speeds, distance moves, turns and stall detection
+ * (plan steps 3 to 5).
  *
- * Open loop: a move drives both wheels at MOTION_MOVE_SPEED_MM_S, and a
- * turn spins the car in place at MOTION_TURN_SPEED_DEG_S, through
+ * A move drives both wheels at MOTION_MOVE_SPEED_MM_S, and a turn spins
+ * the car in place at MOTION_TURN_SPEED_DEG_S, through
  * motion_drive_set_velocity(); each brakes once the encoders show the
- * distance or angle. The module is RTOS-free; its owner calls
+ * distance or angle. Every update feeds the measured wheel speeds to the
+ * drive's speed loop (motion_drive_control()), so speeds hold under load.
+ * The module is RTOS-free; its owner calls
  * motion_move_update() every MOTION_UPDATE_PERIOD_MS. All functions must
  * be called from that one task, because reading the encoders empties their
  * FIFOs.
@@ -38,12 +40,17 @@ typedef enum
     MOTION_STATE_TIMED_OUT    /**< Braked, target not reached in time. */
 } motion_state_t;
 
-/** @brief Chassis odometry since motion_move_init(). */
+/**
+ * @brief Chassis odometry since motion_move_init(). Speeds are averaged
+ * over the last MOTION_SPEED_WINDOW_UPDATES updates.
+ */
 typedef struct
 {
-    int32_t distance_mm; /**< Mean of both wheels' travel; + is forward. */
-    int16_t speed_mm_s;  /**< Mean wheel speed over the last update. */
-    int32_t heading_deg; /**< Total turn, not wrapped; + is left (CCW). */
+    int32_t distance_mm;      /**< Mean of both wheels' travel; + forward. */
+    int16_t speed_mm_s;       /**< Mean of the two wheel speeds. */
+    int16_t left_speed_mm_s;  /**< Left wheel speed; + is forward. */
+    int16_t right_speed_mm_s; /**< Right wheel speed; + is forward. */
+    int32_t heading_deg;      /**< Total turn, not wrapped; + is left. */
 } motion_odometry_t;
 
 /* Public function declarations. */
@@ -58,11 +65,12 @@ typedef struct
 motion_status_t motion_move_init (void);
 
 /**
- * @brief Read the encoders, update odometry, and run the current move or
- * turn. Ends it once its distance or angle is reached (state STOPPED). It
- * brakes and enters MOTION_STATE_STALLED when a wheel shows no encoder
- * change for MOTION_STALL_TIMEOUT_MS during it, or MOTION_STATE_TIMED_OUT
- * when it runs MOTION_TIMEOUT_FACTOR times longer than expected.
+ * @brief Read the encoders, update odometry and wheel speeds, run one
+ * speed-loop step, and run the current move or turn. Ends it once its
+ * distance or angle is reached (state STOPPED). It brakes and enters
+ * MOTION_STATE_STALLED when a wheel shows no encoder change for
+ * MOTION_STALL_TIMEOUT_MS during it, or MOTION_STATE_TIMED_OUT when it runs
+ * MOTION_TIMEOUT_FACTOR times longer than expected.
  * @return MOTION_OK or MOTION_ERR_NOT_INIT.
  * Call every MOTION_UPDATE_PERIOD_MS: speeds and the stall timeout assume
  * that period.
