@@ -116,6 +116,29 @@
 #define MOTION_SPEED_WINDOW_UPDATES 5u
 
 /*
+ * Straight-line (sync) loop of distance moves (plan step 6). It holds the
+ * heading a move started on by adding a turn rate, in deg/s, to both
+ * wheels' setpoints. The error is the heading change since the move
+ * started, from the right - left count difference; one count of
+ * difference is about 1 deg at 2 mm per count. KP: deg/s per deg of
+ * error. KI: deg/s per deg of error per second.
+ * TODO(calibrate) with MOT-U25 on the floor: with KI 0, raise KP until the
+ * car weaves visibly over 1 m, then halve it; then raise KI only if the
+ * final heading is off the same way on every run.
+ */
+#define MOTION_SYNC_KP 3.0f
+#define MOTION_SYNC_KI 0.5f
+
+/*
+ * Largest sync correction, in deg/s. Each wheel's setpoint changes by
+ * rate * track / 2 (about 19 mm/s at 20 deg/s), which must stay well below
+ * MOTION_MOVE_SPEED_MM_S so neither wheel slows to a stop or reverses.
+ * TODO(calibrate): large enough to hold MOT-U25 straight, small enough
+ * that starts do not swerve.
+ */
+#define MOTION_SYNC_MAX_DEG_S 20.0f
+
+/*
  * Period between motion_move_update() calls, in ms (CYC_MOTION in the
  * design review). Speeds and the stall timeout are based on it.
  */
@@ -197,6 +220,14 @@
  * test session.
  */
 #define MOTION_SPEED_TESTS 0
+
+/*
+ * Set 1 to add the manual straight-line steps (MOT-U24..U26) to make
+ * TEST=1. They spin the lifted car's wheels, then drive it on the floor,
+ * and block the test run for about five minutes; keep this 0 except
+ * during a motion test session.
+ */
+#define MOTION_SYNC_TESTS 0
 
 /* Public function declarations. */
 
