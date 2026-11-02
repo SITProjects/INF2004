@@ -7,8 +7,9 @@
  * subsystems include it as "../motion/motion.h".
  *
  * The subsystem has no task yet: motion_start() configures both motors and
- * holds them braked. The open-loop drive API is in motion_drive.h; motor
- * pins and calibration are in motion_config.h.
+ * holds them braked. The open-loop drive API is in motion_drive.h,
+ * odometry and distance moves in motion_move.h; motor pins and calibration
+ * are in motion_config.h.
  */
 
 #ifndef MOTION_H

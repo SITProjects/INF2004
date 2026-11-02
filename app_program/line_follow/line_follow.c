@@ -5,6 +5,9 @@
  * The line task reads both IR sensors and runs the line-following logic
  * at a nominal 20 ms interval, and prints a snapshot every 200 ms. It
  * owns the ADC (TEAM.md section 3). It does not drive the motors.
+ * APP_TEST prints raw readings and provisional edge-band labels every
+ * ~100 ms. These hand-measured bands require fixed-height validation
+ * and are shared with the provisional navigation decisions.
  */
 
 #include "line_follow.h"
@@ -12,13 +15,21 @@
 
 /* Private types, constants, and macros. */
 #define SAMPLE_INTERVAL_MS 20
+#if APP_TEST
+#define SAMPLES_PER_PRINT 5u /* 5 x 20 ms: nominal 100 ms diagnostics. */
+#else
 #define SAMPLES_PER_PRINT 10u /* 10 x 20 ms: print every 200 ms. */
+#endif
 
 /* Static data. */
 ID line_follow_tid_sense;
 
 /* Private function declarations. */
 static void sense_task (INT stacd, void * p_exinf);
+#if APP_TEST
+static char const * edge_band_name (uint16_t raw, uint16_t lower,
+                                    uint16_t upper);
+#endif
 
 /* Public function definitions. */
 
@@ -69,9 +80,20 @@ sense_task (INT stacd, void * p_exinf)
         {
             if (b_read)
             {
+#if APP_TEST
+                tm_printf((UB *)"LEFT_RAW=%u  RIGHT_RAW=%u  "
+                                "LEFT=%s  RIGHT=%s  COMMAND=%s\n",
+                          (UINT)reading.left_raw, (UINT)reading.right_raw,
+                          edge_band_name(reading.left_raw, LINE_LEFT_EDGE_MIN,
+                                         LINE_LEFT_EDGE_MAX),
+                          edge_band_name(reading.right_raw, LINE_RIGHT_EDGE_MIN,
+                                         LINE_RIGHT_EDGE_MAX),
+                          line_command_name(command));
+#else
                 tm_printf((UB *)"Left AO: %u | Right AO: %u | Command: %s\n",
                           (UINT)reading.left_raw, (UINT)reading.right_raw,
                           line_command_name(command));
+#endif
             }
             else
             {
@@ -84,3 +106,27 @@ sense_task (INT stacd, void * p_exinf)
         (void)tk_dly_tsk(SAMPLE_INTERVAL_MS);
     }
 }
+
+#if APP_TEST
+/* Label the measured interval only; do not infer surface or line position. */
+static char const *
+edge_band_name (uint16_t raw, uint16_t lower, uint16_t upper)
+{
+    char const * p_name;
+
+    if (raw < lower)
+    {
+        p_name = "BELOW_EDGE";
+    }
+    else if (raw > upper)
+    {
+        p_name = "ABOVE_EDGE";
+    }
+    else
+    {
+        p_name = "EDGE_BAND";
+    }
+
+    return p_name;
+}
+#endif /* APP_TEST */

@@ -11,6 +11,10 @@
 #include "motion.h"
 #include "../test_report.h"
 #include "motion_config.h"
+#include "motion_drive.h"
+#include "motion_move.h"
+#include "motion_pid.h"
+#include "drv_motor.h"
 
 #if APP_TEST
 
@@ -19,8 +23,194 @@
 #define PWM_SLICE_COUNT 8u
 #define MOTOR_WRAP_10KHZ (((UW)SYSCLK * 100u) - 1u) /* clk_sys / 10 kHz - 1 */
 
+/* PIO0 CTRL; the encoders run on state machines 2 and 3 (drv_encoder.c). */
+#define PIO0_CTRL 0x50200000u
+#define ENCODER_SM_ENABLE ((1u << 2) | (1u << 3))
+
+/* SMx_ADDR (program counter) of state machines 2 and 3. */
+#define PIO0_SM2_ADDR 0x50200104u
+#define PIO0_SM3_ADDR 0x5020011cu
+
+#define REST_CHECK_MS 200
+
+/* MOT-U18: PID outputs must match hand-worked values this closely. */
+#define PID_TOLERANCE 0.0001f
+
+/*
+ * MOT-U22: time this many test-loop updates; speeds assume each takes
+ * MOTION_UPDATE_PERIOD_MS, so the mean must be within this many percent.
+ */
+#define PERIOD_CHECK_UPDATES 50u
+#define PERIOD_TOLERANCE_PERCENT 5u
+
+#if MOTION_MANUAL_TESTS
+#define TURN_WINDOW_MS 20000
+#define TURN_PRINT_MS 500
+
+/* MOT-U06: each wheel alone, forward then backward, at a gentle duty. */
+#define SPIN_DUTY 0.4f
+#define SPIN_START_DELAY_MS 3000
+#define SPIN_MS 1500
+#define SPIN_PAUSE_MS 1000
+
+typedef struct
+{
+    motor_id_t id;
+    float duty;
+    char const * p_name;
+} spin_step_t;
+#endif /* MOTION_MANUAL_TESTS */
+
+#if MOTION_SPEED_TESTS
+/* MOT-U19: duty sweep on the lifted car, in tenths of a percent. */
+#define SPEED_START_DELAY_MS 5000
+#define SWEEP_START_PERMILLE 100
+#define SWEEP_STEP_PERMILLE 50
+#define SWEEP_SETTLE_MS 1000
+#define SWEEP_MEASURE_MS 500
+
+/* MOT-U20: lifted speed steps; MOT-U21: floor runs, unplugged. */
+#define STEP_HIGH_MM_S 200
+#define STEP_LOW_MM_S 100
+#define STEP_MS 1500
+#define FLOOR_RUN_MM 800u
+#define FLOOR_START_DELAY_MS 15000
+#define FLOOR_PAUSE_MS 10000
+#define PLUG_WAIT_MS 30000
+/* 8 s: an 800 mm run with room for a slow open-loop wheel. */
+#define RECORD_MAX_SAMPLES 400
+
+/* One speed-loop update: what was asked, and what the wheels did. */
+typedef struct
+{
+    motion_command_t command;
+    int16_t left_mm_s;
+    int16_t right_mm_s;
+} speed_sample_t;
+
+/* A run of samples, one per MOTION_UPDATE_PERIOD_MS. */
+typedef struct
+{
+    speed_sample_t samples[RECORD_MAX_SAMPLES];
+    INT count;
+} speed_record_t;
+#endif /* MOTION_SPEED_TESTS */
+
+#if MOTION_SYNC_TESTS
+/* MOT-U24: lifted sign check; MOT-U25: floor drift; MOT-U26: nudge. */
+#define SYNC_START_DELAY_MS 10000
+#define SYNC_FORWARD_MM 1000u
+#define SYNC_BACKWARD_MM 500u
+#define SYNC_RUNS 3
+#define SYNC_MEASURE_MS 20000
+/* Above the module's own timeout of a 1 m move, which ends a run first. */
+#define SYNC_RUN_TIMEOUT_MS 30000
+/* 8 s: a 1 m move at 200 mm/s with room to spare. */
+#define SYNC_MAX_SAMPLES 400
+
+/* One update of a move: the straight-line loop and the setpoints. */
+typedef struct
+{
+    motion_sync_t sync;
+    motion_command_t command;
+} sync_sample_t;
+
+/* A move's samples, one per MOTION_UPDATE_PERIOD_MS. */
+typedef struct
+{
+    sync_sample_t samples[SYNC_MAX_SAMPLES];
+    INT count;
+} sync_record_t;
+#endif /* MOTION_SYNC_TESTS */
+
+#if MOTION_MOVE_TESTS || MOTION_TURN_TESTS || MOTION_SPEED_TESTS ||            \
+    MOTION_SYNC_TESTS
+#define MOVE_SETTLE_MS 500
+#endif
+
+#if MOTION_MOVE_TESTS || MOTION_TURN_TESTS
+/* MOT-U08..U16: floor moves and turns, then a held wheel, lifted. */
+#define MOVE_START_DELAY_MS 5000
+/* Above every module timeout, so the module's own timeout ends a run. */
+#define MOVE_TIMEOUT_MS 30000
+#define FORWARD_TEST_MM 1000u
+#define STALL_START_DELAY_MS 10000
+#endif /* MOTION_MOVE_TESTS || MOTION_TURN_TESTS */
+
+#if MOTION_MOVE_TESTS
+#define BACKWARD_TEST_MM 100u
+#endif /* MOTION_MOVE_TESTS */
+
+#if MOTION_TURN_TESTS
+/* MOT-U11..U16: calibration and accuracy turns, preemption, stall. */
+#define CAL_TURN_DEG 360u
+#define CAL_TURN_COUNT 3
+#define TEST_TURN_DEG 90u
+#define U_TURN_DEG 180u
+#define TURN_TRIALS 5
+#define TURN_MEASURE_MS 8000
+#define PREEMPT_AFTER_MS 1000
+#define PREEMPT_STOP_AFTER_MS 500
+#define PREEMPT_BACK_MM 100u
+
+typedef enum
+{
+    TURN_LEFT = 0,
+    TURN_RIGHT,
+    TURN_U
+} turn_kind_t;
+#endif /* MOTION_TURN_TESTS */
+
 /* Private function declarations. */
 static BOOL slice_braked (UW pin);
+static BOOL encoders_steady (void);
+static BOOL move_idle_at_rest (void);
+static BOOL pid_math_ok (void);
+static BOOL near (float actual, float expected);
+static BOOL update_period_ok (void);
+static BOOL sync_idle_at_rest (void);
+#if MOTION_MANUAL_TESTS
+static void print_counts_while_turning (void);
+static void spin_each_wheel (void);
+static UW pin_level (UW levels, UW pin);
+#endif
+#if MOTION_MOVE_TESTS
+static void run_move (char const * p_id, uint16_t distance_mm, bool b_forward);
+#endif
+#if MOTION_TURN_TESTS
+static void run_turns (char const * p_id, turn_kind_t kind, uint16_t angle_deg,
+                       INT count, INT pause_ms);
+static motion_status_t start_turn (turn_kind_t kind, uint16_t angle_deg);
+static BOOL preempt_and_stop (void);
+static void run_until_timeout (void);
+#endif
+#if MOTION_SPEED_TESTS
+static void sweep_feed_forward (void);
+static void step_speed_lifted (void);
+static void run_floor_unplugged (void);
+static void record_for (speed_record_t * p_record, INT duration_ms);
+static void record_while_moving (speed_record_t * p_record);
+static void print_record (char const * p_id, char const * p_label,
+                          speed_record_t const * p_record);
+#endif
+#if MOTION_SYNC_TESTS
+static void check_sync_sign_lifted (void);
+static void measure_drift_floor (void);
+static void nudge_and_reverse (void);
+static void run_sync_move (char const * p_id, char const * p_label,
+                           uint16_t distance_mm, bool b_forward,
+                           sync_record_t * p_record);
+static void print_sync_trace (char const * p_id,
+                              sync_record_t const * p_record);
+#endif
+#if MOTION_MOVE_TESTS || MOTION_TURN_TESTS
+static BOOL hold_wheel_until_stall (char const * p_id, bool b_turn);
+static INT update_while_moving (void);
+#endif
+#if MOTION_MOVE_TESTS || MOTION_TURN_TESTS || MOTION_SPEED_TESTS ||            \
+    MOTION_SYNC_TESTS
+static void update_for (INT duration_ms);
+#endif
 
 /* Public function definitions. */
 
@@ -34,6 +224,74 @@ motion_test (void)
                slice_braked(MOTION_LEFT_MOTOR_PIN_A) &&
                    slice_braked(MOTION_RIGHT_MOTOR_PIN_A),
                "both motors run 10 kHz PWM and are braked");
+
+    /* MOT-U03: both encoder state machines run; counts hold at rest. */
+    TEST_CHECK("MOT-U03",
+               ((in_w(PIO0_CTRL) & ENCODER_SM_ENABLE) == ENCODER_SM_ENABLE) &&
+                   encoders_steady(),
+               "both encoders count on PIO0 and hold still at rest");
+
+    /* MOT-U07: idle at rest; 0 mm, 0 degrees and too large are refused. */
+    TEST_CHECK("MOT-U07", move_idle_at_rest(),
+               "moves start stopped, odometry holds at rest, 0 refused");
+
+    /* MOT-U18: PID arithmetic against hand-worked values; no motors. */
+    TEST_CHECK("MOT-U18", pid_math_ok(),
+               "PID P, I, D terms, limits, anti-windup and reset");
+
+    /* MOT-U22: the test loops update every period; no motors. */
+    TEST_CHECK("MOT-U22", update_period_ok(),
+               "test-loop updates run at MOTION_UPDATE_PERIOD_MS");
+
+    /* MOT-U23: straight-line loop idle at rest, switchable; no motors. */
+    TEST_CHECK("MOT-U23", sync_idle_at_rest(),
+               "straight-line loop idle at rest, switches on and off");
+
+#if MOTION_MANUAL_TESTS
+    /* MOT-U06: manual; see testing/motion/TEST_LOG.md. */
+    spin_each_wheel();
+
+    /* MOT-U04, MOT-U05: manual; see testing/motion/TEST_LOG.md. */
+    print_counts_while_turning();
+#endif
+
+#if MOTION_MOVE_TESTS
+    /* MOT-U08..U10: manual; see testing/motion/TEST_LOG.md. */
+    run_move("MOT-U08", FORWARD_TEST_MM, true);
+    run_move("MOT-U09", BACKWARD_TEST_MM, false);
+    TEST_CHECK("MOT-U10", hold_wheel_until_stall("MOT-U10", false),
+               "held wheel stalls, brakes, refuses moves until stopped");
+#endif
+
+#if MOTION_TURN_TESTS
+    /* MOT-U11..U16: manual; see testing/motion/TEST_LOG.md. */
+    run_turns("MOT-U11", TURN_LEFT, CAL_TURN_DEG, CAL_TURN_COUNT, 0);
+    run_turns("MOT-U12", TURN_RIGHT, CAL_TURN_DEG, CAL_TURN_COUNT, 0);
+    run_turns("MOT-U13", TURN_LEFT, TEST_TURN_DEG, TURN_TRIALS,
+              TURN_MEASURE_MS);
+    run_turns("MOT-U13", TURN_RIGHT, TEST_TURN_DEG, TURN_TRIALS,
+              TURN_MEASURE_MS);
+    run_turns("MOT-U14", TURN_U, U_TURN_DEG, TURN_TRIALS, TURN_MEASURE_MS);
+    TEST_CHECK("MOT-U15", preempt_and_stop(),
+               "a turn replaces a move, and stop ends a turn at once");
+    TEST_CHECK("MOT-U16", hold_wheel_until_stall("MOT-U16", true),
+               "held wheel stalls a turn, brakes, refuses until stopped");
+    run_until_timeout();
+#endif
+
+#if MOTION_SPEED_TESTS
+    /* MOT-U19..U21: manual; see testing/motion/TEST_LOG.md. */
+    sweep_feed_forward();
+    step_speed_lifted();
+    run_floor_unplugged();
+#endif
+
+#if MOTION_SYNC_TESTS
+    /* MOT-U24..U26: manual; see testing/motion/TEST_LOG.md. */
+    check_sync_sign_lifted();
+    measure_drift_floor();
+    nudge_and_reverse();
+#endif
 
     TEST_SUMMARY("motion");
 }
@@ -50,5 +308,917 @@ slice_braked (UW pin)
            (in_w(base + PWM_CHx_TOP) == MOTOR_WRAP_10KHZ) &&
            (in_w(base + PWM_CHx_CC) == 0u);
 }
+
+/* Count reads succeed and neither count changes over REST_CHECK_MS. */
+static BOOL
+encoders_steady (void)
+{
+    motion_counts_t before;
+    motion_counts_t after;
+
+    if ((motion_drive_get_counts(&before) != MOTION_OK) ||
+        (tk_dly_tsk(REST_CHECK_MS) != E_OK) ||
+        (motion_drive_get_counts(&after) != MOTION_OK))
+    {
+        return FALSE;
+    }
+    return (before.left_count == after.left_count) &&
+           (before.right_count == after.right_count);
+}
+
+/* STOPPED and not busy; distance and speed hold over a rest period. */
+static BOOL
+move_idle_at_rest (void)
+{
+    motion_odometry_t before;
+    motion_odometry_t after;
+
+    if ((motion_move_stop() != MOTION_OK) ||
+        (motion_move_update() != MOTION_OK) ||
+        (motion_move_get_odometry(&before) != MOTION_OK) ||
+        (tk_dly_tsk(REST_CHECK_MS) != E_OK) ||
+        (motion_move_update() != MOTION_OK) ||
+        (motion_move_get_odometry(&after) != MOTION_OK))
+    {
+        return FALSE;
+    }
+    return (MOTION_STATE_STOPPED == motion_move_get_state()) &&
+           !motion_move_is_busy() &&
+           (before.distance_mm == after.distance_mm) &&
+           (before.heading_deg == after.heading_deg) &&
+           (0 == after.speed_mm_s) &&
+           (motion_move_forward(0u) == MOTION_ERR_PARAM) &&
+           (motion_move_turn_left(0u) == MOTION_ERR_PARAM) &&
+           (motion_move_turn_right(0u) == MOTION_ERR_PARAM) &&
+           (motion_move_turn_left(MOTION_MAX_TURN_DEG + 1u) ==
+            MOTION_ERR_PARAM) &&
+           !motion_move_is_busy() && slice_braked(MOTION_LEFT_MOTOR_PIN_A) &&
+           slice_braked(MOTION_RIGHT_MOTOR_PIN_A);
+}
+
+/* Each PID term, the limits, anti-windup and reset give worked values. */
+static BOOL
+pid_math_ok (void)
+{
+    motion_pid_t pid;
+    BOOL b_ok = TRUE;
+
+    /* P: 0.5 * 4 = 2. */
+    motion_pid_init(&pid, 0.5f, 0.0f, 0.0f, -10.0f, 10.0f);
+    b_ok = b_ok && near(motion_pid_update(&pid, 4.0f, 0.02f), 2.0f);
+
+    /* I: 1 * 2 * 0.5 per update, accumulating. */
+    motion_pid_init(&pid, 0.0f, 1.0f, 0.0f, -10.0f, 10.0f);
+    b_ok = b_ok && near(motion_pid_update(&pid, 2.0f, 0.5f), 1.0f);
+    b_ok = b_ok && near(motion_pid_update(&pid, 2.0f, 0.5f), 2.0f);
+
+    /* D: none on the first update, then 1 * (1 - 0) / 0.5. */
+    motion_pid_init(&pid, 0.0f, 0.0f, 1.0f, -10.0f, 10.0f);
+    b_ok = b_ok && near(motion_pid_update(&pid, 0.0f, 0.5f), 0.0f);
+    b_ok = b_ok && near(motion_pid_update(&pid, 1.0f, 0.5f), 2.0f);
+
+    /*
+     * Limits and anti-windup: a large error holds the output at the limit
+     * without winding the integral up, so a small error of the other sign
+     * swings the output at once: -0.5 P + -0.5 I. A wound-up integral (1)
+     * would give 0 instead.
+     */
+    motion_pid_init(&pid, 1.0f, 10.0f, 0.0f, -1.0f, 1.0f);
+    for (INT i = 0; i < 20; i++)
+    {
+        b_ok = b_ok && near(motion_pid_update(&pid, 5.0f, 0.1f), 1.0f);
+    }
+    b_ok = b_ok && near(motion_pid_update(&pid, -0.5f, 0.1f), -1.0f);
+
+    /* Narrower limits pull the integral in; reset clears it. */
+    motion_pid_set_limits(&pid, -0.25f, 0.25f);
+    b_ok = b_ok && near(motion_pid_update(&pid, 0.0f, 0.1f), -0.25f);
+    motion_pid_reset(&pid);
+    b_ok = b_ok && near(motion_pid_update(&pid, 0.0f, 0.1f), 0.0f);
+
+    /* Bad arguments give 0. */
+    b_ok = b_ok && near(motion_pid_update(NULL, 1.0f, 0.1f), 0.0f);
+    b_ok = b_ok && near(motion_pid_update(&pid, 1.0f, 0.0f), 0.0f);
+    return b_ok;
+}
+
+/* @p actual is within PID_TOLERANCE of @p expected. */
+static BOOL
+near (float actual, float expected)
+{
+    float difference = actual - expected;
+
+    return (difference < PID_TOLERANCE) && (difference > -PID_TOLERANCE);
+}
+
+/*
+ * Time PERIOD_CHECK_UPDATES updates of the loop the speed tests use (a
+ * delay, then motion_move_update()) and print the total. The system
+ * timer's 10 ms resolution is 1 % of the roughly 1 s this takes.
+ */
+static BOOL
+update_period_ok (void)
+{
+    SYSTIM start;
+    SYSTIM end;
+    UW expected_ms = PERIOD_CHECK_UPDATES * MOTION_UPDATE_PERIOD_MS;
+    UW margin_ms = (expected_ms * PERIOD_TOLERANCE_PERCENT) / 100u;
+
+    if (tk_get_otm(&start) != E_OK)
+    {
+        return FALSE;
+    }
+    for (UW i = 0u; i < PERIOD_CHECK_UPDATES; i++)
+    {
+        if ((tk_dly_tsk((TMO)MOTION_UPDATE_PERIOD_MS) != E_OK) ||
+            (motion_move_update() != MOTION_OK))
+        {
+            return FALSE;
+        }
+    }
+    if (tk_get_otm(&end) != E_OK)
+    {
+        return FALSE;
+    }
+
+    /* Unsigned subtraction stays right across a wrap of the low word. */
+    UW elapsed_ms = end.lo - start.lo;
+    tm_printf((UB *)"[TEST] MOT-U22 %d updates took %d ms (%d expected)\n",
+              (INT)PERIOD_CHECK_UPDATES, (INT)elapsed_ms, (INT)expected_ms);
+    return (elapsed_ms + margin_ms >= expected_ms) &&
+           (elapsed_ms <= expected_ms + margin_ms);
+}
+
+/*
+ * Stopped, the straight-line loop has no error or correction; switching
+ * it off and on works and leaves the motors braked; a NULL read fails.
+ */
+static BOOL
+sync_idle_at_rest (void)
+{
+    motion_sync_t sync;
+
+    if ((motion_move_stop() != MOTION_OK) ||
+        (motion_move_update() != MOTION_OK) ||
+        (motion_move_get_sync(&sync) != MOTION_OK))
+    {
+        return FALSE;
+    }
+    BOOL b_idle = (0 == sync.error_ticks) && (0 == sync.correction_deg_s);
+    BOOL b_switched = (motion_move_set_sync(false) == MOTION_OK) &&
+                      (motion_move_set_sync(true) == MOTION_OK);
+    return b_idle && b_switched &&
+           (motion_move_get_sync(NULL) == MOTION_ERR_PARAM) &&
+           (MOTION_STATE_STOPPED == motion_move_get_state()) &&
+           slice_braked(MOTION_LEFT_MOTOR_PIN_A) &&
+           slice_braked(MOTION_RIGHT_MOTOR_PIN_A);
+}
+
+#if MOTION_MANUAL_TESTS
+/* Print both counts while a tester turns the wheels by hand. */
+static void
+print_counts_while_turning (void)
+{
+    motion_counts_t counts;
+
+    tm_printf((UB *)"[TEST] MOT-U04/U05 turn each wheel one revolution "
+                    "forward, then back, within %d s (expect %d per rev)\n",
+              TURN_WINDOW_MS / 1000, (INT)MOTION_ENCODER_TICKS_PER_REV);
+    for (INT elapsed = 0; elapsed < TURN_WINDOW_MS; elapsed += TURN_PRINT_MS)
+    {
+        if ((tk_dly_tsk(TURN_PRINT_MS) != E_OK) ||
+            (motion_drive_get_counts(&counts) != MOTION_OK))
+        {
+            tm_printf((UB *)"[TEST] MOT-U04/U05 encoder read failed\n");
+            return;
+        }
+        /* Raw phase levels and PCs show wiring faults apart from code. */
+        UW levels = in_w(GPIO_IN);
+        tm_printf((UB *)"[TEST] MOT-U04/U05 left %d right %d  "
+                        "pins L%d%d R%d%d  pc %d %d\n",
+                  (INT)counts.left_count, (INT)counts.right_count,
+                  (INT)pin_level(levels, MOTION_LEFT_ENCODER_PIN_A),
+                  (INT)pin_level(levels, MOTION_LEFT_ENCODER_PIN_B),
+                  (INT)pin_level(levels, MOTION_RIGHT_ENCODER_PIN_A),
+                  (INT)pin_level(levels, MOTION_RIGHT_ENCODER_PIN_B),
+                  (INT)in_w(PIO0_SM2_ADDR), (INT)in_w(PIO0_SM3_ADDR));
+    }
+}
+
+/* Spin each wheel alone, forward then backward, and print its counts. */
+static void
+spin_each_wheel (void)
+{
+    static spin_step_t const steps[] = {
+        {MOTOR_LEFT, SPIN_DUTY, "LEFT wheel FORWARD"},
+        {MOTOR_LEFT, -SPIN_DUTY, "LEFT wheel BACKWARD"},
+        {MOTOR_RIGHT, SPIN_DUTY, "RIGHT wheel FORWARD"},
+        {MOTOR_RIGHT, -SPIN_DUTY, "RIGHT wheel BACKWARD"},
+    };
+    motion_counts_t before;
+    motion_counts_t after;
+
+    tm_printf((UB *)"[TEST] MOT-U06 keep the car lifted: each wheel spins "
+                    "alone in %d s\n",
+              SPIN_START_DELAY_MS / 1000);
+    if (tk_dly_tsk(SPIN_START_DELAY_MS) != E_OK)
+    {
+        return;
+    }
+
+    for (UW i = 0u; i < (sizeof(steps) / sizeof(steps[0])); i++)
+    {
+        tm_printf((UB *)"[TEST] MOT-U06 %s\n", steps[i].p_name);
+        (void)motion_drive_get_counts(&before);
+        motor_set_duty(steps[i].id, steps[i].duty);
+        ER er = tk_dly_tsk(SPIN_MS);
+        motor_brake(steps[i].id);
+        if ((er != E_OK) || (motion_drive_get_counts(&after) != MOTION_OK))
+        {
+            tm_printf((UB *)"[TEST] MOT-U06 stopped early\n");
+            return;
+        }
+        tm_printf((UB *)"[TEST] MOT-U06   encoder change left %d right %d\n",
+                  (INT)(int16_t)(after.left_count - before.left_count),
+                  (INT)(int16_t)(after.right_count - before.right_count));
+        (void)tk_dly_tsk(SPIN_PAUSE_MS);
+    }
+}
+
+/* Level (0 or 1) of @p pin in a GPIO_IN snapshot. */
+static UW
+pin_level (UW levels, UW pin)
+{
+    return (levels >> pin) & 1u;
+}
+#endif /* MOTION_MANUAL_TESTS */
+
+#if MOTION_MOVE_TESTS
+/* Run one move on the floor and print the odometry to compare with a
+ * ruler. */
+static void
+run_move (char const * p_id, uint16_t distance_mm, bool b_forward)
+{
+    motion_odometry_t start;
+    motion_odometry_t end;
+
+    tm_printf((UB *)"[TEST] %s car on the floor: mark its position; it "
+                    "drives %s %d mm in %d s\n",
+              p_id, b_forward ? "FORWARD" : "BACKWARD", (INT)distance_mm,
+              MOVE_START_DELAY_MS / 1000);
+    if (tk_dly_tsk(MOVE_START_DELAY_MS) != E_OK)
+    {
+        return;
+    }
+
+    (void)motion_move_update();
+    (void)motion_move_get_odometry(&start);
+    motion_status_t status = b_forward ? motion_move_forward(distance_mm)
+                                       : motion_move_backward(distance_mm);
+    if (status != MOTION_OK)
+    {
+        tm_printf((UB *)"[TEST] %s move refused (%d)\n", p_id, (INT)status);
+        return;
+    }
+
+    INT moving_ms = update_while_moving();
+    motion_state_t end_state = motion_move_get_state();
+    (void)motion_move_stop();
+    /* Keep counting while the car coasts to rest. */
+    update_for(MOVE_SETTLE_MS);
+    (void)motion_move_get_odometry(&end);
+    tm_printf((UB *)"[TEST] %s state %d after %d ms; odometry %d mm "
+                    "(target %d): ruler must agree within 3 percent\n",
+              p_id, (INT)end_state, moving_ms,
+              (INT)(end.distance_mm - start.distance_mm),
+              b_forward ? (INT)distance_mm : -(INT)distance_mm);
+}
+#endif /* MOTION_MOVE_TESTS */
+
+#if MOTION_TURN_TESTS
+/*
+ * Run @p count turns on the floor, @p pause_ms apart, and print each one's
+ * encoder heading at the brake and after the coast, to compare with the
+ * measured angle.
+ */
+static void
+run_turns (char const * p_id, turn_kind_t kind, uint16_t angle_deg, INT count,
+           INT pause_ms)
+{
+    static char const * const p_names[] = {"LEFT", "RIGHT", "U-TURN"};
+    INT sign = (TURN_RIGHT == kind) ? -1 : 1;
+    motion_odometry_t first;
+    motion_odometry_t start;
+    motion_odometry_t braked;
+    motion_odometry_t end;
+
+    tm_printf((UB *)"[TEST] %s car on the floor: mark its heading; it turns "
+                    "%s %d deg, %d times, in %d s\n",
+              p_id, p_names[kind], (INT)angle_deg, count,
+              MOVE_START_DELAY_MS / 1000);
+    if (tk_dly_tsk(MOVE_START_DELAY_MS) != E_OK)
+    {
+        return;
+    }
+
+    (void)motion_move_update();
+    (void)motion_move_get_odometry(&first);
+    for (INT run = 1; run <= count; run++)
+    {
+        (void)motion_move_get_odometry(&start);
+        motion_status_t status = start_turn(kind, angle_deg);
+        if (status != MOTION_OK)
+        {
+            tm_printf((UB *)"[TEST] %s turn refused (%d)\n", p_id, (INT)status);
+            return;
+        }
+
+        INT turning_ms = update_while_moving();
+        motion_state_t end_state = motion_move_get_state();
+        (void)motion_move_get_odometry(&braked);
+        (void)motion_move_stop();
+        /* Keep counting while the car coasts to rest. */
+        update_for(MOVE_SETTLE_MS);
+        (void)motion_move_get_odometry(&end);
+        tm_printf((UB *)"[TEST] %s run %d state %d after %d ms; heading %d "
+                        "deg (target %d), coast %d\n",
+                  p_id, run, (INT)end_state, turning_ms,
+                  (INT)(end.heading_deg - start.heading_deg),
+                  sign * (INT)angle_deg,
+                  (INT)(end.heading_deg - braked.heading_deg));
+
+        if ((pause_ms > 0) && (run < count))
+        {
+            tm_printf((UB *)"[TEST] %s measure, then re-mark; next turn in "
+                            "%d s\n",
+                      p_id, pause_ms / 1000);
+            update_for(pause_ms);
+        }
+    }
+
+    if (count > 1)
+    {
+        tm_printf((UB *)"[TEST] %s total heading %d deg (target %d): "
+                        "measure it\n",
+                  p_id, (INT)(end.heading_deg - first.heading_deg),
+                  sign * count * (INT)angle_deg);
+    }
+}
+
+/* Start a turn of @p kind; @p angle_deg is ignored for a U-turn. */
+static motion_status_t
+start_turn (turn_kind_t kind, uint16_t angle_deg)
+{
+    if (TURN_RIGHT == kind)
+    {
+        return motion_move_turn_right(angle_deg);
+    }
+    if (TURN_U == kind)
+    {
+        return motion_move_u_turn();
+    }
+    return motion_move_turn_left(angle_deg);
+}
+
+/*
+ * On the floor: a turn replaces a move in progress and is measured from
+ * where it started, a move replaces a turn, and a stop during a turn
+ * brakes at once.
+ */
+static BOOL
+preempt_and_stop (void)
+{
+    motion_odometry_t start;
+    motion_odometry_t end;
+
+    tm_printf((UB *)"[TEST] MOT-U15 car on the floor, 1 m clear ahead: mark "
+                    "its heading; it drives forward, turns LEFT %d deg "
+                    "partway, starts a turn that a short reverse replaces, "
+                    "then a turn that is stopped, in %d s\n",
+              (INT)TEST_TURN_DEG, MOVE_START_DELAY_MS / 1000);
+    if ((tk_dly_tsk(MOVE_START_DELAY_MS) != E_OK) ||
+        (motion_move_update() != MOTION_OK) ||
+        (motion_move_forward(FORWARD_TEST_MM) != MOTION_OK))
+    {
+        return FALSE;
+    }
+
+    update_for(PREEMPT_AFTER_MS);
+    BOOL b_was_moving = (MOTION_STATE_MOVE == motion_move_get_state());
+    (void)motion_move_get_odometry(&start);
+    if (motion_move_turn_left(TEST_TURN_DEG) != MOTION_OK)
+    {
+        return FALSE;
+    }
+    BOOL b_replaced = (MOTION_STATE_TURN == motion_move_get_state());
+
+    (void)update_while_moving();
+    BOOL b_turn_done = (MOTION_STATE_STOPPED == motion_move_get_state());
+    update_for(MOVE_SETTLE_MS);
+    (void)motion_move_get_odometry(&end);
+
+    /* A move part way through a turn replaces it and runs to the end. */
+    BOOL b_move_replaced = FALSE;
+    if (motion_move_turn_left(CAL_TURN_DEG) == MOTION_OK)
+    {
+        update_for(PREEMPT_STOP_AFTER_MS);
+        b_move_replaced =
+            (motion_move_backward(PREEMPT_BACK_MM) == MOTION_OK) &&
+            (MOTION_STATE_MOVE == motion_move_get_state());
+        (void)update_while_moving();
+        b_move_replaced = b_move_replaced &&
+                          (MOTION_STATE_STOPPED == motion_move_get_state());
+        update_for(MOVE_SETTLE_MS);
+    }
+
+    /* A stop part way through a turn brakes before the next update. */
+    BOOL b_stopped = FALSE;
+    if (motion_move_turn_left(CAL_TURN_DEG) == MOTION_OK)
+    {
+        update_for(PREEMPT_STOP_AFTER_MS);
+        b_stopped = (motion_move_stop() == MOTION_OK) &&
+                    (MOTION_STATE_STOPPED == motion_move_get_state()) &&
+                    !motion_move_is_busy() &&
+                    slice_braked(MOTION_LEFT_MOTOR_PIN_A) &&
+                    slice_braked(MOTION_RIGHT_MOTOR_PIN_A);
+    }
+    update_for(MOVE_SETTLE_MS);
+
+    tm_printf((UB *)"[TEST] MOT-U15 moving %d, replaced %d, turn done %d, "
+                    "move replaced turn %d, stopped %d; turn heading %d deg "
+                    "(target %d)\n",
+              (INT)b_was_moving, (INT)b_replaced, (INT)b_turn_done,
+              (INT)b_move_replaced, (INT)b_stopped,
+              (INT)(end.heading_deg - start.heading_deg), (INT)TEST_TURN_DEG);
+    return b_was_moving && b_replaced && b_turn_done && b_move_replaced &&
+           b_stopped;
+}
+
+/*
+ * On the lifted car, turn and print how the turn ended. With one
+ * MOTION_*_ENCODER_INVERTED flag deliberately flipped, the count
+ * difference barely moves and the turn must time out.
+ */
+static void
+run_until_timeout (void)
+{
+    tm_printf((UB *)"[TEST] MOT-U17 keep the car lifted: it turns LEFT %d "
+                    "deg in %d s\n",
+              (INT)TEST_TURN_DEG, MOVE_START_DELAY_MS / 1000);
+    if ((tk_dly_tsk(MOVE_START_DELAY_MS) != E_OK) ||
+        (motion_move_update() != MOTION_OK) ||
+        (motion_move_turn_left(TEST_TURN_DEG) != MOTION_OK))
+    {
+        tm_printf((UB *)"[TEST] MOT-U17 turn refused\n");
+        return;
+    }
+
+    INT turning_ms = update_while_moving();
+    motion_state_t end_state = motion_move_get_state();
+    motion_status_t retry = motion_move_turn_left(TEST_TURN_DEG);
+    (void)motion_move_stop();
+    tm_printf((UB *)"[TEST] MOT-U17 state %d after %d ms, retry %d (flag "
+                    "flipped: expect state %d after about %d ms, retry %d; "
+                    "else state %d)\n",
+              (INT)end_state, turning_ms, (INT)retry,
+              (INT)MOTION_STATE_TIMED_OUT,
+              (INT)(((MOTION_TIMEOUT_FACTOR * TEST_TURN_DEG * 1000u) /
+                     (UW)MOTION_TURN_SPEED_DEG_S) +
+                    MOTION_TIMEOUT_MARGIN_MS),
+              (INT)MOTION_ERR_TIMED_OUT, (INT)MOTION_STATE_STOPPED);
+}
+#endif /* MOTION_TURN_TESTS */
+
+#if MOTION_SPEED_TESTS
+/*
+ * On the lifted car, step both wheels through rising duties, open loop,
+ * and print each wheel's settled speed, for the feed-forward line.
+ */
+static void
+sweep_feed_forward (void)
+{
+    motion_odometry_t odometry;
+
+    tm_printf((UB *)"[TEST] MOT-U19 keep the car lifted: both wheels step "
+                    "from duty %d to 1000 permille in %d s\n",
+              SWEEP_START_PERMILLE, SPEED_START_DELAY_MS / 1000);
+    (void)motion_move_stop();
+    update_for(SPEED_START_DELAY_MS);
+
+    for (INT permille = SWEEP_START_PERMILLE; permille <= 1000;
+         permille += SWEEP_STEP_PERMILLE)
+    {
+        float duty = (float)permille / 1000.0f;
+        INT left_sum = 0;
+        INT right_sum = 0;
+        INT samples = 0;
+
+        motor_set_duty(MOTOR_LEFT, duty);
+        motor_set_duty(MOTOR_RIGHT, duty);
+        update_for(SWEEP_SETTLE_MS);
+        for (INT elapsed = 0; elapsed < SWEEP_MEASURE_MS;
+             elapsed += (INT)MOTION_UPDATE_PERIOD_MS)
+        {
+            update_for((INT)MOTION_UPDATE_PERIOD_MS);
+            (void)motion_move_get_odometry(&odometry);
+            left_sum += (INT)odometry.left_speed_mm_s;
+            right_sum += (INT)odometry.right_speed_mm_s;
+            samples++;
+        }
+        tm_printf((UB *)"[TEST] MOT-U19 duty %d left %d right %d mm/s\n",
+                  permille, left_sum / samples, right_sum / samples);
+    }
+    (void)motion_move_stop();
+    update_for(MOVE_SETTLE_MS);
+}
+
+/*
+ * On the lifted car, step the speed setpoint with the speed loop on and
+ * record every update, for tuning MOTION_SPEED_KP and MOTION_SPEED_KI.
+ */
+static void
+step_speed_lifted (void)
+{
+    static speed_record_t record;
+
+    tm_printf((UB *)"[TEST] MOT-U20 keep the car lifted: speed steps %d, "
+                    "%d, %d mm/s in %d s\n",
+              STEP_HIGH_MM_S, STEP_LOW_MM_S, STEP_HIGH_MM_S,
+              SPEED_START_DELAY_MS / 1000);
+    update_for(SPEED_START_DELAY_MS);
+
+    record.count = 0;
+    (void)motion_drive_set_velocity(STEP_HIGH_MM_S, 0);
+    record_for(&record, STEP_MS);
+    (void)motion_drive_set_velocity(STEP_LOW_MM_S, 0);
+    record_for(&record, STEP_MS);
+    (void)motion_drive_set_velocity(STEP_HIGH_MM_S, 0);
+    record_for(&record, STEP_MS);
+    (void)motion_move_stop();
+    update_for(MOVE_SETTLE_MS);
+    print_record("MOT-U20", "speed loop", &record);
+}
+
+/*
+ * On the floor, on battery alone, drive the same distance open loop, then
+ * with the speed loop; print both runs once USB is plugged back in.
+ */
+static void
+run_floor_unplugged (void)
+{
+    static speed_record_t open_loop;
+    static speed_record_t closed_loop;
+
+    tm_printf((UB *)"[TEST] MOT-U21 unplug USB, put the car on the floor "
+                    "with 2 m clear ahead: it drives %d mm open loop in "
+                    "%d s, then %d mm with the speed loop\n",
+              (INT)FLOOR_RUN_MM, FLOOR_START_DELAY_MS / 1000,
+              (INT)FLOOR_RUN_MM);
+    update_for(FLOOR_START_DELAY_MS);
+
+    (void)motion_drive_set_speed_pid(false);
+    open_loop.count = 0;
+    if (motion_move_forward(FLOOR_RUN_MM) == MOTION_OK)
+    {
+        record_while_moving(&open_loop);
+    }
+    (void)motion_move_stop();
+    update_for(FLOOR_PAUSE_MS);
+
+    (void)motion_drive_set_speed_pid(true);
+    closed_loop.count = 0;
+    if (motion_move_forward(FLOOR_RUN_MM) == MOTION_OK)
+    {
+        record_while_moving(&closed_loop);
+    }
+    (void)motion_move_stop();
+
+    tm_printf((UB *)"[TEST] MOT-U21 plug USB back in; results in %d s\n",
+              PLUG_WAIT_MS / 1000);
+    update_for(PLUG_WAIT_MS);
+    print_record("MOT-U21", "open loop", &open_loop);
+    print_record("MOT-U21", "speed loop", &closed_loop);
+}
+
+/* Update every period for @p duration_ms, recording each update. */
+static void
+record_for (speed_record_t * p_record, INT duration_ms)
+{
+    motion_odometry_t odometry;
+
+    for (INT elapsed = 0; elapsed < duration_ms;
+         elapsed += (INT)MOTION_UPDATE_PERIOD_MS)
+    {
+        if ((tk_dly_tsk((TMO)MOTION_UPDATE_PERIOD_MS) != E_OK) ||
+            (motion_move_update() != MOTION_OK))
+        {
+            return;
+        }
+        if (p_record->count < RECORD_MAX_SAMPLES)
+        {
+            speed_sample_t * p_sample = &p_record->samples[p_record->count];
+            (void)motion_drive_get_command(&p_sample->command);
+            (void)motion_move_get_odometry(&odometry);
+            p_sample->left_mm_s = odometry.left_speed_mm_s;
+            p_sample->right_mm_s = odometry.right_speed_mm_s;
+            p_record->count++;
+        }
+    }
+}
+
+/* Record every update until the move ends or the record is full. */
+static void
+record_while_moving (speed_record_t * p_record)
+{
+    while (motion_move_is_busy() && (p_record->count < RECORD_MAX_SAMPLES))
+    {
+        INT before = p_record->count;
+        record_for(p_record, (INT)MOTION_UPDATE_PERIOD_MS);
+        if (p_record->count == before)
+        {
+            return;
+        }
+    }
+}
+
+/*
+ * Print one line per recorded update, then each wheel's mean speed over
+ * the second half of the run, once it has settled.
+ */
+static void
+print_record (char const * p_id, char const * p_label,
+              speed_record_t const * p_record)
+{
+    INT left_sum = 0;
+    INT right_sum = 0;
+    INT half = p_record->count / 2;
+
+    tm_printf((UB *)"[TEST] %s %s: ms setL setR speedL speedR dutyL dutyR\n",
+              p_id, p_label);
+    for (INT i = 0; i < p_record->count; i++)
+    {
+        speed_sample_t const * p_sample = &p_record->samples[i];
+        tm_printf((UB *)"[TEST] %s %d %d %d %d %d %d %d\n", p_id,
+                  (i + 1) * (INT)MOTION_UPDATE_PERIOD_MS,
+                  (INT)p_sample->command.left_setpoint_mm_s,
+                  (INT)p_sample->command.right_setpoint_mm_s,
+                  (INT)p_sample->left_mm_s, (INT)p_sample->right_mm_s,
+                  (INT)p_sample->command.left_duty_permille,
+                  (INT)p_sample->command.right_duty_permille);
+        if (i >= half)
+        {
+            left_sum += (INT)p_sample->left_mm_s;
+            right_sum += (INT)p_sample->right_mm_s;
+        }
+    }
+    if (p_record->count > half)
+    {
+        tm_printf((UB *)"[TEST] %s %s settled: left %d right %d mm/s "
+                        "(target %d)\n",
+                  p_id, p_label, left_sum / (p_record->count - half),
+                  right_sum / (p_record->count - half),
+                  (INT)MOTION_MOVE_SPEED_MM_S);
+    }
+}
+#endif /* MOTION_SPEED_TESTS */
+
+#if MOTION_SYNC_TESTS
+/*
+ * On the lifted car, drive forward then backward with the straight-line
+ * loop on while a tester slows the left wheel; print every update, to
+ * check the loop steers against the error rather than with it.
+ */
+static void
+check_sync_sign_lifted (void)
+{
+    static sync_record_t record;
+
+    tm_printf((UB *)"[TEST] MOT-U24 keep the car lifted; while the wheels "
+                    "turn, lightly slow the LEFT wheel with a finger, do "
+                    "not stop it. FORWARD %d mm, then BACKWARD %d mm, in "
+                    "%d s\n",
+              (INT)SYNC_FORWARD_MM, (INT)SYNC_FORWARD_MM,
+              SYNC_START_DELAY_MS / 1000);
+    (void)motion_move_set_sync(true);
+    update_for(SYNC_START_DELAY_MS);
+
+    run_sync_move("MOT-U24", "forward", SYNC_FORWARD_MM, true, &record);
+    print_sync_trace("MOT-U24", &record);
+    run_sync_move("MOT-U24", "backward", SYNC_FORWARD_MM, false, &record);
+    print_sync_trace("MOT-U24", &record);
+}
+
+/*
+ * On the floor, drive 1 m SYNC_RUNS times with the straight-line loop off,
+ * then SYNC_RUNS times with it on; the tester measures each run's
+ * sideways drift.
+ */
+static void
+measure_drift_floor (void)
+{
+    static sync_record_t record;
+    static char const * const p_labels[] = {"sync OFF", "sync ON"};
+
+    for (UW mode = 0u; mode < 2u; mode++)
+    {
+        (void)motion_move_set_sync(mode != 0u);
+        for (INT run = 1; run <= SYNC_RUNS; run++)
+        {
+            tm_printf((UB *)"[TEST] MOT-U25 %s run %d: car on the floor on "
+                            "the start line, tape along its side; it drives "
+                            "FORWARD %d mm in %d s\n",
+                      p_labels[mode], run, (INT)SYNC_FORWARD_MM,
+                      SYNC_MEASURE_MS / 1000);
+            update_for(SYNC_MEASURE_MS);
+            run_sync_move("MOT-U25", p_labels[mode], SYNC_FORWARD_MM, true,
+                          &record);
+        }
+    }
+    (void)motion_move_set_sync(true);
+    tm_printf((UB *)"[TEST] MOT-U25 measure the last run within %d s\n",
+              SYNC_MEASURE_MS / 1000);
+    update_for(SYNC_MEASURE_MS);
+}
+
+/*
+ * On the floor with the loop on: drive 1 m while the tester nudges the
+ * car, printing every update, then reverse SYNC_BACKWARD_MM.
+ */
+static void
+nudge_and_reverse (void)
+{
+    static sync_record_t record;
+
+    tm_printf((UB *)"[TEST] MOT-U26 car on the floor, 1 m clear ahead: "
+                    "about halfway, push its front sideways about 1 cm. "
+                    "FORWARD %d mm in %d s\n",
+              (INT)SYNC_FORWARD_MM, SYNC_START_DELAY_MS / 1000);
+    update_for(SYNC_START_DELAY_MS);
+    run_sync_move("MOT-U26", "nudged", SYNC_FORWARD_MM, true, &record);
+    print_sync_trace("MOT-U26", &record);
+
+    tm_printf((UB *)"[TEST] MOT-U26 measure, re-mark; it reverses %d mm in "
+                    "%d s\n",
+              (INT)SYNC_BACKWARD_MM, SYNC_MEASURE_MS / 1000);
+    update_for(SYNC_MEASURE_MS);
+    run_sync_move("MOT-U26", "reverse", SYNC_BACKWARD_MM, false, &record);
+}
+
+/*
+ * Run one move, record every update, and print how it ended: state,
+ * distance and heading by odometry after the coast, and the largest
+ * straight-line error during the move.
+ */
+static void
+run_sync_move (char const * p_id, char const * p_label, uint16_t distance_mm,
+               bool b_forward, sync_record_t * p_record)
+{
+    motion_odometry_t start;
+    motion_odometry_t end;
+    INT max_error = 0;
+    INT elapsed = 0;
+
+    p_record->count = 0;
+    (void)motion_move_update();
+    (void)motion_move_get_odometry(&start);
+    motion_status_t status = b_forward ? motion_move_forward(distance_mm)
+                                       : motion_move_backward(distance_mm);
+    if (status != MOTION_OK)
+    {
+        tm_printf((UB *)"[TEST] %s %s move refused (%d)\n", p_id, p_label,
+                  (INT)status);
+        return;
+    }
+
+    while (motion_move_is_busy() && (elapsed < SYNC_RUN_TIMEOUT_MS))
+    {
+        if ((tk_dly_tsk((TMO)MOTION_UPDATE_PERIOD_MS) != E_OK) ||
+            (motion_move_update() != MOTION_OK))
+        {
+            break;
+        }
+        elapsed += (INT)MOTION_UPDATE_PERIOD_MS;
+
+        /* The move's last update has reset the loop; keep its error. */
+        if (!motion_move_is_busy())
+        {
+            continue;
+        }
+        if (p_record->count < SYNC_MAX_SAMPLES)
+        {
+            sync_sample_t * p_sample = &p_record->samples[p_record->count];
+            (void)motion_move_get_sync(&p_sample->sync);
+            (void)motion_drive_get_command(&p_sample->command);
+            p_record->count++;
+            INT error = (INT)p_sample->sync.error_ticks;
+            error = (error < 0) ? -error : error;
+            max_error = (error > max_error) ? error : max_error;
+        }
+    }
+
+    motion_state_t end_state = motion_move_get_state();
+    (void)motion_move_stop();
+    /* Keep counting while the car coasts to rest. */
+    update_for(MOVE_SETTLE_MS);
+    (void)motion_move_get_odometry(&end);
+    tm_printf((UB *)"[TEST] %s %s state %d after %d ms; odometry %d mm "
+                    "(target %d), heading %d deg, max error %d ticks\n",
+              p_id, p_label, (INT)end_state, elapsed,
+              (INT)(end.distance_mm - start.distance_mm),
+              b_forward ? (INT)distance_mm : -(INT)distance_mm,
+              (INT)(end.heading_deg - start.heading_deg), max_error);
+}
+
+/* Print one line per recorded update of a move. */
+static void
+print_sync_trace (char const * p_id, sync_record_t const * p_record)
+{
+    tm_printf((UB *)"[TEST] %s trace: ms errTicks corrDegS setL setR\n", p_id);
+    for (INT i = 0; i < p_record->count; i++)
+    {
+        sync_sample_t const * p_sample = &p_record->samples[i];
+        tm_printf((UB *)"[TEST] %s %d %d %d %d %d\n", p_id,
+                  (i + 1) * (INT)MOTION_UPDATE_PERIOD_MS,
+                  (INT)p_sample->sync.error_ticks,
+                  (INT)p_sample->sync.correction_deg_s,
+                  (INT)p_sample->command.left_setpoint_mm_s,
+                  (INT)p_sample->command.right_setpoint_mm_s);
+    }
+}
+#endif /* MOTION_SYNC_TESTS */
+
+#if MOTION_MOVE_TESTS || MOTION_TURN_TESTS
+/*
+ * Drive the lifted car with the left wheel held, forward or (@p b_turn)
+ * turning left; check the stall.
+ */
+static BOOL
+hold_wheel_until_stall (char const * p_id, bool b_turn)
+{
+    tm_printf((UB *)"[TEST] %s lift the car and hold the LEFT wheel still: "
+                    "the car is driven %s in %d s\n",
+              p_id, b_turn ? "turning left" : "forward",
+              STALL_START_DELAY_MS / 1000);
+    if ((tk_dly_tsk(STALL_START_DELAY_MS) != E_OK) ||
+        (motion_move_update() != MOTION_OK))
+    {
+        return FALSE;
+    }
+    motion_status_t status = b_turn ? motion_move_turn_left(90u)
+                                    : motion_move_forward(FORWARD_TEST_MM);
+    if (status != MOTION_OK)
+    {
+        return FALSE;
+    }
+
+    INT moving_ms = update_while_moving();
+    BOOL b_stalled = (MOTION_STATE_STALLED == motion_move_get_state());
+    BOOL b_braked = slice_braked(MOTION_LEFT_MOTOR_PIN_A) &&
+                    slice_braked(MOTION_RIGHT_MOTOR_PIN_A);
+    status = b_turn ? motion_move_turn_left(90u)
+                    : motion_move_forward(FORWARD_TEST_MM);
+    BOOL b_refused = (MOTION_ERR_STALLED == status);
+    BOOL b_cleared = (motion_move_stop() == MOTION_OK) &&
+                     (MOTION_STATE_STOPPED == motion_move_get_state());
+    tm_printf((UB *)"[TEST] %s stalled %d after %d ms (expect about %d), "
+                    "braked %d, refused %d, cleared %d\n",
+              p_id, (INT)b_stalled, moving_ms, (INT)MOTION_STALL_TIMEOUT_MS,
+              (INT)b_braked, (INT)b_refused, (INT)b_cleared);
+    return b_stalled && b_braked && b_refused && b_cleared;
+}
+
+/* Update every period until the move ends or times out; return its ms. */
+static INT
+update_while_moving (void)
+{
+    INT elapsed = 0;
+
+    while (motion_move_is_busy() && (elapsed < MOVE_TIMEOUT_MS))
+    {
+        if ((tk_dly_tsk((TMO)MOTION_UPDATE_PERIOD_MS) != E_OK) ||
+            (motion_move_update() != MOTION_OK))
+        {
+            break;
+        }
+        elapsed += (INT)MOTION_UPDATE_PERIOD_MS;
+    }
+    return elapsed;
+}
+#endif /* MOTION_MOVE_TESTS || MOTION_TURN_TESTS */
+
+#if MOTION_MOVE_TESTS || MOTION_TURN_TESTS || MOTION_SPEED_TESTS ||            \
+    MOTION_SYNC_TESTS
+/* Update every period for @p duration_ms, running any move or turn. */
+static void
+update_for (INT duration_ms)
+{
+    for (INT elapsed = 0; elapsed < duration_ms;
+         elapsed += (INT)MOTION_UPDATE_PERIOD_MS)
+    {
+        (void)tk_dly_tsk((TMO)MOTION_UPDATE_PERIOD_MS);
+        (void)motion_move_update();
+    }
+}
+#endif /* MOTION_MOVE_TESTS ... MOTION_SYNC_TESTS */
 
 #endif /* APP_TEST */
