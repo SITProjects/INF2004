@@ -8,7 +8,10 @@
  * sum of both wheels' totals, a turn by their difference (right - left),
  * which is the heading change times the track width. Each update also
  * measures each wheel's speed over the last MOTION_SPEED_WINDOW_UPDATES
- * updates and passes both speeds to the drive's speed loop.
+ * updates and passes both speeds to the drive's speed loop. During a move,
+ * a straight-line PI loop first turns the change in that difference since
+ * the move started (a heading error) into a turn rate for
+ * motion_drive_set_velocity(), so the speed loops steer the car back.
  *
  * Copyright (c) 2026 10x Slackers
  * SPDX-License-Identifier: MIT
@@ -17,6 +20,7 @@
 #include "motion_move.h"
 #include <stddef.h>
 #include "motion_config.h"
+#include "motion_pid.h"
 
 /* Private types, constants, and macros. */
 
@@ -30,6 +34,9 @@
 
 /* Updates without an encoder change, during a move, that mean a stall. */
 #define STALL_UPDATES (MOTION_STALL_TIMEOUT_MS / MOTION_UPDATE_PERIOD_MS)
+
+/* Time between motion_move_update() calls, in seconds. */
+#define UPDATE_PERIOD_S ((float)MOTION_UPDATE_PERIOD_MS / 1000.0f)
 
 typedef enum
 {
@@ -68,6 +75,16 @@ static uint32_t still_updates[WHEEL_COUNT];
 static uint32_t move_updates = 0u;
 static uint32_t move_limit_updates = 0u;
 
+/*
+ * Straight-line loop: whether it corrects, the right - left difference
+ * the current move started at, and its last error and correction.
+ */
+static bool b_sync = true;
+static motion_pid_t sync_pid;
+static int32_t heading_start = 0;
+static int32_t sync_error_ticks = 0;
+static int16_t sync_correction_deg_s = 0;
+
 /* Private function declarations. */
 static motion_status_t start_move (uint16_t distance_mm, int32_t dir);
 static motion_status_t start_turn (uint16_t angle_deg, int32_t dir);
@@ -79,6 +96,8 @@ static int32_t tick_difference (void);
 static void enter_stopped (void);
 static bool wheel_stalled (wheel_t wheel, int16_t delta);
 static void update_speeds (int16_t delta_left, int16_t delta_right);
+static void correct_heading (void);
+static void reset_sync (void);
 
 /* Public function definitions. */
 
@@ -101,6 +120,9 @@ motion_move_init (void)
         }
     }
     window_index = 0u;
+    motion_pid_init(&sync_pid, MOTION_SYNC_KP, MOTION_SYNC_KI, 0.0f,
+                    -MOTION_SYNC_MAX_DEG_S, MOTION_SYNC_MAX_DEG_S);
+    b_sync = true;
     b_initialised = true;
     enter_stopped();
     return MOTION_OK;
@@ -123,6 +145,10 @@ motion_move_update (void)
     total_ticks[WHEEL_LEFT] += delta_left;
     total_ticks[WHEEL_RIGHT] += delta_right;
     update_speeds(delta_left, delta_right);
+    if (MOTION_STATE_MOVE == state)
+    {
+        correct_heading();
+    }
     (void)motion_drive_control(wheel_speed_mm_s[WHEEL_LEFT],
                                wheel_speed_mm_s[WHEEL_RIGHT]);
 
@@ -239,6 +265,42 @@ motion_move_get_odometry (motion_odometry_t * p_odometry)
     return MOTION_OK;
 }
 
+motion_status_t
+motion_move_set_sync (bool b_enable)
+{
+    if (!b_initialised)
+    {
+        return MOTION_ERR_NOT_INIT;
+    }
+
+    b_sync = b_enable;
+    motion_pid_reset(&sync_pid);
+    sync_correction_deg_s = 0;
+    if (MOTION_STATE_MOVE == state)
+    {
+        (void)motion_drive_set_velocity(
+            (int16_t)(move_dir * (int32_t)MOTION_MOVE_SPEED_MM_S), 0);
+    }
+    return MOTION_OK;
+}
+
+motion_status_t
+motion_move_get_sync (motion_sync_t * p_sync)
+{
+    if (NULL == p_sync)
+    {
+        return MOTION_ERR_PARAM;
+    }
+    if (!b_initialised)
+    {
+        return MOTION_ERR_NOT_INIT;
+    }
+
+    p_sync->error_ticks = sync_error_ticks;
+    p_sync->correction_deg_s = sync_correction_deg_s;
+    return MOTION_OK;
+}
+
 /* Private function definitions. */
 
 /* Begin a move of @p distance_mm in direction @p dir (+1 or -1). */
@@ -336,6 +398,8 @@ begin (motion_state_t new_state, int32_t start, int32_t dir, int32_t target,
     move_target = target;
     still_updates[WHEEL_LEFT] = 0u;
     still_updates[WHEEL_RIGHT] = 0u;
+    heading_start = tick_difference();
+    reset_sync();
     state = new_state;
 }
 
@@ -366,6 +430,7 @@ enter_stopped (void)
     move_limit_updates = 0u;
     still_updates[WHEEL_LEFT] = 0u;
     still_updates[WHEEL_RIGHT] = 0u;
+    reset_sync();
 }
 
 /* Count updates without an encoder change; true at the stall timeout. */
@@ -399,4 +464,44 @@ update_speeds (int16_t delta_left, int16_t delta_right)
                               MOTION_UPDATE_PERIOD_MS));
     }
     window_index = (window_index + 1u) % MOTION_SPEED_WINDOW_UPDATES;
+}
+
+/*
+ * One straight-line step of a move: measure the heading change since the
+ * move started and, with the loop on, steer against it. Heading does not
+ * depend on the direction of travel, so the same sign corrects forward and
+ * backward moves.
+ */
+static void
+correct_heading (void)
+{
+    sync_error_ticks = tick_difference() - heading_start;
+    if (!b_sync)
+    {
+        return;
+    }
+
+    float error_deg = ((float)sync_error_ticks * MM_PER_TICK) /
+                      (MOTION_TRACK_WIDTH_MM * DEG_TO_RAD);
+    float correction =
+        motion_pid_update(&sync_pid, -error_deg, UPDATE_PERIOD_S);
+
+    /* The drive takes whole deg/s: round to nearest. */
+    int16_t rate = (int16_t)((correction >= 0.0f) ? (correction + 0.5f)
+                                                  : (correction - 0.5f));
+    if (rate != sync_correction_deg_s)
+    {
+        sync_correction_deg_s = rate;
+        (void)motion_drive_set_velocity(
+            (int16_t)(move_dir * (int32_t)MOTION_MOVE_SPEED_MM_S), rate);
+    }
+}
+
+/* Clear the straight-line loop's integral, error and correction. */
+static void
+reset_sync (void)
+{
+    motion_pid_reset(&sync_pid);
+    sync_error_ticks = 0;
+    sync_correction_deg_s = 0;
 }

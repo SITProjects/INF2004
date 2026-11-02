@@ -96,7 +96,35 @@ typedef struct
 } speed_record_t;
 #endif /* MOTION_SPEED_TESTS */
 
-#if MOTION_MOVE_TESTS || MOTION_TURN_TESTS || MOTION_SPEED_TESTS
+#if MOTION_SYNC_TESTS
+/* MOT-U24: lifted sign check; MOT-U25: floor drift; MOT-U26: nudge. */
+#define SYNC_START_DELAY_MS 10000
+#define SYNC_FORWARD_MM 1000u
+#define SYNC_BACKWARD_MM 500u
+#define SYNC_RUNS 3
+#define SYNC_MEASURE_MS 20000
+/* Above the module's own timeout of a 1 m move, which ends a run first. */
+#define SYNC_RUN_TIMEOUT_MS 30000
+/* 8 s: a 1 m move at 200 mm/s with room to spare. */
+#define SYNC_MAX_SAMPLES 400
+
+/* One update of a move: the straight-line loop and the setpoints. */
+typedef struct
+{
+    motion_sync_t sync;
+    motion_command_t command;
+} sync_sample_t;
+
+/* A move's samples, one per MOTION_UPDATE_PERIOD_MS. */
+typedef struct
+{
+    sync_sample_t samples[SYNC_MAX_SAMPLES];
+    INT count;
+} sync_record_t;
+#endif /* MOTION_SYNC_TESTS */
+
+#if MOTION_MOVE_TESTS || MOTION_TURN_TESTS || MOTION_SPEED_TESTS ||            \
+    MOTION_SYNC_TESTS
 #define MOVE_SETTLE_MS 500
 #endif
 
@@ -140,6 +168,7 @@ static BOOL move_idle_at_rest (void);
 static BOOL pid_math_ok (void);
 static BOOL near (float actual, float expected);
 static BOOL update_period_ok (void);
+static BOOL sync_idle_at_rest (void);
 #if MOTION_MANUAL_TESTS
 static void print_counts_while_turning (void);
 static void spin_each_wheel (void);
@@ -164,11 +193,22 @@ static void record_while_moving (speed_record_t * p_record);
 static void print_record (char const * p_id, char const * p_label,
                           speed_record_t const * p_record);
 #endif
+#if MOTION_SYNC_TESTS
+static void check_sync_sign_lifted (void);
+static void measure_drift_floor (void);
+static void nudge_and_reverse (void);
+static void run_sync_move (char const * p_id, char const * p_label,
+                           uint16_t distance_mm, bool b_forward,
+                           sync_record_t * p_record);
+static void print_sync_trace (char const * p_id,
+                              sync_record_t const * p_record);
+#endif
 #if MOTION_MOVE_TESTS || MOTION_TURN_TESTS
 static BOOL hold_wheel_until_stall (char const * p_id, bool b_turn);
 static INT update_while_moving (void);
 #endif
-#if MOTION_MOVE_TESTS || MOTION_TURN_TESTS || MOTION_SPEED_TESTS
+#if MOTION_MOVE_TESTS || MOTION_TURN_TESTS || MOTION_SPEED_TESTS ||            \
+    MOTION_SYNC_TESTS
 static void update_for (INT duration_ms);
 #endif
 
@@ -202,6 +242,10 @@ motion_test (void)
     /* MOT-U22: the test loops update every period; no motors. */
     TEST_CHECK("MOT-U22", update_period_ok(),
                "test-loop updates run at MOTION_UPDATE_PERIOD_MS");
+
+    /* MOT-U23: straight-line loop idle at rest, switchable; no motors. */
+    TEST_CHECK("MOT-U23", sync_idle_at_rest(),
+               "straight-line loop idle at rest, switches on and off");
 
 #if MOTION_MANUAL_TESTS
     /* MOT-U06: manual; see testing/motion/TEST_LOG.md. */
@@ -240,6 +284,13 @@ motion_test (void)
     sweep_feed_forward();
     step_speed_lifted();
     run_floor_unplugged();
+#endif
+
+#if MOTION_SYNC_TESTS
+    /* MOT-U24..U26: manual; see testing/motion/TEST_LOG.md. */
+    check_sync_sign_lifted();
+    measure_drift_floor();
+    nudge_and_reverse();
 #endif
 
     TEST_SUMMARY("motion");
@@ -396,6 +447,31 @@ update_period_ok (void)
               (INT)PERIOD_CHECK_UPDATES, (INT)elapsed_ms, (INT)expected_ms);
     return (elapsed_ms + margin_ms >= expected_ms) &&
            (elapsed_ms <= expected_ms + margin_ms);
+}
+
+/*
+ * Stopped, the straight-line loop has no error or correction; switching
+ * it off and on works and leaves the motors braked; a NULL read fails.
+ */
+static BOOL
+sync_idle_at_rest (void)
+{
+    motion_sync_t sync;
+
+    if ((motion_move_stop() != MOTION_OK) ||
+        (motion_move_update() != MOTION_OK) ||
+        (motion_move_get_sync(&sync) != MOTION_OK))
+    {
+        return FALSE;
+    }
+    BOOL b_idle = (0 == sync.error_ticks) && (0 == sync.correction_deg_s);
+    BOOL b_switched = (motion_move_set_sync(false) == MOTION_OK) &&
+                      (motion_move_set_sync(true) == MOTION_OK);
+    return b_idle && b_switched &&
+           (motion_move_get_sync(NULL) == MOTION_ERR_PARAM) &&
+           (MOTION_STATE_STOPPED == motion_move_get_state()) &&
+           slice_braked(MOTION_LEFT_MOTOR_PIN_A) &&
+           slice_braked(MOTION_RIGHT_MOTOR_PIN_A);
 }
 
 #if MOTION_MANUAL_TESTS
@@ -906,6 +982,171 @@ print_record (char const * p_id, char const * p_label,
 }
 #endif /* MOTION_SPEED_TESTS */
 
+#if MOTION_SYNC_TESTS
+/*
+ * On the lifted car, drive forward then backward with the straight-line
+ * loop on while a tester slows the left wheel; print every update, to
+ * check the loop steers against the error rather than with it.
+ */
+static void
+check_sync_sign_lifted (void)
+{
+    static sync_record_t record;
+
+    tm_printf((UB *)"[TEST] MOT-U24 keep the car lifted; while the wheels "
+                    "turn, lightly slow the LEFT wheel with a finger, do "
+                    "not stop it. FORWARD %d mm, then BACKWARD %d mm, in "
+                    "%d s\n",
+              (INT)SYNC_FORWARD_MM, (INT)SYNC_FORWARD_MM,
+              SYNC_START_DELAY_MS / 1000);
+    (void)motion_move_set_sync(true);
+    update_for(SYNC_START_DELAY_MS);
+
+    run_sync_move("MOT-U24", "forward", SYNC_FORWARD_MM, true, &record);
+    print_sync_trace("MOT-U24", &record);
+    run_sync_move("MOT-U24", "backward", SYNC_FORWARD_MM, false, &record);
+    print_sync_trace("MOT-U24", &record);
+}
+
+/*
+ * On the floor, drive 1 m SYNC_RUNS times with the straight-line loop off,
+ * then SYNC_RUNS times with it on; the tester measures each run's
+ * sideways drift.
+ */
+static void
+measure_drift_floor (void)
+{
+    static sync_record_t record;
+    static char const * const p_labels[] = {"sync OFF", "sync ON"};
+
+    for (UW mode = 0u; mode < 2u; mode++)
+    {
+        (void)motion_move_set_sync(mode != 0u);
+        for (INT run = 1; run <= SYNC_RUNS; run++)
+        {
+            tm_printf((UB *)"[TEST] MOT-U25 %s run %d: car on the floor on "
+                            "the start line, tape along its side; it drives "
+                            "FORWARD %d mm in %d s\n",
+                      p_labels[mode], run, (INT)SYNC_FORWARD_MM,
+                      SYNC_MEASURE_MS / 1000);
+            update_for(SYNC_MEASURE_MS);
+            run_sync_move("MOT-U25", p_labels[mode], SYNC_FORWARD_MM, true,
+                          &record);
+        }
+    }
+    (void)motion_move_set_sync(true);
+    tm_printf((UB *)"[TEST] MOT-U25 measure the last run within %d s\n",
+              SYNC_MEASURE_MS / 1000);
+    update_for(SYNC_MEASURE_MS);
+}
+
+/*
+ * On the floor with the loop on: drive 1 m while the tester nudges the
+ * car, printing every update, then reverse SYNC_BACKWARD_MM.
+ */
+static void
+nudge_and_reverse (void)
+{
+    static sync_record_t record;
+
+    tm_printf((UB *)"[TEST] MOT-U26 car on the floor, 1 m clear ahead: "
+                    "about halfway, push its front sideways about 1 cm. "
+                    "FORWARD %d mm in %d s\n",
+              (INT)SYNC_FORWARD_MM, SYNC_START_DELAY_MS / 1000);
+    update_for(SYNC_START_DELAY_MS);
+    run_sync_move("MOT-U26", "nudged", SYNC_FORWARD_MM, true, &record);
+    print_sync_trace("MOT-U26", &record);
+
+    tm_printf((UB *)"[TEST] MOT-U26 measure, re-mark; it reverses %d mm in "
+                    "%d s\n",
+              (INT)SYNC_BACKWARD_MM, SYNC_MEASURE_MS / 1000);
+    update_for(SYNC_MEASURE_MS);
+    run_sync_move("MOT-U26", "reverse", SYNC_BACKWARD_MM, false, &record);
+}
+
+/*
+ * Run one move, record every update, and print how it ended: state,
+ * distance and heading by odometry after the coast, and the largest
+ * straight-line error during the move.
+ */
+static void
+run_sync_move (char const * p_id, char const * p_label, uint16_t distance_mm,
+               bool b_forward, sync_record_t * p_record)
+{
+    motion_odometry_t start;
+    motion_odometry_t end;
+    INT max_error = 0;
+    INT elapsed = 0;
+
+    p_record->count = 0;
+    (void)motion_move_update();
+    (void)motion_move_get_odometry(&start);
+    motion_status_t status = b_forward ? motion_move_forward(distance_mm)
+                                       : motion_move_backward(distance_mm);
+    if (status != MOTION_OK)
+    {
+        tm_printf((UB *)"[TEST] %s %s move refused (%d)\n", p_id, p_label,
+                  (INT)status);
+        return;
+    }
+
+    while (motion_move_is_busy() && (elapsed < SYNC_RUN_TIMEOUT_MS))
+    {
+        if ((tk_dly_tsk((TMO)MOTION_UPDATE_PERIOD_MS) != E_OK) ||
+            (motion_move_update() != MOTION_OK))
+        {
+            break;
+        }
+        elapsed += (INT)MOTION_UPDATE_PERIOD_MS;
+
+        /* The move's last update has reset the loop; keep its error. */
+        if (!motion_move_is_busy())
+        {
+            continue;
+        }
+        if (p_record->count < SYNC_MAX_SAMPLES)
+        {
+            sync_sample_t * p_sample = &p_record->samples[p_record->count];
+            (void)motion_move_get_sync(&p_sample->sync);
+            (void)motion_drive_get_command(&p_sample->command);
+            p_record->count++;
+            INT error = (INT)p_sample->sync.error_ticks;
+            error = (error < 0) ? -error : error;
+            max_error = (error > max_error) ? error : max_error;
+        }
+    }
+
+    motion_state_t end_state = motion_move_get_state();
+    (void)motion_move_stop();
+    /* Keep counting while the car coasts to rest. */
+    update_for(MOVE_SETTLE_MS);
+    (void)motion_move_get_odometry(&end);
+    tm_printf((UB *)"[TEST] %s %s state %d after %d ms; odometry %d mm "
+                    "(target %d), heading %d deg, max error %d ticks\n",
+              p_id, p_label, (INT)end_state, elapsed,
+              (INT)(end.distance_mm - start.distance_mm),
+              b_forward ? (INT)distance_mm : -(INT)distance_mm,
+              (INT)(end.heading_deg - start.heading_deg), max_error);
+}
+
+/* Print one line per recorded update of a move. */
+static void
+print_sync_trace (char const * p_id, sync_record_t const * p_record)
+{
+    tm_printf((UB *)"[TEST] %s trace: ms errTicks corrDegS setL setR\n", p_id);
+    for (INT i = 0; i < p_record->count; i++)
+    {
+        sync_sample_t const * p_sample = &p_record->samples[i];
+        tm_printf((UB *)"[TEST] %s %d %d %d %d %d\n", p_id,
+                  (i + 1) * (INT)MOTION_UPDATE_PERIOD_MS,
+                  (INT)p_sample->sync.error_ticks,
+                  (INT)p_sample->sync.correction_deg_s,
+                  (INT)p_sample->command.left_setpoint_mm_s,
+                  (INT)p_sample->command.right_setpoint_mm_s);
+    }
+}
+#endif /* MOTION_SYNC_TESTS */
+
 #if MOTION_MOVE_TESTS || MOTION_TURN_TESTS
 /*
  * Drive the lifted car with the left wheel held, forward or (@p b_turn)
@@ -965,7 +1206,8 @@ update_while_moving (void)
 }
 #endif /* MOTION_MOVE_TESTS || MOTION_TURN_TESTS */
 
-#if MOTION_MOVE_TESTS || MOTION_TURN_TESTS || MOTION_SPEED_TESTS
+#if MOTION_MOVE_TESTS || MOTION_TURN_TESTS || MOTION_SPEED_TESTS ||            \
+    MOTION_SYNC_TESTS
 /* Update every period for @p duration_ms, running any move or turn. */
 static void
 update_for (INT duration_ms)
@@ -977,6 +1219,6 @@ update_for (INT duration_ms)
         (void)motion_move_update();
     }
 }
-#endif /* MOTION_MOVE_TESTS || MOTION_TURN_TESTS || MOTION_SPEED_TESTS */
+#endif /* MOTION_MOVE_TESTS ... MOTION_SYNC_TESTS */
 
 #endif /* APP_TEST */

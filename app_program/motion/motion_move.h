@@ -1,13 +1,15 @@
 /**
  * @file motion_move.h
  * @brief Odometry, wheel speeds, distance moves, turns and stall detection
- * (plan steps 3 to 5).
+ * (plan steps 3 to 6).
  *
  * A move drives both wheels at MOTION_MOVE_SPEED_MM_S, and a turn spins
  * the car in place at MOTION_TURN_SPEED_DEG_S, through
  * motion_drive_set_velocity(); each brakes once the encoders show the
  * distance or angle. Every update feeds the measured wheel speeds to the
  * drive's speed loop (motion_drive_control()), so speeds hold under load.
+ * During a move, a straight-line (sync) PI loop also trims a small turn
+ * rate into the wheel setpoints to hold the heading the move started on.
  * The module is RTOS-free; its owner calls
  * motion_move_update() every MOTION_UPDATE_PERIOD_MS. All functions must
  * be called from that one task, because reading the encoders empties their
@@ -53,6 +55,18 @@ typedef struct
     int32_t heading_deg;      /**< Total turn, not wrapped; + is left. */
 } motion_odometry_t;
 
+/**
+ * @brief Straight-line (sync) loop of the current move, as of the last
+ * motion_move_update(). Both are 0 when no move is in progress.
+ */
+typedef struct
+{
+    int32_t error_ticks;      /**< Right - left count change since the move
+                                   started; + means the car turned left. */
+    int16_t correction_deg_s; /**< Turn rate added to the setpoints; + is
+                                   left. 0 while the loop is off. */
+} motion_sync_t;
+
 /* Public function declarations. */
 
 /**
@@ -66,7 +80,8 @@ motion_status_t motion_move_init (void);
 
 /**
  * @brief Read the encoders, update odometry and wheel speeds, run one
- * speed-loop step, and run the current move or turn. Ends it once its
+ * straight-line step during a move and one speed-loop step, and run the
+ * current move or turn. Ends it once its
  * distance or angle is reached (state STOPPED). It brakes and enters
  * MOTION_STATE_STALLED when a wheel shows no encoder change for
  * MOTION_STALL_TIMEOUT_MS during it, or MOTION_STATE_TIMED_OUT when it runs
@@ -143,5 +158,24 @@ motion_state_t motion_move_get_state (void);
  * MOTION_ERR_NOT_INIT.
  */
 motion_status_t motion_move_get_odometry (motion_odometry_t * p_odometry);
+
+/**
+ * @brief Turn the straight-line (sync) loop of moves on or off; it is on
+ * after motion_move_init(). For comparing runs with and without it.
+ * @param b_enable True to correct the heading during moves.
+ * @return MOTION_OK or MOTION_ERR_NOT_INIT.
+ * Clears the loop's integral. During a move, turning it off returns both
+ * wheels to the plain move speed at once; turning it on corrects the
+ * heading change since the move started.
+ */
+motion_status_t motion_move_set_sync (bool b_enable);
+
+/**
+ * @brief Read the straight-line loop's error and correction.
+ * @param p_sync Caller-owned snapshot to fill.
+ * @return MOTION_OK, MOTION_ERR_PARAM for a NULL pointer, or
+ * MOTION_ERR_NOT_INIT.
+ */
+motion_status_t motion_move_get_sync (motion_sync_t * p_sync);
 
 #endif /* MOTION_MOVE_H */
