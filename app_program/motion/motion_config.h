@@ -139,6 +139,52 @@
 #define MOTION_SYNC_MAX_DEG_S 20.0f
 
 /*
+ * Chassis speed of line following, in mm/s. The MBF_MOTION_CMD packing
+ * has no speed field, so tMotion follows at this speed.
+ * TODO(calibrate) with MOT-U31: start slow; raise only once the line gains
+ * hold the tightest curve of the course.
+ */
+#define MOTION_FOLLOW_SPEED_MM_S 120u
+
+/*
+ * Line PD loop of line following (plan step 6b). It turns the line error
+ * (-MOTION_LINE_ERROR_MAX to MOTION_LINE_ERROR_MAX, + is line to the
+ * left) into a turn rate for both wheels' setpoints. KP: deg/s per unit of
+ * error, so 0.1 turns at 100 deg/s with the line at one side. KD: deg/s per
+ * unit of error per second (in seconds).
+ * TODO(calibrate) with MOT-U31 on a straight, then the tightest curve:
+ * with KD 0, raise KP until the car weaves along a straight line, then
+ * halve it; then raise KD until the weave dies within about one swing.
+ */
+#define MOTION_FOLLOW_KP 0.1f
+#define MOTION_FOLLOW_KD 0.0f
+
+/*
+ * Largest turn rate the line loop asks for, in deg/s. Each wheel's
+ * setpoint changes by rate * track / 2 (about 113 mm/s at 120 deg/s), so
+ * at MOTION_FOLLOW_SPEED_MM_S the inner wheel nearly stops.
+ * TODO(calibrate): at least the follow speed / the tightest curve radius
+ * (in rad/s), so the car can hold that curve (MOT-U31).
+ */
+#define MOTION_FOLLOW_MAX_DEG_S 120.0f
+
+/*
+ * Following stops (state STOPPED) when the last line error is older than
+ * this, so the car never drives on with stale steering. About five of the
+ * line task's 20 ms readings. A multiple of MOTION_UPDATE_PERIOD_MS.
+ */
+#define MOTION_LINE_TIMEOUT_MS 100u
+
+/*
+ * Readings in a row that must agree before the line counts as seen, or as
+ * gone; one noisy reading cannot end a move at a line.
+ * TODO(calibrate) with MOT-U32: raise if moves stop short of the line or
+ * on marks that are not a line; each extra reading adds about 20 ms (4 mm
+ * at 200 mm/s) of overshoot.
+ */
+#define MOTION_LINE_SEEN_SAMPLES 2u
+
+/*
  * Period between motion_move_update() calls, in ms (CYC_MOTION in the
  * design review). Speeds and the stall timeout are based on it.
  */
@@ -192,7 +238,7 @@
 
 /*
  * Set 1 to add the manual bench steps (MOT-U04..U06) to make TEST=1. They
- * spin each wheel under power and block the test run for about 33 s, so
+ * spin each wheel under power and block the test run for about 133 s, so
  * keep this 0 except on a lifted car during a motion test session.
  */
 #define MOTION_MANUAL_TESTS 0
@@ -228,6 +274,14 @@
  * during a motion test session.
  */
 #define MOTION_SYNC_TESTS 0
+
+/*
+ * Set 1 to add the manual line-following steps (MOT-U28..U30) to make
+ * TEST=1. They spin the lifted car's wheels, then drive it on the floor
+ * with hand-fed line errors, and block the test run for about a minute and
+ * a half; keep this 0 except during a motion test session.
+ */
+#define MOTION_FOLLOW_TESTS 0
 
 /* Public function declarations. */
 
