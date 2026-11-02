@@ -118,10 +118,14 @@ static bool b_line_seen = false;
 static uint32_t line_change_samples = 0u;
 static bool b_line_seen_last = false;
 
-/* Line following: chassis speed, PD loop and its last turn rate. */
+/*
+ * Line following: chassis speed, PD loop, its last turn rate, and updates
+ * since its last step (the step's dt).
+ */
 static uint16_t follow_speed_mm_s = 0u;
 static motion_pid_t follow_pid;
 static int16_t follow_turn_deg_s = 0;
+static uint32_t follow_step_updates = 0u;
 
 /* Private function declarations. */
 static motion_status_t start_move (uint16_t distance_mm, int32_t dir);
@@ -210,6 +214,7 @@ motion_move_update (void)
     }
     else if (MOTION_STATE_FOLLOW == state)
     {
+        follow_step_updates++;
         if (line_age_updates > LINE_TIMEOUT_UPDATES)
         {
             enter_stopped();
@@ -723,13 +728,18 @@ reset_sync (void)
 
 /*
  * One line step while following: steer towards the line. A + error (line
- * to the left) needs a + (left) turn, so the error goes in as it is.
+ * to the left) needs a + (left) turn, so the error goes in as it is. The
+ * step's dt is the time since the last one, so D stays right when the
+ * line task reads slower than motion_move_update() runs.
  */
 static void
 follow_line (void)
 {
-    int16_t rate = round_rate(
-        motion_pid_update(&follow_pid, (float)line_error, UPDATE_PERIOD_S));
+    float dt_s = (float)follow_step_updates * UPDATE_PERIOD_S;
+
+    follow_step_updates = 0u;
+    int16_t rate =
+        round_rate(motion_pid_update(&follow_pid, (float)line_error, dt_s));
     if (rate != follow_turn_deg_s)
     {
         follow_turn_deg_s = rate;
@@ -737,12 +747,13 @@ follow_line (void)
     }
 }
 
-/* Clear the line loop's history and turn rate. */
+/* Clear the line loop's history, turn rate and step timing. */
 static void
 reset_follow (void)
 {
     motion_pid_reset(&follow_pid);
     follow_turn_deg_s = 0;
+    follow_step_updates = 0u;
 }
 
 /* The drive takes whole deg/s: round @p rate to nearest. */
