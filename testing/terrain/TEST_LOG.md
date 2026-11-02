@@ -32,3 +32,8 @@ Add a new row for every run. Never edit or delete old rows.
 | Date | Test ID | Commit | Tester | Result | Log / evidence | Notes |
 |---|---|---|---|---|---|---|
 | YYYY-MM-DD | TER-U01 | `abc1234` | | PASS / FAIL | `logs/YYYY-MM-DD_….txt` | |
+| 2026-11-02 | TER-U06 | `4a4be96` | ann | PASS | `logs/2026-11-02_ter_u06_level_ref.txt` | Loose IMU taped flat on a levelled desk; new reference X -0.470, Y 0.743, Z 8.491 m/s^2. TER-U07 not done (IMU stayed taped) |
+| 2026-11-02 | TER-U01 | `4a4be96` + new reference | ann | PASS | `logs/2026-11-02_ter_u01_u02_u04.txt` | Packed code, loose IMU |
+| 2026-11-02 | TER-U02 | `4a4be96` + new reference | ann | PASS | `logs/2026-11-02_ter_u01_u02_u04.txt` | VALID about 2.6 s after boot |
+| 2026-11-02 | TER-U04 | `4a4be96` + new reference | ann | PASS | `logs/2026-11-02_ter_u01_u02_u04.txt` | Pitch and roll within 1 degree |
+| 2026-11-02 | TER-U11 | `4a4be96` + new reference | ann | PASS | `logs/2026-11-02_ter_u11_imu_fault.txt` | Raised on unplug, cleared on replug, calibration stayed VALID. Sampling after the reconnect not checked |
