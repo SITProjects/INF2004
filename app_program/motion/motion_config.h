@@ -26,36 +26,34 @@
 
 /*
  * Set true for a wheel that spins backward on a forward command.
- * TODO(calibrate): confirm with MOT-U06 that FORWARD turns each wheel the
- * way that drives the car forward.
+ * MOT-U06 (2026-11-02): FORWARD turns both wheels forward.
  */
 #define MOTION_LEFT_MOTOR_INVERTED false
 #define MOTION_RIGHT_MOTOR_INVERTED false
 
 /*
  * Quadrature encoder phases A/B, counted by PIO0 (drv_encoder.c): left on
- * Grove P2, right on the GP13/GP14 servo header signal pins. B must be the
+ * the GP13/GP14 servo header signal pins, right on Grove P2. B must be the
  * pin after A. Power the encoders from 3.3 V: the RP2040 inputs are not
  * 5 V tolerant.
  */
-#define MOTION_LEFT_ENCODER_PIN_A 2u
-#define MOTION_LEFT_ENCODER_PIN_B 3u
-#define MOTION_RIGHT_ENCODER_PIN_A 13u
-#define MOTION_RIGHT_ENCODER_PIN_B 14u
+#define MOTION_LEFT_ENCODER_PIN_A 13u
+#define MOTION_LEFT_ENCODER_PIN_B 14u
+#define MOTION_RIGHT_ENCODER_PIN_A 2u
+#define MOTION_RIGHT_ENCODER_PIN_B 3u
 
 /*
  * Set true for an encoder that counts down when its wheel drives forward.
- * TODO(calibrate): set from MOT-U05/MOT-U06 once the encoders are wired.
+ * MOT-U05/MOT-U06 (2026-11-03): the right encoder counts down.
  */
 #define MOTION_LEFT_ENCODER_INVERTED false
-#define MOTION_RIGHT_ENCODER_INVERTED false
+#define MOTION_RIGHT_ENCODER_INVERTED true
 
 /*
  * Encoder counts per wheel turn, counting all 4 edges per encoder cycle.
- * TODO(calibrate): placeholder; measure by turning each wheel one
- * revolution by hand (testing/motion/TEST_LOG.md, MOT-U04).
+ * MOT-U04 (2026-11-03): about 2500 left and 2530 right, turned by hand.
  */
-#define MOTION_ENCODER_TICKS_PER_REV 1000u
+#define MOTION_ENCODER_TICKS_PER_REV 2490u
 
 /*
  * Wheel diameter in mm; odometry uses pi * diameter / ticks per rev.

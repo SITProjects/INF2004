@@ -49,8 +49,8 @@ fixed.
 | GP23, GP24, GP25, GP29 | *reserved* | Pico W radio |
 | GP0 | | (taken whenever the team builds with `CRASH_REPORT=1`) |
 | GP1 | | (taken whenever the team builds with `CRASH_REPORT=1`) |
-| GP2 | motion | left encoder phase A (input, PIO0 state machine 2) |
-| GP3 | motion | left encoder phase B (input, PIO0 state machine 2) |
+| GP2 | motion | right encoder phase A (input, PIO0 state machine 3) |
+| GP3 | motion | right encoder phase B (input, PIO0 state machine 3) |
 | GP4 | terrain | I2C0 SDA to the GY-511 (Robo Pico Grove 3), claimed by the kernel I2C driver at boot |
 | GP5 | terrain | I2C0 SCL to the GY-511 (Robo Pico Grove 3), claimed by the kernel I2C driver at boot |
 | GP6 | | |
@@ -60,8 +60,8 @@ fixed.
 | GP10 | motion | right motor input A (PWM slice 5 A) |
 | GP11 | motion | right motor input B (PWM slice 5 B) |
 | GP12 | obstacle | servo signal (PWM slice 6 A) |
-| GP13 | motion | right encoder phase A (input, PIO0 state machine 3; PWM slice 6 B is not used, so the servo is unaffected) |
-| GP14 | motion | right encoder phase B (input, PIO0 state machine 3) |
+| GP13 | motion | left encoder phase A (input, PIO0 state machine 2; PWM slice 6 B is not used, so the servo is unaffected) |
+| GP14 | motion | left encoder phase B (input, PIO0 state machine 2) |
 | GP15 | | |
 | GP16 | obstacle | ultrasonic trigger (output) |
 | GP17 | obstacle | ultrasonic echo (input, edge interrupt) |

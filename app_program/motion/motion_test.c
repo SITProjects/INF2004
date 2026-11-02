@@ -43,6 +43,17 @@
 #define PERIOD_CHECK_UPDATES 50u
 #define PERIOD_TOLERANCE_PERCENT 5u
 
+/*
+ * tk_dly_tsk() waits one kernel tick longer than asked, so the test loops
+ * ask for one tick less. Each update ends well within a tick, so every
+ * wait then ends on the tick MOTION_UPDATE_PERIOD_MS after the last.
+ */
+#if (MOTION_UPDATE_PERIOD_MS <= CNF_TIMER_PERIOD) ||                           \
+    ((MOTION_UPDATE_PERIOD_MS % CNF_TIMER_PERIOD) != 0)
+#error "MOTION_UPDATE_PERIOD_MS must be a multiple of the tick, above it"
+#endif
+#define UPDATE_DELAY_MS (MOTION_UPDATE_PERIOD_MS - CNF_TIMER_PERIOD)
+
 #if MOTION_MANUAL_TESTS
 #define TURN_WINDOW_MS 120000
 #define TURN_PRINT_MS 500
@@ -182,6 +193,7 @@ static BOOL move_idle_at_rest (void);
 static BOOL pid_math_ok (void);
 static BOOL near (float actual, float expected);
 static BOOL update_period_ok (void);
+static ER wait_update_period (void);
 static BOOL sync_idle_at_rest (void);
 static BOOL follow_idle_at_rest (void);
 #if MOTION_MANUAL_TESTS
@@ -465,7 +477,7 @@ update_period_ok (void)
     }
     for (UW i = 0u; i < PERIOD_CHECK_UPDATES; i++)
     {
-        if ((tk_dly_tsk((TMO)MOTION_UPDATE_PERIOD_MS) != E_OK) ||
+        if ((wait_update_period() != E_OK) ||
             (motion_move_update() != MOTION_OK))
         {
             return FALSE;
@@ -482,6 +494,13 @@ update_period_ok (void)
               (INT)PERIOD_CHECK_UPDATES, (INT)elapsed_ms, (INT)expected_ms);
     return (elapsed_ms + margin_ms >= expected_ms) &&
            (elapsed_ms <= expected_ms + margin_ms);
+}
+
+/* Wait until the next test-loop update is due (see UPDATE_DELAY_MS). */
+static ER
+wait_update_period (void)
+{
+    return tk_dly_tsk((TMO)UPDATE_DELAY_MS);
 }
 
 /*
@@ -1004,7 +1023,7 @@ record_for (speed_record_t * p_record, INT duration_ms)
     for (INT elapsed = 0; elapsed < duration_ms;
          elapsed += (INT)MOTION_UPDATE_PERIOD_MS)
     {
-        if ((tk_dly_tsk((TMO)MOTION_UPDATE_PERIOD_MS) != E_OK) ||
+        if ((wait_update_period() != E_OK) ||
             (motion_move_update() != MOTION_OK))
         {
             return;
@@ -1187,7 +1206,7 @@ run_sync_move (char const * p_id, char const * p_label, uint16_t distance_mm,
 
     while (motion_move_is_busy() && (elapsed < SYNC_RUN_TIMEOUT_MS))
     {
-        if ((tk_dly_tsk((TMO)MOTION_UPDATE_PERIOD_MS) != E_OK) ||
+        if ((wait_update_period() != E_OK) ||
             (motion_move_update() != MOTION_OK))
         {
             break;
@@ -1437,7 +1456,7 @@ feed_line_for (int16_t error, bool b_seen, INT duration_ms)
          elapsed += (INT)MOTION_UPDATE_PERIOD_MS)
     {
         (void)motion_move_set_line(error, b_seen);
-        (void)tk_dly_tsk((TMO)MOTION_UPDATE_PERIOD_MS);
+        (void)wait_update_period();
         (void)motion_move_update();
     }
 }
@@ -1509,7 +1528,7 @@ update_while_moving (void)
 
     while (motion_move_is_busy() && (elapsed < MOVE_TIMEOUT_MS))
     {
-        if ((tk_dly_tsk((TMO)MOTION_UPDATE_PERIOD_MS) != E_OK) ||
+        if ((wait_update_period() != E_OK) ||
             (motion_move_update() != MOTION_OK))
         {
             break;
@@ -1529,7 +1548,7 @@ update_for (INT duration_ms)
     for (INT elapsed = 0; elapsed < duration_ms;
          elapsed += (INT)MOTION_UPDATE_PERIOD_MS)
     {
-        (void)tk_dly_tsk((TMO)MOTION_UPDATE_PERIOD_MS);
+        (void)wait_update_period();
         (void)motion_move_update();
     }
 }
