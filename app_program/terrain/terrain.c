@@ -6,7 +6,9 @@
  * retrying while the sensor is missing, then calls
  * terrain_monitor_update() every 10 ms and reports calibration and IMU
  * fault changes.
- * With TERRAIN_DEBUG_PRINT_MS set it also prints pitch and roll.
+ * With TERRAIN_DEBUG_PRINT_MS set it also prints pitch, roll and the
+ * hump state, or the calibration progress until calibrated; it never
+ * takes events from the queue.
  */
 
 #include "terrain.h"
@@ -19,6 +21,7 @@
 #define UPDATE_PERIOD_MS 10
 #define INIT_RETRY_MS 1000
 #define TENTHS_PER_UNIT 10
+#define US_PER_MS 1000u
 
 /* Static data. */
 ID terrain_tid_monitor;
@@ -26,7 +29,8 @@ ID terrain_tid_monitor;
 /* Private function declarations. */
 static void monitor_task (INT stacd, void * p_exinf);
 #if TERRAIN_DEBUG_PRINT_MS > 0
-static void print_tilt (void);
+static void print_status (void);
+static void print_calibrating (terrain_data_t const * p_data);
 static void print_angle (char const * p_name, int16_t ddeg, bool b_held);
 #endif
 
@@ -76,7 +80,8 @@ monitor_task (INT stacd, void * p_exinf)
     terrain_calib_state_t last_state = TERRAIN_CALIB_CALIBRATING;
     bool b_last_fault = false;
 #if TERRAIN_DEBUG_PRINT_MS > 0
-    INT since_print_ms = 0;
+    /* Real time, not loop passes: a pass can take longer than 10 ms. */
+    uint64_t last_print_us = terrain_platform_time_us();
 #endif
     for (;;)
     {
@@ -104,11 +109,12 @@ monitor_task (INT stacd, void * p_exinf)
         }
 
 #if TERRAIN_DEBUG_PRINT_MS > 0
-        since_print_ms += UPDATE_PERIOD_MS;
-        if (since_print_ms >= TERRAIN_DEBUG_PRINT_MS)
+        uint64_t const now_us = terrain_platform_time_us();
+        if ((now_us - last_print_us) >=
+            ((uint64_t)TERRAIN_DEBUG_PRINT_MS * US_PER_MS))
         {
-            since_print_ms = 0;
-            print_tilt();
+            last_print_us = now_us;
+            print_status();
         }
 #endif
         (void)tk_dly_tsk(UPDATE_PERIOD_MS);
@@ -116,12 +122,18 @@ monitor_task (INT stacd, void * p_exinf)
 }
 
 #if TERRAIN_DEBUG_PRINT_MS > 0
-/* One line of pitch and roll, once calibrated. */
+/* One line of pitch, roll and hump state; calibration progress before. */
 static void
-print_tilt (void)
+print_status (void)
 {
-    terrain_data_t data;
-    if (terrain_monitor_get_latest(&data) != TERRAIN_OK)
+    terrain_data_t data = {0};
+    terrain_status_t const status = terrain_monitor_get_latest(&data);
+    if (status == TERRAIN_ERR_NOT_CALIBRATED)
+    {
+        print_calibrating(&data);
+        return;
+    }
+    if (status != TERRAIN_OK)
     {
         return;
     }
@@ -131,7 +143,32 @@ print_tilt (void)
                 terrain_monitor_data_is_pitch_held(&data));
     print_angle("roll", terrain_monitor_data_roll_ddeg(&data),
                 terrain_monitor_data_is_roll_held(&data));
-    tm_printf((UB *)"\n");
+    tm_printf((UB *)" hump %s\n", terrain_monitor_hump_text(
+                                      terrain_monitor_data_hump_state(&data)));
+}
+
+/*
+ * Why calibration has not finished: samples not arriving (the count stands
+ * still), or attempts rejected as moved (retries go up with the spread).
+ */
+static void
+print_calibrating (terrain_data_t const * p_data)
+{
+    terrain_calib_info_t info;
+    if (terrain_monitor_get_calibration(&info) != TERRAIN_OK)
+    {
+        return;
+    }
+
+    tm_printf((UB *)"terrain: %s samples %d attempts %d retries %d "
+                    "spread %d mg tilt %d.%d deg\n",
+              terrain_monitor_calib_text(terrain_monitor_calib_state(&info)),
+              (INT)terrain_monitor_data_sample_count(p_data),
+              (INT)terrain_monitor_calib_attempts(&info),
+              (INT)terrain_monitor_calib_retries(&info),
+              (INT)terrain_monitor_calib_spread_mg(&info),
+              (INT)terrain_monitor_calib_tilt_ddeg(&info) / TENTHS_PER_UNIT,
+              (INT)terrain_monitor_calib_tilt_ddeg(&info) % TENTHS_PER_UNIT);
 }
 
 /* tm_printf has no %f: print tenths as whole degrees and tenths. */
