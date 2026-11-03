@@ -158,10 +158,11 @@ drive_task (INT stacd, void * p_exinf)
 static void
 service_commands (void)
 {
-    bool b_new = false;
+    bool b_new;
     SYSTIM now;
     ER const result = take_request(&b_new);
-    if ((result < E_OK) || (tk_get_otm(&now) < E_OK) ||
+    /* Contention skips this poll; the cached timestamp still expires. */
+    if (((result < E_OK) && (result != E_TMOUT)) || (tk_get_otm(&now) < E_OK) ||
         ((uint32_t)((uint32_t)now.lo - active_request.received_ms) >=
          MOTION_LINE_TIMEOUT_MS))
     {
@@ -177,6 +178,7 @@ service_commands (void)
 static ER
 take_request (bool * p_new)
 {
+    *p_new = false;
     ER const result = tk_loc_mtx(command_mutex, TMO_POL);
     if (result < E_OK)
     {

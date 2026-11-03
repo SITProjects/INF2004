@@ -41,10 +41,14 @@ ER motion_command_start (void);
  * @param command Existing edge decision. SEARCH, STOP and JUNCTION brake.
  * @param p_reading Raw ADC pair, 0..4095 per channel, copied before returning.
  *        NULL means sensor failure and requests a stop without line feedback.
- * @return E_OK, E_PAR for invalid counts/command (stop request stored), or a
- *         negative kernel error. Failed submission guarantees no delivery.
- * @note Submission never waits for the mutex. Shared data is copied under
- *       that mutex; newer readings replace older ones. The owner derives a
+ * @return E_OK, E_PAR for invalid counts/command (stop request stored),
+ *         E_TMOUT if the slot is busy (sample skipped), or another kernel
+ *         error. Failed submission guarantees no delivery.
+ * @note Submission never waits for the mutex. On E_TMOUT the caller may
+ *       skip logging and retry with its next sample. Receiver contention
+ *       retains a fresh cached request without refreshing its timestamp or
+ *       feeding it again to the controller. Shared data is copied under the
+ *       mutex; newer readings replace older ones. The owner derives a
  *       signed reflectance error from the existing per-sensor edge bands,
  *       saturating toward full BLACK; it is not a calibrated distance.
  *       Only fresh readings feed the controller. Stale input stops following

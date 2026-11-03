@@ -78,8 +78,12 @@ sense_task (INT stacd, void * p_exinf)
             command = line_command_update(reading);
         }
 
-        app_check(motion_command_submit(command, b_read ? &reading : NULL),
-                  "line motion submission");
+        ER const submission =
+            motion_command_submit(command, b_read ? &reading : NULL);
+        if ((submission < E_OK) && (submission != E_TMOUT))
+        {
+            app_check(submission, "line motion submission");
+        }
 
         if ((sample % SAMPLES_PER_PRINT) == 0u)
         {
