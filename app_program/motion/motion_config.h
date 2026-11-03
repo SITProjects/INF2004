@@ -57,8 +57,8 @@
 
 /*
  * Wheel diameter in mm; odometry uses pi * diameter / ticks per rev.
- * Measured 64 mm. TODO(calibrate): tune with MOT-U08 (move_forward(1000)
- * against a ruler) until the distance is within about one count.
+ * Measured 64 mm. MOT-U08 (2026-11-03): odometry agrees with the ruler
+ * within about 1 mm over 1 m.
  */
 #define MOTION_WHEEL_DIAMETER_MM 64.0f
 
@@ -195,6 +195,13 @@
  * has no speed field, so every move uses this speed.
  */
 #define MOTION_MOVE_SPEED_MM_S 200
+
+/*
+ * Millimetres to brake before a move's target, for the coast after
+ * braking. MOT-U08/U09 (2026-11-03): 1 m and 10 cm moves both ended
+ * about 5 mm past the target by ruler.
+ */
+#define MOTION_MOVE_STOP_EARLY_MM 5.0f
 
 /*
  * Turn rate of turns in place, in degrees per second; each wheel moves at
