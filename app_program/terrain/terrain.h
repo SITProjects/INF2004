@@ -20,8 +20,8 @@
 
 /* Public types, constants, and macros. */
 
-/** Terrain task priority; the terrain band is 18-19 (TEAM.md section 4). */
-#define TERRAIN_PRI_MONITOR 18
+/** Terrain task priority: tImu, design freeze 6 + 3 (TEAM.md section 4). */
+#define TERRAIN_PRI_MONITOR 9
 
 /** ID of the terrain task, which owns I2C0. */
 extern ID terrain_tid_monitor;

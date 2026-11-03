@@ -38,8 +38,8 @@
 
 /* Public types, constants, and macros. */
 
-/** Priority of tMotion, in the motion band 14-15 (TEAM.md section 4). */
-#define MOTION_PRI_DRIVE 14
+/** Priority of tMotion: design freeze 3 + 3 (TEAM.md section 4). */
+#define MOTION_PRI_DRIVE 6
 
 /** motion_flg_ctrl (FLG_MOTION): set by the CYC_MOTION handler. */
 #define MOTION_FLG_TICK 0x01u

@@ -54,3 +54,11 @@ in `TEAM.md` sections 3 and 4.
   hardware with no CPU load, and leaves obstacle's code unchanged. The
   motion task's interface does not change: it still reads both counts
   every 20 ms.
+- **Task priorities are the freeze priorities + 3, and tMotion runs on
+  core 1.** The freeze numbered tSafety 2 and tMotion 3, but in this
+  template the initial task uses 1, the kernel's USB console 3 and its
+  Wi-Fi task 4. Every application task keeps the freeze order, 3 lower
+  (`TEAM.md` section 4). The kernel's Wi-Fi task still outranks every
+  application task, unlike the freeze's lowest-priority tComms, so tMotion
+  is pinned to core 1: the USB, Wi-Fi and obstacle tasks are pinned to
+  core 0, so none of them can delay its 20 ms update (NFR1, NFR6).
