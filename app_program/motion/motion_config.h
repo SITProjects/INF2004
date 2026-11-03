@@ -198,8 +198,14 @@
 
 /*
  * Millimetres to brake before a move's target, for the coast after
- * braking. MOT-U08/U09 (2026-11-03): 1 m and 10 cm moves both ended
- * about 5 mm past the target by ruler.
+ * braking. The coast grows with speed, so this holds only at
+ * MOTION_MOVE_SPEED_MM_S; measure again if that changes. The target is
+ * checked once per update, so a move also brakes up to one update's
+ * travel (4 mm at 200 mm/s) late.
+ * MOT-U08/U09 (2026-11-03): 1 m and 10 cm moves both ended about 5 mm
+ * past the target by ruler.
+ * TODO(calibrate): confirm by ruler with MOT-U08/U09 that both moves now
+ * end within 3 percent.
  */
 #define MOTION_MOVE_STOP_EARLY_MM 5.0f
 
