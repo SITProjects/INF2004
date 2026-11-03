@@ -8,6 +8,9 @@
 
 #include "communication.h"
 #include "connectivity.h"
+#if TM_MQTT
+#include "telemetry_queue.h"
+#endif
 
 /* Private types, constants, and macros. */
 #define POLL_PERIOD_MS 500
@@ -23,8 +26,11 @@ static void wifi_task (INT stacd, void * p_exinf);
 ER
 communication_init (void)
 {
-    /* No kernel objects yet. */
+#if TM_MQTT
+    return (ER)telemetry_queue_init();
+#else
     return E_OK;
+#endif
 }
 
 ER
