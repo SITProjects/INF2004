@@ -29,6 +29,7 @@
       }
     }
   },
+  "runArgs": ["-p", "1883:1883"],
   "remoteUser": "vscode",
   "postStartCommand": "pre-commit install"
   // Configure tool-specific properties.

@@ -11,6 +11,7 @@
 
 #if TM_MQTT
 #include <stdint.h>
+#include "telemetry_queue.h"
 #include "lwip/apps/mqtt.h"
 #include "lwip/ip_addr.h"
 #include "lwip/sys.h"
@@ -23,6 +24,9 @@
 #define KEEPALIVE_S 60u
 #define RX_TOPIC_SIZE 64u
 #define RX_DATA_SIZE 128u
+#define TELEMETRY_TOPIC MQTT_TOPIC "/telemetry"
+#define TELEMETRY_RETRY_MS 1000u
+#define TELEMETRY_DRAIN_MS 100u
 
 /* Static data. */
 static mqtt_client_t * client;
@@ -36,6 +40,12 @@ static char rx_topic[RX_TOPIC_SIZE];
 static UB rx_data[RX_DATA_SIZE];
 static uint16_t rx_len;
 static bool b_rx_truncated;
+static bool b_telemetry_pending;
+static bool b_telemetry_acked;
+static uintptr_t telemetry_token;
+static uint32_t telemetry_sequence;
+static uint32_t telemetry_attempt_ms;
+static uint32_t telemetry_wait_ms;
 
 /* Private function declarations. */
 static void connection_cb (mqtt_client_t * p_client, void * p_arg,
@@ -47,15 +57,22 @@ static void incoming_publish_cb (void * p_arg, const char * p_topic,
 static void incoming_data_cb (void * p_arg, const uint8_t * p_data,
                               uint16_t len, uint8_t flags);
 
+static void telemetry_service (uint32_t now_ms);
+static void telemetry_request_cb (void * p_arg, err_t result);
+static void telemetry_disconnected (void);
+static void telemetry_complete (void);
+
 /* Public function definitions. */
 void
 mqtt_client_service (bool b_network_up)
 {
     uint32_t now_ms = sys_now();
+    telemetry_complete();
 
     /* Defer cleanup until outside lwIP's receive/request callbacks. */
     if (b_subscription_failed)
     {
+        telemetry_disconnected();
         mqtt_disconnect(client);
         b_subscription_failed = false;
         b_connecting = false;
@@ -65,6 +82,7 @@ mqtt_client_service (bool b_network_up)
 
     if (!b_network_up)
     {
+        telemetry_disconnected();
         if ((client != NULL) &&
             (b_connecting || mqtt_client_is_connected(client)))
         {
@@ -78,6 +96,7 @@ mqtt_client_service (bool b_network_up)
 
     if ((client != NULL) && mqtt_client_is_connected(client))
     {
+        telemetry_service(now_ms);
         if ((uint32_t)(now_ms - heartbeat_started_ms) >= HEARTBEAT_PERIOD_MS)
         {
             UB payload[48];
@@ -144,6 +163,93 @@ mqtt_client_service (bool b_network_up)
 
 /* Private function definitions. */
 static void
+telemetry_complete (void)
+{
+    if (b_telemetry_acked && telemetry_queue_ack(telemetry_sequence))
+    {
+        tm_printf((UB *)"telemetry: ACK seq=%lu\n",
+                  (unsigned long)telemetry_sequence);
+        b_telemetry_acked = false;
+        b_telemetry_pending = false;
+    }
+}
+
+static void
+telemetry_disconnected (void)
+{
+    /* lwIP discards outstanding requests on close without request callbacks.
+     * An already received PUBACK still needs its deferred queue removal. */
+    if (!b_telemetry_acked && b_telemetry_pending)
+    {
+        b_telemetry_pending = false;
+        ++telemetry_token;
+    }
+    telemetry_wait_ms = 0u;
+}
+
+static void
+telemetry_request_cb (void * p_arg, err_t result)
+{
+    if (!b_telemetry_pending || ((uintptr_t)p_arg != telemetry_token))
+    {
+        return;
+    }
+    if (result == ERR_OK)
+    {
+        /* Do not take the kernel mutex inside lwIP's callback. */
+        b_telemetry_acked = true;
+    }
+    else
+    {
+        b_telemetry_pending = false;
+        telemetry_attempt_ms = sys_now();
+        telemetry_wait_ms = TELEMETRY_RETRY_MS;
+        tm_printf((UB *)"telemetry: retry seq=%lu err=%d\n",
+                  (unsigned long)telemetry_sequence, (int)result);
+    }
+}
+
+static void
+telemetry_service (uint32_t now_ms)
+{
+    if (b_telemetry_pending ||
+        ((uint32_t)(now_ms - telemetry_attempt_ms) < telemetry_wait_ms))
+    {
+        return;
+    }
+    telemetry_record_t record;
+    if (!telemetry_queue_peek(&record))
+    {
+        return;
+    }
+    UB payload[128];
+    int len = tm_sprintf(payload, (const UB *)"seq=%lu captured_ms=%lu %s",
+                         (unsigned long)record.sequence,
+                         (unsigned long)record.captured_ms, record.text);
+    telemetry_sequence = record.sequence;
+    ++telemetry_token;
+    /* Set before publish: even an immediate callback sees the current token. */
+    b_telemetry_pending = true;
+    telemetry_attempt_ms = now_ms;
+    telemetry_wait_ms = TELEMETRY_DRAIN_MS;
+    err_t result =
+        mqtt_publish(client, TELEMETRY_TOPIC, payload, (uint16_t)len, 1, 0,
+                     telemetry_request_cb, (void *)telemetry_token);
+    if (result != ERR_OK)
+    {
+        b_telemetry_pending = false;
+        telemetry_wait_ms = TELEMETRY_RETRY_MS;
+        tm_printf((UB *)"telemetry: publish failed seq=%lu err=%d\n",
+                  (unsigned long)record.sequence, (int)result);
+    }
+    else
+    {
+        tm_printf((UB *)"telemetry: TX [%s] \"%s\"\n", TELEMETRY_TOPIC,
+                  payload);
+    }
+}
+
+static void
 connection_cb (mqtt_client_t * p_client, void * p_arg,
                mqtt_connection_status_t status)
 {
@@ -165,6 +271,7 @@ connection_cb (mqtt_client_t * p_client, void * p_arg,
     }
     else
     {
+        telemetry_disconnected();
         b_retry_wait = true;
         retry_started_ms = sys_now();
         tm_printf((UB *)"mqtt: connection status %d, retrying in 3s\n",

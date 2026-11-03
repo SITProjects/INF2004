@@ -11,8 +11,12 @@
 #include "obstacle_calibration.h"
 #include "obstacle_scan.h"
 #include <stdbool.h>
+#if TM_MQTT
+#include "../communication/telemetry_queue.h"
+#endif
 
 /* Private types, constants, and macros. */
+#define TELEMETRY_SAMPLE_PERIOD_MS 1000u
 
 /* Static data. */
 
@@ -89,6 +93,12 @@ scan_task (INT stacd, void * p_exinf)
     }
     tm_printf((UB *)"[%lu ms]obstacle: scanning started\n", log_time_ms());
 
+#if TM_MQTT
+    uint32_t last_sample_ms = log_time_ms();
+    uint32_t sample_ms = 0u;
+    bool b_sample_pending = false;
+    UB sample_text[TELEMETRY_TEXT_SIZE];
+#endif
     uint8_t last_sequence = 0u;
     bool b_last_stop_requested = obstacle_scan_stop_requested();
     bool b_last_critical = false;
@@ -126,6 +136,43 @@ scan_task (INT stacd, void * p_exinf)
                       direction_degrees(direction));
         }
 
+#if TM_MQTT
+        uint32_t now_ms = log_time_ms();
+        if (!b_sample_pending &&
+            ((uint32_t)(now_ms - last_sample_ms) >= TELEMETRY_SAMPLE_PERIOD_MS))
+        {
+            last_sample_ms = now_ms;
+            sample_ms = now_ms;
+            (void)tm_sprintf(
+                sample_text,
+                (const UB *)"obstacle flags=%u edges=%u width_mm=%u",
+                (unsigned int)scan.flags, (unsigned int)scan.edges,
+                (unsigned int)scan.width_mm);
+            b_sample_pending = true;
+        }
+        if (b_sample_pending)
+        {
+            uint32_t sequence = 0u;
+            telemetry_enqueue_result_t queued = telemetry_queue_push(
+                sample_ms, (const char *)sample_text, &sequence);
+            if (queued != TELEMETRY_BUSY)
+            {
+                b_sample_pending = false;
+                if (queued == TELEMETRY_QUEUED)
+                {
+                    tm_printf(
+                        (UB *)"telemetry: queued seq=%lu captured_ms=%lu\n",
+                        (unsigned long)sequence, (unsigned long)sample_ms);
+                }
+                else
+                {
+                    tm_printf((UB *)"telemetry: DROP seq=%lu reason=%s\n",
+                              (unsigned long)sequence,
+                              queued == TELEMETRY_FULL ? "full" : "invalid");
+                }
+            }
+        }
+#endif
         (void)tk_dly_tsk(OBSTACLE_UPDATE_PERIOD_MS);
     }
 #endif
