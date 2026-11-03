@@ -69,3 +69,14 @@ Add a new row for every run. Never edit or delete old rows.
 | Date | Test ID | Commit | Tester | Result | Log / evidence | Notes |
 |---|---|---|---|---|---|---|
 | YYYY-MM-DD | MOT-U01 | `abc1234` | | PASS / FAIL | `logs/YYYY-MM-DD_….txt` | |
+| 2026-11-03 | MOT-U01 | `ad5e45f` + local | Felicia Chua | PASS | `logs/2026-11-03_MOT-U04-U06.txt` | `make TEST=1 WIFI=none`, motion-only `app_main.c`, `MOTION_MANUAL_TESTS` 1 |
+| 2026-11-03 | MOT-U03 | `ad5e45f` + local | Felicia Chua | PASS | `logs/2026-11-03_MOT-U04-U06.txt` | |
+| 2026-11-03 | MOT-U04 | `ad5e45f` + local | Felicia Chua | PASS | `logs/2026-11-03_MOT-U04-U06.txt` | 5 turns each way: left ≈2497, right ≈2531 counts per rev (an unlogged 2026-11-02 run gave ≈2480–2500); set `MOTION_ENCODER_TICKS_PER_REV` 2490, ≈0.08 mm per count; MOT-U08 tunes the scale |
+| 2026-11-03 | MOT-U05 | `ad5e45f` + local | Felicia Chua | PASS | `logs/2026-11-03_MOT-U04-U06.txt` | both counts fall by the same amount backward, with `MOTION_RIGHT_ENCODER_INVERTED` true |
+| 2026-11-03 | MOT-U06 | `ad5e45f` + local | Felicia Chua | PASS | `logs/2026-11-03_MOT-U04-U06.txt` | each wheel moves only its own count, + forward. Unlogged 2026-11-02 runs showed each motor moving the other side's count: the encoders are wired left GP13/14, right GP2/3, so the pins were swapped in `motion_config.h` (TEAM.md updated) |
+| 2026-11-03 | MOT-U07 | `ad5e45f` + local | Felicia Chua | PASS | `logs/2026-11-03_MOT-U04-U06.txt` | |
+| 2026-11-03 | MOT-U18 | `ad5e45f` + local | Felicia Chua | PASS | `logs/2026-11-03_MOT-U04-U06.txt` | |
+| 2026-11-03 | MOT-U22 | `ad5e45f` + local | Felicia Chua | PASS | `logs/2026-11-03_MOT-U04-U06.txt` | 1000 ms. Unlogged 2026-11-02 runs took 1500 ms: `tk_dly_tsk()` adds one 10 ms tick, so the test loops now ask for one tick less |
+| 2026-11-03 | MOT-U23 | `ad5e45f` + local | Felicia Chua | PASS | `logs/2026-11-03_MOT-U04-U06.txt` | |
+| 2026-11-03 | MOT-U27 | `ad5e45f` + local | Felicia Chua | PASS | `logs/2026-11-03_MOT-U04-U06.txt` | |
+| 2026-11-03 | MOT-U02 | `4fe0403` + local | Felicia Chua | PASS | `logs/2026-11-03_MOT-U02.txt` | normal image, dual-core (`make WIFI=none`), all subsystems started, only the motors connected; 3 USB power-ups with the motor supply (power bank on VIN) on: neither wheel moved. VIN-only power-up not tested |

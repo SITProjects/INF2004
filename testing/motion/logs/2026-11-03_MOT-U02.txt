@@ -1,0 +1,232 @@
+=~=~=~=~=~=~=~=~=~=~=~= PuTTY log 2026.11.03 07:50:52 =~=~=~=~=~=~=~=~=~=~=~=
+
+
+microT-Kernel Version 3.00
+
+
+=== micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+dual-core (SMP) build, usermain on core 0
+motion: motors initialized and braked
+motion: encoders counting on PIO0
+line_follow: IR line-following dry run started. Motors disabled.
+all subsystems started
+
+[0 ms]obstacle: scanning started
+terrain: setup failed: accelerometer not found: check the cable, Grove port and 3.3 V power; retrying
+[0 ms]obstacle: stop request ACTIVE (sensing output only)
+Left AO: 43 | Right AO: 40 | Command: SEARCH
+Wi-Fi: built with WIFI=none; the radio is off
+Left AO: 43 | Right AO: 43 | Command: SEARCH
+Left AO: 44 | Right AO: 43 | Command: SEARCH
+Left AO: 45 | Right AO: 43 | Command: SEARCH
+Left AO: 45 | Right AO: 44 | Command: SEARCH
+Left AO: 44 | Right AO: 43 | Command: SEARCH
+Left AO: 44 | Right AO: 44 | Command: SEARCH
+Left AO: 45 | Right AO: 43 | Command: SEARCH
+Left AO: 42 | Right AO: 45 | Command: SEARCH
+Left AO: 48 | Right AO: 44 | Command: SEARCH
+Left AO: 45 | Right AO: 46 | Command: SEARCH
+Left AO: 46 | Right AO: 43 | Command: SEARCH
+Left AO: 42 | Right AO: 46 | Command: SEARCH
+Left AO: 44 | Right AO: 43 | Command: SEARCH
+Left AO: 46 | Right AO: 43 | Command: SEARCH
+Left AO: 44 | Right AO: 44 | Command: SEARCH
+[6260 ms]obstacle: [0x04] UNKNOWN dir -1
+Left AO: 43 | Right AO: 32 | Command: SEARCH
+Left AO: 44 | Right AO: 43 | Command: SEARCH
+Left AO: 44 | Right AO: 44 | Command: SEARCH
+Left AO: 57 | Right AO: 44 | Command: SEARCH
+Left AO: 46 | Right AO: 43 | Command: SEARCH
+Left AO: 44 | Right AO: 44 | Command: SEARCH
+Left AO: 46 | Right AO: 40 | Command: SEARCH
+Left AO: 45 | Right AO: 43 | Command: SEARCH
+Left AO: 46 | Right AO: 44 | Command: SEARCH
+Left AO: 45 | Right AO: 43 | Command: SEARCH
+Left AO: 44 | Right AO: 43 | Command: SEARCH
+Left AO: 44 | Right AO: 43 | Command: SEARCH
+Left AO: 43 | Right AO: 42 | Command: SEARCH
+Left AO: 45 | Right AO: 45 | Command: SEARCH
+Left AO: 40 | Right AO: 44 | Command: SEARCH
+Left AO: 43 | Right AO: 43 | Command: SEARCH
+Left AO: 45 | Right AO: 43 | Command: SEARCH
+Left AO: 44 | Right AO: 43 | Command: SEARCH
+Left AO: 44 | Right AO: 44 | Command: SEARCH
+Left AO: 44 | Right AO: 44 | Command: SEARCH
+[13940 ms]obstacle: [0x04] UNKNOWN dir -1
+Left AO: 41 | Right AO: 33 | Command: SEARCH
+Left AO: 45 | Right AO: 45 | Command: SEARCH
+Left AO: 44 | Right AO: 44 | Command: SEARCH
+Left AO: 43 | Right AO: 43 | Command: SEARCH
+Left AO: 43 | Right AO: 43 | Command: SEARCH
+Left AO: 45 | Right AO: 45 | Command: SEARCH
+Left AO: 44 | Right AO: 45 | Command: SEARCH
+Left AO: 44 | Right AO: 44 | Command: SEARCH
+Left AO: 43 | Right AO: 45 | Command: SEARCH
+Left AO: 46 | Right AO: 42 | Command: SEARCH
+
+
+microT-Kernel Version 3.00
+
+
+=== micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+dual-core (SMP) build, usermain on core 0
+motion: motors initialized and braked
+motion: encoders counting on PIO0
+line_follow: IR line-following dry run started. Motors disabled.
+all subsystems started
+
+[0 ms]obstacle: scanning started
+terrain: setup failed: accelerometer not found: check the cable, Grove port and 3.3 V power; retrying
+[0 ms]obstacle: stop request ACTIVE (sensing output only)
+Left AO: 37 | Right AO: 37 | Command: SEARCH
+Wi-Fi: built with WIFI=none; the radio is off
+Left AO: 45 | Right AO: 45 | Command: SEARCH
+Left AO: 45 | Right AO: 44 | Command: SEARCH
+Left AO: 45 | Right AO: 44 | Command: SEARCH
+Left AO: 45 | Right AO: 43 | Command: SEARCH
+Left AO: 43 | Right AO: 44 | Command: SEARCH
+Left AO: 46 | Right AO: 45 | Command: SEARCH
+Left AO: 45 | Right AO: 44 | Command: SEARCH
+Left AO: 44 | Right AO: 43 | Command: SEARCH
+Left AO: 42 | Right AO: 45 | Command: SEARCH
+Left AO: 43 | Right AO: 43 | Command: SEARCH
+Left AO: 43 | Right AO: 45 | Command: SEARCH
+Left AO: 43 | Right AO: 45 | Command: SEARCH
+Left AO: 44 | Right AO: 44 | Command: SEARCH
+Left AO: 46 | Right AO: 45 | Command: SEARCH
+Left AO: 46 | Right AO: 41 | Command: SEARCH
+Left AO: 46 | Right AO: 44 | Command: SEARCH
+Left AO: 45 | Right AO: 42 | Command: SEARCH
+Left AO: 42 | Right AO: 44 | Command: SEARCH
+Left AO: 47 | Right AO: 44 | Command: SEARCH
+[6260 ms]obstacle: [0x04] UNKNOWN dir -1
+Left AO: 46 | Right AO: 42 | Command: SEARCH
+Left AO: 45 | Right AO: 45 | Command: SEARCH
+Left AO: 46 | Right AO: 45 | Command: SEARCH
+Left AO: 45 | Right AO: 45 | Command: SEARCH
+Left AO: 46 | Right AO: 44 | Command: SEARCH
+Left AO: 46 | Right AO: 45 | Command: SEARCH
+Left AO: 46 | Right AO: 45 | Command: SEARCH
+Left AO: 45 | Right AO: 45 | Command: SEARCH
+Left AO: 45 | Right AO: 46 | Command: SEARCH
+Left AO: 46 | Right AO: 45 | Command: SEARCH
+Left AO: 48 | Right AO: 45 | Command: SEARCH
+Left AO: 44 | Right AO: 45 | Command: SEARCH
+Left AO: 44 | Right AO: 45 | Command: SEARCH
+Left AO: 46 | Right AO: 45 | Command: SEARCH
+Left AO: 45 | Right AO: 45 | Command: SEARCH
+Left AO: 46 | Right AO: 45 | Command: SEARCH
+Left AO: 45 | Right AO: 44 | Command: SEARCH
+Left AO: 45 | Right AO: 44 | Command: SEARCH
+Left AO: 45 | Right AO: 45 | Command: SEARCH
+Left AO: 45 | Right AO: 44 | Command: SEARCH
+Left AO: 44 | Right AO: 44 | Command: SEARCH
+Left AO: 45 | Right AO: 44 | Command: SEARCH
+Left AO: 45 | Right AO: 43 | Command: SEARCH
+Left AO: 46 | Right AO: 45 | Command: SEARCH
+Left AO: 46 | Right AO: 44 | Command: SEARCH
+[13940 ms]obstacle: [0x04] UNKNOWN dir -1
+Left AO: 44 | Right AO: 45 | Command: SEARCH
+Left AO: 44 | Right AO: 45 | Command: SEARCH
+Left AO: 46 | Right AO: 46 | Command: SEARCH
+Left AO: 45 | Right AO: 44 | Command: SEARCH
+Left AO: 43 | Right AO: 44 | Command: SEARCH
+Left AO: 46 | Right AO: 44 | Command: SEARCH
+Left AO: 45 | Right AO: 44 | Command: SEARCH
+Left AO: 46 | Right AO: 44 | Command: SEARCH
+Left AO: 49 | Right AO: 44 | Command: SEARCH
+Left AO: 47 | Right AO: 44 | Command: SEARCH
+Left AO: 46 | Right AO: 44 | Command: SEARCH
+Left AO: 44 | Right AO: 45 | Command: SEARCH
+Left AO: 46 | Right AO: 45 | Command: SEARCH
+Left AO: 46 | Right AO: 52 | Command: SEARCH
+Left AO: 45 | Right AO: 43 | Command: SEARCH
+Left AO: 44 | Right AO: 43 | Command: SEARCH
+
+
+microT-Kernel Version 3.00
+
+
+=== micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+dual-core (SMP) build, usermain on core 0
+motion: motors initialized and braked
+motion: encoders counting on PIO0
+line_follow: IR line-following dry run started. Motors disabled.
+all subsystems started
+
+[0 ms]obstacle: scanning started
+terrain: setup failed: accelerometer not found: check the cable, Grove port and 3.3 V power; retrying
+[0 ms]obstacle: stop request ACTIVE (sensing output only)
+Left AO: 37 | Right AO: 40 | Command: SEARCH
+Wi-Fi: built with WIFI=none; the radio is off
+Left AO: 46 | Right AO: 44 | Command: SEARCH
+Left AO: 48 | Right AO: 44 | Command: SEARCH
+Left AO: 35 | Right AO: 46 | Command: SEARCH
+Left AO: 48 | Right AO: 42 | Command: SEARCH
+Left AO: 45 | Right AO: 43 | Command: SEARCH
+Left AO: 46 | Right AO: 43 | Command: SEARCH
+Left AO: 45 | Right AO: 45 | Command: SEARCH
+Left AO: 44 | Right AO: 51 | Command: SEARCH
+Left AO: 45 | Right AO: 44 | Command: SEARCH
+Left AO: 43 | Right AO: 43 | Command: SEARCH
+Left AO: 45 | Right AO: 43 | Command: SEARCH
+Left AO: 44 | Right AO: 42 | Command: SEARCH
+Left AO: 44 | Right AO: 43 | Command: SEARCH
+Left AO: 44 | Right AO: 45 | Command: SEARCH
+Left AO: 49 | Right AO: 43 | Command: SEARCH
+Left AO: 43 | Right AO: 50 | Command: SEARCH
+Left AO: 43 | Right AO: 43 | Command: SEARCH
+[6240 ms]obstacle: [0x04] UNKNOWN dir -1
+Left AO: 49 | Right AO: 43 | Command: SEARCH
+Left AO: 43 | Right AO: 44 | Command: SEARCH
+Left AO: 44 | Right AO: 44 | Command: SEARCH
+Left AO: 43 | Right AO: 43 | Command: SEARCH
+Left AO: 43 | Right AO: 43 | Command: SEARCH
+Left AO: 44 | Right AO: 45 | Command: SEARCH
+Left AO: 44 | Right AO: 44 | Command: SEARCH
+Left AO: 44 | Right AO: 44 | Command: SEARCH
+Left AO: 45 | Right AO: 42 | Command: SEARCH
+Left AO: 42 | Right AO: 43 | Command: SEARCH
+Left AO: 44 | Right AO: 45 | Command: SEARCH
+Left AO: 45 | Right AO: 45 | Command: SEARCH
+Left AO: 43 | Right AO: 47 | Command: SEARCH
+Left AO: 43 | Right AO: 45 | Command: SEARCH
+Left AO: 42 | Right AO: 43 | Command: SEARCH
+Left AO: 44 | Right AO: 48 | Command: SEARCH
+Left AO: 45 | Right AO: 46 | Command: SEARCH
+Left AO: 54 | Right AO: 42 | Command: SEARCH
+Left AO: 44 | Right AO: 45 | Command: SEARCH
+[13920 ms]obstacle: [0x04] UNKNOWN dir -1
+Left AO: 45 | Right AO: 44 | Command: SEARCH
+Left AO: 45 | Right AO: 49 | Command: SEARCH
+Left AO: 44 | Right AO: 51 | Command: SEARCH
+Left AO: 45 | Right AO: 44 | Command: SEARCH
+Left AO: 44 | Right AO: 45 | Command: SEARCH
+Left AO: 44 | Right AO: 43 | Command: SEARCH
+Left AO: 43 | Right AO: 51 | Command: SEARCH
+Left AO: 44 | Right AO: 44 | Command: SEARCH
+Left AO: 50 | Right AO: 43 | Command: SEARCH
+Left AO: 43 | Right AO: 43 | Command: SEARCH
+Left AO: 44 | Right AO: 44 | Command: SEARCH
+Left AO: 45 | Right AO: 44 | Command: SEARCH
+Left AO: 44 | Right AO: 39 | Command: SEARCH
+Left AO: 43 | Right AO: 43 | Command: SEARCH
+Left AO: 44 | Right AO: 45 | Command: SEARCH
+Left AO: 43 | Right AO: 44 | Command: SEARCH
+Left AO: 43 | Right AO: 44 | Command: SEARCH
+Left AO: 43 | Right AO: 42 | Command: SEARCH
+Left AO: 46 | Right AO: 40 | Command: SEARCH
+[21620 ms]obstacle: [0x04] UNKNOWN dir -1
+Left AO: 35 | Right AO: 42 | Command: SEARCH
+Left AO: 45 | Right AO: 44 | Command: SEARCH
+Left AO: 45 | Right AO: 56 | Command: SEARCH
+Left AO: 44 | Right AO: 46 | Command: SEARCH
+Left AO: 44 | Right AO: 49 | Command: SEARCH
+Left AO: 45 | Right AO: 44 | Command: SEARCH
+Left AO: 43 | Right AO: 43 | Command: SEARCH
+Left AO: 45 | Right AO: 43 | Command: SEARCH
+Left AO: 43 | Right AO: 44 | Command: SEARCH
+Left AO: 44 | Right AO: 43 | Command: SEARCH
+Left AO: 44 | Right AO: 43 | Command: SEARCH
+Left AO: 45 | Right AO: 44 | Command: SEARCH
+Left AO: 45 | Right AO: 57 | Command: SEARCH
