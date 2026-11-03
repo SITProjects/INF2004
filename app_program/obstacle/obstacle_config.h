@@ -113,9 +113,9 @@
  * Candidate thresholds, pending stopping-distance tests. Edit only the
  * millimetre values; the echo equivalents are derived.
  *
- * Detection: 300 mm -> 1750 us. A nearer centre reading requests a stop.
+ * Detection: 200 mm -> 1176 us. A nearer centre reading requests a stop.
  */
-#define OBSTACLE_DETECT_DISTANCE_MM 300u
+#define OBSTACLE_DETECT_DISTANCE_MM 200u
 #define OBSTACLE_DETECT_ECHO_US                                                \
     OBSTACLE_MM_TO_ECHO_US(OBSTACLE_DETECT_DISTANCE_MM)
 
