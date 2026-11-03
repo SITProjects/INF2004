@@ -23,17 +23,29 @@
 ER motion_command_init (void);
 
 /**
- * @brief Start the periodic task that owns the motion controller.
+ * @brief Prepare the adapter and record its nonblocking startup delay.
  * @pre motion_command_init(), motion_drive_init(), motion_move_init() succeeded.
  * @return E_OK, E_OBJ if not initialized/already started, or a kernel error.
- * @note Called once by motion_start(). Motor/encoder ownership transfers to
- *       this task in enabled normal builds. In dry runs and APP_TEST it never
- *       calls motion APIs, allowing existing motion tests exclusive access.
- *       Enabled operation starts after the configured preparation delay and
- *       runs continuously. IR_MOTOR_TEST buffers 32 snapshots and prints
- *       them once after the first stop; it never prints the trace in motion.
+ * @note Called once by motion_start(), before creating tMotion. No task is
+ *       created here. tMotion owns all motor/encoder access afterwards.
  */
 ER motion_command_start (void);
+
+/**
+ * @brief Service the latest line request from the sole motor owner, tMotion.
+ * @pre motion_command_start() succeeded. Call once per motion tick before
+ *      motion_move_update(); this function never advances that control loop.
+ * @param b_control_enabled True permits automatic line decisions after the
+ *        startup delay. False suspends decisions for queued commands/inhibit,
+ *        while fresh line visibility can still feed stop-at-line movements.
+ * @note Only tMotion may call. No waiting or sleeping. Cached input must
+ *       remain fresh on takeover; stale/invalid input stops automatic following.
+ *       A fresh cached sample may be applied once on takeover without changing
+ *       its timestamp. Normal polling feeds only newly submitted samples.
+ *       APP_TEST and disabled actuation only log; they never call motor APIs.
+ *       IR_MOTOR_TEST retains recent snapshots and prints after a stop.
+ */
+void motion_command_service (bool b_control_enabled);
 
 /**
  * @brief Replace the latest IR reading and navigation decision.
@@ -74,7 +86,8 @@ ER motion_command_start (void);
  *       Only fresh readings feed the controller. Stale input stops following
  *       using main's MOTION_LINE_TIMEOUT_MS, subject to task scheduling.
  *       Motor speed, PD tuning and cadence reuse motion_config.h. Faults
- *       latch until restart; this adapter never automatically clears a stall.
+ *       latch until restart or explicit STOP/INHIBIT then FOLLOW through
+ *       tMotion; sensor samples never automatically clear a motor fault.
  */
 ER motion_command_submit (line_command_t command,
                           ir_sensor_reading_t const * p_reading);

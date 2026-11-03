@@ -1,6 +1,6 @@
 /**
  * @file obstacle_scan.h
- * @brief Nonblocking three-position sensing with packed obstacle results.
+ * @brief Nonblocking forward sensing and width sweep with packed results.
  */
 
 #ifndef OBSTACLE_SCAN_H
@@ -59,9 +59,25 @@ typedef struct
  * change to this bit alone does not advance the sequence, so read it on
  * every poll, like the stop request.
  *
- * Width is not measured: width_mm is always WIDTH_UNAVAILABLE, both edge
- * indices are EDGE_NONE and both edge-found flags are false. See robot_types.h
- * for the bit layout. Sequence wraps modulo 256 and advances on a
+ * Width (coarse then fine): the two side positions above are the coarse
+ * scan. The confirming centre group's near votes give a reference echo; a
+ * completed reading is a HIT when VALID and nearer than that echo plus
+ * OBSTACLE_EDGE_JUMP_US, a MISS for NO_ECHO or a farther echo. An end that
+ * is a HIT is that side's outermost hit and its edge is not found (the
+ * obstacle continues past the sweep, so the width is a lower bound). From an
+ * end that is a MISS, the scanner walks inward one 5 degree step at a time
+ * with one ping per angle, right side first, and stops at the first HIT; if
+ * none hits, the centre is the hit. Either way that edge is found. The
+ * direction and the width are published together, once, after both walks.
+ * Any coarse or fine position whose faults exhaust its retries makes the
+ * width unavailable (width 0, edges EDGE_NONE, both flags false) while the
+ * direction is still published. Edges are the first hit from outside, valid
+ * for one contiguous obstacle in the 60..120 degree arc; a found edge is
+ * accurate to about half a step before calibration. Results assume the car
+ * is stationary throughout the sweep. See obstacle_width.h for the geometry
+ * and robot_types.h for the bit layout.
+ *
+ * Sequence wraps modulo 256 and advances on a
  * completed result, newly asserted stop request, stale forward data,
  * side-scan timeout or state-recovery fault. Consume each sequence once;
  * fewer than 256 unseen results must separate comparisons. Results persist

@@ -1,0 +1,28 @@
+[0 ms]obstacle: scanning started
+[0 ms]obstacle: stop request ACTIVE (sensing output only)
+[1200 ms]obstacle: side scan started
+[4600 ms]obstacle: fine 115 deg VALID 1697 us HIT
+[5640 ms]obstacle: fine 65 deg VALID 1798 us HIT
+[5640 ms]obstacle: width 258 mm hits 65..115 bounds 62.5..117.5
+[5640 ms]obstacle: side scan completed after 4440 ms
+[5640 ms]obstacle: [0x6A] PATH_FOUND dir 60 width 258 mm hits 65..115 (L found, R found)
+[6820 ms]obstacle: side scan started
+[10200 ms]obstacle: fine 115 deg VALID 1667 us HIT
+[11240 ms]obstacle: fine 65 deg VALID 1748 us HIT
+[11240 ms]obstacle: width 252 mm hits 65..115 bounds 62.5..117.5
+[11240 ms]obstacle: side scan completed after 4420 ms
+[11240 ms]obstacle: [0x6A] PATH_FOUND dir 60 width 252 mm hits 65..115 (L found, R found)
+[12440 ms]obstacle: side scan started
+[15880 ms]obstacle: fine 65 deg VALID 1748 us HIT
+[15880 ms]obstacle: width 283 mm hits 65..120 bounds 62.5..120.0
+[15880 ms]obstacle: side scan completed after 3440 ms
+[15880 ms]obstacle: [0x2A] PATH_FOUND dir 60 width 283 mm hits 65..120 (L found, R not found)
+[17060 ms]obstacle: side scan started
+[20440 ms]obstacle: fine 65 deg VALID 1818 us HIT
+[20440 ms]obstacle: width 282 mm hits 65..120 bounds 62.5..120.0
+[20440 ms]obstacle: side scan completed after 3380 ms
+[20440 ms]obstacle: [0x2A] PATH_FOUND dir 60 width 282 mm hits 65..120 (L found, R not found)
+[21620 ms]obstacle: side scan started
+[25020 ms]obstacle: fine 65 deg VALID 1843 us HIT
+[25020 ms]obstacle: width 277 mm hits 65..120 bounds 62.5..120.0
+[25020 ms]obstacle: side scan completed after 3400 ms

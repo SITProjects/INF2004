@@ -2,10 +2,9 @@
  * @file motion_command.c
  * @brief Feed calibrated IR edge errors to the existing motion controller.
  *
- * A mutex protects a latest-value slot. The owner task services the motion
- * controller every update period, rather than blocking for sensor messages.
- * Dry-run and APP_TEST builds never call motion APIs from this adapter;
- * existing motion tests retain exclusive access to the encoders and motors.
+ * A mutex protects a latest-value slot. tMotion services this adapter once
+ * per update before its single motion_move_update() call. This module creates
+ * no task. Dry-run and APP_TEST builds never call motion APIs from it.
  */
 
 #include "motion_command.h"
@@ -16,13 +15,6 @@
 /* Private types, constants, and macros. */
 #define ACTUATION_ACTIVE (MOTION_COMMAND_ACTUATION_ENABLED && !APP_TEST)
 #define ADC_MAX 4095u
-/* The kernel adds one tick to a positive task delay, as in motion_test.c. */
-#if (MOTION_UPDATE_PERIOD_MS <= CNF_TIMER_PERIOD) ||                           \
-    ((MOTION_UPDATE_PERIOD_MS % CNF_TIMER_PERIOD) != 0)
-#error "Motion update period must be a multiple of the tick, above one tick"
-#endif
-#define UPDATE_DELAY_MS (MOTION_UPDATE_PERIOD_MS - CNF_TIMER_PERIOD)
-
 _Static_assert(MOTION_LINE_ERROR_MAX <= 1023, "Line error must fit 11 bits");
 _Static_assert(LINE_COMMAND_ALIGN_RIGHT <= 15,
                "Line command must fit four bits");
@@ -81,7 +73,11 @@ typedef struct
 
 /* Static data. */
 static ID command_mutex;
-static ID drive_task_id;
+static bool b_started;
+#if ACTUATION_ACTIVE
+static uint32_t startup_ms;
+static bool b_control_previous;
+#endif
 /* Shared only under command_mutex. */
 static command_request_t latest_request;
 /* The following state belongs exclusively to the motion task. */
@@ -95,8 +91,6 @@ static bool b_turn_latched;
 #endif
 
 /* Private function declarations. */
-static void drive_task (INT stacd, void * p_exinf);
-static void service_commands (void);
 static ER take_request (bool * p_new);
 static int16_t estimate_error (line_command_t command,
                                ir_sensor_reading_t reading);
@@ -129,13 +123,27 @@ motion_command_init (void)
 ER
 motion_command_start (void)
 {
-    if ((command_mutex <= 0) || (drive_task_id > 0))
+    if ((command_mutex <= 0) || b_started)
     {
         return E_OBJ;
     }
-    drive_task_id =
-        app_start_task(drive_task, MOTION_PRI_DRIVE, 0, "motion_drive_task");
-    return (drive_task_id < E_OK) ? drive_task_id : E_OK;
+#if ACTUATION_ACTIVE
+    SYSTIM now;
+    ER const result = tk_get_otm(&now);
+    if (result < E_OK)
+    {
+        return result;
+    }
+    startup_ms = (uint32_t)now.lo;
+    tm_printf((UB *)"motion: tMotion line adapter at %u mm/s; "
+                    "%u s startup delay, no run cutoff\n",
+              (UINT)MOTION_COMMAND_FOLLOW_SPEED_MM_S,
+              (UINT)(MOTION_COMMAND_START_DELAY_MS / 1000u));
+#else
+    tm_printf((UB *)"motion: line adapter dry run; no motor API calls\n");
+#endif
+    b_started = true;
+    return E_OK;
 }
 
 ER
@@ -186,51 +194,57 @@ motion_command_submit (line_command_t command,
                : ((b_command_valid && b_counts_valid) ? E_OK : E_PAR);
 }
 
-/* Private function definitions. */
-
-static void
-drive_task (INT stacd, void * p_exinf)
-{
-    (void)stacd;
-    (void)p_exinf;
-#if ACTUATION_ACTIVE
-    tm_printf((UB *)"motion: continuous line following at %u mm/s; "
-                    "%u s startup delay, no run cutoff\n",
-              (UINT)MOTION_COMMAND_FOLLOW_SPEED_MM_S,
-              (UINT)(MOTION_COMMAND_START_DELAY_MS / 1000u));
-    tm_printf((UB *)"motion: probe=%u deg/s search=%u mm/s\n",
-              (UINT)(MOTION_COMMAND_PROBE_ERROR * MOTION_FOLLOW_KP + 0.5f),
-              (UINT)MOTION_COMMAND_SEARCH_SPEED_MM_S);
-    (void)tk_dly_tsk(MOTION_COMMAND_START_DELAY_MS);
-#else
-    tm_printf((UB *)"motion: line adapter dry run; no motor API calls\n");
-#endif
-    for (;;)
-    {
-        service_commands();
-        (void)tk_dly_tsk(UPDATE_DELAY_MS);
-    }
-}
-
-static void
-service_commands (void)
+/* Public owner hook: tMotion remains the sole caller of motion APIs. */
+void
+motion_command_service (bool b_control_enabled)
 {
     bool b_new;
     SYSTIM now;
     ER const result = take_request(&b_new);
+    bool const b_clock = (tk_get_otm(&now) == E_OK);
     /* Contention skips this poll; the cached timestamp still expires. */
-    if (((result < E_OK) && (result != E_TMOUT)) || (tk_get_otm(&now) < E_OK) ||
+    if (((result < E_OK) && (result != E_TMOUT)) || !b_clock ||
         ((uint32_t)((uint32_t)now.lo - active_request.received_ms) >=
          MOTION_LINE_TIMEOUT_MS))
     {
         active_request.b_valid = 0u;
     }
 #if ACTUATION_ACTIVE
-    update_controller(b_new);
+    bool const b_take_over = b_control_enabled && !b_control_previous;
+    b_control_previous = b_control_enabled;
+    if (!b_control_enabled)
+    {
+        b_recovery_turn = false;
+        b_turn_latched = false;
+        b_slow_active = false;
+        /* External MOVE/TURN stop-at-line still receives current visibility,
+         * but no line decision may replace the queued command or inhibit. */
+        if (b_new && active_request.b_valid)
+        {
+            (void)motion_move_set_line((int16_t)active_request.error,
+                                       active_request.b_seen != 0u);
+        }
+        return;
+    }
+    if (!b_started || (b_clock && ((uint32_t)((uint32_t)now.lo - startup_ms) <
+                                   MOTION_COMMAND_START_DELAY_MS)))
+    {
+        return;
+    }
+    if (b_take_over)
+    {
+        /* An explicit FOLLOW is accepted only after tMotion clears a motor
+         * fault with STOP/INHIBIT. No sensor sample can clear this latch. */
+        b_fault_latched = false;
+    }
+    update_controller(b_new || b_take_over);
 #else
+    (void)b_control_enabled;
     report_request();
 #endif
 }
+
+/* Private function definitions. */
 
 static ER
 take_request (bool * p_new)
@@ -347,12 +361,6 @@ update_controller (bool b_new)
             latch_fault(status);
         }
     }
-    /* Keep odometry and the wheel-speed loop running even without new IR. */
-    motion_status_t const status = motion_move_update();
-    if (status != MOTION_OK)
-    {
-        latch_fault(status);
-    }
 #if IR_MOTOR_TEST
     motor_test_trace(b_new);
 #endif
@@ -454,7 +462,8 @@ latch_fault (motion_status_t status)
         {
             (void)motion_move_stop();
         }
-        tm_printf((UB *)"motion: controller fault %d; restart required\n",
+        tm_printf((UB *)"motion: controller fault %d; STOP then FOLLOW or "
+                        "restart required\n",
                   (INT)status);
     }
 }

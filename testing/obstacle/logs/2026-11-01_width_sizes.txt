@@ -1,0 +1,51 @@
+== Section sizes (bytes)
+   text	   data	    bss	    dec	    hex	filename
+    208	      0	      4	    212	     d4	build_make/mtkernel_3/app_program/obstacle/drv_servo.o
+   1076	      0	     32	   1108	    454	build_make/mtkernel_3/app_program/obstacle/drv_ultrasonic.o
+   1001	      0	      4	   1005	    3ed	build_make/mtkernel_3/app_program/obstacle/obstacle.o
+    356	      0	      0	    356	    164	build_make/mtkernel_3/app_program/obstacle/obstacle_decision.o
+   3734	      1	     54	   3789	    ecd	build_make/mtkernel_3/app_program/obstacle/obstacle_scan.o
+    936	      0	      0	    936	    3a8	build_make/mtkernel_3/app_program/obstacle/obstacle_width.o
+
+== Static RAM symbols (size in hex bytes, b = file-local, B = global)
+drv_servo.o 00000000 00000004 b servo_gpio
+drv_ultrasonic.o 00000000 00000001 b driver_flags
+drv_ultrasonic.o 00000000 00000001 b measurement_result
+drv_ultrasonic.o 00000000 00000002 b echo_pulse_us
+drv_ultrasonic.o 00000000 00000004 b echo_start_us
+drv_ultrasonic.o 00000000 00000004 b irq_reg_offset
+drv_ultrasonic.o 00000000 00000004 b irq_shift
+drv_ultrasonic.o 00000000 00000004 b trigger_start_us
+drv_ultrasonic.o 00000000 00000004 b ultrasonic_echo_pin
+drv_ultrasonic.o 00000000 00000004 b ultrasonic_lock
+drv_ultrasonic.o 00000000 00000004 b ultrasonic_trig_pin
+obstacle.o 00000000 00000004 B obstacle_tid_scan
+obstacle_scan.o 00000000 00000001 b b_forward_triggered
+obstacle_scan.o 00000000 00000001 d b_stop_requested
+obstacle_scan.o 00000000 00000001 b centre_near_count
+obstacle_scan.o 00000000 00000001 b edge_indices
+obstacle_scan.o 00000000 00000001 b pending_flags
+obstacle_scan.o 00000000 00000002 b centre_echo_us
+obstacle_scan.o 00000000 00000002 b left_echo_us
+obstacle_scan.o 00000000 00000002 b left_edge_echo_us
+obstacle_scan.o 00000000 00000002 b right_edge_echo_us
+obstacle_scan.o 00000000 00000002 b scan_state
+obstacle_scan.o 00000000 00000004 b last_forward_trigger_ms
+obstacle_scan.o 00000000 00000004 b last_usable_centre_ms
+obstacle_scan.o 00000000 00000004 b sensor_angle
+obstacle_scan.o 00000000 00000004 b servo_timing
+obstacle_scan.o 00000000 00000004 b settle_duration_ms
+obstacle_scan.o 00000000 00000004 b settle_start_ms
+obstacle_scan.o 00000000 00000004 b side_scan_start_ms
+obstacle_scan.o 00000000 00000006 b pings_us
+obstacle_scan.o 00000000 00000006 b result
+
+== libm symbols linked for the width estimate (size in hex bytes)
+00000078 cosf
+0000007c sinf
+00000094 floorf
+000000b4 scalbnf
+000000f0 __kernel_sinf
+00000190 __kernel_cosf
+000002f4 __ieee754_rem_pio2f
+00000744 __kernel_rem_pio2f

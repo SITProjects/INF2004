@@ -40,7 +40,9 @@ typedef struct
     bool b_turn_known;     /**< b_turning is valid. */
     bool b_turning;        /**< The car is turning; holds roll. */
     bool b_distance_known; /**< distance_mm is valid. */
-    uint32_t distance_mm;  /**< Distance driven since start, mm (humps). */
+    int32_t distance_mm;   /**< Distance driven since start, mm; + is
+                                forward (hump height). May wrap round:
+                                only differences are used. */
 } terrain_hint_t;
 
 /* Public function declarations. */

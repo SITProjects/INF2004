@@ -9,7 +9,8 @@
 #include "motion_config.h"
 
 /** Normal builds drive the motors. APP_TEST always disables adapter actuation.
- * Set this to 0 for a dry run. IR_MOTOR_TEST isolates line and motion tasks
+ * Set this to 0 for a dry run. tMotion owns the motors in every profile.
+ * IR_MOTOR_TEST isolates line and motion tasks
  * and adds stop traces; it uses the same continuous settings as normal mode.
  */
 #ifndef MOTION_COMMAND_ACTUATION_ENABLED

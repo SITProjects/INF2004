@@ -1,6 +1,7 @@
 /**
  * @file terrain_monitor.c
- * @brief IMU motion and terrain monitoring: coordinator and calibration.
+ * @brief IMU motion and terrain monitoring: coordinator, calibration and
+ *        events.
  *
  * Copyright (c) 2026 10x Slackers
  * SPDX-License-Identifier: MIT
@@ -12,7 +13,10 @@
 #include "drv_imu.h"
 #include "drv_imu_bus.h"
 #include "terrain_config.h"
+#include "terrain_detect.h"
+#include "terrain_event.h"
 #include "terrain_fault.h"
+#include "terrain_height.h"
 #include "terrain_hint.h"
 #include "terrain_platform.h"
 #include "terrain_process.h"
@@ -26,9 +30,8 @@
  * Snapshot (terrain_data_t), five words:
  *   word 0: pitch 10 | roll 10 | turn rate 9 (P5) | calib state 2 |
  *           pitch held 1
- *   word 1: roll held 1 | hump state 2 (P4) | tilt warning 1 (P4) |
- *           turning 1 (P5) | speed state 2 (P8) | highest hump 8 (P9) |
- *           time 16 | spare 1
+ *   word 1: roll held 1 | hump state 2 | spare 2 | speed state 2 (P8) |
+ *           highest hump 8 (P9) | time 16 | spare 1
  *   word 2: sample count 16 | overrun 6 | errors 6 | sensor resets 4
  *   word 3: accel X 12 | accel Y 12 | spare 8
  *   word 4: accel Z 12 | spare 20
@@ -44,6 +47,10 @@
 
 #define W_STATE 1u
 #define ROLL_HELD_SHIFT 0u
+#define HUMP_SHIFT 1u
+#define HUMP_BITS 2u
+#define HIGHEST_SHIFT 7u
+#define HIGHEST_BITS 8u
 #define TIME_SHIFT 15u
 #define TIME_BITS 16u
 
@@ -101,6 +108,13 @@ _Static_assert(TERRAIN_FAULT_RETRY_UPDATES < (1u << OWN_FAIL_BITS),
                "fault limit must fit its field");
 _Static_assert(TERRAIN_CALIB_SAMPLES <= UINT8_MAX,
                "calibration samples must fit the 8-bit count");
+_Static_assert(TERRAIN_HUMP_DESCENDING < (1u << HUMP_BITS),
+               "hump state must fit its field");
+_Static_assert(TERRAIN_HEIGHT_MAX_MM == ((1u << HIGHEST_BITS) - 1u),
+               "highest hump must fit its field");
+_Static_assert(sizeof(terrain_event_queue_t) ==
+                   ((TERRAIN_EVENT_QUEUE_LEN + 1u) * sizeof(uint32_t)),
+               "event queue must be one word per event plus one");
 
 /* Static data. */
 
@@ -119,14 +133,27 @@ static terrain_calib_limits_t const calib_limits = {
     TERRAIN_CALIB_MAX_SPREAD_MPS2, TERRAIN_CALIB_MAX_GRAVITY_ERR_MPS2,
     TERRAIN_LEVEL_MAX_DEG};
 
+static terrain_hump_limits_t const hump_limits = {
+    TERRAIN_HUMP_UP_DEG,        TERRAIN_HUMP_TOP_DEG,
+    TERRAIN_HUMP_DOWN_DEG,      TERRAIN_HUMP_LEVEL_DEG,
+    TERRAIN_HUMP_ENTER_SAMPLES, TERRAIN_HUMP_LEVEL_SAMPLES};
+
+static terrain_height_limits_t const height_limits = {
+    (float)TERRAIN_WHEELBASE_MM, TERRAIN_HUMP_LEVEL_DEG,
+    (float)TERRAIN_HEIGHT_MAX_STEP_MM,
+    TERRAIN_PROCESS_LOWPASS_ALPHA(TERRAIN_HUMP_HEIGHT_TAU_S,
+                                  TERRAIN_SAMPLE_PERIOD_S)};
+
 /*
  * Shared with other tasks; access only under terrain_platform_lock().
  * Only the caller of terrain_monitor_update() writes latest and calib_info;
- * other tasks write only b_recal_request.
+ * other tasks write only b_recal_request. events is changed by both: the
+ * update adds events and terrain_monitor_poll_event() removes them.
  */
 static terrain_data_t latest;
 static terrain_calib_info_t calib_info;
 static bool b_recal_request = false;
+static terrain_event_queue_t events;
 
 static bool b_ready = false;
 
@@ -135,6 +162,8 @@ static uint32_t own_state = 0u; /* OWN_* fields. */
 static terrain_calib_acc_t calib_acc;
 static terrain_vec3_t bias;
 static terrain_tilt_t tilt;
+static uint32_t detect_word = 0u; /* terrain_detect.h layout. */
+static terrain_height_t height;
 
 /* Worked out when building, so it lives in flash. */
 static float const tilt_alpha =
@@ -148,10 +177,12 @@ static bool take_recal_request (void);
 static void calib_start (void);
 static void calib_add (terrain_vec3_t const * p_sample);
 static void handle_fault (void);
+static void detect_sample (terrain_vec3_t const * p_accel, uint32_t now_10ms,
+                           float step_mm, bool b_step);
 static void show_calibrating (terrain_data_t * p_data);
 static void clear_calib_info (terrain_calib_info_t * p_info);
 static void publish (terrain_vec3_t const * p_accel, uint32_t new_samples,
-                     bool b_overrun);
+                     bool b_overrun, uint32_t now_10ms);
 static void publish_calib (terrain_calib_out_t const * p_out, bool b_moved);
 static void store_latest (terrain_data_t const * p_data);
 static uint32_t own_get (uint32_t shift, uint32_t width);
@@ -185,9 +216,11 @@ terrain_monitor_init (void)
     show_calibrating(&latest);
     clear_calib_info(&calib_info);
     b_recal_request = false;
+    terrain_event_queue_reset(&events);
     terrain_platform_unlock(saved);
 
     own_put(OWN_FAIL_SHIFT, OWN_FAIL_BITS, 0u);
+    terrain_height_reset(&height);
     calib_start();
 
     b_ready = true;
@@ -229,11 +262,23 @@ terrain_monitor_update (void)
     float scale = imu_accel_scale_mps2();
     terrain_vec3_t accel = {0.0f, 0.0f, 0.0f};
 
+    /* One time for the whole batch: its samples are within 10 ms. */
+    uint32_t const now_10ms =
+        (uint32_t)(terrain_platform_time_us() / US_PER_TICK);
+
     /* Speed changes fake pitch and turns fake roll: hold them then. */
     terrain_hint_t hint;
     terrain_hint_read(&hint);
     bool const b_hold_pitch = hint.b_speed_known && hint.b_speed_changing;
     bool const b_hold_roll = hint.b_turn_known && hint.b_turning;
+
+    /* Distance driven since the last batch, shared evenly by its samples
+     * (they are 10 ms apart). Tracked even while not calibrated. */
+    float batch_mm = 0.0f;
+    bool const b_step = terrain_height_distance_step(
+        &height, hint.b_distance_known, hint.distance_mm,
+        height_limits.max_step_mm, &batch_mm);
+    float const step_mm = batch_mm / (float)count;
 
     for (uint32_t i = 0u; i < count; i++)
     {
@@ -261,10 +306,11 @@ terrain_monitor_update (void)
             accel = terrain_process_correct(&sample, &bias);
             terrain_process_tilt_update(&tilt, &accel, tilt_alpha, b_hold_pitch,
                                         b_hold_roll);
+            detect_sample(&accel, now_10ms, step_mm, b_step);
         }
     }
 
-    publish(&accel, count, b_overrun);
+    publish(&accel, count, b_overrun, now_10ms);
     return TERRAIN_OK;
 }
 
@@ -345,11 +391,86 @@ terrain_monitor_recalibrate (void)
     return TERRAIN_OK;
 }
 
+terrain_status_t
+terrain_monitor_poll_event (terrain_event_t * p_out)
+{
+    if (p_out == NULL)
+    {
+        return TERRAIN_ERR_PARAM;
+    }
+    if (!b_ready)
+    {
+        return TERRAIN_ERR_NOT_INIT;
+    }
+
+    uint32_t saved = terrain_platform_lock();
+    *p_out = terrain_event_queue_pop(&events);
+    terrain_platform_unlock(saved);
+    return TERRAIN_OK;
+}
+
+uint8_t
+terrain_monitor_events_dropped (void)
+{
+    if (!b_ready)
+    {
+        return 0u;
+    }
+
+    uint32_t saved = terrain_platform_lock();
+    uint32_t const dropped = terrain_event_queue_dropped(&events);
+    terrain_platform_unlock(saved);
+    return (uint8_t)dropped;
+}
+
+terrain_event_type_t
+terrain_monitor_event_type (terrain_event_t const * p_event)
+{
+    if (p_event == NULL)
+    {
+        return TERRAIN_EVENT_NONE;
+    }
+    return terrain_event_type(*p_event);
+}
+
+int16_t
+terrain_monitor_event_value (terrain_event_t const * p_event)
+{
+    if (p_event == NULL)
+    {
+        return 0;
+    }
+    return (int16_t)terrain_event_value(*p_event);
+}
+
+uint16_t
+terrain_monitor_event_time_10ms (terrain_event_t const * p_event)
+{
+    if (p_event == NULL)
+    {
+        return 0u;
+    }
+    return terrain_event_time_10ms(*p_event);
+}
+
 terrain_calib_state_t
 terrain_monitor_data_calib_state (terrain_data_t const * p_data)
 {
     return (terrain_calib_state_t)data_get(p_data, W_TILT, CALIB_SHIFT,
                                            CALIB_BITS);
+}
+
+terrain_hump_state_t
+terrain_monitor_data_hump_state (terrain_data_t const * p_data)
+{
+    return (terrain_hump_state_t)data_get(p_data, W_STATE, HUMP_SHIFT,
+                                          HUMP_BITS);
+}
+
+uint8_t
+terrain_monitor_data_highest_hump_mm (terrain_data_t const * p_data)
+{
+    return (uint8_t)data_get(p_data, W_STATE, HIGHEST_SHIFT, HIGHEST_BITS);
 }
 
 int16_t
@@ -524,6 +645,52 @@ terrain_monitor_calib_text (terrain_calib_state_t state)
     }
 }
 
+char const *
+terrain_monitor_hump_text (terrain_hump_state_t state)
+{
+    switch (state)
+    {
+        case TERRAIN_HUMP_LEVEL:
+            return "LEVEL";
+        case TERRAIN_HUMP_ASCENDING:
+            return "ASCENDING";
+        case TERRAIN_HUMP_TOP:
+            return "TOP";
+        case TERRAIN_HUMP_DESCENDING:
+            return "DESCENDING";
+        default:
+            return "UNKNOWN";
+    }
+}
+
+char const *
+terrain_monitor_event_text (terrain_event_type_t type)
+{
+    switch (type)
+    {
+        case TERRAIN_EVENT_NONE:
+            return "NONE";
+        case TERRAIN_EVENT_ASCENDING:
+            return "ASCENDING";
+        case TERRAIN_EVENT_DESCENDING:
+            return "DESCENDING";
+        case TERRAIN_EVENT_LEVEL:
+            return "LEVEL";
+        case TERRAIN_EVENT_COLLISION:
+            return "COLLISION";
+        case TERRAIN_EVENT_STATIONARY:
+            return "STATIONARY";
+        case TERRAIN_EVENT_ACCELERATING:
+            return "ACCELERATING";
+        case TERRAIN_EVENT_CRUISING:
+            return "CRUISING";
+        case TERRAIN_EVENT_DECELERATING:
+            return "DECELERATING";
+        default:
+            return "UNKNOWN";
+    }
+}
+
 /* Private function definitions. */
 
 /* Open the I2C bus and set up the accelerometer from terrain_config.h. */
@@ -597,6 +764,11 @@ calib_start (void)
     bias = zero;
     terrain_process_calib_reset(&calib_acc);
     terrain_process_tilt_reset(&tilt);
+
+    /* A hump cut short just ends: no event, queued events are kept. The
+     * last distance is kept, so the distance step is known straight away. */
+    detect_word = 0u;
+    terrain_height_restart(&height);
 }
 
 /* Collect one sample; after a full attempt, judge it. */
@@ -673,18 +845,79 @@ handle_fault (void)
 }
 
 /*
- * What the shared snapshot shows while calibrating: no readings, counters
- * and time kept. Used for the real reset and by the getters while a
- * request is pending, so both always agree.
+ * Run the hump height and the hump state machine on the newest sample and
+ * queue the event. The machine uses the smoothed pitch; the height its own
+ * lighter smoothing of this sample's pitch. Paused while pitch is held.
+ * step_mm is the distance driven during this sample (valid if b_step).
+ * The lock is held only to add the event and the highest hump.
+ */
+static void
+detect_sample (terrain_vec3_t const * p_accel, uint32_t now_10ms, float step_mm,
+               bool b_step)
+{
+    /* A held pitch is an old value, not news: pause the machine with it. */
+    if ((tilt.flags & TERRAIN_TILT_PITCH_HELD) != 0u)
+    {
+        return;
+    }
+
+    /* Height first: it needs the state before this sample's step. */
+    terrain_height_step(&height, terrain_detect_hump_state(detect_word),
+                        terrain_process_pitch_deg(p_accel), step_mm, b_step,
+                        &height_limits);
+
+    terrain_event_type_t const type =
+        terrain_detect_hump_step(&detect_word, tilt.pitch_deg, &hump_limits);
+    if (type == TERRAIN_EVENT_NONE)
+    {
+        return;
+    }
+
+    /* ASCENDING and DESCENDING carry the pitch; LEVEL the hump height. */
+    uint32_t value = 0u;
+    if ((type == TERRAIN_EVENT_ASCENDING) || (type == TERRAIN_EVENT_DESCENDING))
+    {
+        value = terrain_process_encode_signed(tilt.pitch_deg, DDEG_PER_DEG,
+                                              TERRAIN_EVENT_VALUE_BITS);
+    }
+    else if (type == TERRAIN_EVENT_LEVEL)
+    {
+        value = terrain_height_mm(&height);
+        terrain_height_clear_hump(&height);
+    }
+    else
+    {
+        /* The hump step sends no other kinds. */
+    }
+    terrain_event_t const event = terrain_event_make(type, value, now_10ms);
+
+    uint32_t saved = terrain_platform_lock();
+    terrain_event_queue_push(&events, event);
+    if ((type == TERRAIN_EVENT_LEVEL) &&
+        (value > data_get(&latest, W_STATE, HIGHEST_SHIFT, HIGHEST_BITS)))
+    {
+        data_put(&latest, W_STATE, HIGHEST_SHIFT, HIGHEST_BITS, value);
+    }
+    terrain_platform_unlock(saved);
+}
+
+/*
+ * What the shared snapshot shows while calibrating: no readings; counters,
+ * time and the highest hump (a fact about the run) kept. Used for the real
+ * reset and by the getters while a request is pending, so both always
+ * agree.
  */
 static void
 show_calibrating (terrain_data_t * p_data)
 {
-    /* All-zero fields read as CALIBRATING, 0 and not held. */
+    /* All-zero fields read as CALIBRATING, LEVEL, 0 and not held. */
     uint32_t const time = data_get(p_data, W_STATE, TIME_SHIFT, TIME_BITS);
+    uint32_t const highest =
+        data_get(p_data, W_STATE, HIGHEST_SHIFT, HIGHEST_BITS);
     p_data->word[W_TILT] = 0u;
     p_data->word[W_STATE] = 0u;
     data_put(p_data, W_STATE, TIME_SHIFT, TIME_BITS, time);
+    data_put(p_data, W_STATE, HIGHEST_SHIFT, HIGHEST_BITS, highest);
     p_data->word[W_ACCEL_XY] = 0u;
     p_data->word[W_ACCEL_Z] = 0u;
 }
@@ -703,9 +936,9 @@ clear_calib_info (terrain_calib_info_t * p_info)
  * lock. A pending recalibration is hidden by the getters.
  */
 static void
-publish (terrain_vec3_t const * p_accel, uint32_t new_samples, bool b_overrun)
+publish (terrain_vec3_t const * p_accel, uint32_t new_samples, bool b_overrun,
+         uint32_t now_10ms)
 {
-    uint64_t const now_us = terrain_platform_time_us();
     terrain_calib_state_t const state = own_calib_state();
     bool const b_valid = (state == TERRAIN_CALIB_VALID);
     terrain_vec3_t const zero = {0.0f, 0.0f, 0.0f};
@@ -727,10 +960,11 @@ publish (terrain_vec3_t const * p_accel, uint32_t new_samples, bool b_overrun)
     data_put(&next, W_STATE, ROLL_HELD_SHIFT, FLAG_BITS,
              (b_valid && ((tilt.flags & TERRAIN_TILT_ROLL_HELD) != 0u)) ? 1u
                                                                         : 0u);
+    data_put(&next, W_STATE, HUMP_SHIFT, HUMP_BITS,
+             b_valid ? (uint32_t)terrain_detect_hump_state(detect_word) : 0u);
 
     /* 10 ms ticks, wrapping: readers only use differences. */
-    data_put(&next, W_STATE, TIME_SHIFT, TIME_BITS,
-             (uint32_t)(now_us / US_PER_TICK));
+    data_put(&next, W_STATE, TIME_SHIFT, TIME_BITS, now_10ms);
 
     uint32_t count = data_get(&next, W_COUNTS, SAMPLES_SHIFT, SAMPLES_BITS);
     data_put(&next, W_COUNTS, SAMPLES_SHIFT, SAMPLES_BITS,

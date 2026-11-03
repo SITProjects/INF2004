@@ -10,7 +10,7 @@ Define a test here before running it. Test IDs never change.
 
 | ID | What is tested | Requirement / interface | Method | Steps / how | Expected result |
 |---|---|---|---|---|---|
-| MOT-U01 | both motors run 10 kHz PWM and are braked after start-up | | auto | `motion_test.c` | `[TEST] MOT-U01 PASS` |
+| MOT-U01 | both motors run 20 kHz PWM and are braked after start-up | | auto | `motion_test.c` | `[TEST] MOT-U01 PASS` |
 | MOT-U02 | wheels stay still at power-up | | manual | 1. Flash normal image with the car lifted. 2. Watch both wheels for 10 s. | neither wheel turns; console shows `motion: motors initialized and braked` |
 | MOT-U03 | both encoders count on PIO0 and hold still at rest | step 2 | auto | `motion_test.c`; car lifted, wheels untouched | `[TEST] MOT-U03 PASS` |
 | MOT-U04 | one forward wheel revolution gives `MOTION_ENCODER_TICKS_PER_REV` counts, about 2 mm per count or better | step 2, A3, NFR8 | manual | 1. Set `MOTION_MANUAL_TESTS` to 1 in `motion_config.h` and flash `make TEST=1` with the car lifted. 2. Mark each tyre. 3. When `MOT-U04/U05 turn each wheel` appears, turn the left wheel exactly one revolution forward, then the right. 4. Read the `left`/`right` lines. | each count rises by the same amount each time (record it in `motion_config.h`); wheel circumference ÷ count ≤ 2 mm |
@@ -40,6 +40,12 @@ Define a test here before running it. Test IDs never change.
 | MOT-U28 | following steers towards a hand-fed line error, and stops when the errors stop | step 6b | manual + auto | 1. Set `MOTION_FOLLOW_TESTS` to 1 in `motion_config.h` and flash `make TEST=1` with the car lifted. 2. When `MOT-U28 keep the car lifted` appears, keep clear: the wheels turn for four 1.5 s steps with line errors 0, +300, 0, −300. 3. Save the `error … turn … set … speed` lines. | `[TEST] MOT-U28 PASS`: error +300 gives a + turn and the right wheel's setpoint and speed above the left's; −300 the reverse; 0 equal. Both wheels brake within about 100 ms of the last error (`stopped … ms` ≤ 140). If the speeds do not follow the setpoints, tune the speed loop (MOT-U20) first |
 | MOT-U29 | a move or turn asked to stop at the line ends when the line comes into view, not when it starts on it; otherwise it ends at its distance | step 6b, design review 6.4 | manual + auto | Same run, still lifted: when `MOT-U29` appears, keep clear for four short runs with a pretend line: (a) forward, line appears; (b) 360° turn that starts on the line, line goes, then returns; (c) 200 mm forward not asked to stop, crosses the line; (d) 200 mm asked to stop, never sees it. | `[TEST] MOT-U29 PASS`; (a) and (b) end within `MOTION_LINE_SEEN_SAMPLES` updates of the line appearing, (c) and (d) end at their distance |
 | MOT-U30 | following arcs the right way on the floor at the turn rate asked for | step 6b | manual | Same run: when `MOT-U30` appears, put the car on the floor with 1 m clear all round. It follows with error +300 (arc left), 0 (straight), −300 (arc right), 1.5 s each. Save the `heading … (asked …)` lines. | arcs left, then straight, then right; each phase's `heading` within about 20 % of `asked` (45° with the default `MOTION_FOLLOW_KP`); the straight phase within a few degrees of 0. A large shortfall means the inner wheel cannot slow enough: check `MOTION_FOLLOW_MAX_DEG_S` and the speed loop |
+| MOT-U33 | motion command words pack into the 22-bit layout, saturate at 1023 mm and 180° without touching neighbouring fields, decode back, and leave bits 22..31 clear | step 9, Tribunal 1 | auto | `motion_test.c`; no motors | `[TEST] MOT-U33 PASS` |
+| MOT-U34 | tMotion wakes every `MOTION_UPDATE_PERIOD_MS` within 1 ms while every other task runs | step 9, NFR1, A1 | auto | `motion_test.c`; tMotion runs 1 s with the TIMER stamped at each wake-up; no motors. Run on the full image (all subsystems started, `make TEST=1`, Wi-Fi on), not the motion-only one | `[TEST] MOT-U34 PASS`; the `period … us` line within 19000..21000; record the `longest update` (loop execution time) for the Tri 1 before/after comparison |
+| MOT-U35 | through `MBF_MOTION_CMD`, tMotion refuses a word with reserved bits, a 0 mm move and a turn above 180°, but not a stop; INHIBIT brakes within 20 ms, reports INHIBITED and discards a command sent meanwhile; clearing it returns to STOPPED | step 9, NFR6 | auto | `motion_test.c`; no motors (the discarded command is an invalid one) | `[TEST] MOT-U35 PASS`; `INHIBIT to brake … us` ≤ 20000 |
+| MOT-U36 | through tMotion on the lifted car: (a) a 300 mm move ends with MOVE_DONE, reason DIST; (b) a move replaced by another gives MOVE_DONE only for the second; (c) STOP ends a move without MOVE_DONE; (d) INHIBIT during a move brakes within 20 ms, discards a move sent meanwhile, and clearing it gives no MOVE_DONE; (e) FOLLOW runs on the interim line input and ends with FOLLOW_ENDED once readings stop | step 9, design review 6.4, NFR6 | manual + auto | 1. Set `MOTION_TASK_TESTS` to 1 in `motion_config.h` and flash `make TEST=1` with the car lifted. 2. When `MOT-U36 keep the car lifted` appears, keep clear for about 20 s. | `[TEST] MOT-U36 PASS`; every part `1`; `INHIBIT to brake … us` ≤ 20000. Watch the wheels: each part stops when it should |
+| MOT-U37 | through tMotion, a held wheel raises STALL and mode STALLED; a new move is refused until STOP | step 9, FR12 | manual + auto | Same run: when `MOT-U37` appears, hold the LEFT wheel firmly still before the right one starts (10 s). | `[TEST] MOT-U37 PASS`; the right wheel brakes within about 0.3–0.8 s |
+| MOT-U38 | `motion_get_odometry()` (IF-05, for terrain) refuses NULL, its update count rises by one per period while tMotion runs, and at rest distance and heading hold and every speed is 0 | step 9, IF-05 | auto | `motion_test.c`; reads the snapshot from the test task for 200 ms while tMotion runs; no motors | `[TEST] MOT-U38 PASS`; `updates` within 2 of 10 |
 
 *Method:* **auto** = `TEST_CHECK` in code, result printed on the console;
 **manual** = a person observes the result (LED, scope, meter, phone app…).
@@ -48,8 +54,11 @@ only with `MOTION_MOVE_TESTS` set to 1, and MOT-U11..U16 only with
 `MOTION_TURN_TESTS` set to 1 (MOT-U17 is the last of these), and
 MOT-U19..U21 only with `MOTION_SPEED_TESTS` set to 1, MOT-U24..U26
 only with `MOTION_SYNC_TESTS` set to 1, and MOT-U28..U30 only with
-`MOTION_FOLLOW_TESTS` set to 1; set all six back to 0 before
+`MOTION_FOLLOW_TESTS` set to 1, and MOT-U36..U37 only with
+`MOTION_TASK_TESTS` set to 1; set all seven back to 0 before
 committing, so a normal `make TEST=1` never drives the motors.
+MOT-U01..U32 call the motion module directly, so `motion_test()` first
+holds tMotion (`motion_task_hold()`) and releases it for MOT-U34 on.
 MOT-U28..U30 need a tuned speed loop (MOT-U20) and a calibrated
 `MOTION_TRACK_WIDTH_MM` (MOT-U11). Following a real line (MOT-U31) and
 stopping at real tape (MOT-U32) are not defined yet: they need a signed
@@ -65,6 +74,13 @@ first, and MOT-U11..U16 also a calibrated `MOTION_WHEEL_DIAMETER_MM`
 ## Results
 
 Add a new row for every run. Never edit or delete old rows.
+
+The motor PWM changed from 10 kHz to 20 kHz in `b111dd4`. Earlier runs
+and logs used 10 kHz, so their MOT-U01 lines say 10 kHz. Those results
+do not depend on the PWM frequency: encoder counts, loop timing, wheel
+diameter and stall detection. MOT-U08/U09 are rerun at 20 kHz to
+confirm the stop-early distance, and MOT-U19/U20 are calibrated at
+20 kHz.
 
 | Date | Test ID | Commit | Tester | Result | Log / evidence | Notes |
 |---|---|---|---|---|---|---|

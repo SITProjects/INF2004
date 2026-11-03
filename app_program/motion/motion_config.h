@@ -252,6 +252,13 @@
 #define MOTION_STALL_TIMEOUT_MS 300u
 
 /*
+ * Commands MBF_MOTION_CMD holds before a sender waits; tMotion empties it
+ * every update. TODO(step 9, tMission): raise it if tMission ever sees
+ * E_TMOUT from tk_snd_mbf().
+ */
+#define MOTION_CMD_QUEUE_DEPTH 4u
+
+/*
  * Set 1 to add the manual bench steps (MOT-U04..U06) to make TEST=1. They
  * spin each wheel under power and block the test run for about 133 s, so
  * keep this 0 except on a lifted car during a motion test session.
@@ -297,6 +304,14 @@
  * a half; keep this 0 except during a motion test session.
  */
 #define MOTION_FOLLOW_TESTS 0
+
+/*
+ * Set 1 to add the manual tMotion steps (MOT-U36, MOT-U37) to make TEST=1.
+ * They send commands to tMotion through MBF_MOTION_CMD and spin the lifted
+ * car's wheels, and block the test run for about a minute; keep this 0
+ * except during a motion test session.
+ */
+#define MOTION_TASK_TESTS 0
 
 /* Public function declarations. */
 

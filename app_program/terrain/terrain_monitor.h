@@ -4,8 +4,9 @@
  *
  * Phase 1: initialise the GY-511 and read acceleration in the car's
  * axes. Phase 2: calibrate at every start, then correct every reading.
- * Phase 3: pitch and roll. Events, turn rate, collisions, motion state
- * and hump height follow in later phases.
+ * Phase 3: pitch and roll. Phase 4: hump state and an event queue. Phase
+ * 9: hump height. Turn rate, collisions and motion state follow in later
+ * phases.
  *
  * Call terrain_monitor_init() once, then terrain_monitor_update()
  * regularly (about every 10 ms) from one place only. Calibration then skips
@@ -14,9 +15,10 @@
  * level ground; an attempt in which the car moved is repeated. Readings
  * are given out only once the calibration state is TERRAIN_CALIB_VALID.
  *
- * terrain_monitor_get_latest(), terrain_monitor_get_calibration() and
- * terrain_monitor_recalibrate() may be called from anywhere, including other
- * tasks.
+ * terrain_monitor_get_latest(), terrain_monitor_get_calibration(),
+ * terrain_monitor_recalibrate(), terrain_monitor_poll_event() and
+ * terrain_monitor_events_dropped() may be called from anywhere, including
+ * other tasks.
  *
  * Copyright (c) 2026 10x Slackers
  * SPDX-License-Identifier: MIT
@@ -51,6 +53,47 @@ typedef enum
     TERRAIN_CALIB_VALID      /**< Calibrated; readings are corrected. */
 } terrain_calib_state_t;
 
+/**
+ * @brief Where the car is on a hump, judged from pitch. Resting value 0.
+ */
+typedef enum
+{
+    TERRAIN_HUMP_LEVEL = 0, /**< Flat, no hump in progress. */
+    TERRAIN_HUMP_ASCENDING, /**< Nose up: climbing. */
+    TERRAIN_HUMP_TOP,       /**< Over the top, not coming down yet. */
+    TERRAIN_HUMP_DESCENDING /**< Nose down: coming off a hump, or a dip. */
+} terrain_hump_state_t;
+
+/**
+ * @brief Kind of event. The codes are fixed, because events are passed to
+ *        other subsystems; new kinds take the next free code.
+ */
+typedef enum
+{
+    TERRAIN_EVENT_NONE = 0,     /**< No event: the queue was empty. */
+    TERRAIN_EVENT_ASCENDING,    /**< A climb started. */
+    TERRAIN_EVENT_DESCENDING,   /**< A descent (or a dip) started. */
+    TERRAIN_EVENT_LEVEL,        /**< Flat again after a descent. */
+    TERRAIN_EVENT_COLLISION,    /**< Reserved: collision detection. */
+    TERRAIN_EVENT_STATIONARY,   /**< Reserved: speed state. */
+    TERRAIN_EVENT_ACCELERATING, /**< Reserved: speed state. */
+    TERRAIN_EVENT_CRUISING,     /**< Reserved: speed state. */
+    TERRAIN_EVENT_DECELERATING  /**< Reserved: speed state. */
+} terrain_event_type_t;
+
+/* Number of event codes in use; codes from here up to 15 are spare. */
+#define TERRAIN_EVENT_TYPES 9u
+
+/**
+ * @brief One event, packed into one word: type 4 bits, value 12 bits,
+ *        time 16 bits. Read it only through the terrain_monitor_event_*()
+ *        functions; the layout is private. An all-zero event is NONE.
+ */
+typedef struct
+{
+    uint32_t word; /**< Packed type, value and time. */
+} terrain_event_t;
+
 /* Words in a packed snapshot. */
 #define TERRAIN_DATA_WORDS 5u
 
@@ -70,9 +113,16 @@ typedef enum
  * the same goes for roll. Those hints come from other subsystems; until
  * they exist, nothing is held.
  *
- * The acceleration and tilt fields are 0 (and nothing is held) unless the
- * calibration state is TERRAIN_CALIB_VALID. An all-zero snapshot reads as
- * CALIBRATING with everything 0.
+ * The hump state follows pitch through LEVEL, ASCENDING, TOP and
+ * DESCENDING; see terrain_monitor_poll_event() for the events it sends.
+ * While pitch is held, the hump state and its waits pause too.
+ *
+ * The highest hump is the largest LEVEL event height since init, in mm
+ * (see terrain_monitor_poll_event()). It is kept through a recalibration.
+ *
+ * The acceleration, tilt and hump state fields are 0 (and nothing is
+ * held) unless the calibration state is TERRAIN_CALIB_VALID. An all-zero
+ * snapshot reads as CALIBRATING, LEVEL, with everything 0.
  */
 typedef struct
 {
@@ -168,6 +218,82 @@ terrain_status_t terrain_monitor_get_calibration (terrain_calib_info_t * p_out);
 terrain_status_t terrain_monitor_recalibrate (void);
 
 /**
+ * @brief Take the oldest event from the queue.
+ * @param p_out Receives the event; read it with the
+ *        terrain_monitor_event_*() functions.
+ * @return TERRAIN_OK, also when the queue is empty: the event is then
+ *         TERRAIN_EVENT_NONE. TERRAIN_ERR_NOT_INIT or TERRAIN_ERR_PARAM,
+ *         with @p p_out unchanged.
+ *
+ * Never waits. A poll removes the event, so only one task should read
+ * events. Calling it until it gives NONE empties the queue.
+ *
+ * Events, while the calibration state is VALID:
+ * - ASCENDING: pitch stayed above TERRAIN_HUMP_UP_DEG for
+ *   TERRAIN_HUMP_ENTER_SAMPLES samples. Value: pitch then, tenths of a
+ *   degree.
+ * - DESCENDING: pitch stayed below -TERRAIN_HUMP_DOWN_DEG for
+ *   TERRAIN_HUMP_ENTER_SAMPLES samples. Value: pitch then, tenths of a
+ *   degree (negative).
+ * - LEVEL: after a descent, pitch stayed within TERRAIN_HUMP_LEVEL_DEG of
+ *   0 for TERRAIN_HUMP_LEVEL_SAMPLES samples. Value: the hump's height,
+ *   mm, 0 to 255 (stops at 255). A dip (a descent first) reads about 0.
+ *
+ * The height is the larger of two estimates, each kept at its highest
+ * from the start of the climb: TERRAIN_WHEELBASE_MM x sin(pitch), right
+ * for humps narrower than the car, and the sum of sin(pitch) x distance
+ * driven, right for wider humps. The second needs the driven distance
+ * from the motion subsystem; without it only the first is used.
+ *
+ * While pitch is held (the car speeds up or brakes), no hump events are
+ * found and the height pauses: the held value is not a new reading.
+ *
+ * The queue holds TERRAIN_EVENT_QUEUE_LEN events; when it is full the
+ * oldest is dropped and counted (terrain_monitor_events_dropped()). A
+ * recalibration resets the hump state to LEVEL without an event and keeps
+ * the events already queued. Only terrain_monitor_init() empties it.
+ * Safe to call from other tasks while terrain_monitor_update() runs.
+ */
+terrain_status_t terrain_monitor_poll_event (terrain_event_t * p_out);
+
+/**
+ * @brief Events dropped because the queue was full, since init.
+ * @return 0 to 255; stops at 255. 0 before init.
+ * Safe to call from other tasks.
+ */
+uint8_t terrain_monitor_events_dropped (void);
+
+/**
+ * @brief Kind of an event.
+ * @param p_event Event from terrain_monitor_poll_event().
+ * @return The kind; TERRAIN_EVENT_NONE if @p p_event is NULL.
+ * The event read functions only read their argument: any task may call
+ * them on its own copy.
+ */
+terrain_event_type_t
+terrain_monitor_event_type (terrain_event_t const * p_event);
+
+/**
+ * @brief Value of an event, in the unit of its kind (see
+ *        terrain_monitor_poll_event()).
+ * @param p_event Event.
+ * @return For ASCENDING and DESCENDING, tenths of a degree, -2048 to
+ *         2047; for other kinds 0 to 4095. 0 for NONE or if @p p_event
+ *         is NULL.
+ */
+int16_t terrain_monitor_event_value (terrain_event_t const * p_event);
+
+/**
+ * @brief When an event happened.
+ * @param p_event Event.
+ * @return Time in 10 ms ticks, on the same clock as
+ *         terrain_monitor_data_time_10ms(), wrapping round after
+ *         655.35 s: use only 16-bit unsigned differences. Events found
+ *         in one update share its time. 0 if @p p_event is NULL.
+ */
+uint16_t terrain_monitor_event_time_10ms (terrain_event_t const * p_event);
+
+/**
  * @brief Calibration state in a snapshot.
  * @param p_data Snapshot from terrain_monitor_get_latest().
  * @return The state; TERRAIN_CALIB_CALIBRATING if @p p_data is NULL.
@@ -176,6 +302,23 @@ terrain_status_t terrain_monitor_recalibrate (void);
  */
 terrain_calib_state_t
 terrain_monitor_data_calib_state (terrain_data_t const * p_data);
+
+/**
+ * @brief Hump state in a snapshot.
+ * @param p_data Snapshot.
+ * @return The state; TERRAIN_HUMP_LEVEL unless VALID, or if @p p_data is
+ *         NULL.
+ */
+terrain_hump_state_t
+terrain_monitor_data_hump_state (terrain_data_t const * p_data);
+
+/**
+ * @brief Highest hump since init in a snapshot.
+ * @param p_data Snapshot.
+ * @return mm, 0 to 255 (stops at 255); also kept while not VALID. 0 if
+ *         @p p_data is NULL or before the first hump.
+ */
+uint8_t terrain_monitor_data_highest_hump_mm (terrain_data_t const * p_data);
 
 /**
  * @brief Pitch in a snapshot.
@@ -318,5 +461,19 @@ char const * terrain_monitor_status_text (terrain_status_t status);
  * @return A constant string such as "VALID"; never NULL.
  */
 char const * terrain_monitor_calib_text (terrain_calib_state_t state);
+
+/**
+ * @brief Name of a hump state, for printing.
+ * @param state Any terrain_hump_state_t value.
+ * @return A constant string such as "ASCENDING"; never NULL.
+ */
+char const * terrain_monitor_hump_text (terrain_hump_state_t state);
+
+/**
+ * @brief Name of an event kind, for printing.
+ * @param type Any terrain_event_type_t value.
+ * @return A constant string such as "LEVEL"; never NULL.
+ */
+char const * terrain_monitor_event_text (terrain_event_type_t type);
 
 #endif /* TERRAIN_MONITOR_H */

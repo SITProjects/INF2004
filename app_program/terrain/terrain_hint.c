@@ -31,7 +31,7 @@ terrain_hint_read (terrain_hint_t * p_out)
 
     /* No source yet: everything unknown, so tilt is never held. */
     terrain_hint_t const unknown = {false, false, false, false,
-                                    false, false, 0u};
+                                    false, false, 0};
     *p_out = unknown;
 }
 
