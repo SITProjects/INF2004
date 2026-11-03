@@ -3,24 +3,24 @@
  * @brief Line-following subsystem: dual IR line sensing and decisions.
  *
  * The line task reads both IR sensors and runs the line-following logic
- * at a nominal 20 ms interval, and prints a snapshot every 200 ms. It
+ * at a nominal 20 ms interval, and prints periodic raw snapshots. It
  * owns the ADC and submits decisions to the motion task, which owns
  * the motors. It never calls the motor driver directly.
- * APP_TEST prints raw readings and provisional edge-band labels every
- * ~100 ms. These hand-measured bands require fixed-height validation
- * and are shared with the provisional navigation decisions.
+ * APP_TEST prints raw readings and per-sensor line-detection labels.
+ * Detection levels require validation at fixed mounting height/spacing.
  */
 
 #include "line_follow.h"
 #include "line_command.h"
 #include "../motion/motion_command.h"
+#include "../motion/motion_command_config.h"
 
 /* Private types, constants, and macros. */
 #define SAMPLE_INTERVAL_MS 20
 #if APP_TEST
 #define SAMPLES_PER_PRINT 5u /* 5 x 20 ms: nominal 100 ms diagnostics. */
 #else
-#define SAMPLES_PER_PRINT 10u /* 10 x 20 ms: print every 200 ms. */
+#define SAMPLES_PER_PRINT 20u /* Roughly 600 ms with the kernel delay. */
 #endif
 
 /* Static data. */
@@ -28,10 +28,7 @@ ID line_follow_tid_sense;
 
 /* Private function declarations. */
 static void sense_task (INT stacd, void * p_exinf);
-#if APP_TEST
-static char const * edge_band_name (uint16_t raw, uint16_t lower,
-                                    uint16_t upper);
-#endif
+static void report_junction (line_command_t command);
 
 /* Public function definitions. */
 
@@ -63,40 +60,66 @@ sense_task (INT stacd, void * p_exinf)
         tm_printf((UB *)"line_follow: failed to open the ADC device\n");
         tk_ext_tsk();
     }
+#if !APP_TEST && !IR_CALIBRATION_ONLY && MOTION_COMMAND_ACTUATION_ENABLED
+    /* Start sensing after the same preparation delay as the motor owner. */
+    (void)tk_dly_tsk(MOTION_COMMAND_START_DELAY_MS);
+#endif
+#if IR_MOTOR_TEST || IR_CALIBRATION_ONLY
+    /* Controlled tests start with the robot manually placed on the line. */
+    line_command_begin_tracking();
+#else
     line_command_init();
+#endif
+#if IR_CALIBRATION_ONLY
+    tm_printf(
+        (UB *)"line_follow: stationary calibration; motors not started\n");
+#else
     tm_printf((UB *)"line_follow: IR line sensing started. "
                     "Submitting commands to motion.\n");
+#endif
 
     uint32_t sample = 0u;
     for (;;)
     {
         ir_sensor_reading_t reading;
-        bool b_read = ir_sensor_read(&reading);
+        bool const b_read = ir_sensor_read(&reading);
+        SYSTIM now;
+        bool const b_clock = (tk_get_otm(&now) == E_OK);
+        bool const b_sample_valid = b_read && b_clock;
         line_command_t command = LINE_COMMAND_STOP;
-        if (b_read)
+        if (b_sample_valid)
         {
-            command = line_command_update(reading);
+            command = line_command_update(reading, (uint32_t)now.lo);
+        }
+        else
+        {
+            line_command_init();
         }
 
+        report_junction(command);
+
+#if !IR_CALIBRATION_ONLY
         ER const submission =
-            motion_command_submit(command, b_read ? &reading : NULL);
+            motion_command_submit(command, b_sample_valid ? &reading : NULL);
         if ((submission < E_OK) && (submission != E_TMOUT))
         {
             app_check(submission, "line motion submission");
         }
+#endif
 
         if ((sample % SAMPLES_PER_PRINT) == 0u)
         {
-            if (b_read)
+            if (b_sample_valid)
             {
 #if APP_TEST
                 tm_printf((UB *)"LEFT_RAW=%u  RIGHT_RAW=%u  "
                                 "LEFT=%s  RIGHT=%s  COMMAND=%s\n",
                           (UINT)reading.left_raw, (UINT)reading.right_raw,
-                          edge_band_name(reading.left_raw, LINE_LEFT_EDGE_MIN,
-                                         LINE_LEFT_EDGE_MAX),
-                          edge_band_name(reading.right_raw, LINE_RIGHT_EDGE_MIN,
-                                         LINE_RIGHT_EDGE_MAX),
+                          (reading.left_raw >= LINE_LEFT_DETECT_MIN) ? "LINE"
+                                                                     : "WHITE",
+                          (reading.right_raw >= LINE_RIGHT_DETECT_MIN)
+                              ? "LINE"
+                              : "WHITE",
                           line_command_name(command));
 #else
                 tm_printf((UB *)"Left AO: %u | Right AO: %u | Command: %s\n",
@@ -106,7 +129,9 @@ sense_task (INT stacd, void * p_exinf)
             }
             else
             {
-                tm_printf((UB *)"line_follow: IR sensor read failed\n");
+                tm_printf((UB *)(b_read
+                                     ? "line_follow: monotonic clock failed\n"
+                                     : "line_follow: IR sensor read failed\n"));
             }
         }
         sample++;
@@ -116,26 +141,16 @@ sense_task (INT stacd, void * p_exinf)
     }
 }
 
-#if APP_TEST
-/* Label the measured interval only; do not infer surface or line position. */
-static char const *
-edge_band_name (uint16_t raw, uint16_t lower, uint16_t upper)
+/* Detection event is independent of the slower raw-reading snapshots.
+ * A dashboard can consume this status later without changing motion policy. */
+static void
+report_junction (line_command_t command)
 {
-    char const * p_name;
-
-    if (raw < lower)
+    static bool b_reported;
+    bool const b_junction = (command == LINE_COMMAND_JUNCTION);
+    if (b_junction && !b_reported)
     {
-        p_name = "BELOW_EDGE";
+        tm_printf((UB *)"line_follow: JUNCTION detected; continuing forward\n");
     }
-    else if (raw > upper)
-    {
-        p_name = "ABOVE_EDGE";
-    }
-    else
-    {
-        p_name = "EDGE_BAND";
-    }
-
-    return p_name;
+    b_reported = b_junction;
 }
-#endif /* APP_TEST */
