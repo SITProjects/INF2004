@@ -1,0 +1,35 @@
+Tribunal 1 decision: wheel tick counters 32-bit -> 16-bit.
+Default build (make -j8), arm-none-eabi-size and nm on the motion objects.
+
+######## BEFORE (int32_t counts)
+== Section sizes (bytes)
+   text	   data	    bss	    dec	    hex	filename
+    584	      0	     25	    609	    261	mtkernel_3/app_program/motion/drv_encoder.o
+    492	      0	      1	    493	    1ed	mtkernel_3/app_program/motion/motion_drive.o
+
+== Static RAM symbols (size in hex bytes, b = file-local, B = global)
+drv_encoder.o 00000000 00000001 b b_program_loaded
+drv_encoder.o 00000000 00000018 b encoders
+motion_drive.o 00000000 00000001 b b_initialised
+
+######## AFTER (int16_t counts)
+== Section sizes (bytes)
+   text	   data	    bss	    dec	    hex	filename
+    596	      0	     13	    609	    261	mtkernel_3/app_program/motion/drv_encoder.o
+    492	      0	      1	    493	    1ed	mtkernel_3/app_program/motion/motion_drive.o
+
+== Static RAM symbols (size in hex bytes, b = file-local, B = global)
+drv_encoder.o 00000000 00000001 b b_program_loaded
+drv_encoder.o 00000000 0000000c b encoders
+motion_drive.o 00000000 00000001 b b_initialised
+
+== Summary
+encoders[] state:       24 -> 12 bytes RAM (count int32 -> int16, sm uint32 -> uint8)
+motion_counts_t:         8 ->  4 bytes (caller stack)
+drv_encoder.o text:    584 -> 596 bytes (+12: 16-bit truncation)
+Wrap-safe delta (int16_t)(now - prev): host check, 108/108 cases pass,
+including counts crossing +-32767 and the inverted-wheel flag.
+
+== Loop timing
+Not measured: the 20 ms tMotion loop does not exist yet (plan step 9).
+Measure before/after on hardware with a toggled GPIO when it does.

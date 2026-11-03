@@ -1,85 +1,92 @@
 /**
  * @file motion_command.c
- * @brief Map latest line commands to the existing open-loop motor API.
+ * @brief Feed calibrated IR edge errors to the existing motion controller.
  *
- * The motion task owns PWM slices 4 and 5. A mutex protects the latest
- * request; an event flag wakes the task without building a command backlog.
- * Actuation is disabled by default and always disabled in APP_TEST builds.
+ * A mutex protects a latest-value slot. The owner task services the motion
+ * controller every update period, rather than blocking for sensor messages.
+ * Dry-run and APP_TEST builds never call motion APIs from this adapter;
+ * existing motion tests retain exclusive access to the encoders and motors.
  */
 
 #include "motion_command.h"
 #include "motion.h"
-#include "motion_drive.h"
+#include "motion_config.h"
+#include "motion_move.h"
 
 /* Private types, constants, and macros. */
-#define COMMAND_PENDING 1u
-/* Provisional mapping values; tune on the actual robot. */
-#define FORWARD_MM_S 80
-#define STEER_MM_S 60
-#define TURN_DEG_S 30
-#define COMMAND_TIMEOUT_MS 250
-#define LOCK_TIMEOUT_MS 10
+#define ACTUATION_ACTIVE (MOTION_COMMAND_ACTUATION_ENABLED && !APP_TEST)
+#define ADC_MAX 4095u
+#define REPORT_INTERVAL_MS 100u
+/* The kernel adds one tick to a positive task delay, as in motion_test.c. */
+#if (MOTION_UPDATE_PERIOD_MS <= CNF_TIMER_PERIOD) ||                           \
+    ((MOTION_UPDATE_PERIOD_MS % CNF_TIMER_PERIOD) != 0)
+#error "Motion update period must be a multiple of the tick, above one tick"
+#endif
+#define UPDATE_DELAY_MS (MOTION_UPDATE_PERIOD_MS - CNF_TIMER_PERIOD)
 
-typedef struct
-{
-    int16_t linear_mm_s;
-    int16_t angular_deg_s;
-} velocity_request_t;
+_Static_assert(MOTION_LINE_ERROR_MAX <= 1023, "Line error must fit 11 bits");
+_Static_assert(LINE_LEFT_EDGE_MIN > 0u &&
+                   LINE_LEFT_BLACK_MIN > LINE_LEFT_EDGE_MAX,
+               "Invalid left calibration span");
+_Static_assert(LINE_RIGHT_EDGE_MIN > 0u &&
+                   LINE_RIGHT_BLACK_MIN > LINE_RIGHT_EDGE_MAX,
+               "Invalid right calibration span");
 
 typedef struct
 {
     uint32_t received_ms;
+    signed int error : 11;
     unsigned int command : 3;
+    unsigned int b_seen : 1;
+    unsigned int b_valid : 1;
+    unsigned int b_pending : 1;
 } command_request_t;
 
 /* Static data. */
 static ID command_mutex;
-static ID command_event;
 static ID drive_task_id;
+/* Shared only under command_mutex. */
 static command_request_t latest_request;
+/* The following state belongs exclusively to the motion task. */
+static command_request_t active_request;
+#if ACTUATION_ACTIVE
+static int16_t last_error = MOTION_LINE_ERROR_MAX;
+static bool b_fault_latched;
+#endif
 
 /* Private function declarations. */
 static void drive_task (INT stacd, void * p_exinf);
-static bool receive_command (line_command_t * p_command,
-                             uint32_t * p_received_ms, bool b_active);
-static velocity_request_t map_command (line_command_t command);
-static void apply_command (line_command_t command);
+static void service_commands (void);
+static ER take_request (bool * p_new);
+static int16_t edge_offset (uint16_t raw, uint16_t lower, uint16_t upper,
+                            uint16_t black);
+static int16_t estimate_error (ir_sensor_reading_t reading);
+#if ACTUATION_ACTIVE
+static void update_controller (bool b_new);
+static motion_status_t apply_reading (void);
+static void latch_fault (motion_status_t status);
+#else
+static void report_request (void);
+#endif
 
 /* Public function definitions. */
 
 ER
 motion_command_init (void)
 {
-    T_CMTX const mutex_config = {.mtxatr = TA_INHERIT};
-    T_CFLG const event_config = {0};
-
-    if ((command_mutex > 0) || (command_event > 0))
+    T_CMTX const config = {.mtxatr = TA_INHERIT};
+    if (command_mutex > 0)
     {
         return E_OBJ;
     }
-    command_mutex = tk_cre_mtx(&mutex_config);
-    if (command_mutex < E_OK)
-    {
-        return command_mutex;
-    }
-    command_event = tk_cre_flg(&event_config);
-    if (command_event < E_OK)
-    {
-        (void)tk_del_mtx(command_mutex);
-        command_mutex = 0;
-        return command_event;
-    }
-    return E_OK;
+    command_mutex = tk_cre_mtx(&config);
+    return (command_mutex < E_OK) ? command_mutex : E_OK;
 }
 
 ER
 motion_command_start (void)
 {
-    if ((command_mutex <= 0) || (command_event <= 0))
-    {
-        return E_OBJ;
-    }
-    if (drive_task_id > 0)
+    if ((command_mutex <= 0) || (drive_task_id > 0))
     {
         return E_OBJ;
     }
@@ -89,12 +96,25 @@ motion_command_start (void)
 }
 
 ER
-motion_command_submit (line_command_t command)
+motion_command_submit (line_command_t command,
+                       ir_sensor_reading_t const * p_reading)
 {
-    bool const b_valid = ((unsigned int)command <= LINE_COMMAND_STOP);
+    bool const b_command_valid = ((unsigned int)command <= LINE_COMMAND_STOP);
+    bool const b_counts_valid =
+        (p_reading == NULL) ||
+        ((p_reading->left_raw <= ADC_MAX) && (p_reading->right_raw <= ADC_MAX));
+    command_request_t request = {.command = LINE_COMMAND_STOP};
     SYSTIM now;
 
-    if ((command_mutex <= 0) || (command_event <= 0))
+    if (b_command_valid && b_counts_valid && (p_reading != NULL))
+    {
+        request.command = command;
+        request.error = estimate_error(*p_reading);
+        request.b_seen = (p_reading->left_raw >= LINE_LEFT_EDGE_MIN) ||
+                         (p_reading->right_raw >= LINE_RIGHT_EDGE_MIN);
+        request.b_valid = 1u;
+    }
+    if (command_mutex <= 0)
     {
         return E_OBJ;
     }
@@ -106,12 +126,14 @@ motion_command_submit (line_command_t command)
     result = tk_get_otm(&now);
     if (result == E_OK)
     {
-        latest_request.received_ms = (uint32_t)now.lo;
-        latest_request.command = b_valid ? command : LINE_COMMAND_STOP;
-        result = tk_set_flg(command_event, COMMAND_PENDING);
+        request.received_ms = (uint32_t)now.lo;
+        request.b_pending = 1u;
+        latest_request = request;
     }
     (void)tk_unl_mtx(command_mutex);
-    return (result < E_OK) ? result : (b_valid ? E_OK : E_PAR);
+    return (result < E_OK)
+               ? result
+               : ((b_command_valid && b_counts_valid) ? E_OK : E_PAR);
 }
 
 /* Private function definitions. */
@@ -121,125 +143,199 @@ drive_task (INT stacd, void * p_exinf)
 {
     (void)stacd;
     (void)p_exinf;
-
-#if MOTION_COMMAND_ACTUATION_ENABLED && !APP_TEST
-    tm_printf((UB *)"motion: line-command actuation enabled\n");
+#if ACTUATION_ACTIVE
+    tm_printf((UB *)"motion: line adapter enabled\n");
 #else
-    tm_printf((UB *)"motion: dry run; motors remain braked\n");
+    tm_printf((UB *)"motion: line adapter dry run; no motor API calls\n");
 #endif
-    uint32_t received_ms = 0u;
-    bool b_active = false;
     for (;;)
     {
-        line_command_t command = LINE_COMMAND_STOP;
-        b_active = receive_command(&command, &received_ms, b_active);
-        apply_command(b_active ? command : LINE_COMMAND_STOP);
-        if (!b_active)
-        {
-            /* Stop before yielding, including after a kernel error. */
-            (void)tk_dly_tsk(1);
-        }
+        service_commands();
+        (void)tk_dly_tsk(UPDATE_DELAY_MS);
     }
-}
-
-static bool
-receive_command (line_command_t * p_command, uint32_t * p_received_ms,
-                 bool b_active)
-{
-    UINT flags;
-    SYSTIM now;
-    TMO wait_ms = COMMAND_TIMEOUT_MS;
-
-    if (tk_get_otm(&now) < E_OK)
-    {
-        return false;
-    }
-    if (b_active)
-    {
-        uint32_t const elapsed = (uint32_t)now.lo - *p_received_ms;
-        wait_ms = (elapsed >= COMMAND_TIMEOUT_MS)
-                      ? TMO_POL
-                      : (TMO)(COMMAND_TIMEOUT_MS - elapsed);
-    }
-    if (tk_wai_flg(command_event, COMMAND_PENDING, TWF_ORW | TWF_CLR, &flags,
-                   wait_ms) < E_OK)
-    {
-        return false;
-    }
-    if (tk_loc_mtx(command_mutex, LOCK_TIMEOUT_MS) < E_OK)
-    {
-        return false;
-    }
-    command_request_t const request = latest_request;
-    (void)tk_unl_mtx(command_mutex);
-
-    if ((tk_get_otm(&now) < E_OK) ||
-        ((uint32_t)((uint32_t)now.lo - request.received_ms) >=
-         COMMAND_TIMEOUT_MS))
-    {
-        return false;
-    }
-    *p_received_ms = request.received_ms;
-    *p_command = (line_command_t)request.command;
-    return true;
-}
-
-static velocity_request_t
-map_command (line_command_t command)
-{
-    velocity_request_t request = {0};
-    switch (command)
-    {
-        case LINE_COMMAND_FORWARD:
-            request.linear_mm_s = FORWARD_MM_S;
-            break;
-
-        case LINE_COMMAND_STEER_LEFT:
-        case LINE_COMMAND_STEER_RIGHT:
-            request.linear_mm_s = STEER_MM_S;
-            request.angular_deg_s =
-                (command == LINE_COMMAND_STEER_LEFT) ? TURN_DEG_S : -TURN_DEG_S;
-            break;
-
-        default:
-            /* SEARCH, JUNCTION, STOP and unknown values all brake. */
-            break;
-    }
-    return request;
 }
 
 static void
-apply_command (line_command_t command)
+service_commands (void)
 {
-#if !MOTION_COMMAND_ACTUATION_ENABLED || APP_TEST
-    static line_command_t previous = (line_command_t)-1;
-#endif
-    velocity_request_t const request = map_command(command);
-    motion_status_t status;
-
-#if MOTION_COMMAND_ACTUATION_ENABLED && !APP_TEST
-    if ((request.linear_mm_s != 0) || (request.angular_deg_s != 0))
+    bool b_new = false;
+    SYSTIM now;
+    ER const result = take_request(&b_new);
+    if ((result < E_OK) || (tk_get_otm(&now) < E_OK) ||
+        ((uint32_t)((uint32_t)now.lo - active_request.received_ms) >=
+         MOTION_LINE_TIMEOUT_MS))
     {
-        status = motion_drive_set_velocity(request.linear_mm_s,
-                                           request.angular_deg_s);
+        active_request.b_valid = 0u;
     }
-    else
-#endif
-    {
-        status = motion_drive_stop();
-    }
-    if (status != MOTION_OK)
-    {
-        (void)motion_drive_stop();
-        tm_printf((UB *)"motion: drive request failed (%d)\n", (INT)status);
-        return;
-    }
-#if !MOTION_COMMAND_ACTUATION_ENABLED || APP_TEST
-    if (command != previous)
-    {
-        tm_printf((UB *)"motion: request linear=%d mm/s angular=%d deg/s\n",
-                  (INT)request.linear_mm_s, (INT)request.angular_deg_s);
-        previous = command;
-    }
+#if ACTUATION_ACTIVE
+    update_controller(b_new);
+#else
+    report_request();
 #endif
 }
+
+static ER
+take_request (bool * p_new)
+{
+    ER const result = tk_loc_mtx(command_mutex, TMO_POL);
+    if (result < E_OK)
+    {
+        return result;
+    }
+    *p_new = (latest_request.b_pending != 0u);
+    if (*p_new)
+    {
+        active_request = latest_request;
+        latest_request.b_pending = 0u;
+    }
+    (void)tk_unl_mtx(command_mutex);
+    return E_OK;
+}
+
+/* Provisional reflectance offset, not a measured distance. Inside the band
+ * is zero. Scale toward ADC zero or the measured full-black minimum. */
+static int16_t
+edge_offset (uint16_t raw, uint16_t lower, uint16_t upper, uint16_t black)
+{
+    int32_t offset = 0;
+    if (raw < lower)
+    {
+        offset = ((int32_t)raw - lower) * MOTION_LINE_ERROR_MAX / lower;
+    }
+    else if (raw > upper)
+    {
+        offset =
+            ((int32_t)raw - upper) * MOTION_LINE_ERROR_MAX / (black - upper);
+        if (offset > MOTION_LINE_ERROR_MAX)
+        {
+            offset = MOTION_LINE_ERROR_MAX;
+        }
+    }
+    return (int16_t)offset;
+}
+
+static int16_t
+estimate_error (ir_sensor_reading_t reading)
+{
+    int32_t const left = edge_offset(reading.left_raw, LINE_LEFT_EDGE_MIN,
+                                     LINE_LEFT_EDGE_MAX, LINE_LEFT_BLACK_MIN);
+    int32_t const right =
+        edge_offset(reading.right_raw, LINE_RIGHT_EDGE_MIN, LINE_RIGHT_EDGE_MAX,
+                    LINE_RIGHT_BLACK_MIN);
+    /* More black on the left and/or less on the right requires a left turn. */
+    return (int16_t)((left - right) / 2);
+}
+
+#if ACTUATION_ACTIVE
+static void
+update_controller (bool b_new)
+{
+    motion_state_t const state = motion_move_get_state();
+    if (state == MOTION_STATE_STALLED)
+    {
+        latch_fault(MOTION_ERR_STALLED);
+    }
+    else if (state == MOTION_STATE_TIMED_OUT)
+    {
+        latch_fault(MOTION_ERR_TIMED_OUT);
+    }
+    if (!b_fault_latched)
+    {
+        motion_status_t status = MOTION_OK;
+        if (!active_request.b_valid)
+        {
+            if (motion_move_is_busy())
+            {
+                status = motion_move_stop();
+            }
+        }
+        else if (b_new)
+        {
+            status = apply_reading();
+        }
+        if (status != MOTION_OK)
+        {
+            latch_fault(status);
+        }
+    }
+    /* Keep odometry and the wheel-speed loop running even without new IR. */
+    motion_status_t const status = motion_move_update();
+    if (status != MOTION_OK)
+    {
+        latch_fault(status);
+    }
+}
+
+static motion_status_t
+apply_reading (void)
+{
+    int16_t error = (int16_t)active_request.error;
+    if (active_request.b_seen)
+    {
+        if (error != 0)
+        {
+            last_error = error;
+        }
+    }
+    else
+    {
+        /* The API requires a last-side hint for lost line, never zero.
+         * With no prior direction, choose positive; SEARCH still brakes. */
+        error =
+            (last_error < 0) ? -MOTION_LINE_ERROR_MAX : MOTION_LINE_ERROR_MAX;
+    }
+    motion_status_t status =
+        motion_move_set_line(error, active_request.b_seen != 0u);
+    if (status != MOTION_OK)
+    {
+        return status;
+    }
+    bool const b_follow =
+        active_request.b_seen &&
+        ((active_request.command == LINE_COMMAND_FORWARD) ||
+         (active_request.command == LINE_COMMAND_STEER_LEFT) ||
+         (active_request.command == LINE_COMMAND_STEER_RIGHT));
+    if (!b_follow)
+    {
+        return motion_move_is_busy() ? motion_move_stop() : MOTION_OK;
+    }
+    /* Start only on entry; restarting every sample would reset the PD loop. */
+    if (motion_move_get_state() != MOTION_STATE_FOLLOW)
+    {
+        status = motion_move_follow(MOTION_FOLLOW_SPEED_MM_S);
+    }
+    return status;
+}
+
+static void
+latch_fault (motion_status_t status)
+{
+    if (!b_fault_latched)
+    {
+        b_fault_latched = true;
+        motion_state_t const state = motion_move_get_state();
+        if ((state != MOTION_STATE_STALLED) &&
+            (state != MOTION_STATE_TIMED_OUT))
+        {
+            (void)motion_move_stop();
+        }
+        tm_printf((UB *)"motion: controller fault %d; restart required\n",
+                  (INT)status);
+    }
+}
+#else
+static void
+report_request (void)
+{
+    static uint32_t sample;
+    if ((sample++ % (REPORT_INTERVAL_MS / MOTION_UPDATE_PERIOD_MS)) == 0u)
+    {
+        line_command_t const command =
+            active_request.b_valid ? (line_command_t)active_request.command
+                                   : LINE_COMMAND_STOP;
+        tm_printf((UB *)"motion: %s edge_error=%d seen=%u valid=%u (dry run)\n",
+                  line_command_name(command), (INT)active_request.error,
+                  (UINT)active_request.b_seen, (UINT)active_request.b_valid);
+    }
+}
+#endif /* ACTUATION_ACTIVE */

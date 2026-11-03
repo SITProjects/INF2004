@@ -1,0 +1,88 @@
+=~=~=~=~=~=~=~=~=~=~=~= PuTTY log 2026.11.03 09:08:27 =~=~=~=~=~=~=~=~=~=~=~=
+
+
+microT-Kernel Version 3.00
+
+
+=== micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+dual-core (SMP) build, usermain on core 0
+motion: motors initialized and braked
+motion: encoders counting on PIO0
+all subsystems started
+
+[TEST] === test run start ===
+[TEST] MOT-U01 PASS  both motors run 10 kHz PWM and are braked
+[TEST] MOT-U03 PASS  both encoders count on PIO0 and hold still at rest
+[TEST] MOT-U07 PASS  moves start stopped, odometry holds at rest, 0 refused
+[TEST] MOT-U18 PASS  PID P, I, D terms, limits, anti-windup and reset
+[TEST] MOT-U22 50 updates took 1000 ms (1000 expected)
+[TEST] MOT-U22 PASS  test-loop updates run at MOTION_UPDATE_PERIOD_MS
+[TEST] MOT-U23 PASS  straight-line loop idle at rest, switches on and off
+[TEST] MOT-U27 PASS  follow and line input refuse bad values, line debounced
+[TEST] MOT-U08 car on the floor: mark its position; it drives FORWARD 1000 mm in 5 s
+[TEST] MOT-U08 state 0 after 4760 ms; odometry 1003 mm (target 1000): ruler must agree within 3 percent
+[TEST] MOT-U09 car on the floor: mark its position; it drives BACKWARD 100 mm in 5 s
+[TEST] MOT-U09 state 0 after 440 ms; odometry -110 mm (target -100): ruler must agree within 3 percent
+[TEST] MOT-U10 lift the car and hold the LEFT wheel still: the car is driven forward in 10 s
+[TEST] MOT-U10 stalled 1 after 460 ms (expect about 300), braked 1, refused 1, cleared 1
+[TEST] MOT-U10 PASS  held wheel stalls, brakes, refuses moves until stopped
+[TEST] motion SUMMARY 8 passed, 0 failed
+[TEST] === test run end ===
+
+
+microT-Kernel Version 3.00
+
+
+=== micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+dual-core (SMP) build, usermain on core 0
+motion: motors initialized and braked
+motion: encoders counting on PIO0
+all subsystems started
+
+[TEST] === test run start ===
+[TEST] MOT-U01 PASS  both motors run 10 kHz PWM and are braked
+[TEST] MOT-U03 PASS  both encoders count on PIO0 and hold still at rest
+[TEST] MOT-U07 PASS  moves start stopped, odometry holds at rest, 0 refused
+[TEST] MOT-U18 PASS  PID P, I, D terms, limits, anti-windup and reset
+[TEST] MOT-U22 50 updates took 1000 ms (1000 expected)
+[TEST] MOT-U22 PASS  test-loop updates run at MOTION_UPDATE_PERIOD_MS
+[TEST] MOT-U23 PASS  straight-line loop idle at rest, switches on and off
+[TEST] MOT-U27 PASS  follow and line input refuse bad values, line debounced
+[TEST] MOT-U08 car on the floor: mark its position; it drives FORWARD 1000 mm in 5 s
+[TEST] MOT-U08 state 0 after 4800 ms; odometry 1003 mm (target 1000): ruler must agree within 3 percent
+[TEST] MOT-U09 car on the floor: mark its position; it drives BACKWARD 100 mm in 5 s
+[TEST] MOT-U09 state 0 after 440 ms; odometry -110 mm (target -100): ruler must agree within 3 percent
+[TEST] MOT-U10 lift the car and hold the LEFT wheel still: the car is driven forward in 10 s
+[TEST] MOT-U10 stalled 1 after 540 ms (expect about 300), braked 1, refused 1, cleared 1
+[TEST] MOT-U10 PASS  held wheel stalls, brakes, refuses moves until stopped
+[TEST] motion SUMMARY 8 passed, 0 failed
+[TEST] === test run end ===
+
+
+microT-Kernel Version 3.00
+
+
+=== micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+dual-core (SMP) build, usermain on core 0
+motion: motors initialized and braked
+motion: encoders counting on PIO0
+all subsystems started
+
+[TEST] === test run start ===
+[TEST] MOT-U01 PASS  both motors run 10 kHz PWM and are braked
+[TEST] MOT-U03 PASS  both encoders count on PIO0 and hold still at rest
+[TEST] MOT-U07 PASS  moves start stopped, odometry holds at rest, 0 refused
+[TEST] MOT-U18 PASS  PID P, I, D terms, limits, anti-windup and reset
+[TEST] MOT-U22 50 updates took 1000 ms (1000 expected)
+[TEST] MOT-U22 PASS  test-loop updates run at MOTION_UPDATE_PERIOD_MS
+[TEST] MOT-U23 PASS  straight-line loop idle at rest, switches on and off
+[TEST] MOT-U27 PASS  follow and line input refuse bad values, line debounced
+[TEST] MOT-U08 car on the floor: mark its position; it drives FORWARD 1000 mm in 5 s
+[TEST] MOT-U08 state 0 after 4800 ms; odometry 1002 mm (target 1000): ruler must agree within 3 percent
+[TEST] MOT-U09 car on the floor: mark its position; it drives BACKWARD 100 mm in 5 s
+[TEST] MOT-U09 state 0 after 420 ms; odometry -106 mm (target -100): ruler must agree within 3 percent
+[TEST] MOT-U10 lift the car and hold the LEFT wheel still: the car is driven forward in 10 s
+[TEST] MOT-U10 stalled 1 after 720 ms (expect about 300), braked 1, refused 1, cleared 1
+[TEST] MOT-U10 PASS  held wheel stalls, brakes, refuses moves until stopped
+[TEST] motion SUMMARY 8 passed, 0 failed
+[TEST] === test run end ===

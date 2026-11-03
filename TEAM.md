@@ -16,7 +16,7 @@ subsystem, ask its owner or open a pull request for them to review.
 | Subsystem | What it does | Student ID | GitHub username | Code | Tests |
 |---|---|---|---|---|---|
 | obstacle | Ultrasonic sensor on a servo scans for a clear path | | Kitsuneez | `app_program/obstacle/` | `testing/obstacle/` |
-| motion | Two H-bridge DC motors, open-loop drive (held braked for now) | | felicia-chuaxy | `app_program/motion/` | `testing/motion/` |
+| motion | Two H-bridge DC motors, open-loop drive (held braked for now); wheel encoders | | felicia-chuaxy | `app_program/motion/` | `testing/motion/` |
 | line_follow | Two IR sensors → line commands (dry run, no motors) | | kaiwenteoo | `app_program/line_follow/` | `testing/line_follow/` |
 | terrain | GY-511 accelerometer, calibration and corrected readings | | ann | `app_program/terrain/` | `testing/terrain/` |
 | communication | Wi-Fi connection status | | Jerome-4469 | `app_program/communication/` | `testing/communication/` |
@@ -49,8 +49,8 @@ fixed.
 | GP23, GP24, GP25, GP29 | *reserved* | Pico W radio |
 | GP0 | | (taken whenever the team builds with `CRASH_REPORT=1`) |
 | GP1 | | (taken whenever the team builds with `CRASH_REPORT=1`) |
-| GP2 | motion (reserved) | planned left encoder A; released by obstacle |
-| GP3 | motion (reserved) | planned left encoder B; released by obstacle |
+| GP2 | motion | right encoder phase A (input, PIO0 state machine 3) |
+| GP3 | motion | right encoder phase B (input, PIO0 state machine 3) |
 | GP4 | terrain | I2C0 SDA to the GY-511 (Robo Pico Grove 3), claimed by the kernel I2C driver at boot |
 | GP5 | terrain | I2C0 SCL to the GY-511 (Robo Pico Grove 3), claimed by the kernel I2C driver at boot |
 | GP6 | | |
@@ -60,12 +60,12 @@ fixed.
 | GP10 | motion | right motor input A (PWM slice 5 A) |
 | GP11 | motion | right motor input B (PWM slice 5 B) |
 | GP12 | obstacle | servo signal (PWM slice 6 A) |
-| GP13 | | (shares PWM slice 6 with the servo: 50 Hz only) |
-| GP14 | | |
+| GP13 | motion | left encoder phase A (input, PIO0 state machine 2; PWM slice 6 B is not used, so the servo is unaffected) |
+| GP14 | motion | left encoder phase B (input, PIO0 state machine 2) |
 | GP15 | | |
 | GP16 | obstacle | ultrasonic trigger (output) |
 | GP17 | obstacle | ultrasonic echo (input, edge interrupt) |
-| GP18 | | |
+| GP18 | *planned: tMission (owner to confirm)* | Robo Pico RGB LED (WS2812); proposed on PIO1 (section 3) |
 | GP19 | | |
 | GP20 | | |
 | GP21 | | |
@@ -78,7 +78,8 @@ Application settings live in `app_program/obstacle/obstacle_config.h`.
 Shared application payloads live in `app_program/robot_types.h`; their sweep
 geometry is the decoding contract and must be agreed with telemetry users.
 The `config/` folder remains kernel configuration. GPIO bank dispatch is
-still obstacle-owned; encoder IRQ integration remains a coordinated change.
+obstacle-owned; the wheel encoders do not use it, because PIO0 counts them
+(section 3).
 
 ## 3. Peripherals
 
@@ -118,11 +119,22 @@ the drivers have no locking to stop it.
 | ADC | line_follow | `line_follow_task` (kernel driver `"adca"`) | GP26, GP27 (GP28 free) |
 | PWM slices (list) | obstacle: slice 6. motion: slices 4, 5 | obstacle: `obstacle_scan_task`. motion: none yet; `motion_start()` configures them and holds the motors braked | GP12 (obstacle); GP8–GP11 (motion) |
 | GPIO bank interrupt (`IO_IRQ_BANK0`, all GPIOs) | obstacle | `obstacle_scan_task`, core 0 only | GP17 echo edges. Ask the obstacle owner before enabling any other GPIO interrupt |
+| PIO0 | motion | none yet: `motion_start()` loads the encoder program; one task reads the counts (`encoder_get_count()` empties the FIFO) | GP2, GP3, GP13, GP14 (inputs). The program fills instruction slots 0–23 and uses state machines 2 and 3; slots 24–31 and state machines 0 and 1 are free. 2 and 3, not 0 and 1, because the SDK allocator hands out state machine 0 first and places programs at the top slots, so a fallback to PIO0 would not collide. `encoder_init()` fails if any PIO0 state machine is already running |
+| PIO1 | *kernel*; planned RGB LED | `cyw43_utk_task` (gSPI to the radio: 6 instructions, 1 state machine). Proposed: the WS2812 LED program (4 instructions) goes here too, leaving PIO0 to the encoders; the LED's owner must confirm | GP23–25, GP29; GP18 |
 | TIMER (free-running 1 MHz counter) | *shared, read only* | any | — Read by obstacle and terrain; never write it |
 | WiFi radio, TCP/IP, MQTT | *kernel* | `cyw43_utk_task` (built in) | GP23–25, GP29 |
 
 The kernel's physical timers (`tk_sta_ptm` and friends) are built on the PWM
 slices; do not use physical timers 4, 5 or 6.
+
+The CYW43 radio driver takes its PIO through the Pico SDK allocator
+(`pio_claim_free_sm_and_add_program()`), which tries PIO1 before PIO0, so
+it lands on PIO1. Any other PIO program must also go on PIO1: the encoder
+program on PIO0 has to sit at address 0, and the allocator cannot see it.
+The comment in `kernel/sysdepend/pico_rp2040/hw_setting.c` that labels
+PIO0 "CYW43439 PIO-SPI" is stale: that code only releases PIO0 and PIO1
+from reset at boot, and only in Wi-Fi builds. `drv_encoder.c` releases
+PIO0 itself for builds without Wi-Fi.
 
 ### WiFi and MQTT are special
 

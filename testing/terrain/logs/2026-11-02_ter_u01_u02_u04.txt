@@ -1,0 +1,13 @@
+TER-U01, TER-U02, TER-U04 on the packed code (bench, loose IMU)
+Date: 2026-11-02
+Firmware: make TEST=1 at 4a4be96 + new level reference from
+2026-11-02_ter_u06_level_ref.txt in terrain_config.h (TERRAIN_TEST_BENCH 0)
+Setup: same taped position as the TER-U06 run.
+Only the terrain lines are copied from the console.
+
+terrain: IMU ready; calibrating, keep the car still on level ground
+terrain: calibration VALID
+[TEST] TER-U01 PASS  IMU delivers samples at about 100 Hz
+[TEST] TER-U02 PASS  calibration VALID with the car still and level
+[TEST] TER-U04 PASS  pitch and roll within 1 degree of 0 at rest
+[TEST] terrain SUMMARY 3 passed, 0 failed
