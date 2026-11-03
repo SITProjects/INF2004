@@ -114,6 +114,7 @@ typedef struct
  *
  * The hump state follows pitch through LEVEL, ASCENDING, TOP and
  * DESCENDING; see terrain_monitor_poll_event() for the events it sends.
+ * While pitch is held, the hump state and its waits pause too.
  *
  * The acceleration, tilt and hump fields are 0 (and nothing is held)
  * unless the calibration state is TERRAIN_CALIB_VALID. An all-zero
@@ -232,6 +233,9 @@ terrain_status_t terrain_monitor_recalibrate (void);
  *   degree (negative).
  * - LEVEL: after a descent, pitch stayed within TERRAIN_HUMP_LEVEL_DEG of
  *   0 for TERRAIN_HUMP_LEVEL_SAMPLES samples. Value: 0.
+ *
+ * While pitch is held (the car speeds up or brakes), no hump events are
+ * found: the held value is not a new reading.
  *
  * The queue holds TERRAIN_EVENT_QUEUE_LEN events; when it is full the
  * oldest is dropped and counted (terrain_monitor_events_dropped()). A

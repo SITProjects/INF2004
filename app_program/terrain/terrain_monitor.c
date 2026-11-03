@@ -816,11 +816,17 @@ handle_fault (void)
 
 /*
  * Run the hump state machine on the newest pitch and queue its event.
- * The lock is held only to add the event.
+ * Paused while pitch is held. The lock is held only to add the event.
  */
 static void
 detect_sample (uint32_t now_10ms)
 {
+    /* A held pitch is an old value, not news: pause the machine with it. */
+    if ((tilt.flags & TERRAIN_TILT_PITCH_HELD) != 0u)
+    {
+        return;
+    }
+
     terrain_event_type_t const type =
         terrain_detect_hump_step(&detect_word, tilt.pitch_deg, &hump_limits);
     if (type == TERRAIN_EVENT_NONE)

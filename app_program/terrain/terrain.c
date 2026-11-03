@@ -126,10 +126,15 @@ monitor_task (INT stacd, void * p_exinf)
 static void
 print_status (void)
 {
-    terrain_data_t data;
-    if (terrain_monitor_get_latest(&data) != TERRAIN_OK)
+    terrain_data_t data = {0};
+    terrain_status_t const status = terrain_monitor_get_latest(&data);
+    if (status == TERRAIN_ERR_NOT_CALIBRATED)
     {
         print_calibrating(&data);
+        return;
+    }
+    if (status != TERRAIN_OK)
+    {
         return;
     }
 
