@@ -17,6 +17,9 @@
  * helpers in robot_types.h and send it with
  * tk_snd_mbf(motion_mbf_cmd, &cmd, sizeof(cmd), tmout). A new command
  * replaces the one in progress, which then ends without MOVE_DONE.
+ * With the line adapter enabled, FOLLOW resumes automatic line decisions;
+ * STOP/MOVE/TURN suspend them until a new FOLLOW. INHIBIT also suspends
+ * them, so clearing it alone cannot replay a cached line command.
  *
  * To stop the car (tSafety): tk_set_flg(motion_flg_ctrl,
  * MOTION_FLG_INHIBIT). tMotion wakes and brakes at once (NFR6), discards

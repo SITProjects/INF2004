@@ -13,13 +13,17 @@
  * runs every queued command in order; passes in a new line reading; calls
  * motion_move_update(); and reports MOVE_DONE, STALL and the other
  * MOTION_EVT_ bits when the update changes the state. MOTION_FLG_INHIBIT
- * wakes it at once to brake.
+ * wakes it at once to brake. The line-command adapter is serviced by this
+ * same owner; it never creates another motor task. Queued STOP/MOVE/TURN
+ * and INHIBIT suspend automatic following until a queued FOLLOW resumes it.
  */
 
 #include "motion.h"
 #include "motion_config.h"
 #include "motion_drive.h"
 #include "motion_move.h"
+#include "motion_command.h"
+#include "motion_command_config.h"
 
 /* Private types, constants, and macros. */
 
@@ -76,6 +80,8 @@ ID motion_mbf_cmd;
 ID motion_flg_event;
 
 static ID cyc_motion;
+/* Queued commands/inhibit take control until an explicit FOLLOW request. */
+static bool b_line_control = MOTION_COMMAND_ACTUATION_ENABLED && !APP_TEST;
 
 /* Written by tMotion only; read by any task as one word. */
 static volatile uint32_t status_word;
@@ -165,7 +171,7 @@ motion_init (void)
     status_word = (uint32_t)ROBOT_MOTION_MODE_STOPPED;
     timing.inhibit_brake_us = TIMER_NONE;
     timing_reset();
-    return E_OK;
+    return motion_command_init();
 }
 
 ER
@@ -180,6 +186,12 @@ motion_start (void)
     }
     tm_printf((UB *)"motion: motors initialized and braked\n");
     tm_printf((UB *)"motion: encoders counting on PIO0\n");
+
+    ER const result = motion_command_start();
+    if (result < E_OK)
+    {
+        return result;
+    }
 
     /* TODO(step 9, team): priority 3 (design freeze) or 14 (TEAM.md). */
     ID tid = app_start_task(motion_task, MOTION_PRI_DRIVE, 0u, "tMotion");
@@ -340,6 +352,7 @@ motion_task (INT stacd, void * p_exinf)
         /* NFR6: brake at once, not on the next tick. */
         if (b_inhibit && !b_inhibited)
         {
+            b_line_control = false;
             (void)motion_move_stop();
             timing.inhibit_brake_us = timer_us();
             b_inhibited = true;
@@ -364,6 +377,7 @@ motion_task (INT stacd, void * p_exinf)
         }
 
         motion_state_t before = motion_move_get_state();
+        motion_command_service(b_line_control);
         (void)motion_move_update();
         report_change(before, motion_move_get_state());
         publish_status(b_inhibited);
@@ -442,11 +456,34 @@ run_command (uint32_t cmd)
         }
 
         case ROBOT_MOTION_CMD_FOLLOW:
+#if MOTION_COMMAND_ACTUATION_ENABLED && !APP_TEST
+            /* The adapter selects tracking/alignment/search speed. It is
+             * serviced below, still inside tMotion, using fresh line data. */
+            if (motion_move_get_state() == MOTION_STATE_STALLED)
+            {
+                result = MOTION_ERR_STALLED;
+            }
+            else if (motion_move_get_state() == MOTION_STATE_TIMED_OUT)
+            {
+                result = MOTION_ERR_TIMED_OUT;
+            }
+            else
+            {
+                b_line_control = true;
+                result = MOTION_OK;
+            }
+#else
             result = motion_move_follow(MOTION_FOLLOW_SPEED_MM_S);
+#endif
             break;
 
         default:
             break;
+    }
+
+    if ((result == MOTION_OK) && (type != ROBOT_MOTION_CMD_FOLLOW))
+    {
+        b_line_control = false;
     }
 
     /* Stop at line applies to moves and turns; ignored on STOP / FOLLOW. */

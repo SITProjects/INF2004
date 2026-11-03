@@ -154,8 +154,9 @@
  * with KD 0, raise KP until the car weaves along a straight line, then
  * halve it; then raise KD until the weave dies within about one swing.
  */
-#define MOTION_FOLLOW_KP 0.1f
-#define MOTION_FOLLOW_KD 0.0f
+/* Validated on the robot at 120 mm/s on straights and both curve directions. */
+#define MOTION_FOLLOW_KP 0.3f
+#define MOTION_FOLLOW_KD 0.006f
 
 /*
  * Largest turn rate the line loop asks for, in deg/s. Each wheel's
@@ -166,7 +167,8 @@
  * TODO(calibrate): at least the follow speed / the tightest curve radius
  * (in rad/s), so the car can hold that curve (MOT-U31).
  */
-#define MOTION_FOLLOW_MAX_DEG_S 120.0f
+/* Bound the combined proportional and damping correction. */
+#define MOTION_FOLLOW_MAX_DEG_S 90.0f
 
 /*
  * Following stops (state STOPPED) when the last line error is older than

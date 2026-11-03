@@ -103,22 +103,39 @@ usermain (void)
 #endif
 
     /* Phase 1: every subsystem creates its kernel objects. */
+#if !IR_CALIBRATION_ONLY
+#if !IR_MOTOR_TEST
     app_check(obstacle_init(), "obstacle_init");
+#endif
     app_check(motion_init(), "motion_init");
+#endif
     app_check(line_follow_init(), "line_follow_init");
+#if !IR_CALIBRATION_ONLY && !IR_MOTOR_TEST
     app_check(terrain_init(), "terrain_init");
     app_check(communication_init(), "communication_init");
+#endif
 
     /* Phase 2: every subsystem starts its tasks. */
+#if !IR_CALIBRATION_ONLY
+#if !IR_MOTOR_TEST
     app_check(obstacle_start(), "obstacle_start");
+#endif
     app_check(motion_start(), "motion_start");
+#endif
     app_check(line_follow_start(), "line_follow_start");
+#if !IR_CALIBRATION_ONLY && !IR_MOTOR_TEST
     app_check(terrain_start(), "terrain_start");
     app_check(communication_start(), "communication_start");
 
     tm_printf((UB *)"all subsystems started\n\n");
+#elif IR_MOTOR_TEST
+    tm_printf(
+        (UB *)"IR MOTOR TEST: continuous line following; no run cutoff\n\n");
+#else
+    tm_printf((UB *)"IR calibration only: GP26 left, GP27 right\n\n");
+#endif
 
-#if APP_TEST
+#if APP_TEST && !IR_CALIBRATION_ONLY && !IR_MOTOR_TEST
     /*
      * Test build (make TEST=1): run every subsystem's tests in turn, here in
      * the initial task, while the system is running. Tests may call
