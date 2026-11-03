@@ -42,6 +42,12 @@
 /* Side positions retain the median of nonzero samples. */
 #define OBSTACLE_PINGS_PER_ANGLE 3u
 
+/*
+ * Fine sweep: after both coarse ends, walk inward one grid step at a time
+ * from each end that missed the obstacle, one ping per angle.
+ */
+#define OBSTACLE_FINE_PINGS_PER_ANGLE 1u
+
 /* Centre confirmation: first near ping plus two usable pings, majority wins. */
 #define OBSTACLE_CENTRE_CONFIRM_PINGS 3u
 #define OBSTACLE_CENTRE_NEAR_VOTES 2u
@@ -85,11 +91,13 @@
 #define OBSTACLE_TICK_MS 10u
 
 /*
- * Provisional sound scale: millimetres per 10000 echo microseconds.
- * Replace scale and signed offset only after the OBS-U28 distance fit.
+ * Sound scale (millimetres per 10000 echo microseconds) and signed offset:
+ * provisional OBS-U28 fit, 2026-11-03_cal_ranging.txt, D = 0.1700 t - 18.
+ * Not accepted yet: residuals at 50, 200 and 500 mm exceed the rule; refit
+ * after re-measuring those distances.
  */
-#define OBSTACLE_SOUND_MM_PER_10K_US 1715u
-#define OBSTACLE_ECHO_OFFSET_MM 0
+#define OBSTACLE_SOUND_MM_PER_10K_US 1700u
+#define OBSTACLE_ECHO_OFFSET_MM (-18)
 
 /*
  * Convert D to ceil((D - offset) * 10000 / scale), for 0..400000 mm
@@ -107,19 +115,19 @@
  * Candidate thresholds, pending stopping-distance tests. Edit only the
  * millimetre values; the echo equivalents are derived.
  *
- * Detection: 300 mm -> 1750 us. A nearer centre reading requests a stop.
+ * Detection: 300 mm -> 1871 us. A nearer centre reading requests a stop.
  */
 #define OBSTACLE_DETECT_DISTANCE_MM 300u
 #define OBSTACLE_DETECT_ECHO_US                                                \
     OBSTACLE_MM_TO_ECHO_US(OBSTACLE_DETECT_DISTANCE_MM)
 
-/* Critical: 80 mm -> 467 us. One nearer centre reading sets the flag. */
+/* Critical: 80 mm -> 577 us. One nearer centre reading sets the flag. */
 #define OBSTACLE_CRITICAL_DISTANCE_MM 80u
 #define OBSTACLE_CRITICAL_ECHO_US                                              \
     OBSTACLE_MM_TO_ECHO_US(OBSTACLE_CRITICAL_DISTANCE_MM)
 
 /*
- * Critical release: 100 mm -> 584 us, the Week 6 minimum stopping gap.
+ * Critical release: 100 mm -> 695 us, the Week 6 minimum stopping gap.
  * The flag clears only after a complete centre group with no VALID reading
  * nearer than this. 80..100 mm is the hysteresis band.
  */
@@ -127,7 +135,11 @@
 #define OBSTACLE_CRITICAL_RELEASE_ECHO_US                                      \
     OBSTACLE_MM_TO_ECHO_US(OBSTACLE_CRITICAL_RELEASE_DISTANCE_MM)
 
-/* Candidate edge discontinuity: approximately 80 mm in radial range. */
+/*
+ * Width sweep: a VALID reading is on the obstacle (HIT) when it is nearer
+ * than the centre echo plus this margin, 466 us (about 80 mm). A flat face
+ * 300 mm ahead reads 271 us farther at 30 degrees, so it still counts.
+ */
 #define OBSTACLE_EDGE_JUMP_US 466u
 
 /*
@@ -140,13 +152,19 @@
 #define OBSTACLE_SERVO_SETTLE_MARGIN_MS 1000u
 
 /*
- * Width geometry: provisional zero corrections.
+ * Width geometry, provisional. Pivot offset is not measured yet (zero).
  * Pivot offset is signed, along the sensor's radial measurement axis.
  * A lateral mounting offset needs a separate coordinate transform.
- * Edge correction moves each detected edge toward the obstacle centre.
+ * A found edge lies half a step outside its hit; the edge correction then
+ * moves it toward the obstacle centre (beam spread). The 11 degree value is
+ * a single-case estimate (160 mm object at 300 mm, 2026-11-03_width_300.txt)
+ * that reads 155..159 mm; refit with OBS-U33 after OBS-U28/U29/U30 and the
+ * pivot measurement. Corrections above the maximum make the width
+ * unavailable.
  */
 #define OBSTACLE_SENSOR_RADIAL_OFFSET_MM 0.0f
-#define OBSTACLE_EDGE_CORRECTION_DEG 0.0f
+#define OBSTACLE_EDGE_CORRECTION_DEG 11.0f
+#define OBSTACLE_EDGE_CORRECTION_MAX_DEG 15.0f
 
 /*
  * Freshness. While the stop request is released, going longer than this
@@ -182,19 +200,40 @@
      OBSTACLE_TRANSACTION_MS + OBSTACLE_TICK_MS)
 
 /*
+ * Worst case for one fine angle: a one-step move, every allowed trigger,
+ * then the last transaction and one tick: 1000 + 3 * 70 + 25 + 10 = 1245 ms.
+ */
+#define OBSTACLE_FINE_POSITION_WORST_MS                                        \
+    (OBSTACLE_SETTLE_MS(OBSTACLE_SWEEP_STEP_DEG) +                             \
+     ((OBSTACLE_FINE_PINGS_PER_ANGLE + OBSTACLE_EXTRA_ATTEMPTS_PER_ANGLE) *    \
+      (OBSTACLE_PING_INTERVAL_MS + OBSTACLE_TICK_MS)) +                        \
+     OBSTACLE_TRANSACTION_MS + OBSTACLE_TICK_MS)
+
+/*
+ * Worst case for both fine walks: every index between an end and the
+ * centre (5 per side), plus the longest cross move, from 120 degrees to the
+ * first left index: 10 * 1245 + 1000 = 13450 ms today.
+ */
+#define OBSTACLE_FINE_SCAN_WORST_MS                                            \
+    ((2u * (OBSTACLE_CENTRE_INDEX - 1u) * OBSTACLE_FINE_POSITION_WORST_MS) +   \
+     OBSTACLE_SETTLE_MS(OBSTACLE_SWEEP_LAST_DEG - OBSTACLE_SWEEP_FIRST_DEG -   \
+                        OBSTACLE_SWEEP_STEP_DEG))
+
+/*
  * Worst case for a side scan: centre-to-left move, left position,
- * left-to-right move, right position. The return to centre happens after
- * the result is published. Today: 1000 + 1000 + 2 * 385 = 2770 ms.
+ * left-to-right move, right position, then both fine walks. The return to
+ * centre happens after the result is published.
+ * Today: 1000 + 1000 + 2 * 385 + 13450 = 16220 ms.
  */
 #define OBSTACLE_SIDE_SCAN_WORST_MS                                            \
     (OBSTACLE_SETTLE_MS(OBSTACLE_CENTRE_DEG - OBSTACLE_SWEEP_FIRST_DEG) +      \
      OBSTACLE_SETTLE_MS(OBSTACLE_SWEEP_LAST_DEG - OBSTACLE_SWEEP_FIRST_DEG) +  \
-     (2u * OBSTACLE_SIDE_POSITION_WORST_MS))
+     (2u * OBSTACLE_SIDE_POSITION_WORST_MS) + OBSTACLE_FINE_SCAN_WORST_MS)
 
 /*
  * Watchdog limits. The stop acknowledgement timeout belongs to the motion
- * handshake (integration). The side-scan timeout is twice the worst case:
- * 5540 ms today, about 2240 ms once the servo is calibrated.
+ * handshake (integration). The side-scan timeout is twice the worst case,
+ * 32440 ms today. It is a fail-safe bound, not a performance target.
  */
 #define OBSTACLE_STOP_ACK_TIMEOUT_MS 500u
 #define OBSTACLE_SCAN_TIMEOUT_MS (2u * OBSTACLE_SIDE_SCAN_WORST_MS)
@@ -212,8 +251,12 @@
 #define OBSTACLE_CALIBRATION_MODE OBSTACLE_CAL_MODE_OFF
 #define OBSTACLE_CAL_PINGS 20u
 
-/* Mode 3 destination; move from the opposite side after fully settling. */
+/*
+ * Mode 3 destination, and the size of each trial move towards it: 60 moves
+ * from the opposite end, 5 checks single fine-sweep steps.
+ */
 #define OBSTACLE_CAL_SETTLE_TARGET_DEG 60
+#define OBSTACLE_CAL_SETTLE_MOVE_DEG 60
 
 /* Signed command correction: physical centre command minus 90 degrees. */
 #define OBSTACLE_SERVO_TRIM_DEG 0
@@ -254,6 +297,14 @@
 #if (OBSTACLE_CAL_SETTLE_TARGET_DEG != 60) &&                                  \
     (OBSTACLE_CAL_SETTLE_TARGET_DEG != 120)
 #error "Calibration settle destination must be 60 or 120 degrees"
+#endif
+
+#if (OBSTACLE_CAL_SETTLE_MOVE_DEG != 60) && (OBSTACLE_CAL_SETTLE_MOVE_DEG != 5)
+#error "Calibration settle move must be 60 or 5 degrees"
+#endif
+
+#if OBSTACLE_FINE_PINGS_PER_ANGLE != 1u
+#error "The fine walk reads exactly one ping per angle"
 #endif
 
 #if (OBSTACLE_CENTRE_CONFIRM_PINGS != 3u) || (OBSTACLE_CENTRE_NEAR_VOTES != 2u)
