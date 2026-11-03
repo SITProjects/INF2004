@@ -9,7 +9,7 @@ app_program/
     app_main.c / app.h      usermain(): init then start every subsystem
     test_report.h           TEST_CHECK helpers for make TEST=1
     obstacle/               ultrasonic + servo scan      (task, core 0)
-    motion/                 motors, encoders, open loop  (no task yet)
+    motion/                 motors, encoders, moves      (tMotion task)
     line_follow/            IR sensors -> line commands  (task)
     terrain/                GY-511 IMU, calibration      (task)
     communication/          Wi-Fi status                 (task)
@@ -35,9 +35,10 @@ Start-up: the kernel calls `usermain()` in the initial task. It calls every
 Dependencies point downwards only: subsystem tasks call their feature
 modules; feature modules call their drivers; drivers call the kernel, the
 board helpers in `bsp/libbsp.h`, the kernel device drivers, or registers.
-Subsystems do not call each other yet. When they do, they communicate
-through kernel objects listed in `TEAM.md` section 5 and
-[`../interfaces/README.md`](../interfaces/README.md).
+Subsystems communicate only through kernel objects and the non-blocking
+functions listed in `TEAM.md` section 5 and
+[`../interfaces/README.md`](../interfaces/README.md); motion's are
+proposed there and not yet agreed.
 
 Hardware ownership (one owning task per peripheral) and task priorities are
 in `TEAM.md` sections 3 and 4.

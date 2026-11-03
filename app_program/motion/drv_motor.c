@@ -14,7 +14,7 @@
 #include <bsp/libbsp.h>
 
 /* Private types, constants, and macros. */
-#define MOTOR_PWM_FREQ_HZ 10000u
+#define MOTOR_PWM_FREQ_HZ 20000u
 #define MOTOR_PWM_MAX_WRAP 65535u
 #define MOTOR_PWM_MAX_DIVIDER 255u
 

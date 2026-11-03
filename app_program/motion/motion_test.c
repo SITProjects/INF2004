@@ -22,7 +22,7 @@
 /* Private types, constants, and macros. */
 #define PWM_SLICE_STRIDE 0x14u
 #define PWM_SLICE_COUNT 8u
-#define MOTOR_WRAP_10KHZ (((UW)SYSCLK * 100u) - 1u) /* clk_sys / 10 kHz - 1 */
+#define MOTOR_WRAP_20KHZ (((UW)SYSCLK * 50u) - 1u) /* clk_sys / 20 kHz - 1 */
 
 /* PIO0 CTRL; the encoders run on state machines 2 and 3 (drv_encoder.c). */
 #define PIO0_CTRL 0x50200000u
@@ -54,6 +54,38 @@
 #error "MOTION_UPDATE_PERIOD_MS must be a multiple of the tick, above it"
 #endif
 #define UPDATE_DELAY_MS (MOTION_UPDATE_PERIOD_MS - CNF_TIMER_PERIOD)
+
+/*
+ * MOT-U34: run tMotion this long, then check its wake-up periods are
+ * within PERIOD_JITTER_US of MOTION_UPDATE_PERIOD_MS (NFR1, A1).
+ */
+#define TASK_RUN_MS 1000
+#define PERIOD_JITTER_US 1000u
+#define US_PER_MS 1000u
+
+/* MOT-U35, MOT-U36: tMotion acts on a command within this many ms. */
+#define TASK_REACT_MS (3 * (INT)MOTION_UPDATE_PERIOD_MS)
+
+/* MOT-U38: read the shared odometry across this many updates. */
+#define SHARED_CHECK_MS 200
+#define SHARED_UPDATE_SLACK 2u
+
+/* NFR6: INHIBIT brakes within this long. */
+#define INHIBIT_LIMIT_US 20000u
+
+#if MOTION_TASK_TESTS
+/* MOT-U36, MOT-U37: tMotion commands on the lifted car. */
+#define TASK_START_DELAY_MS 10000
+#define TASK_SHORT_MM 300u
+#define TASK_LONG_MM 1000u
+/* 300 mm at 200 mm/s takes 1.5 s; allow for start and braking. */
+#define TASK_SHORT_DONE_MS 4000
+#define TASK_INTERRUPT_MS 500
+#define TASK_QUIET_MS 2500
+#define TASK_FOLLOW_MS 1500
+#define TASK_FOLLOW_END_MS 300
+#define TASK_STALL_WAIT_MS 5000
+#endif /* MOTION_TASK_TESTS */
 
 #if MOTION_MANUAL_TESTS
 #define TURN_WINDOW_MS 120000
@@ -197,6 +229,18 @@ static BOOL update_period_ok (void);
 static ER wait_update_period (void);
 static BOOL sync_idle_at_rest (void);
 static BOOL follow_idle_at_rest (void);
+static BOOL command_packing_ok (void);
+static BOOL task_timing_ok (void);
+static BOOL task_refusals_ok (void);
+static BOOL shared_odometry_ok (void);
+static BOOL send_command (uint32_t cmd);
+static UINT wait_events (UINT bits, INT timeout_ms);
+static BOOL wait_mode (robot_motion_mode_t mode, INT timeout_ms);
+static BOOL inhibit_latency_ok (char const * p_id, uint32_t set_us);
+#if MOTION_TASK_TESTS
+static BOOL task_commands_lifted (void);
+static BOOL task_stall_lifted (void);
+#endif
 #if MOTION_MANUAL_TESTS
 static void print_counts_while_turning (void);
 static void spin_each_wheel (void);
@@ -254,11 +298,21 @@ motion_test (void)
 {
     TEST_INIT();
 
-    /* MOT-U01: both motors' slices run at 10 kHz with both inputs low. */
+    /*
+     * MOT-U01..U32 call the motion module directly, so tMotion hands it
+     * over first and takes it back for MOT-U34 onwards.
+     */
+    if (motion_task_hold(true) != E_OK)
+    {
+        tm_printf((UB *)"[TEST] motion: tMotion did not stop; results of "
+                        "MOT-U01..U32 are unreliable\n");
+    }
+
+    /* MOT-U01: both motors' slices run at 20 kHz with both inputs low. */
     TEST_CHECK("MOT-U01",
                slice_braked(MOTION_LEFT_MOTOR_PIN_A) &&
                    slice_braked(MOTION_RIGHT_MOTOR_PIN_A),
-               "both motors run 10 kHz PWM and are braked");
+               "both motors run 20 kHz PWM and are braked");
 
     /* MOT-U03: both encoder state machines run; counts hold at rest. */
     TEST_CHECK("MOT-U03",
@@ -341,19 +395,46 @@ motion_test (void)
     follow_arcs_floor();
 #endif
 
+    /* MOT-U33: command word packing, limits and decoding; no motors. */
+    TEST_CHECK("MOT-U33", command_packing_ok(),
+               "motion commands pack, saturate and decode");
+
+    /* MOT-U34: tMotion wakes every period while the system runs. */
+    TEST_CHECK("MOT-U34", task_timing_ok(),
+               "tMotion updates every period within 1 ms (NFR1)");
+
+    /* MOT-U35: invalid commands refused, INHIBIT discards; no motors. */
+    TEST_CHECK("MOT-U35", task_refusals_ok(),
+               "tMotion refuses bad commands, INHIBIT brakes and flushes");
+
+    /* MOT-U38: shared odometry updates every period; no motors. */
+    TEST_CHECK("MOT-U38", shared_odometry_ok(),
+               "shared odometry rises every update and holds at rest");
+
+#if MOTION_TASK_TESTS
+    /* MOT-U36, MOT-U37: manual; see testing/motion/TEST_LOG.md. */
+    TEST_CHECK("MOT-U36", task_commands_lifted(),
+               "MOVE_DONE, preemption, STOP, INHIBIT and FOLLOW via tMotion");
+    TEST_CHECK("MOT-U37", task_stall_lifted(),
+               "held wheel raises STALL via tMotion until STOP");
+#endif
+
+    /* Leave tMotion running the car for the rest of the system. */
+    (void)motion_task_hold(false);
+
     TEST_SUMMARY("motion");
 }
 
 /* Private function definitions. */
 
-/* The slice of @p pin is enabled, wraps for 10 kHz, and both levels are 0. */
+/* The slice of @p pin is enabled, wraps for 20 kHz, and both levels are 0. */
 static BOOL
 slice_braked (UW pin)
 {
     UW base = PWM_BASE + (PWM_SLICE_STRIDE * ((pin / 2u) % PWM_SLICE_COUNT));
 
     return ((in_w(base + PWM_CHx_CSR) & PWM_CH_CSR_EN) != 0u) &&
-           (in_w(base + PWM_CHx_TOP) == MOTOR_WRAP_10KHZ) &&
+           (in_w(base + PWM_CHx_TOP) == MOTOR_WRAP_20KHZ) &&
            (in_w(base + PWM_CHx_CC) == 0u);
 }
 
@@ -588,6 +669,351 @@ follow_idle_at_rest (void)
            !motion_move_is_busy() && slice_braked(MOTION_LEFT_MOTOR_PIN_A) &&
            slice_braked(MOTION_RIGHT_MOTOR_PIN_A);
 }
+
+/*
+ * Each command packs into its fields, saturates at the field limits
+ * without touching its neighbours, and leaves the reserved bits clear.
+ */
+static BOOL
+command_packing_ok (void)
+{
+    uint32_t move = robot_motion_cmd_move(500u, true, true);
+    uint32_t move_max = robot_motion_cmd_move(1023u, false, false);
+    uint32_t move_over = robot_motion_cmd_move(5000u, false, false);
+    uint32_t turn = robot_motion_cmd_turn(90u, true, false);
+    uint32_t turn_max = robot_motion_cmd_turn(180u, false, true);
+    uint32_t turn_over = robot_motion_cmd_turn(181u, false, false);
+    uint32_t follow = robot_motion_cmd_follow();
+    uint32_t stop = robot_motion_cmd_stop();
+
+    BOOL b_move = (ROBOT_MOTION_CMD_MOVE == robot_motion_cmd_get_type(move)) &&
+                  (500u == robot_motion_cmd_get_distance(move)) &&
+                  robot_motion_cmd_get_reverse(move) &&
+                  robot_motion_cmd_get_stop_at_line(move) &&
+                  (0u == robot_motion_cmd_get_angle(move)) &&
+                  (1023u == robot_motion_cmd_get_distance(move_max)) &&
+                  !robot_motion_cmd_get_reverse(move_max) &&
+                  !robot_motion_cmd_get_stop_at_line(move_max) &&
+                  (0u == robot_motion_cmd_get_angle(move_max)) &&
+                  (1023u == robot_motion_cmd_get_distance(move_over));
+    BOOL b_turn = (ROBOT_MOTION_CMD_TURN == robot_motion_cmd_get_type(turn)) &&
+                  (90u == robot_motion_cmd_get_angle(turn)) &&
+                  robot_motion_cmd_get_reverse(turn) &&
+                  !robot_motion_cmd_get_stop_at_line(turn) &&
+                  (180u == robot_motion_cmd_get_angle(turn_max)) &&
+                  robot_motion_cmd_get_stop_at_line(turn_max) &&
+                  (0u == robot_motion_cmd_get_distance(turn_max)) &&
+                  (180u == robot_motion_cmd_get_angle(turn_over));
+    BOOL b_other =
+        (ROBOT_MOTION_CMD_FOLLOW == robot_motion_cmd_get_type(follow)) &&
+        (ROBOT_MOTION_CMD_STOP == robot_motion_cmd_get_type(stop)) &&
+        (0u == stop);
+    uint32_t all =
+        move | move_max | move_over | turn | turn_max | turn_over | follow;
+    return b_move && b_turn && b_other &&
+           (0u == (all & ROBOT_MOTION_CMD_RESERVED_MASK));
+}
+
+/*
+ * Let tMotion run for TASK_RUN_MS while every other task runs, then check
+ * each period between its updates is MOTION_UPDATE_PERIOD_MS within
+ * PERIOD_JITTER_US. Ends with tMotion held.
+ */
+static BOOL
+task_timing_ok (void)
+{
+    motion_task_timing_t timing;
+    uint32_t period_us = MOTION_UPDATE_PERIOD_MS * US_PER_MS;
+    /* Hand-over at each end may cost up to a period each. */
+    uint32_t min_updates = (TASK_RUN_MS / MOTION_UPDATE_PERIOD_MS) - 2u;
+
+    if ((motion_task_hold(false) != E_OK) ||
+        (tk_dly_tsk(TASK_RUN_MS) != E_OK) || (motion_task_hold(true) != E_OK))
+    {
+        return FALSE;
+    }
+    motion_task_get_timing(&timing);
+    tm_printf((UB *)"[TEST] MOT-U34 %d updates, period %d..%d us "
+                    "(%d expected), longest update %d us\n",
+              (INT)timing.updates, (INT)timing.min_period_us,
+              (INT)timing.max_period_us, (INT)period_us,
+              (INT)timing.max_busy_us);
+    return (timing.updates >= min_updates) &&
+           (timing.min_period_us + PERIOD_JITTER_US >= period_us) &&
+           (timing.max_period_us <= period_us + PERIOD_JITTER_US);
+}
+
+/*
+ * Through MBF_MOTION_CMD, with tMotion running: a word with reserved bits,
+ * a 0 mm move and a turn above 180 degrees are refused, a stop is not.
+ * Then INHIBIT: mode INHIBITED, a command sent meanwhile is discarded
+ * (an invalid one, so the wheels never move even if it ran), and clearing
+ * it returns to STOPPED. Nothing here drives the motors. Ends held.
+ */
+static BOOL
+task_refusals_ok (void)
+{
+    T_RMBF rmbf;
+    uint32_t bad_turn = (uint32_t)ROBOT_MOTION_CMD_TURN |
+                        (200u << ROBOT_MOTION_CMD_ANGLE_SHIFT);
+
+    if (motion_task_hold(false) != E_OK)
+    {
+        return FALSE;
+    }
+    (void)tk_clr_flg(motion_flg_event, 0u);
+
+    BOOL b_refused = send_command(ROBOT_MOTION_CMD_RESERVED_MASK) &&
+                     (MOTION_EVT_REJECTED ==
+                      wait_events(MOTION_EVT_REJECTED, TASK_REACT_MS)) &&
+                     send_command(robot_motion_cmd_move(0u, false, false)) &&
+                     (MOTION_EVT_REJECTED ==
+                      wait_events(MOTION_EVT_REJECTED, TASK_REACT_MS)) &&
+                     send_command(bad_turn) &&
+                     (MOTION_EVT_REJECTED ==
+                      wait_events(MOTION_EVT_REJECTED, TASK_REACT_MS));
+    BOOL b_stop = send_command(robot_motion_cmd_stop()) &&
+                  (0u == wait_events(MOTION_EVT_REJECTED, TASK_REACT_MS)) &&
+                  wait_mode(ROBOT_MOTION_MODE_STOPPED, TASK_REACT_MS);
+
+    uint32_t set_us = (uint32_t)in_w(TIMER_TIMERAWL);
+    (void)tk_set_flg(motion_flg_ctrl, MOTION_FLG_INHIBIT);
+    BOOL b_inhibited =
+        wait_mode(ROBOT_MOTION_MODE_INHIBITED, TASK_REACT_MS) &&
+        send_command(ROBOT_MOTION_CMD_RESERVED_MASK) &&
+        (0u == wait_events(MOTION_EVT_REJECTED, TASK_REACT_MS)) &&
+        (tk_ref_mbf(motion_mbf_cmd, &rmbf) == E_OK) && (0 == rmbf.msgsz) &&
+        (ROBOT_MOTION_MODE_INHIBITED == motion_get_status().mode);
+    (void)tk_clr_flg(motion_flg_ctrl, ~(UINT)MOTION_FLG_INHIBIT);
+    BOOL b_cleared = wait_mode(ROBOT_MOTION_MODE_STOPPED, TASK_REACT_MS) &&
+                     (0u == wait_events(MOTION_EVT_REJECTED, TASK_REACT_MS));
+
+    BOOL b_held = (motion_task_hold(true) == E_OK);
+    BOOL b_latency = b_held && inhibit_latency_ok("MOT-U35", set_us);
+    tm_printf((UB *)"[TEST] MOT-U35 refused %d stop %d inhibited %d "
+                    "cleared %d\n",
+              (INT)b_refused, (INT)b_stop, (INT)b_inhibited, (INT)b_cleared);
+    return b_refused && b_stop && b_inhibited && b_cleared && b_latency &&
+           slice_braked(MOTION_LEFT_MOTOR_PIN_A) &&
+           slice_braked(MOTION_RIGHT_MOTOR_PIN_A);
+}
+
+/*
+ * With tMotion running and the car at rest, motion_get_odometry() refuses
+ * NULL, its update count rises by one per period over SHARED_CHECK_MS,
+ * distance and heading hold and every speed is 0. Ends held.
+ */
+static BOOL
+shared_odometry_ok (void)
+{
+    motion_shared_odometry_t first = {0};
+    motion_shared_odometry_t last = {0};
+    uint32_t expected = SHARED_CHECK_MS / MOTION_UPDATE_PERIOD_MS;
+
+    if ((motion_task_hold(false) != E_OK) ||
+        (tk_dly_tsk(MOTION_UPDATE_PERIOD_MS) != E_OK))
+    {
+        return FALSE;
+    }
+    BOOL b_read = !motion_get_odometry(NULL) && motion_get_odometry(&first) &&
+                  (tk_dly_tsk(SHARED_CHECK_MS) == E_OK) &&
+                  motion_get_odometry(&last);
+    BOOL b_held = (motion_task_hold(true) == E_OK);
+    uint32_t updates = last.updates - first.updates;
+
+    tm_printf((UB *)"[TEST] MOT-U38 %d updates in %d ms (%d expected), "
+                    "distance %d mm, heading %d deg\n",
+              (INT)updates, SHARED_CHECK_MS, (INT)expected,
+              (INT)last.distance_mm, (INT)last.heading_deg);
+    return b_read && b_held && (updates + SHARED_UPDATE_SLACK >= expected) &&
+           (updates <= expected + SHARED_UPDATE_SLACK) &&
+           (first.distance_mm == last.distance_mm) &&
+           (first.heading_deg == last.heading_deg) && (0 == last.speed_mm_s) &&
+           (0 == last.left_speed_mm_s) && (0 == last.right_speed_mm_s);
+}
+
+/* Queue one command for tMotion, as tMission does. */
+static BOOL
+send_command (uint32_t cmd)
+{
+    return tk_snd_mbf(motion_mbf_cmd, &cmd, (INT)sizeof(cmd),
+                      (TMO)TASK_REACT_MS) == E_OK;
+}
+
+/* Wait for any of @p bits; clear and return those set, or 0 on timeout. */
+static UINT
+wait_events (UINT bits, INT timeout_ms)
+{
+    UINT flags = 0u;
+
+    if (tk_wai_flg(motion_flg_event, bits, TWF_ORW, &flags, (TMO)timeout_ms) !=
+        E_OK)
+    {
+        return 0u;
+    }
+    (void)tk_clr_flg(motion_flg_event, ~(flags & bits));
+    return flags & bits;
+}
+
+/* Poll motion_get_status() each period until it reports @p mode. */
+static BOOL
+wait_mode (robot_motion_mode_t mode, INT timeout_ms)
+{
+    for (INT elapsed = 0; elapsed < timeout_ms;
+         elapsed += (INT)MOTION_UPDATE_PERIOD_MS)
+    {
+        if (motion_get_status().mode == mode)
+        {
+            return TRUE;
+        }
+        (void)tk_dly_tsk(MOTION_UPDATE_PERIOD_MS);
+    }
+    return motion_get_status().mode == mode;
+}
+
+/*
+ * Print and check the time from @p set_us (TIMER read just before setting
+ * INHIBIT) to tMotion braking (NFR6). Call while tMotion is held.
+ */
+static BOOL
+inhibit_latency_ok (char const * p_id, uint32_t set_us)
+{
+    motion_task_timing_t timing;
+
+    motion_task_get_timing(&timing);
+    uint32_t latency_us = timing.inhibit_brake_us - set_us;
+    tm_printf((UB *)"[TEST] %s INHIBIT to brake %d us (limit %d)\n", p_id,
+              (INT)latency_us, (INT)INHIBIT_LIMIT_US);
+    return latency_us <= INHIBIT_LIMIT_US;
+}
+
+#if MOTION_TASK_TESTS
+/*
+ * On the lifted car, through MBF_MOTION_CMD: (a) a move ends with
+ * MOVE_DONE (DIST); (b) a move replaced by another raises MOVE_DONE only
+ * for the second; (c) STOP ends a move without MOVE_DONE; (d) INHIBIT
+ * brakes a move within NFR6 and discards a move sent meanwhile; (e) FOLLOW
+ * runs on the interim line input and ends with FOLLOW_ENDED once readings
+ * stop. Ends with tMotion running.
+ */
+static BOOL
+task_commands_lifted (void)
+{
+    UINT const any_end = MOTION_EVT_MOVE_DONE | MOTION_EVT_STALL |
+                         MOTION_EVT_ENC_FAULT | MOTION_EVT_REJECTED;
+
+    tm_printf((UB *)"[TEST] MOT-U36 keep the car lifted: the wheels spin "
+                    "in %d s, for about 20 s\n",
+              TASK_START_DELAY_MS / 1000);
+    if ((motion_task_hold(false) != E_OK) ||
+        (tk_dly_tsk(TASK_START_DELAY_MS) != E_OK))
+    {
+        return FALSE;
+    }
+    (void)tk_clr_flg(motion_flg_event, 0u);
+
+    /* (a) */
+    BOOL b_done =
+        send_command(robot_motion_cmd_move(TASK_SHORT_MM, false, false)) &&
+        (MOTION_EVT_MOVE_DONE == wait_events(any_end, TASK_SHORT_DONE_MS)) &&
+        (ROBOT_MOTION_DONE_DIST == motion_get_status().done) &&
+        (ROBOT_MOTION_MODE_STOPPED == motion_get_status().mode);
+
+    /* (b) */
+    BOOL b_replaced =
+        send_command(robot_motion_cmd_move(TASK_LONG_MM, false, false)) &&
+        (0u == wait_events(any_end, TASK_INTERRUPT_MS)) &&
+        send_command(robot_motion_cmd_move(TASK_SHORT_MM, true, false)) &&
+        (MOTION_EVT_MOVE_DONE == wait_events(any_end, TASK_SHORT_DONE_MS));
+
+    /* (c) */
+    BOOL b_stopped =
+        send_command(robot_motion_cmd_move(TASK_LONG_MM, false, false)) &&
+        (tk_dly_tsk(TASK_INTERRUPT_MS) == E_OK) &&
+        send_command(robot_motion_cmd_stop()) &&
+        wait_mode(ROBOT_MOTION_MODE_STOPPED, TASK_REACT_MS) &&
+        (0u == wait_events(any_end, TASK_QUIET_MS));
+
+    /* (d) */
+    BOOL b_inhibited =
+        send_command(robot_motion_cmd_move(TASK_LONG_MM, true, false)) &&
+        (tk_dly_tsk(TASK_INTERRUPT_MS) == E_OK);
+    uint32_t set_us = (uint32_t)in_w(TIMER_TIMERAWL);
+    (void)tk_set_flg(motion_flg_ctrl, MOTION_FLG_INHIBIT);
+    b_inhibited =
+        b_inhibited && wait_mode(ROBOT_MOTION_MODE_INHIBITED, TASK_REACT_MS) &&
+        send_command(robot_motion_cmd_move(TASK_SHORT_MM, false, false)) &&
+        (tk_dly_tsk(TASK_REACT_MS) == E_OK) &&
+        (ROBOT_MOTION_MODE_INHIBITED == motion_get_status().mode);
+    (void)tk_clr_flg(motion_flg_ctrl, ~(UINT)MOTION_FLG_INHIBIT);
+    b_inhibited = b_inhibited &&
+                  wait_mode(ROBOT_MOTION_MODE_STOPPED, TASK_REACT_MS) &&
+                  (0u == wait_events(any_end, TASK_QUIET_MS)) &&
+                  (motion_task_hold(true) == E_OK) &&
+                  inhibit_latency_ok("MOT-U36", set_us) &&
+                  (motion_task_hold(false) == E_OK);
+
+    /* (e) Readings first, so FOLLOW sees a fresh, debounced line. */
+    BOOL b_follow = TRUE;
+    for (INT elapsed = 0; elapsed < TASK_FOLLOW_MS;
+         elapsed += (INT)MOTION_UPDATE_PERIOD_MS)
+    {
+        motion_set_line_input(0, true);
+        if ((elapsed == TASK_REACT_MS) &&
+            !send_command(robot_motion_cmd_follow()))
+        {
+            b_follow = FALSE;
+        }
+        (void)tk_dly_tsk(MOTION_UPDATE_PERIOD_MS);
+    }
+    b_follow =
+        b_follow && (ROBOT_MOTION_MODE_FOLLOW == motion_get_status().mode) &&
+        (MOTION_EVT_FOLLOW_ENDED ==
+         wait_events(MOTION_EVT_FOLLOW_ENDED | any_end,
+                     (INT)MOTION_LINE_TIMEOUT_MS + TASK_FOLLOW_END_MS)) &&
+        (ROBOT_MOTION_MODE_STOPPED == motion_get_status().mode);
+
+    tm_printf((UB *)"[TEST] MOT-U36 (a) done %d (b) replaced %d (c) stopped "
+                    "%d (d) inhibited %d (e) follow %d\n",
+              (INT)b_done, (INT)b_replaced, (INT)b_stopped, (INT)b_inhibited,
+              (INT)b_follow);
+    return b_done && b_replaced && b_stopped && b_inhibited && b_follow;
+}
+
+/*
+ * On the lifted car with the left wheel held: a move through tMotion
+ * raises STALL, mode STALLED; a new move is refused until STOP.
+ */
+static BOOL
+task_stall_lifted (void)
+{
+    tm_printf((UB *)"[TEST] MOT-U37 keep the car lifted and hold the LEFT "
+                    "wheel still; the right wheel spins in %d s\n",
+              TASK_START_DELAY_MS / 1000);
+    (void)tk_dly_tsk(TASK_START_DELAY_MS);
+    (void)tk_clr_flg(motion_flg_event, 0u);
+
+    BOOL b_stalled =
+        send_command(robot_motion_cmd_move(TASK_LONG_MM, false, false)) &&
+        (MOTION_EVT_STALL ==
+         wait_events(MOTION_EVT_STALL | MOTION_EVT_MOVE_DONE |
+                         MOTION_EVT_ENC_FAULT,
+                     TASK_STALL_WAIT_MS)) &&
+        (ROBOT_MOTION_MODE_STALLED == motion_get_status().mode);
+    BOOL b_refused =
+        send_command(robot_motion_cmd_move(TASK_SHORT_MM, false, false)) &&
+        (MOTION_EVT_REJECTED ==
+         wait_events(MOTION_EVT_REJECTED, TASK_REACT_MS)) &&
+        (ROBOT_MOTION_MODE_STALLED == motion_get_status().mode);
+    BOOL b_cleared = send_command(robot_motion_cmd_stop()) &&
+                     wait_mode(ROBOT_MOTION_MODE_STOPPED, TASK_REACT_MS);
+
+    tm_printf((UB *)"[TEST] MOT-U37 stalled %d refused %d cleared %d; "
+                    "let go\n",
+              (INT)b_stalled, (INT)b_refused, (INT)b_cleared);
+    return b_stalled && b_refused && b_cleared;
+}
+#endif /* MOTION_TASK_TESTS */
 
 #if MOTION_MANUAL_TESTS
 /* Print both counts while a tester turns the wheels by hand. */
