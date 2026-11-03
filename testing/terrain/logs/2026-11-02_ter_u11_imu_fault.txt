@@ -1,0 +1,19 @@
+TER-U11: IMU fault raised when the sensor stops and cleared when it is back
+Date: 2026-11-02
+Firmware: make (normal) at 4a4be96 + new level reference
+(2026-11-02_ter_u06_level_ref.txt), TERRAIN_TEST_BENCH 0
+Setup: loose GY-511 on Grove 3, taped flat as for TER-U06. Calibration
+reached VALID at boot (seen on an earlier boot of the same image; the
+console was opened after boot for this run). Grove cable pulled at the
+IMU end, then plugged back in after a few seconds.
+Only the console lines around the test are copied.
+
+[132250 ms]obstacle: [0x04] UNKNOWN dir -1
+terrain: IMU fault raised
+[139950 ms]obstacle: [0x04] UNKNOWN dir -1
+terrain: IMU fault cleared
+[147630 ms]obstacle: [0x04] UNKNOWN dir -1
+
+No terrain: calibration line after the fault, so calibration stayed VALID.
+Not checked: that samples kept arriving after the reconnect (the sensor
+may restart in power-down mode; see the stall finding).
