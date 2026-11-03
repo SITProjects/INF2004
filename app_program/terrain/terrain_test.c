@@ -7,9 +7,10 @@
  * output to testing/terrain/logs/ and record the result in
  * testing/terrain/TEST_LOG.md. Test IDs: TER-U01, TER-U02, ...
  *
- * All tests need the GY-511 connected; TER-U02 and TER-U04 also need the
- * car standing still on level ground during power-up. No test waits for
- * a person: every wait is bounded.
+ * TER-U12 runs the hump state machine and event queue on made-up data and
+ * needs only the Pico. The other tests need the GY-511 connected; TER-U02,
+ * TER-U04 and TER-U13 also need the car standing still on level ground
+ * during power-up. No test waits for a person: every wait is bounded.
  *
  * The bench tests TER-U06 and TER-U07 are added only with
  * TERRAIN_TEST_BENCH set to 1 in terrain_config.h. They print what to do
@@ -20,7 +21,10 @@
 #include "terrain.h"
 #include "../test_report.h"
 #include "terrain_config.h"
+#include "terrain_detect.h"
+#include "terrain_event.h"
 #include "terrain_monitor.h"
+#include "terrain_process.h"
 
 #if APP_TEST
 
@@ -32,6 +36,14 @@
 #define TILT_SETTLE_MS 500 /* Over three smoothing time constants. */
 #define LEVEL_TOL_DDEG 10  /* 1 degree. */
 
+/* TER-U12 trace: pitch well past the 4 degree limits, in degrees. */
+#define TRACE_UP_DEG 8.0f
+#define TRACE_DOWN_DEG (-8.0f)
+#define TRACE_FLAT_DEG 0.0f
+#define TRACE_UP_DDEG 80
+#define DDEG_PER_DEG 10.0f
+#define TRACE_EVENTS_MAX 8u
+
 #if TERRAIN_TEST_BENCH
 #define COUNTDOWN_S 5
 #define ONE_S_MS 1000
@@ -41,7 +53,16 @@
 #define MILLI_PER_UNIT 1000
 #endif
 
+/** @brief One stretch of the TER-U12 pitch trace. */
+typedef struct
+{
+    float pitch_deg;  /**< Pitch for the whole stretch. */
+    uint32_t samples; /**< Length, samples. */
+} trace_part_t;
+
 /* Private function declarations. */
+static bool hump_trace_ok (void);
+static bool queue_drops_oldest (void);
 #if TERRAIN_TEST_BENCH
 static bool bench_step (char const * p_instruction,
                         terrain_calib_info_t * p_out);
@@ -100,6 +121,25 @@ terrain_test (void)
                    (roll_ddeg > -LEVEL_TOL_DDEG),
                "pitch and roll within 1 degree of 0 at rest");
 
+    /* TER-U12: hump machine and queue on made-up data (no IMU needed). */
+    TEST_CHECK("TER-U12", hump_trace_ok(),
+               "hump trace gives ASCENDING, DESCENDING, LEVEL only");
+    TEST_CHECK("TER-U12", queue_drops_oldest(),
+               "full event queue drops the oldest event");
+
+    /* TER-U13: still and level, so no hump and no events. */
+    terrain_data_t still = {0};
+    terrain_event_t event = {0u};
+    terrain_status_t const data_status = terrain_monitor_get_latest(&still);
+    terrain_status_t const event_status = terrain_monitor_poll_event(&event);
+    TEST_CHECK(
+        "TER-U13",
+        (data_status == TERRAIN_OK) &&
+            (terrain_monitor_data_hump_state(&still) == TERRAIN_HUMP_LEVEL) &&
+            (event_status == TERRAIN_OK) &&
+            (terrain_monitor_event_type(&event) == TERRAIN_EVENT_NONE),
+        "hump LEVEL and no events at rest");
+
 #if TERRAIN_TEST_BENCH
     /* TER-U06: record the level reference; replaces the old L key. */
     terrain_calib_info_t level = {0};
@@ -145,6 +185,88 @@ terrain_test (void)
 }
 
 /* Private function definitions. */
+
+/*
+ * TER-U12: a 4-sample spike (ignored), then one hump. Only ASCENDING,
+ * DESCENDING and LEVEL may come out, in that order, with the climb's
+ * pitch as its value.
+ */
+static bool
+hump_trace_ok (void)
+{
+    static trace_part_t const trace[] = {
+        {TRACE_FLAT_DEG, 20u}, {TRACE_UP_DEG, TERRAIN_HUMP_ENTER_SAMPLES - 1u},
+        {TRACE_FLAT_DEG, 10u}, {TRACE_UP_DEG, 15u},
+        {TRACE_FLAT_DEG, 10u}, {TRACE_DOWN_DEG, 15u},
+        {TRACE_FLAT_DEG, 20u}};
+    static terrain_event_type_t const expected[] = {
+        TERRAIN_EVENT_ASCENDING, TERRAIN_EVENT_DESCENDING, TERRAIN_EVENT_LEVEL};
+    terrain_hump_limits_t const limits = {
+        TERRAIN_HUMP_UP_DEG,        TERRAIN_HUMP_TOP_DEG,
+        TERRAIN_HUMP_DOWN_DEG,      TERRAIN_HUMP_LEVEL_DEG,
+        TERRAIN_HUMP_ENTER_SAMPLES, TERRAIN_HUMP_LEVEL_SAMPLES};
+
+    terrain_event_queue_t queue;
+    terrain_event_queue_reset(&queue);
+    uint32_t word = 0u;
+    uint32_t tick = 0u;
+    for (uint32_t part = 0u; part < (sizeof(trace) / sizeof(trace[0])); part++)
+    {
+        for (uint32_t i = 0u; i < trace[part].samples; i++)
+        {
+            terrain_event_type_t const type =
+                terrain_detect_hump_step(&word, trace[part].pitch_deg, &limits);
+            uint32_t const value = terrain_process_encode_signed(
+                trace[part].pitch_deg, DDEG_PER_DEG, TERRAIN_EVENT_VALUE_BITS);
+            terrain_event_queue_push(&queue,
+                                     terrain_event_make(type, value, tick));
+            tick++;
+        }
+    }
+
+    uint32_t const n = sizeof(expected) / sizeof(expected[0]);
+    bool b_ok = (terrain_event_queue_count(&queue) == n) &&
+                (terrain_detect_hump_state(word) == TERRAIN_HUMP_LEVEL);
+    for (uint32_t i = 0u; i < n; i++)
+    {
+        terrain_event_t const event = terrain_event_queue_pop(&queue);
+        b_ok = b_ok && (terrain_event_type(event) == expected[i]);
+        if (i == 0u)
+        {
+            b_ok = b_ok && (terrain_event_value(event) == TRACE_UP_DDEG);
+        }
+    }
+    return b_ok && (terrain_event_type(terrain_event_queue_pop(&queue)) ==
+                    TERRAIN_EVENT_NONE);
+}
+
+/*
+ * TER-U12: one event more than the queue holds drops the first one;
+ * the rest come out in order, then NONE.
+ */
+static bool
+queue_drops_oldest (void)
+{
+    terrain_event_queue_t queue;
+    terrain_event_queue_reset(&queue);
+    for (uint32_t i = 0u; i <= TERRAIN_EVENT_QUEUE_LEN; i++)
+    {
+        terrain_event_queue_push(&queue,
+                                 terrain_event_make(TERRAIN_EVENT_LEVEL, i, i));
+    }
+
+    bool b_ok =
+        (terrain_event_queue_count(&queue) == TERRAIN_EVENT_QUEUE_LEN) &&
+        (terrain_event_queue_dropped(&queue) == 1u);
+    for (uint32_t i = 1u; i <= TERRAIN_EVENT_QUEUE_LEN; i++)
+    {
+        terrain_event_t const event = terrain_event_queue_pop(&queue);
+        b_ok = b_ok && (terrain_event_value(event) == (int32_t)i);
+    }
+    return b_ok && (terrain_event_queue_count(&queue) == 0u) &&
+           (terrain_event_type(terrain_event_queue_pop(&queue)) ==
+            TERRAIN_EVENT_NONE);
+}
 
 #if TERRAIN_TEST_BENCH
 /*

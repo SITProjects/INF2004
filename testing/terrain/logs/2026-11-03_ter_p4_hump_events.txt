@@ -1,0 +1,24 @@
+TER-U01, TER-U02, TER-U04, TER-U12, TER-U13 with the P4 code (bench, loose IMU)
+Date: 2026-11-03
+Firmware: make TEST=1 on branch 75 (d8f21d3 + uncommitted P4: event queue
+and hump state machine), TERRAIN_DEBUG_PRINT_MS 0, TERRAIN_TEST_BENCH 0.
+Local, not committed: obstacle_test(), motion_test() and line_follow_test()
+skipped in app_main.c, because OBS-U23 onward did not finish (> 3 min) with
+no ultrasonic sensor connected. Restored after the run.
+Setup: loose IMU taped flat, chip up, same desk as 2026-11-02; untouched
+from power-up to the terrain summary.
+Only the terrain lines are copied (obstacle task prints removed).
+
+[TEST] TER-U01 FAIL  IMU delivers samples at about 100 Hz   (../app_program/terrain/terrain_test.c:88)
+terrain: calibration VALID
+[TEST] TER-U02 PASS  calibration VALID with the car still and level
+[TEST] TER-U04 PASS  pitch and roll within 1 degree of 0 at rest
+[TEST] TER-U12 PASS  hump trace gives ASCENDING, DESCENDING, LEVEL only
+[TEST] TER-U12 PASS  full event queue drops the oldest event
+[TEST] TER-U13 PASS  hump LEVEL and no events at rest
+[TEST] terrain SUMMARY 5 passed, 1 failed
+
+Note on TER-U01: with the other tests skipped, terrain_test() started right
+at boot, before terrain_task had set up the IMU, so the first read returned
+"not set up yet". TER-U01's code is unchanged since its 2026-11-02 PASS.
+Calibration became VALID about 2.8 s after boot.

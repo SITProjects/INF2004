@@ -219,6 +219,56 @@
 #endif
 
 /*
+ * Hump state machine (terrain_detect.h), on the smoothed pitch while
+ * calibrated. All are guesses until car day: a 1 cm hump may tip the car
+ * less than 4 degrees, depending on its wheelbase.
+ *
+ * Climb: pitch above +TERRAIN_HUMP_UP_DEG for TERRAIN_HUMP_ENTER_SAMPLES
+ * samples in a row (5 = 50 ms, so a single jolt does not count).
+ */
+#ifndef TERRAIN_HUMP_UP_DEG
+#define TERRAIN_HUMP_UP_DEG 4.0f
+#endif
+
+/* Top of the hump: while climbing, pitch falls below this, degrees. */
+#ifndef TERRAIN_HUMP_TOP_DEG
+#define TERRAIN_HUMP_TOP_DEG 1.0f
+#endif
+
+/*
+ * Descent: pitch below -TERRAIN_HUMP_DOWN_DEG for
+ * TERRAIN_HUMP_ENTER_SAMPLES samples. If a hump's far side is gentler
+ * than this, the state stays TOP and the next hump's ASCENDING is missed:
+ * lower it then.
+ */
+#ifndef TERRAIN_HUMP_DOWN_DEG
+#define TERRAIN_HUMP_DOWN_DEG 4.0f
+#endif
+
+/* Flat again: pitch within +/- this for TERRAIN_HUMP_LEVEL_SAMPLES. */
+#ifndef TERRAIN_HUMP_LEVEL_DEG
+#define TERRAIN_HUMP_LEVEL_DEG 2.0f
+#endif
+
+/* Samples in a row to start a climb or a descent: 5 = 50 ms. */
+#ifndef TERRAIN_HUMP_ENTER_SAMPLES
+#define TERRAIN_HUMP_ENTER_SAMPLES 5u
+#endif
+
+/* Flat samples in a row to end a descent: 10 = 100 ms. */
+#ifndef TERRAIN_HUMP_LEVEL_SAMPLES
+#define TERRAIN_HUMP_LEVEL_SAMPLES 10u
+#endif
+
+/* The hump counters are 4 bits wide. */
+#if (TERRAIN_HUMP_ENTER_SAMPLES < 1) || (TERRAIN_HUMP_ENTER_SAMPLES > 15)
+#error "TERRAIN_HUMP_ENTER_SAMPLES must be 1 to 15"
+#endif
+#if (TERRAIN_HUMP_LEVEL_SAMPLES < 1) || (TERRAIN_HUMP_LEVEL_SAMPLES > 15)
+#error "TERRAIN_HUMP_LEVEL_SAMPLES must be 1 to 15"
+#endif
+
+/*
  * Bench debugging: the terrain task prints pitch and roll every this
  * many milliseconds once calibrated. 0 turns it off; keep 0 in commits
  * so the shared console stays quiet.
