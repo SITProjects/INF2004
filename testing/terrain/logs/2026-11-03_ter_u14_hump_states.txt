@@ -1,0 +1,59 @@
+TER-U14: hump state follows the tilt (bench, loose IMU, by hand)
+Date: 2026-11-03
+Firmware: normal build (make) on branch 75 (d8f21d3 + uncommitted P4),
+with TERRAIN_DEBUG_PRINT_MS 500 set locally for this run only (the
+committed value is 0).
+Setup: loose IMU flat for calibration, then tilted by hand by the board;
+Pico and USB cable left still. COM6 was closed and reopened at about 30 s
+and output carried on.
+Only the terrain lines are copied (obstacle and Wi-Fi lines removed).
+
+terrain: CALIBRATING samples 152 attempts 0 retries 0 spread 0 mg tilt 0.0 deg
+terrain: CALIBRATING samples 197 attempts 0 retries 0 spread 0 mg tilt 0.0 deg
+terrain: CALIBRATING samples 261 attempts 1 retries 1 spread 724 mg tilt 0.8 deg
+terrain: CALIBRATING samples 325 attempts 1 retries 1 spread 724 mg tilt 0.8 deg
+terrain: CALIBRATING samples 389 attempts 1 retries 1 spread 724 mg tilt 0.8 deg
+terrain: calibration VALID
+terrain: pitch -0.1 roll -0.6 hump LEVEL
+  ... (flat, LEVEL, pitch within +/-0.3 until about 20 s)
+terrain: pitch -1.7 roll 1.3 hump LEVEL          (20.5 s: small wobble, ignored)
+  ... (flat, LEVEL; COM6 reopened at about 30 s)
+[32510 ms] output continues after reopening
+terrain: pitch 0.1 roll 0.3 hump LEVEL
+terrain: pitch 2.5 roll 0.9 hump LEVEL
+terrain: pitch 17.8 roll 0.5 hump ASCENDING       (36.7 s: nose up)
+terrain: pitch 41.6 roll 5.2 hump ASCENDING
+terrain: pitch 45.6 roll 0.0 hump ASCENDING
+terrain: pitch 45.8 roll 0.7 hump ASCENDING
+terrain: pitch 45.2 roll 0.8 hump ASCENDING
+terrain: pitch 44.8 roll 1.0 hump ASCENDING
+terrain: pitch 40.8 roll 1.3 hump ASCENDING
+terrain: pitch 17.9 roll 0.9 hump ASCENDING
+terrain: pitch 0.4 roll 0.3 hump TOP             (41.5 s: back flat)
+terrain: pitch -0.1 roll 0.5 hump TOP
+terrain: pitch -0.2 roll 0.0 hump TOP
+terrain: pitch -0.9 roll 0.2 hump TOP
+terrain: pitch -0.4 roll 0.1 hump TOP
+terrain: pitch 0.0 roll 0.2 hump TOP
+terrain: pitch 0.1 roll 0.3 hump TOP
+terrain: pitch -0.2 roll 0.4 hump TOP
+terrain: pitch 0.0 roll 0.5 hump TOP
+terrain: pitch 0.0 roll -0.1 hump TOP
+terrain: pitch -3.0 roll -1.1 hump TOP           (47.7 s: under 4 deg, still TOP)
+terrain: pitch -25.6 roll -2.1 hump DESCENDING   (48.5 s: nose down)
+terrain: pitch -30.5 roll -2.5 hump DESCENDING
+terrain: pitch -30.4 roll -2.2 hump DESCENDING
+terrain: pitch -30.0 roll -3.0 hump DESCENDING
+terrain: pitch -28.7 roll -3.2 hump DESCENDING
+terrain: pitch -25.2 roll -3.4 hump DESCENDING
+terrain: pitch -2.8 roll -2.5 hump DESCENDING
+terrain: pitch -0.2 roll 0.1 hump LEVEL          (52.7 s: flat again)
+terrain: pitch -0.4 roll 0.7 hump LEVEL
+terrain: pitch -0.2 roll 0.0 hump LEVEL
+terrain: pitch -2.9 roll -0.3 hump LEVEL         (54.8 s: small wobble, ignored)
+terrain: pitch 0.0 roll -0.6 hump LEVEL
+terrain: pitch 0.2 roll -0.3 hump LEVEL
+
+Result: PASS. ASCENDING after nose up, TOP after flat, DESCENDING after
+nose down, LEVEL after flat. Wobbles under 4 deg did not change the state.
+The terrain print kept going for the whole 56 s run (no stall this time).
