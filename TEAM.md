@@ -16,7 +16,7 @@ subsystem, ask its owner or open a pull request for them to review.
 | Subsystem | What it does | Student ID | GitHub username | Code | Tests |
 |---|---|---|---|---|---|
 | obstacle | Ultrasonic sensor on a servo scans for a clear path | | Kitsuneez | `app_program/obstacle/` | `testing/obstacle/` |
-| motion | Two H-bridge DC motors, open-loop drive (held braked for now); wheel encoders | | felicia-chuaxy | `app_program/motion/` | `testing/motion/` |
+| motion | Two H-bridge DC motors and wheel encoders: speed loop, distance moves, turns and line following in `tMotion` | | felicia-chuaxy | `app_program/motion/` | `testing/motion/` |
 | line_follow | Two IR sensors → line commands (dry run, no motors) | | kaiwenteoo | `app_program/line_follow/` | `testing/line_follow/` |
 | terrain | GY-511 accelerometer, calibration and corrected readings | | ann | `app_program/terrain/` | `testing/terrain/` |
 | communication | Wi-Fi connection status | | Jerome-4469 | `app_program/communication/` | `testing/communication/` |
@@ -117,9 +117,9 @@ the drivers have no locking to stop it.
 | SPI0 | | | |
 | SPI1 | | | |
 | ADC | line_follow | `line_follow_task` (kernel driver `"adca"`) | GP26, GP27 (GP28 free) |
-| PWM slices (list) | obstacle: slice 6. motion: slices 4, 5 | obstacle: `obstacle_scan_task`. motion: none yet; `motion_start()` configures them and holds the motors braked | GP12 (obstacle); GP8–GP11 (motion) |
+| PWM slices (list) | obstacle: slice 6. motion: slices 4, 5 | obstacle: `obstacle_scan_task`. motion: `tMotion` (`motion_start()` configures them braked, then hands them over) | GP12 (obstacle); GP8–GP11 (motion) |
 | GPIO bank interrupt (`IO_IRQ_BANK0`, all GPIOs) | obstacle | `obstacle_scan_task`, core 0 only | GP17 echo edges. Ask the obstacle owner before enabling any other GPIO interrupt |
-| PIO0 | motion | none yet: `motion_start()` loads the encoder program; one task reads the counts (`encoder_get_count()` empties the FIFO) | GP2, GP3, GP13, GP14 (inputs). The program fills instruction slots 0–23 and uses state machines 2 and 3; slots 24–31 and state machines 0 and 1 are free. 2 and 3, not 0 and 1, because the SDK allocator hands out state machine 0 first and places programs at the top slots, so a fallback to PIO0 would not collide. `encoder_init()` fails if any PIO0 state machine is already running |
+| PIO0 | motion | `tMotion` (`motion_start()` loads the encoder program; only `tMotion` reads the counts, as `encoder_get_count()` empties the FIFO) | GP2, GP3, GP13, GP14 (inputs). The program fills instruction slots 0–23 and uses state machines 2 and 3; slots 24–31 and state machines 0 and 1 are free. 2 and 3, not 0 and 1, because the SDK allocator hands out state machine 0 first and places programs at the top slots, so a fallback to PIO0 would not collide. `encoder_init()` fails if any PIO0 state machine is already running |
 | PIO1 | *kernel*; planned RGB LED | `cyw43_utk_task` (gSPI to the radio: 6 instructions, 1 state machine). Proposed: the WS2812 LED program (4 instructions) goes here too, leaving PIO0 to the encoders; the LED's owner must confirm | GP23–25, GP29; GP18 |
 | TIMER (free-running 1 MHz counter) | *shared, read only* | any | — Read by obstacle and terrain; never write it |
 | WiFi radio, TCP/IP, MQTT | *kernel* | `cyw43_utk_task` (built in) | GP23–25, GP29 |
@@ -173,7 +173,7 @@ change it only by team agreement. Write down every task you create.
 | Subsystem | Priority band | Tasks (name – priority – core) |
 |---|---|---|
 | obstacle | 12–13 | `obstacle_scan_task` – 12 – core 0 (`TP_PRC1`; the echo interrupt is on core 0) |
-| motion | 14–15 | none yet |
+| motion | 14–15 | `tMotion` – 14 – any (design freeze says 3: to settle) |
 | line_follow | 16–17 | `line_follow_task` – 16 – any |
 | terrain | 18–19 | `terrain_task` – 18 – any |
 | communication | 20–21 | `communication_task` – 20 – any |
@@ -186,12 +186,16 @@ Every arrow between two subsystems is listed here. The **provider** creates
 the kernel object and publishes its ID in its own `<name>.h`; the **user**
 only sends to it or waits on it. Agree on the data format before coding.
 
-The subsystems do not exchange data yet: each runs on its own. The obstacle
-results, line commands and motor commands are still TODOs.
+Rows marked *proposed* or *interim* are not agreed yet; the obstacle
+results and line commands are still TODOs.
 
 | ID | From → To | Mechanism | Object ID name | Data / meaning | Agreed by |
 |---|---|---|---|---|---|
-| IF-01 | | | | | |
+| IF-01 | tMission → motion | Message buffer | `motion_mbf_cmd` (MBF_MOTION_CMD) | one `uint32_t` command word, packed with the `robot_motion_cmd_` helpers in `robot_types.h` (22-bit layout, Tribunal 1) | proposed by motion; tMission owner to agree |
+| IF-02 | tSafety → motion | Event flag | `motion_flg_ctrl` (FLG_MOTION), bit `MOTION_FLG_INHIBIT` | set: brake at once and discard commands; clear: back to STOPPED | proposed by motion; tSafety owner to agree |
+| IF-03 | motion → tMission | Event flag + status word | `motion_flg_event` (`MOTION_EVT_` bits), `motion_get_status()` | MOVE_DONE (reason in status), STALL, ENC_FAULT, REJECTED, FOLLOW_ENDED; mode 3 bits | interim until FLG_MISSION exists |
+| IF-04 | line_follow → motion | Function (one 32-bit store) | `motion_set_line_input()` | signed line error −1000..+1000 and line-seen, every reading | interim until `line_state_t` under MTX_LINE; kaiwenteoo to agree |
+| IF-05 | motion → terrain | Shared copy, sequence-checked (no lock, never waits) | `motion_get_odometry()` | `motion_shared_odometry_t`: update count, distance mm and heading deg (`int32`), speed and both wheel speeds mm/s (`int16`); + forward and left; updated every 20 ms | proposed by motion; ann to agree; moves into `telemetry_t` under MTX_TELEM in step 8 |
 
 Each interface is tested by at least one integration test
 (`testing/integration/TEST_LOG.md`).
@@ -203,15 +207,15 @@ limit there.
 
 | Object | Limit | obstacle | motion | line_follow | terrain | communication |
 |---|---|---|---|---|---|---|
-| Task | 32 | 1 | | 1 | 1 | 1 |
+| Task | 32 | 1 | 1 | 1 | 1 | 1 |
 | Semaphore | 16 | | | | | |
-| Event flag | 16 | | | | | |
+| Event flag | 16 | | 2 | | | |
 | Mailbox | 12 | | | | | |
 | Mutex | 12 | | | | | |
-| Message buffer | 12 | | | | | |
+| Message buffer | 12 | | 1 | | | |
 | Fixed memory pool | 12 | | | | | |
 | Variable memory pool | 12 | | | | | |
-| Cyclic handler | 12 | | | | | |
+| Cyclic handler | 12 | | 1 | | | |
 | Alarm handler | 12 | | | | | |
 
 (The kernel's USB and WiFi service tasks, and its I2C and ADC drivers, also
