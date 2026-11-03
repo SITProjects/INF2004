@@ -167,12 +167,13 @@ its selected integer width, including negative-offset magnitude. Recompute
 residuals with the actual quantised scale S/10000 and the rounded offset
 that will be deployed (zero if omitted); dropping a small fitted offset can
 still break acceptance. Recheck threshold echoes using that actual model.
-The software uses one provisional integer scale (1715) and signed offset
-zero; the unused float factor is removed. These are the same unmeasured
-conversion values as before. The cast-free macro promotes to signed 64-bit
+The software uses one integer scale and one signed offset. The first fit
+(2026-11-03_cal_ranging.txt) gives scale 1700 and offset -18 mm, configured
+provisionally: residuals at 50 mm (-5.3), 200 mm (+5.6) and 500 mm (+17.2)
+exceed the rule, so those distances are re-measured and the fit repeated
+before acceptance. The cast-free macro promotes to signed 64-bit
 arithmetic; its input domain is 0..400000 mm and strictly above the offset.
 Configuration guards validate the scale, offset and threshold domains.
-Replace values only after measurements; no measured fit is supplied here.
 
 ## OBS-U29: centre and side angles
 

@@ -91,6 +91,8 @@ never use PASS for a build, host simulation, lost log, or unperformed procedure.
 | Date | Test ID | Commit | Tester | Result | Log / evidence | Notes |
 |---|---|---|---|---|---|---|
 | YYYY-MM-DD | OBS-U01 | `abc1234` | | PASS / FAIL | `logs/YYYY-MM-DD_….txt` | |
+| 2026-11-02 | OBS-U28 | `3ac95e6` | Kitsunez | FAIL | `logs/2026-11-02_cal_ranging.txt` | Invalid run, not used for the fit. Mode 1 (uncommitted), WIFI=none image, borrowed car with temporary trim 30. Pings 2.56 s apart and echoes about 42.7 times short: the microsecond timer ran slow; cause not yet identified |
+| 2026-11-03 | OBS-U28 | `5a1b7bd` | Kitsunez | FAIL | `logs/2026-11-03_cal_ranging.txt` | Mode 1 (uncommitted), Wi-Fi image SHA256 `40de7ea0…66528ad`, trim 0. Bursts 2, 3, 4, 5, 7, 8, 10, 11, 12 = 50, 100, 150, 200, 300, 400, 500, 700, 1000 mm; bursts 1, 6, 9 discarded (board moving). All used bursts 20/20 VALID. Fit D = 0.1700 t − 18.3 mm, configured provisionally as scale 1700, offset −18. Residuals fail at 50 mm (−5.3), 200 mm (+5.6) and 500 mm (+17.2); spread above 35 us at 100 (46), 400 (43) and 500 mm (236). Re-measure 50, 200 and 500 mm, then refit |
 
 U26 and U27 use TEST=1 after the entire automatic run ends and all trigger
 holds have been released. U26 records the APP_TEST centre FAULT timestamp,

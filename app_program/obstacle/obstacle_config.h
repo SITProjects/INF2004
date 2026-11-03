@@ -91,11 +91,13 @@
 #define OBSTACLE_TICK_MS 10u
 
 /*
- * Provisional sound scale: millimetres per 10000 echo microseconds.
- * Replace scale and signed offset only after the OBS-U28 distance fit.
+ * Sound scale (millimetres per 10000 echo microseconds) and signed offset:
+ * provisional OBS-U28 fit, 2026-11-03_cal_ranging.txt, D = 0.1700 t - 18.
+ * Not accepted yet: residuals at 50, 200 and 500 mm exceed the rule; refit
+ * after re-measuring those distances.
  */
-#define OBSTACLE_SOUND_MM_PER_10K_US 1715u
-#define OBSTACLE_ECHO_OFFSET_MM 0
+#define OBSTACLE_SOUND_MM_PER_10K_US 1700u
+#define OBSTACLE_ECHO_OFFSET_MM (-18)
 
 /*
  * Convert D to ceil((D - offset) * 10000 / scale), for 0..400000 mm
@@ -113,19 +115,19 @@
  * Candidate thresholds, pending stopping-distance tests. Edit only the
  * millimetre values; the echo equivalents are derived.
  *
- * Detection: 200 mm -> 1176 us. A nearer centre reading requests a stop.
+ * Detection: 200 mm -> 1283 us. A nearer centre reading requests a stop.
  */
 #define OBSTACLE_DETECT_DISTANCE_MM 200u
 #define OBSTACLE_DETECT_ECHO_US                                                \
     OBSTACLE_MM_TO_ECHO_US(OBSTACLE_DETECT_DISTANCE_MM)
 
-/* Critical: 80 mm -> 467 us. One nearer centre reading sets the flag. */
+/* Critical: 80 mm -> 577 us. One nearer centre reading sets the flag. */
 #define OBSTACLE_CRITICAL_DISTANCE_MM 80u
 #define OBSTACLE_CRITICAL_ECHO_US                                              \
     OBSTACLE_MM_TO_ECHO_US(OBSTACLE_CRITICAL_DISTANCE_MM)
 
 /*
- * Critical release: 100 mm -> 584 us, the Week 6 minimum stopping gap.
+ * Critical release: 100 mm -> 695 us, the Week 6 minimum stopping gap.
  * The flag clears only after a complete centre group with no VALID reading
  * nearer than this. 80..100 mm is the hysteresis band.
  */
