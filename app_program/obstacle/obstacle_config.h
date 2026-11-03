@@ -115,9 +115,9 @@
  * Candidate thresholds, pending stopping-distance tests. Edit only the
  * millimetre values; the echo equivalents are derived.
  *
- * Detection: 200 mm -> 1283 us. A nearer centre reading requests a stop.
+ * Detection: 300 mm -> 1871 us. A nearer centre reading requests a stop.
  */
-#define OBSTACLE_DETECT_DISTANCE_MM 200u
+#define OBSTACLE_DETECT_DISTANCE_MM 300u
 #define OBSTACLE_DETECT_ECHO_US                                                \
     OBSTACLE_MM_TO_ECHO_US(OBSTACLE_DETECT_DISTANCE_MM)
 
@@ -152,16 +152,18 @@
 #define OBSTACLE_SERVO_SETTLE_MARGIN_MS 1000u
 
 /*
- * Width geometry: provisional zero corrections.
+ * Width geometry, provisional. Pivot offset is not measured yet (zero).
  * Pivot offset is signed, along the sensor's radial measurement axis.
  * A lateral mounting offset needs a separate coordinate transform.
  * A found edge lies half a step outside its hit; the edge correction then
- * moves it toward the obstacle centre (beam spread). Calibrate the
- * correction with OBS-U33 only after OBS-U28/U29/U30 and the pivot
- * measurement. Corrections above the maximum make the width unavailable.
+ * moves it toward the obstacle centre (beam spread). The 11 degree value is
+ * a single-case estimate (160 mm object at 300 mm, 2026-11-03_width_300.txt)
+ * that reads 155..159 mm; refit with OBS-U33 after OBS-U28/U29/U30 and the
+ * pivot measurement. Corrections above the maximum make the width
+ * unavailable.
  */
 #define OBSTACLE_SENSOR_RADIAL_OFFSET_MM 0.0f
-#define OBSTACLE_EDGE_CORRECTION_DEG 0.0f
+#define OBSTACLE_EDGE_CORRECTION_DEG 11.0f
 #define OBSTACLE_EDGE_CORRECTION_MAX_DEG 15.0f
 
 /*
