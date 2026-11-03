@@ -11,12 +11,12 @@ cc -std=c11 -Wall -Wextra -Werror -DTM_MQTT=1 \
     -I"$repo_root/lib/liblwip/sysdepend/pico_rp2040" \
     -I"$repo_root/lib/liblwip/sysdepend/pico_rp2040/include" \
     -I"$sdk_path/lib/lwip/src/include" \
-    "$repo_root/testing/communication/host/heartbeat_test.c" \
+    "$repo_root/testing/communication/host/connection_test.c" \
     "$repo_root/app_program/communication/mqtt_client.c" \
     "$repo_root/app_program/communication/telemetry_queue.c" \
     "$repo_root/testing/communication/host/queue_port_stub.c" \
-    -o "$test_dir/heartbeat_test"
-"$test_dir/heartbeat_test"
+    -o "$test_dir/connection_test"
+"$test_dir/connection_test"
 
 cc -std=c11 -Wall -Wextra -Werror -DTM_MQTT=1 \
     -I"$repo_root/testing/communication/host/include" \

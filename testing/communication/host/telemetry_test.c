@@ -135,6 +135,7 @@ mqtt_publish (mqtt_client_t * c, const char * topic, const void * data,
               void * arg)
 {
     assert(c == handle && retain == 0 && len < sizeof(payload));
+    assert(strcmp(topic, MQTT_TOPIC "/telemetry") == 0);
     memcpy(payload, data, len);
     payload[len] = 0;
     publishes++;

@@ -1,108 +1,66 @@
-# MQTT heartbeat hardware check
+# MQTT telemetry hardware check
 
-The active client is `app_program/communication/mqtt_client.c`. It runs in
-`cyw43_utk_task()` on core 0; the communication task must not call it.
-`MQTT=1` selects this client and upstream lwIP MQTT, leaving the old
-`lib/liblwip/.../mqtt_utk.c` demo unlinked. No lib/liblwip files are changed.
-There are no new tasks, queues, or kernel objects for heartbeat-only use.
+The active client is `app_program/communication/mqtt_client.c`, running in
+`cyw43_utk_task()` on core 0. It publishes queued obstacle telemetry only;
+there are no application heartbeat messages or topic subscriptions.
+The MQTT protocol keepalive remains enabled (60 seconds).
 
-## Configuration
+## Configuration and build
 
-Copy `config/wifi_secrets.example.h` to `config/wifi_secrets.h` if absent.
-Set WIFI_SSID and WIFI_PASSWORD, then MQTT_BROKER_IP, MQTT_BROKER_PORT,
-MQTT_CLIENT_ID, and MQTT_TOPIC. The broker address must be a numeric IPv4
-address reachable from the Pico, not localhost. Use a unique client ID per
-Pico. The configuration is gitignored; never commit actual credentials.
+Set Wi-Fi and MQTT settings in the gitignored `config/wifi_secrets.h`.
+Use a reachable numeric IPv4 broker address and a unique client ID.
+Do not commit credentials. The client uses plain TCP without broker login.
 
-This client uses plain TCP, with no TLS or broker username/password. Use a
-broker that permits this on your isolated lab network. Wi-Fi authentication
-and broker authentication are separate.
-
-## Broker and firmware
-
-With Mosquitto and its command-line clients installed, run from repo root
-on the broker computer (or adjust the configuration path):
+Start the lab broker:
 
 ```sh
 mosquitto -c testing/communication/mosquitto-test.conf -v
 ```
 
-Permit inbound TCP port 1883 through its firewall. The supplied listener
-accepts anonymous LAN clients; do not expose it to the Internet. If using a
-remote dev container, the broker must still be reachable from the Pico.
-
-In another broker-computer terminal, substitute your configured topic:
+Subscribe using your configured MQTT_TOPIC followed by `/telemetry`:
 
 ```sh
-mosquitto_sub -h 127.0.0.1 -p 1883 -t mtk3smp-pico/heartbeat -v
+mosquitto_sub -h 127.0.0.1 -p 1883 -t mtk3smp-pico/heartbeat/telemetry -v
 ```
 
-Build from the repository and flash the generated MQTT/test UF2:
+Build and flash the generated UF2:
 
 ```sh
-cd build_make
-make MQTT=1 TEST=1 -j8
+make -C build_make MQTT=1 TEST=1 -j8
 ```
 
-Open the Pico USB serial console. Existing COM-U01/U02 tests check radio and
-Wi-Fi readiness, not MQTT delivery. MQTT hardware cases COM-U04 through
-COM-U07 in TEST_LOG.md are manual and require a broker.
+Normal obstacle scanning must be enabled; calibration mode skips samples.
 
 ## Expected evidence
 
-After `mqtt: connected to <broker-ip>`, wait five seconds:
+After connection, expect samples about once per second, for example:
 
 ```text
-mqtt: TX [mtk3smp-pico/heartbeat] "hb 0"
-mqtt: RX [mtk3smp-pico/heartbeat] "hb 0"
+seq=0 captured_ms=12000 obstacle flags=17 edges=255 width_mm=0
 ```
 
-Expect increasing counters about every five seconds, also visible in
-mosquitto_sub. TX means lwIP accepted the publish request; matching RX and
-an independent subscriber provide broker delivery evidence. QoS is 0 and
-retain is disabled, so interruptions may lose messages. The first heartbeat
-occurs five seconds after each MQTT connection is established.
+Check that the base MQTT_TOPIC receives no `hb` messages for at least
+15 seconds. The `/heartbeat/` text remains in the configured topic prefix
+for compatibility; only the `/telemetry` topic is published.
 
-Test the inbound path from the broker computer:
+Telemetry uses QoS 1 without retain. The FIFO holds 128 records in RAM,
+removes records after PUBACK, and retains pending records across network
+loss. Replay may duplicate messages. Full queues reject newest samples;
+reboot loses queued data. Stop/restart the broker and disable/restore the
+access point; verify replay preserves sequence numbers and capture times.
+Reconnect attempts are throttled by 3000 ms after failure.
 
-```sh
-mosquitto_pub -h 127.0.0.1 -p 1883 -t mtk3smp-pico/heartbeat -m hello-pico
-```
+Record actual serial and subscriber evidence in TEST_LOG.md. A firmware
+build or simulated host test does not verify hardware delivery.
+COM-U07's old inbound logging case is retired; no topic is subscribed.
 
-The Pico should print an RX line containing hello-pico. Incoming messages
-are only logged; they do not control the vehicle.
-
-Stop/restart the broker, then disable/restore the access point. Detection
-may take TCP/MQTT timeouts, followed by a 3000 ms MQTT retry delay. Heartbeats
-must resume without resetting the board or multiplying their frequency.
-The counter continues across reconnects, resets on reboot, and advances
-when lwIP accepts a publish. Allocation and immediate connect failures are
-also retried with the same delay. Subscription failures trigger a deferred
-disconnect and reconnect after this delay to restore the RX check. A failed publish is logged and retried
-with the same counter at the next heartbeat interval.
-
-For COM-U07, use a payload of at least 128 bytes, then a short payload.
-RX payload logging holds at most 127 bytes and sanitizes nonprintable
-payload bytes; fragmented messages are logged after their last fragment.
-
-Save serial and broker/subscriber output under testing/communication/logs/.
-Record each actual run in TEST_LOG.md with commit, tester, duration, and
-result. Do not record a build or simulated transport test as hardware PASS.
-
-`make -j8` leaves MQTT disabled by default. No heartbeat publishes in that
-profile, or with WIFI=none/NET=none.
-
-## Host behavior regression check
-
-With a host C compiler and Pico SDK lwIP sources available, run:
+## Host regression checks
 
 ```sh
 sh testing/communication/host/run.sh
 ```
 
-This compiles the actual application client against real lwIP headers and a
-simulated external MQTT transport. It checks heartbeat timing, retry delays,
-subscription failure recovery, Wi-Fi loss, fragmented/oversized/empty RX,
-publish errors, and clock wraparound. It uses the example configuration and
-does not read local credentials. It does not exercise real TCP, Wi-Fi, or a
-broker and does not replace the hardware cases above.
+These exercise the real application client with simulated transport:
+no heartbeat publishes/subscriptions, reconnect retries, Wi-Fi loss,
+queue capacity, contention, replay, PUBACK handling, and clock wrap.
+They use fake configuration and never read local credentials.
