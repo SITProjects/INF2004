@@ -128,17 +128,18 @@
  * applied, of the car standing still on a floor checked to be flat.
  * Boot calibration compares against it to decide whether the car is
  * level. Record it again whenever the sensor is remounted.
- * Current values: bench reading on a levelled surface (2026-10-16),
- * before the sensor was mounted on the car.
+ * Current values: bench reading with the loose sensor taped flat, chip
+ * up, on a desk checked with a level (2026-11-02), before the sensor was
+ * mounted on the car.
  */
 #ifndef TERRAIN_LEVEL_REF_X
-#define TERRAIN_LEVEL_REF_X (-0.125f)
+#define TERRAIN_LEVEL_REF_X (-0.470f)
 #endif
 #ifndef TERRAIN_LEVEL_REF_Y
-#define TERRAIN_LEVEL_REF_Y (0.917f)
+#define TERRAIN_LEVEL_REF_Y (0.743f)
 #endif
 #ifndef TERRAIN_LEVEL_REF_Z
-#define TERRAIN_LEVEL_REF_Z (8.247f)
+#define TERRAIN_LEVEL_REF_Z (8.491f)
 #endif
 
 /* Samples in one calibration attempt: 200 is 2 s at 100 Hz. */
@@ -148,6 +149,16 @@
 
 #if TERRAIN_CALIB_SAMPLES < 1
 #error "TERRAIN_CALIB_SAMPLES must be at least 1"
+#endif
+
+/*
+ * Samples skipped at the start of every calibration (power-up and each
+ * recalibration), so a hand leaving the car or the car rocking on its
+ * wheels is not averaged in: 50 is 0.5 s at 100 Hz. Not repeated
+ * between the attempts of one calibration.
+ */
+#ifndef TERRAIN_CALIB_SETTLE_SAMPLES
+#define TERRAIN_CALIB_SETTLE_SAMPLES 50u
 #endif
 
 /*
@@ -187,6 +198,43 @@
 
 #if TERRAIN_FAULT_RETRY_UPDATES < 1
 #error "TERRAIN_FAULT_RETRY_UPDATES must be at least 1"
+#endif
+
+/*
+ * Time between accelerometer samples, in seconds. Must match
+ * TERRAIN_ACCEL_ODR: 0.01 s at 100 Hz. Filters are set in seconds and
+ * use this, so they keep their timing if the rate changes.
+ */
+#ifndef TERRAIN_SAMPLE_PERIOD_S
+#define TERRAIN_SAMPLE_PERIOD_S 0.01f
+#endif
+
+/*
+ * Tilt smoothing time constant, in seconds. After a change of angle,
+ * pitch and roll cover about two thirds of it in this time and 95 % in
+ * three times it. Larger is smoother but slower.
+ */
+#ifndef TERRAIN_TILT_TAU_S
+#define TERRAIN_TILT_TAU_S 0.15f
+#endif
+
+/*
+ * Bench debugging: the terrain task prints pitch and roll every this
+ * many milliseconds once calibrated. 0 turns it off; keep 0 in commits
+ * so the shared console stays quiet.
+ */
+#ifndef TERRAIN_DEBUG_PRINT_MS
+#define TERRAIN_DEBUG_PRINT_MS 0
+#endif
+
+/*
+ * Bench tests: 1 adds TER-U06 (record the level reference) and TER-U07
+ * (check the axes after mounting) to make TEST=1. They need a person to
+ * move the car on cue and take about 40 s. Keep 0 in commits: the whole
+ * team's TEST=1 run must not wait for anyone.
+ */
+#ifndef TERRAIN_TEST_BENCH
+#define TERRAIN_TEST_BENCH 0
 #endif
 
 /* Public function declarations. */

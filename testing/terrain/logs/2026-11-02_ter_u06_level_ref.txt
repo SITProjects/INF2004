@@ -1,0 +1,27 @@
+TER-U06: record the level reference (bench, loose IMU)
+Date: 2026-11-02
+Firmware: make TEST=1 at 4a4be96, TERRAIN_TEST_BENCH 1 (local only)
+Setup: loose GY-511 on Grove 3, taped flat, chip up, on a desk checked
+with a phone level app. Old reference (2026-10-16) still in
+terrain_config.h, so boot calibration ended NOT_LEVEL (about 2.7 deg off).
+Only the terrain lines are copied from the console.
+
+[TEST] TER-U01 PASS  IMU delivers samples at about 100 Hz
+terrain: calibration NOT_LEVEL
+[TEST] TER-U02 FAIL  calibration VALID with the car still and level   (../app_program/terrain/terrain_test.c:86)
+[TEST] TER-U04 FAIL  pitch and roll within 1 degree of 0 at rest   (../app_program/terrain/terrain_test.c:96)
+terrain: TER-U06: keep the car still on a floor checked to be flat
+terrain: starting in 5 4 3 2 1; hold still
+terrain: calibration CALIBRATING
+terrain: calibration NOT_LEVEL
+terrain: X -0.470 Y 0.743 Z 8.491 m/s^2
+terrain: paste into terrain_config.h, rebuild:
+#define TERRAIN_LEVEL_REF_X (-0.470f)
+#define TERRAIN_LEVEL_REF_Y (0.743f)
+#define TERRAIN_LEVEL_REF_Z (8.491f)
+[TEST] TER-U06 PASS  level reference recorded
+
+Repeat readings with the IMU not moved (TER-U07 step 1 and 2; TER-U07
+itself not done, the IMU stayed taped):
+terrain: X -0.473 Y 0.737 Z 8.493 m/s^2
+terrain: X -0.459 Y 0.743 Z 8.500 m/s^2
