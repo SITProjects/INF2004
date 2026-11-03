@@ -75,6 +75,13 @@ first, and MOT-U11..U16 also a calibrated `MOTION_WHEEL_DIAMETER_MM`
 
 Add a new row for every run. Never edit or delete old rows.
 
+The motor PWM changed from 10 kHz to 20 kHz in `b111dd4`. Earlier runs
+and logs used 10 kHz, so their MOT-U01 lines say 10 kHz. Those results
+do not depend on the PWM frequency: encoder counts, loop timing, wheel
+diameter and stall detection. MOT-U08/U09 are rerun at 20 kHz to
+confirm the stop-early distance, and MOT-U19/U20 are calibrated at
+20 kHz.
+
 | Date | Test ID | Commit | Tester | Result | Log / evidence | Notes |
 |---|---|---|---|---|---|---|
 | YYYY-MM-DD | MOT-U01 | `abc1234` | | PASS / FAIL | `logs/YYYY-MM-DD_….txt` | |
