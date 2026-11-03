@@ -16,7 +16,11 @@
 
 /* Public types, constants, and macros. */
 
-/** Main task priority; use the subsystem's band in TEAM.md section 4. */
+/**
+ * Main task priority: this task's row in TEAM.md section 4. A new task
+ * needs a row agreed with the team first; 22 is only a placeholder below
+ * every listed task.
+ */
 #define SUBSYSTEM_PRI_MAIN 22
 
 /* Public function declarations. */
