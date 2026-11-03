@@ -525,9 +525,17 @@ start_move (uint16_t distance_mm, int32_t dir)
         return status;
     }
 
-    /* Target in the sum of both wheels' counts, rounded to nearest. */
-    begin(MOTION_STATE_MOVE, tick_sum(), dir,
-          (int32_t)(((2.0f * (float)distance_mm) / MM_PER_TICK) + 0.5f),
+    /*
+     * Target in the sum of both wheels' counts, rounded to nearest. Brake
+     * early by the measured coast, but always move at least one count.
+     */
+    float travel_mm = (float)distance_mm - MOTION_MOVE_STOP_EARLY_MM;
+    int32_t target = (int32_t)(((2.0f * travel_mm) / MM_PER_TICK) + 0.5f);
+    if (target < 1)
+    {
+        target = 1;
+    }
+    begin(MOTION_STATE_MOVE, tick_sum(), dir, target,
           ((uint32_t)distance_mm * 1000u) / (uint32_t)MOTION_MOVE_SPEED_MM_S);
     (void)motion_drive_set_velocity(
         (int16_t)(dir * (int32_t)MOTION_MOVE_SPEED_MM_S), 0);
