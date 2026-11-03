@@ -106,12 +106,14 @@ usermain (void)
 #if !IR_CALIBRATION_ONLY
 #if !IR_MOTOR_TEST
     app_check(obstacle_init(), "obstacle_init");
-    app_check(terrain_init(), "terrain_init");
-    app_check(communication_init(), "communication_init");
 #endif
     app_check(motion_init(), "motion_init");
 #endif
     app_check(line_follow_init(), "line_follow_init");
+#if !IR_CALIBRATION_ONLY && !IR_MOTOR_TEST
+    app_check(terrain_init(), "terrain_init");
+    app_check(communication_init(), "communication_init");
+#endif
 
     /* Phase 2: every subsystem starts its tasks. */
 #if !IR_CALIBRATION_ONLY
