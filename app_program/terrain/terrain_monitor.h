@@ -4,8 +4,9 @@
  *
  * Phase 1: initialise the GY-511 and read acceleration in the car's
  * axes. Phase 2: calibrate at every start, then correct every reading.
- * Phase 3: pitch and roll. Phase 4: hump state and an event queue. Turn
- * rate, collisions, motion state and hump height follow in later phases.
+ * Phase 3: pitch and roll. Phase 4: hump state and an event queue. Phase
+ * 9: hump height. Turn rate, collisions and motion state follow in later
+ * phases.
  *
  * Call terrain_monitor_init() once, then terrain_monitor_update()
  * regularly (about every 10 ms) from one place only. Calibration then skips
@@ -116,8 +117,11 @@ typedef struct
  * DESCENDING; see terrain_monitor_poll_event() for the events it sends.
  * While pitch is held, the hump state and its waits pause too.
  *
- * The acceleration, tilt and hump fields are 0 (and nothing is held)
- * unless the calibration state is TERRAIN_CALIB_VALID. An all-zero
+ * The highest hump is the largest LEVEL event height since init, in mm
+ * (see terrain_monitor_poll_event()). It is kept through a recalibration.
+ *
+ * The acceleration, tilt and hump state fields are 0 (and nothing is
+ * held) unless the calibration state is TERRAIN_CALIB_VALID. An all-zero
  * snapshot reads as CALIBRATING, LEVEL, with everything 0.
  */
 typedef struct
@@ -232,10 +236,17 @@ terrain_status_t terrain_monitor_recalibrate (void);
  *   TERRAIN_HUMP_ENTER_SAMPLES samples. Value: pitch then, tenths of a
  *   degree (negative).
  * - LEVEL: after a descent, pitch stayed within TERRAIN_HUMP_LEVEL_DEG of
- *   0 for TERRAIN_HUMP_LEVEL_SAMPLES samples. Value: 0.
+ *   0 for TERRAIN_HUMP_LEVEL_SAMPLES samples. Value: the hump's height,
+ *   mm, 0 to 255 (stops at 255). A dip (a descent first) reads about 0.
+ *
+ * The height is the larger of two estimates, each kept at its highest
+ * from the start of the climb: TERRAIN_WHEELBASE_MM x sin(pitch), right
+ * for humps narrower than the car, and the sum of sin(pitch) x distance
+ * driven, right for wider humps. The second needs the driven distance
+ * from the motion subsystem; without it only the first is used.
  *
  * While pitch is held (the car speeds up or brakes), no hump events are
- * found: the held value is not a new reading.
+ * found and the height pauses: the held value is not a new reading.
  *
  * The queue holds TERRAIN_EVENT_QUEUE_LEN events; when it is full the
  * oldest is dropped and counted (terrain_monitor_events_dropped()). A
@@ -300,6 +311,14 @@ terrain_monitor_data_calib_state (terrain_data_t const * p_data);
  */
 terrain_hump_state_t
 terrain_monitor_data_hump_state (terrain_data_t const * p_data);
+
+/**
+ * @brief Highest hump since init in a snapshot.
+ * @param p_data Snapshot.
+ * @return mm, 0 to 255 (stops at 255); also kept while not VALID. 0 if
+ *         @p p_data is NULL or before the first hump.
+ */
+uint8_t terrain_monitor_data_highest_hump_mm (terrain_data_t const * p_data);
 
 /**
  * @brief Pitch in a snapshot.

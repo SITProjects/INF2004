@@ -1,0 +1,15 @@
+TER-U01, U02, U04, U12, U13, U15: make TEST=1, branch 80 (5973939 + P9,
+uncommitted), new bench level reference (TER-U06, 2026-11-03).
+Other subsystems' tests skipped locally in app_main.c for this run.
+Loose IMU taped flat, chip up, on a flat desk; Grove cable reseated
+after an earlier run failed TER-U01/U02/U04/U13 (no samples).
+Excerpt: [TEST] lines as reported by the tester (2026-11-03).
+
+[TEST] TER-U01 PASS  IMU delivers samples at about 100 Hz
+[TEST] TER-U02 PASS  calibration VALID with the car still and level
+[TEST] TER-U04 PASS  pitch and roll within 1 degree of 0 at rest
+[TEST] TER-U12 PASS  hump trace gives ASCENDING, DESCENDING, LEVEL only
+[TEST] TER-U12 PASS  full event queue drops the oldest event
+[TEST] TER-U15 PASS  40 mm narrow and 80 mm ramped humps read their height
+[TEST] TER-U13 PASS  hump LEVEL and no events at rest
+[TEST] terrain SUMMARY 7 passed, 0 failed

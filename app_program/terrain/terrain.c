@@ -122,7 +122,8 @@ monitor_task (INT stacd, void * p_exinf)
 }
 
 #if TERRAIN_DEBUG_PRINT_MS > 0
-/* One line of pitch, roll and hump state; calibration progress before. */
+/* One line of pitch, roll, hump state and highest hump; calibration
+ * progress before. */
 static void
 print_status (void)
 {
@@ -143,8 +144,9 @@ print_status (void)
                 terrain_monitor_data_is_pitch_held(&data));
     print_angle("roll", terrain_monitor_data_roll_ddeg(&data),
                 terrain_monitor_data_is_roll_held(&data));
-    tm_printf((UB *)" hump %s\n", terrain_monitor_hump_text(
-                                      terrain_monitor_data_hump_state(&data)));
+    tm_printf((UB *)" hump %s highest %d mm\n",
+              terrain_monitor_hump_text(terrain_monitor_data_hump_state(&data)),
+              (INT)terrain_monitor_data_highest_hump_mm(&data));
 }
 
 /*
