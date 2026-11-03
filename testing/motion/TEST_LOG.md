@@ -79,3 +79,4 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-11-03 | MOT-U22 | `ad5e45f` + local | Felicia Chua | PASS | `logs/2026-11-03_MOT-U04-U06.txt` | 1000 ms. Unlogged 2026-11-02 runs took 1500 ms: `tk_dly_tsk()` adds one 10 ms tick, so the test loops now ask for one tick less |
 | 2026-11-03 | MOT-U23 | `ad5e45f` + local | Felicia Chua | PASS | `logs/2026-11-03_MOT-U04-U06.txt` | |
 | 2026-11-03 | MOT-U27 | `ad5e45f` + local | Felicia Chua | PASS | `logs/2026-11-03_MOT-U04-U06.txt` | |
+| 2026-11-03 | MOT-U02 | `4fe0403` + local | Felicia Chua | PASS | `logs/2026-11-03_MOT-U02.txt` | normal image, dual-core (`make WIFI=none`), all subsystems started, only the motors connected; 3 USB power-ups with the motor supply (power bank on VIN) on: neither wheel moved. VIN-only power-up not tested |
