@@ -272,10 +272,10 @@
  * Hump height (terrain_height.h). Wheelbase: drive axle to the caster's
  * floor contact, front to back, in mm. The tilt estimate is wheelbase x
  * sin(pitch), so a wheelbase 10 % too long reads every such height 10 %
- * too high. TODO(measure): placeholder; below the 162 mm car length.
+ * too high. Measured on the car (4 Nov 2026): 80 mm.
  */
 #ifndef TERRAIN_WHEELBASE_MM
-#define TERRAIN_WHEELBASE_MM 110u
+#define TERRAIN_WHEELBASE_MM 80u
 #endif
 
 #if (TERRAIN_WHEELBASE_MM < 50) || (TERRAIN_WHEELBASE_MM > 160)
@@ -304,6 +304,21 @@
 
 #if (TERRAIN_HEIGHT_MAX_STEP_MM < 1) || (TERRAIN_HEIGHT_MAX_STEP_MM > 1000)
 #error "TERRAIN_HEIGHT_MAX_STEP_MM must be 1 to 1000"
+#endif
+
+/*
+ * Motion's odometry (TEAM.md IF-05) counts as stale, and its distance as
+ * unknown, once its update count has not changed for this long, in ms.
+ * tMotion publishes every 20 ms, so 2 s means it has stopped, not that
+ * it is late. At most 5000: the hint keeps only the count's low byte,
+ * which at 20 ms wraps every 5.12 s.
+ */
+#ifndef TERRAIN_HINT_STALE_MS
+#define TERRAIN_HINT_STALE_MS 2000u
+#endif
+
+#if (TERRAIN_HINT_STALE_MS < 100) || (TERRAIN_HINT_STALE_MS > 5000)
+#error "TERRAIN_HINT_STALE_MS must be 100 to 5000"
 #endif
 
 /*
