@@ -87,6 +87,12 @@ static bool width_pole_valid (void);
 static bool width_limits_valid (void);
 static bool width_offsets_valid (void);
 static bool range_valid (void);
+static bool geometry_persists_valid (void);
+static bool wait_result (obstacle_scan_test_snapshot_t * p_snapshot,
+                         robot_obstacle_status_t status, uint8_t after_sequence,
+                         uint32_t timeout_ms);
+static obstacle_scan_test_reading_t reading (ultrasonic_result_t measurement,
+                                             uint16_t echo_us);
 
 /* Public function definitions. */
 
@@ -161,6 +167,8 @@ obstacle_test (void)
                "stale watchdog event, UNKNOWN, and clear-path recovery");
     TEST_CHECK("OBS-U24", scan_timeout_valid(),
                "side timeout event, UNKNOWN, and clear-path recovery");
+    TEST_CHECK("OBS-U49", geometry_persists_valid(),
+               "scripted sweep: geometry kept with PATH_FOUND until next");
 
     TEST_SUMMARY("obstacle");
 }
@@ -870,6 +878,120 @@ range_valid (void)
     config.echo_offset_mm = -400;
     b_ok = b_ok && !obstacle_width_range_mm(100u, &config, &untouched_mm);
     return b_ok && (untouched_mm == -1.0f);
+}
+
+static obstacle_scan_test_reading_t
+reading (ultrasonic_result_t measurement, uint16_t echo_us)
+{
+    obstacle_scan_test_reading_t entry = {.measurement = measurement,
+                                          .echo_us = echo_us};
+    return entry;
+}
+
+/* Wait for a published status whose sequence differs from after_sequence. */
+static bool
+wait_result (obstacle_scan_test_snapshot_t * p_snapshot,
+             robot_obstacle_status_t status, uint8_t after_sequence,
+             uint32_t timeout_ms)
+{
+    SYSTIM start;
+    if (tk_get_otm(&start) != E_OK)
+    {
+        return false;
+    }
+    for (;;)
+    {
+        SYSTIM now;
+        if ((tk_get_otm(&now) != E_OK) ||
+            ((uint32_t)(now.lo - start.lo) > timeout_ms) ||
+            (obstacle_scan_test_snapshot(p_snapshot) != 0))
+        {
+            return false;
+        }
+        if ((robot_obstacle_get_status(p_snapshot->result.flags) == status) &&
+            (p_snapshot->result.sequence != after_sequence))
+        {
+            return true;
+        }
+        if (tk_dly_tsk(TEST_POLL_MS) != E_OK)
+        {
+            return false;
+        }
+    }
+}
+
+/* OBS-U49: a scripted sweep (near centre, both ends no echo, fine hits at
+ * 115 and 65 degrees) publishes PATH_FOUND left with its geometry. The
+ * geometry outlives reset_sweep() and is replaced by the next publish. */
+static bool
+geometry_persists_valid (void)
+{
+    obstacle_scan_test_snapshot_t before;
+    obstacle_scan_test_snapshot_t found;
+    obstacle_scan_test_snapshot_t later;
+    obstacle_scan_test_snapshot_t cleared;
+    obstacle_scan_test_reading_t script[14];
+    uint8_t count = 0u;
+    for (uint8_t index = 0u; index < 3u; ++index)
+    {
+        script[count++] = reading(ULTRASONIC_VALID, NEAR_US);
+    }
+    for (uint8_t index = 0u; index < 6u; ++index)
+    {
+        script[count++] = reading(ULTRASONIC_NO_ECHO, 0u);
+    }
+    script[count++] = reading(ULTRASONIC_VALID, NEAR_US);
+    script[count++] = reading(ULTRASONIC_VALID, NEAR_US);
+    for (uint8_t index = 0u; index < 3u; ++index)
+    {
+        script[count++] = reading(ULTRASONIC_VALID, CLEAR_US);
+    }
+
+    obstacle_width_config_t config = {
+        .scale_mm_per_10k = OBSTACLE_SOUND_MM_PER_10K_US,
+        .echo_offset_mm = OBSTACLE_ECHO_OFFSET_MM,
+        .radial_offset_mm = OBSTACLE_SENSOR_RADIAL_OFFSET_MM,
+        .edge_correction_deg = OBSTACLE_EDGE_CORRECTION_DEG};
+    float centre_mm = 0.0f;
+    tm_printf((UB *)"[TEST] OBS-U49 keep path clear beyond %lu mm\n",
+              (UW)(OBSTACLE_DETECT_DISTANCE_MM + 100u));
+    bool ok =
+        obstacle_width_range_mm(NEAR_US, &config, &centre_mm) &&
+        wait_snapshot(&before, false, true, false, 5000u) &&
+        (obstacle_scan_test_script(script, count) == 0) &&
+        wait_result(&found, ROBOT_OBSTACLE_PATH_FOUND, before.result.sequence,
+                    OBSTACLE_SCAN_TIMEOUT_MS + TEST_MARGIN_MS) &&
+        (tk_dly_tsk(TEST_POLL_MS) == E_OK) &&
+        (obstacle_scan_test_snapshot(&later) == 0);
+    if (ok)
+    {
+        int32_t centre_error =
+            (int32_t)found.geometry.centre_mm - (int32_t)(centre_mm + 0.5f);
+        tm_printf((UB *)"[TEST] OBS-U49 centre %u mm x %d..%d mm\n",
+                  (unsigned int)found.geometry.centre_mm,
+                  (int)found.geometry.left_x_mm,
+                  (int)found.geometry.right_x_mm);
+        ok = (robot_obstacle_get_direction(found.result.flags) ==
+              ROBOT_OBSTACLE_DIR_LEFT_60) &&
+             (centre_error >= -1) && (centre_error <= 1) &&
+             (found.geometry.left_x_mm > 0) &&
+             (found.geometry.right_x_mm < 0) &&
+             ((later.result.sequence != found.result.sequence) ||
+              ((later.geometry.centre_mm == found.geometry.centre_mm) &&
+               (later.geometry.left_x_mm == found.geometry.left_x_mm) &&
+               (later.geometry.right_x_mm == found.geometry.right_x_mm)));
+    }
+    ok = ok &&
+         wait_result(&cleared, ROBOT_OBSTACLE_CLEAR, found.result.sequence,
+                     OBSTACLE_SCAN_TIMEOUT_MS + TEST_MARGIN_MS) &&
+         (cleared.geometry.centre_mm == 0u) &&
+         (cleared.geometry.left_x_mm == 0) &&
+         (cleared.geometry.right_x_mm == 0) && (cleared.script_remaining == 0u);
+    if (!ok)
+    {
+        tm_printf((UB *)"[TEST] OBS-U49 setup, sweep or check failed\n");
+    }
+    return (obstacle_scan_test_script(NULL, 0u) == 0) && ok;
 }
 
 #endif /* APP_TEST */

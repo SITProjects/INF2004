@@ -8,6 +8,7 @@
 
 /* Public includes. */
 #include "../robot_types.h"
+#include "drv_ultrasonic.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -21,6 +22,18 @@ typedef struct
     /** Extra settling time in milliseconds after the estimated travel. */
     uint16_t settle_margin_ms;
 } obstacle_servo_timing_t;
+
+/**
+ * Geometry published with one result: zeros unless that result is a
+ * finished sweep (PATH_FOUND or BLOCKED). Every range is from the servo
+ * pivot (obstacle_width_range_mm()); lateral offsets are + left.
+ */
+typedef struct
+{
+    uint16_t centre_mm; /**< Servo pivot to obstacle face, 0 if none. */
+    int16_t left_x_mm;  /**< Left boundary, lateral mm from pivot. */
+    int16_t right_x_mm; /**< Right boundary, lateral mm from pivot. */
+} obstacle_scan_geometry_t;
 
 /* Public function declarations. */
 
@@ -100,6 +113,15 @@ robot_obstacle_result_t obstacle_scan_update (void);
 bool obstacle_scan_stop_requested (void);
 
 /**
+ * @brief Read the geometry published with the latest result.
+ * @return Geometry of the result last returned by obstacle_scan_update(),
+ * with the same sequence. It is written only when a result is published, so
+ * it stays valid after the sweep's working state is reset, until the next
+ * publish of any kind. Call only from the scan task.
+ */
+obstacle_scan_geometry_t obstacle_scan_geometry (void);
+
+/**
  * @brief Initialize the sensor and centre the servo before sensing.
  * @param trig_pin Ultrasonic trigger GPIO number.
  * @param echo_pin Ultrasonic echo GPIO number, distinct from trig_pin.
@@ -145,7 +167,20 @@ typedef struct
     uint32_t critical_flag_us;
     /** Event is always ULTRASONIC_VALID; captured centre pulse in us. */
     uint16_t critical_echo_us;
+    robot_obstacle_result_t result;    /**< Latest published result. */
+    obstacle_scan_geometry_t geometry; /**< Published with result. */
+    uint8_t script_remaining;          /**< Scripted readings not yet used. */
 } obstacle_scan_test_snapshot_t;
+
+/** Largest number of scripted readings one request can queue. */
+#define OBSTACLE_SCAN_TEST_SCRIPT_MAX 24u
+
+/** One scripted reading, used in place of the next real ultrasonic result. */
+typedef struct
+{
+    ultrasonic_result_t measurement; /**< VALID, NO_ECHO or FAULT. */
+    uint16_t echo_us;                /**< Echo in us, used when VALID. */
+} obstacle_scan_test_reading_t;
 
 /**
  * @brief Create mailbox mutex once before starting scanner or tests.
@@ -168,6 +203,20 @@ int obstacle_scan_test_request (bool hold);
  * modulo 2^32; they do not measure physical arrival or interrupt latency.
  */
 int obstacle_scan_test_snapshot (obstacle_scan_test_snapshot_t * snapshot);
+/**
+ * @brief Replace the next completed ultrasonic readings with a script.
+ *
+ * The real trigger and echo still run, so driver timing is unchanged; each
+ * completed reading is then replaced by the next scripted entry, in order,
+ * until the script is used up. A new request replaces any unused entries.
+ * @param p_readings Readings to use; may be NULL only when count is 0, which
+ *        cancels the script.
+ * @param count Number of entries, at most OBSTACLE_SCAN_TEST_SCRIPT_MAX.
+ * @return 0 on success, 1 for invalid arguments or synchronization failure.
+ * Any task, after obstacle_scan_test_init().
+ */
+int obstacle_scan_test_script (obstacle_scan_test_reading_t const * p_readings,
+                               uint8_t count);
 #endif
 
 #endif /* OBSTACLE_SCAN_H */

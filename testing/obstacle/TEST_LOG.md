@@ -50,6 +50,7 @@ Bypass geometry, planner and state machine (issue #86):
 |---|---|---|---|---|---|
 | OBS-U39 | edge lateral offsets | `obstacle_width.c` | auto | OBS-U07 box (edges 67.5° and 112.5° at 266 mm); unavailable result | `left_x_mm` 99..105, `right_x_mm` −105..−99; unavailable gives 0, 0 |
 | OBS-U40 | range reference point | `obstacle_width.c` | auto | 1551 µs at the fixture scale with a 20 mm radial offset; echo 0, NULL config or output, range at or below zero | 286 ±0.5 mm from the pivot (offset added once); every invalid case false with the output untouched |
+| OBS-U49 | geometry kept with its result | scanner (test script seam) | auto (bench: clear path) | From a clear, released snapshot, script 3 near centre pings, no echo at both ends, fine hits at 115° and 65°, then 3 clear pings | PATH_FOUND left with centre = pivot range of the near echo ±1 mm, `left_x > 0 > right_x`, unchanged after the sweep state resets; the next CLEAR has a new sequence and zero geometry; script used up |
 
 Critical/freshness cases (all on-target and physical results remain pending):
 
