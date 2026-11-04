@@ -222,3 +222,24 @@ limit there.
 
 (The kernel's USB and WiFi service tasks, and its I2C and ADC drivers, also
 use a few of these.)
+
+## TIMER tick initialization (cold-boot fix)
+
+`usermain()` explicitly configures the watchdog tick to 1 MHz from the
+12 MHz `CLK_REF` before it blocks or starts application subsystems. This
+shared `app_main.c` change leaves kernel sources untouched. TIMER remains
+read-only for application tasks after that one startup configuration.
+
+On 2026-11-04, isolated diagnostic images on the Pico reproduced CYCLES=0
+and about 23,672 TIMER counts over 1,010 ms after removing all power, for
+both default and WIFI=none builds. After BOOTSEL flashing both had
+CYCLES=12 and about 1,010,000 counts. See `testing/integration/TIMER_DIAGNOSTIC.md`
+for source/firmware provenance and before/after evidence.
+
+The initial task was observed on core 0 in these SMP runs. The radio task
+is pinned to core 0; it starts using TIMER after the initial task blocks.
+This placement must be revisited if startup affinity/scheduling changes.
+Kernel consumers before `usermain()` (including SMP lock statistics) remain
+outside this application's initialization guarantee. Motion, terrain and
+communication measurements that relied on TIMER after a cold boot before
+this fix need review; the test history must not be retroactively marked PASS.

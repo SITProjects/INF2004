@@ -22,12 +22,14 @@ Additional regression cases:
 |---|---|---|---|---|---|
 | OBS-U12 | no-return and beyond-range policy | driver → scanner | manual | Scope TRIG/ECHO in open space; include a pulse lasting about 38 ms, if produced by this module. Record trigger-to-rise, pulse duration, driver outcome and scanner status. | NO_ECHO then CLEAR; late falling edge does not overwrite a result; next trigger waits for configured interval |
 | OBS-U13 | malformed or stuck-high echo | driver → scanner | manual | Check ECHO high before trigger, duplicate/ambiguous edges and a zero pulse using controlled input. | FAULT; never classed as a no-return clear reading |
-| OBS-U14 | directional no-return ranking | scanner | manual | Compare a no-return side against a finite clear side, swap sides, then test two no-return sides. | No-return side wins; two no-return sides select left. Width and edge flags follow the sweep rules (OBS-U33), not checked here |
+| OBS-U14 | side selection and fault policy | scanner | manual | With motors unable to move, keep the centre obstacle inside detection. Arrange one finite side return beyond both the configured detection threshold and the centre echo + `OBSTACLE_EDGE_JUMP_US` (about 80 mm additional ray range); repeat with the sides mirrored, both sides occupied, NO_ECHO and a faulty side. Record centre/side echoes and final direction. | Only a side meeting both limits, or NO_ECHO, is chosen; farther clear wins and ties choose left. No clear side gives BLOCKED, or UNKNOWN if a side faulted |
 | OBS-U15 | active pin allocation | config → hardware | manual | Scope GP16 TRIG width and nominal forward trigger cadence in a stable clear-path centre scan (allow polling jitter; side scans have different cadence); scope GP12 servo period/centre width. Confirm GP17 input changes with sensor distance. Inspect GPIO function/output-enable registers or debugger pinmux state and obstacle source to establish ownership of GP2/GP3; quiet pins alone do not establish pin allocation. | TRIG GP16, ECHO GP17, servo GP12; one configured scan priority |
 | OBS-U16 | ping median | `obstacle_decision.c` | auto | `obstacle_test.c`: zeros ignored (not majority voting: `{0, 0, 300}` gives 300 us), two nonzero samples averaged without overflow, all-zero gives 0, NULL/zero count gives 0, only the first 3 samples used | `[TEST] OBS-U16 PASS` |
 | OBS-U17 | position result after its pings | `obstacle_decision.c` | auto | `obstacle_test.c`: exhausted retries give FAULT regardless of median; zero median gives NO_ECHO; otherwise VALID | `[TEST] OBS-U17 PASS` |
 | OBS-U18 | centre decision at the detection threshold | `obstacle_decision.c` | auto | `obstacle_test.c`: NO_ECHO, echo at and above `OBSTACLE_DETECT_ECHO_US` → CLEAR; one below and 1 µs → scan sides; FAULT/PENDING → UNKNOWN | `[TEST] OBS-U18 PASS` |
-| OBS-U19 | side selection | `obstacle_decision.c` | auto | `obstacle_test.c`: 14 cases covering both near, threshold boundary, ties, farther side, no-echo ranking, faults with and without a clear side | `[TEST] OBS-U19 PASS`; on failure the console names the failing case number |
+| OBS-U19 | side selection | `obstacle_decision.c` | auto | `obstacle_test.c`: 22 cases covering both near, detection and centre-relative jump boundaries, a square-on wall, ties, farther side, no-echo ranking, faults, and 32-bit addition near UINT16_MAX | `[TEST] OBS-U19 PASS`; on failure the console names the failing case number |
+| OBS-U52 | side/width classification agreement | `obstacle_decision.c`, `obstacle_width.c` | auto | Grid of centre/side echoes at detection and jump boundaries, zero and UINT16_MAX; test both directions with the opposite side faulted | A VALID side is chosen exactly when it is a width MISS and meets detection; otherwise UNKNOWN with no direction; sums do not wrap |
+| OBS-U54 | wide wall must not offer a bypass | scanner, #88 | manual | Motors unable to move; after ranging/servo calibration, place a flat board square-on at 250 mm, then 290 mm from the sensor face, spanning the entire 60–120 degree sweep. Capture five complete sweeps at each position, recording measured echoes and final results | Every completed valid sweep is BLOCKED, never PATH_FOUND; sensor faults are recorded separately and are not PASS |
 
 Width sweep cases (#48). Synthetic geometry uses a fixed fixture (scale 1715,
 no offsets, correction 0 unless stated), so production calibration cannot
@@ -65,6 +67,13 @@ Bypass geometry, planner and state machine (issue #86):
 | OBS-U49 | geometry kept with its result | scanner (test script seam) | auto (bench: clear path) | From a clear, released snapshot, script 3 near centre pings, no echo at both ends, fine hits at 115° and 65°, then 3 clear pings | PATH_FOUND left with centre = pivot range of the near echo ±1 mm, `left_x > 0 > right_x`, unchanged after the sweep state resets; the next CLEAR has a new sequence and zero geometry; script used up |
 | OBS-U50 | scanner rearm | scanner (test command) | auto (bench: clear path) | Rearm while clear, and again during a scripted side scan, each followed by 3 scripted clear pings | Straight after each rearm: SCANNING with the returned sequence (new), stop latched, no side scan. CLEAR comes only once all 3 scripted pings are used |
 | OBS-U51 | corridor sweep | scanner (test command) | auto (bench: clear path) | Script 13 positions: 1000 + 20·i µs, no echo at index 3, index 6 faulted past its retries. Then request a corridor during a scripted side scan | Corridor sequence +1, `valid_mask` all but bit 6, medians as scripted (index 3 and 6 zero), script used up, then the scanner rearms and clears. The request during the side scan is refused and publishes nothing |
+
+A clear endpoint starts an inward edge search. A walk with no inward hit
+ends at the centre, which still counts as the found edge; only a
+fine-position fault or an unavailable width (invalid geometry) leaves the
+edge unknown. The bypass's unknown-edge and
+corridor verification paths remain necessary. OBS-U49 and the bypass cases
+must be rerun after this decision change.
 
 Critical/freshness cases (all on-target and physical results remain pending):
 
@@ -123,3 +132,22 @@ retry-before-increment and attempt diagnostic with the UNKNOWN publication;
 it is a software-consumption timestamp. U25 observes completed centre decisions
 through the subsequent `side scan started` event while below detection, or
 CLEAR publication above detection, alongside critical set/clear events.
+
+### 2026-11-04 side-clearance regression evidence
+
+Base `b69616b` plus uncommitted side-clearance changes. Host U19/U52 use the
+actual on-target test bodies; the extended sanitizer run checks all 65,536
+centre values at echo boundaries and both candidate directions.
+
+The isolated Pico image also includes the separate timer initialization fix
+and a temporary entry point that runs pure tests with application tasks
+stopped. Source delta: `logs/2026-11-04_side_diagnostic.patch` (against
+`b69616b`). It was built with `make TEST=1`, placeholder Wi-Fi credentials;
+no motors or sensors were driven. Firmware SHA256: `5d6ddabd0abf8274cae0b472a64538ac11dc95c499c9884b40ea44eb6a816fd4`.
+
+| Date | Test ID | Commit | Tester | Result | Log / evidence | Notes |
+|---|---|---|---|---|---|---|
+| 2026-11-04 | OBS-U19 | `b69616b` + diagnostic patch above | Codex | PASS | `logs/2026-11-04_side_on_target.txt` | 22 pure cases on Pico, not physical sensing; host also passes |
+| 2026-11-04 | OBS-U52 | `b69616b` + diagnostic patch above | Codex | PASS | `logs/2026-11-04_side_on_target.txt`, `logs/2026-11-04_side_host.txt` | Classifier agreement on Pico and host; ASan/UBSan host run |
+| 2026-11-04 | OBS-U35–U38, U41–U48 | `b69616b` + diagnostic patch above | Codex | PASS | `logs/2026-11-04_side_on_target.txt` | Existing bypass pure/simulated checks only; no car movement |
+| 2026-11-04 | OBS-U14, U54, U49 | `b69616b` + side-clearance changes | Codex | NOT RUN | — | Physical side/wall fixtures and scanner script run remain pending; not covered by the isolated pure image |

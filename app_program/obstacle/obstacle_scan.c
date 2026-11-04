@@ -823,8 +823,8 @@ scan_sides (ultrasonic_result_t measurement, uint16_t echo_us)
     /* The direction comes from both ends; publish after the fine walks. */
     ultrasonic_result_t left = (ultrasonic_result_t)state_get(
         SCAN_LEFT_RESULT_MASK, SCAN_LEFT_RESULT_SHIFT);
-    obstacle_side_decision_t decision =
-        obstacle_decision_sides(left, left_echo_us, measurement, echo_us);
+    obstacle_side_decision_t decision = obstacle_decision_sides(
+        left, left_echo_us, measurement, echo_us, centre_echo_us);
     pending_flags = robot_obstacle_pack_flags(decision.status,
                                               decision.direction, false, false);
     if ((obstacle_width_classify(left, left_echo_us, centre_echo_us) ==

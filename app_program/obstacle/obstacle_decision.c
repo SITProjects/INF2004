@@ -20,7 +20,8 @@ _Static_assert(OBSTACLE_PINGS_PER_ANGLE <= OBSTACLE_DECISION_MEDIAN_MAX,
 /* Private function declarations. */
 
 static bool is_fault (ultrasonic_result_t measurement);
-static uint32_t clear_rank (ultrasonic_result_t measurement, uint16_t echo_us);
+static uint32_t clear_rank (ultrasonic_result_t measurement, uint16_t echo_us,
+                            uint16_t centre_echo_us);
 
 /* Public function definitions. */
 
@@ -92,12 +93,13 @@ obstacle_decision_centre (ultrasonic_result_t measurement, uint16_t echo_us)
 
 obstacle_side_decision_t
 obstacle_decision_sides (ultrasonic_result_t left, uint16_t left_echo_us,
-                         ultrasonic_result_t right, uint16_t right_echo_us)
+                         ultrasonic_result_t right, uint16_t right_echo_us,
+                         uint16_t centre_echo_us)
 {
     obstacle_side_decision_t decision = {.status = ROBOT_OBSTACLE_BLOCKED,
                                          .direction = ROBOT_OBSTACLE_DIR_NONE};
-    uint32_t left_rank = clear_rank(left, left_echo_us);
-    uint32_t right_rank = clear_rank(right, right_echo_us);
+    uint32_t left_rank = clear_rank(left, left_echo_us, centre_echo_us);
+    uint32_t right_rank = clear_rank(right, right_echo_us, centre_echo_us);
 
     if ((left_rank == 0u) && (right_rank == 0u))
     {
@@ -127,14 +129,17 @@ is_fault (ultrasonic_result_t measurement)
 
 /* Zero means not clear; larger values mean more clearance. */
 static uint32_t
-clear_rank (ultrasonic_result_t measurement, uint16_t echo_us)
+clear_rank (ultrasonic_result_t measurement, uint16_t echo_us,
+            uint16_t centre_echo_us)
 {
     if (measurement == ULTRASONIC_NO_ECHO)
     {
         return NO_ECHO_RANK;
     }
+    /* Match the width classifier's MISS boundary without 16-bit wrap. */
+    uint32_t limit_us = (uint32_t)centre_echo_us + OBSTACLE_EDGE_JUMP_US;
     if ((measurement == ULTRASONIC_VALID) &&
-        (echo_us >= OBSTACLE_DETECT_ECHO_US))
+        (echo_us >= OBSTACLE_DETECT_ECHO_US) && ((uint32_t)echo_us >= limit_us))
     {
         return echo_us;
     }
