@@ -379,8 +379,9 @@ motion_task (INT stacd, void * p_exinf)
         motion_state_t before = motion_move_get_state();
         motion_command_service(b_line_control);
         (void)motion_move_update();
-        report_change(before, motion_move_get_state());
+        /* Status first: an event's reader must see the done reason. */
         publish_status(b_inhibited);
+        report_change(before, motion_move_get_state());
         publish_odometry();
 
         uint32_t busy_us = timer_us() - wake_us;
