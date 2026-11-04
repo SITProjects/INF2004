@@ -24,10 +24,8 @@
 
 static bool config_valid (obstacle_width_config_t const * p_config);
 static float index_angle_deg (uint8_t index);
-static bool edge_range_mm (uint16_t echo_us,
-                           obstacle_width_config_t const * p_config,
-                           float * p_range_mm);
 static uint16_t angle_ddeg (float angle_deg);
+static int16_t lateral_mm (float range_mm, float angle_deg);
 
 /* Public function definitions. */
 
@@ -60,8 +58,8 @@ obstacle_width_estimate (obstacle_width_edge_t left,
     }
     float left_range_mm;
     float right_range_mm;
-    if (!edge_range_mm(left.echo_us, p_config, &left_range_mm) ||
-        !edge_range_mm(right.echo_us, p_config, &right_range_mm))
+    if (!obstacle_width_range_mm(left.echo_us, p_config, &left_range_mm) ||
+        !obstacle_width_range_mm(right.echo_us, p_config, &right_range_mm))
     {
         return obstacle_width_unavailable();
     }
@@ -122,7 +120,9 @@ obstacle_width_estimate (obstacle_width_edge_t left,
         .b_right_found = b_right_found,
         .b_collapsed = b_collapsed,
         .left_bound_ddeg = angle_ddeg(left_deg),
-        .right_bound_ddeg = angle_ddeg(right_deg)};
+        .right_bound_ddeg = angle_ddeg(right_deg),
+        .left_x_mm = lateral_mm(left_range_mm, left_deg),
+        .right_x_mm = lateral_mm(right_range_mm, right_deg)};
     return result;
 }
 
@@ -137,8 +137,31 @@ obstacle_width_unavailable (void)
         .b_right_found = false,
         .b_collapsed = false,
         .left_bound_ddeg = 0u,
-        .right_bound_ddeg = 0u};
+        .right_bound_ddeg = 0u,
+        .left_x_mm = 0,
+        .right_x_mm = 0};
     return result;
+}
+
+bool
+obstacle_width_range_mm (uint16_t echo_us,
+                         obstacle_width_config_t const * p_config,
+                         float * p_range_mm)
+{
+    if ((echo_us == 0u) || (p_range_mm == NULL) || (p_config == NULL) ||
+        (p_config->scale_mm_per_10k == 0u))
+    {
+        return false;
+    }
+    float range_mm =
+        (((float)echo_us * (float)p_config->scale_mm_per_10k) / 10000.0f) +
+        (float)p_config->echo_offset_mm + p_config->radial_offset_mm;
+    if (!isfinite(range_mm) || !(range_mm > 0.0f))
+    {
+        return false;
+    }
+    *p_range_mm = range_mm;
+    return true;
 }
 
 /* Private function definitions. */
@@ -160,29 +183,25 @@ index_angle_deg (uint8_t index)
                    (OBSTACLE_SWEEP_STEP_DEG * index));
 }
 
-/* Range from the servo pivot to the reflecting point, in millimetres. */
-static bool
-edge_range_mm (uint16_t echo_us, obstacle_width_config_t const * p_config,
-               float * p_range_mm)
-{
-    if (echo_us == 0u)
-    {
-        return false;
-    }
-    float range_mm =
-        (((float)echo_us * (float)p_config->scale_mm_per_10k) / 10000.0f) +
-        (float)p_config->echo_offset_mm + p_config->radial_offset_mm;
-    if (!isfinite(range_mm) || !(range_mm > 0.0f))
-    {
-        return false;
-    }
-    *p_range_mm = range_mm;
-    return true;
-}
-
 /* Boundary angles lie within the sweep, 60..120 degrees, so this fits. */
 static uint16_t
 angle_ddeg (float angle_deg)
 {
     return (uint16_t)((angle_deg * 10.0f) + 0.5f);
+}
+
+/* Lateral offset of a boundary, + left; saturated to the int16_t range. */
+static int16_t
+lateral_mm (float range_mm, float angle_deg)
+{
+    float x_mm = range_mm * cosf(angle_deg * DEG_TO_RAD);
+    if (!(x_mm < (float)INT16_MAX))
+    {
+        return INT16_MAX;
+    }
+    if (!(x_mm > (float)INT16_MIN))
+    {
+        return INT16_MIN;
+    }
+    return (int16_t)((x_mm >= 0.0f) ? (x_mm + 0.5f) : (x_mm - 0.5f));
 }

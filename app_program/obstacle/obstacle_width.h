@@ -55,6 +55,8 @@ typedef struct
     bool b_collapsed;          /**< Correction exceeded the edge gap. */
     uint16_t left_bound_ddeg;  /**< Left boundary, 0.1 degree; 0 if none. */
     uint16_t right_bound_ddeg; /**< Right boundary, 0.1 degree; 0 if none. */
+    int16_t left_x_mm;  /**< Left boundary, lateral mm from pivot, + left. */
+    int16_t right_x_mm; /**< Right boundary, lateral mm from pivot, + left. */
 } obstacle_width_result_t;
 
 /* Public function declarations. */
@@ -84,7 +86,9 @@ obstacle_width_class_t obstacle_width_classify (ultrasonic_result_t measurement,
  * width is the distance between the two points. If the correction makes the
  * edges cross, both move to the midpoint of the uncorrected edges and
  * b_collapsed is set. A width that rounds below 1 mm is reported as 1 mm,
- * meaning narrower than the sweep can resolve.
+ * meaning narrower than the sweep can resolve. Each boundary's lateral
+ * offset is r * cos(angle), positive to the left, rounded and saturated to
+ * the int16_t range.
  *
  * @param left Left hit: index 0 up to the centre index.
  * @param right Right hit: centre index up to the last index.
@@ -103,8 +107,25 @@ obstacle_width_estimate (obstacle_width_edge_t left,
 /**
  * @brief Result for a sweep whose width cannot be measured.
  * @return Width ROBOT_OBSTACLE_WIDTH_UNAVAILABLE, both edges
- *         ROBOT_OBSTACLE_EDGE_NONE and every flag false.
+ *         ROBOT_OBSTACLE_EDGE_NONE, every flag false and both offsets 0.
  */
 obstacle_width_result_t obstacle_width_unavailable (void);
+
+/**
+ * @brief Convert an echo to the range from the servo pivot.
+ *
+ * r = echo * scale / 10000 + echo offset + radial offset, so the result is
+ * measured from the servo pivot, not the sensor face.
+ *
+ * @param echo_us Echo in microseconds; zero means no echo.
+ * @param p_config Corrections; NULL or a zero scale is rejected.
+ * @param p_range_mm Non-null output, written only on success.
+ * @return true with the range; false for a zero echo, invalid config, or a
+ *         range that is not finite or not above zero.
+ * Pure: any task, either core.
+ */
+bool obstacle_width_range_mm (uint16_t echo_us,
+                              obstacle_width_config_t const * p_config,
+                              float * p_range_mm);
 
 #endif /* OBSTACLE_WIDTH_H */

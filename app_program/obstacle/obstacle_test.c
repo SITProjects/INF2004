@@ -85,6 +85,8 @@ static bool width_box_valid (void);
 static bool width_shifted_valid (void);
 static bool width_pole_valid (void);
 static bool width_limits_valid (void);
+static bool width_offsets_valid (void);
+static bool range_valid (void);
 
 /* Public function definitions. */
 
@@ -125,6 +127,10 @@ obstacle_test (void)
                "width: 20 mm pole reads 22 mm; over-correction collapses");
     TEST_CHECK("OBS-U11", width_limits_valid(),
                "width: saturates at 511 mm; invalid input unavailable");
+    TEST_CHECK("OBS-U39", width_offsets_valid(),
+               "width: centred box edges at +/-102 mm; unavailable is 0");
+    TEST_CHECK("OBS-U40", range_valid(),
+               "range: from the pivot, radial offset added once");
 
     TEST_CHECK("OBS-U10", packed_obstacle_fields_valid(),
                "packed obstacle fields clamp without changing neighbours");
@@ -828,6 +834,42 @@ packed_obstacle_fields_valid (void)
         return false;
     }
     return true;
+}
+
+/* OBS-U39: the OBS-U07 box (edges 67.5 and 112.5 deg at 266 mm) lies
+ * 266 * cos(67.5 deg) = 102 mm either side of the pivot. */
+static bool
+width_offsets_valid (void)
+{
+    obstacle_width_config_t config = width_fixture(0.0f);
+    obstacle_width_edge_t left = {.index = 2u, .echo_us = 1551u};
+    obstacle_width_edge_t right = {.index = 10u, .echo_us = 1551u};
+    obstacle_width_result_t width =
+        obstacle_width_estimate(left, right, &config);
+    obstacle_width_result_t none = obstacle_width_unavailable();
+    return (width.left_x_mm >= 99) && (width.left_x_mm <= 105) &&
+           (width.right_x_mm <= -99) && (width.right_x_mm >= -105) &&
+           (none.left_x_mm == 0) && (none.right_x_mm == 0);
+}
+
+/* OBS-U40: 1551 us is 266.0 mm at the fixture scale; a 20 mm radial
+ * offset gives 286.0 mm from the pivot, not 306.0 mm. */
+static bool
+range_valid (void)
+{
+    obstacle_width_config_t config = width_fixture(0.0f);
+    config.radial_offset_mm = 20.0f;
+    float range_mm = 0.0f;
+    bool b_ok = obstacle_width_range_mm(1551u, &config, &range_mm) &&
+                (range_mm > 285.5f) && (range_mm < 286.5f);
+
+    float untouched_mm = -1.0f;
+    b_ok = b_ok && !obstacle_width_range_mm(0u, &config, &untouched_mm) &&
+           !obstacle_width_range_mm(1551u, NULL, &untouched_mm) &&
+           !obstacle_width_range_mm(1551u, &config, NULL);
+    config.echo_offset_mm = -400;
+    b_ok = b_ok && !obstacle_width_range_mm(100u, &config, &untouched_mm);
+    return b_ok && (untouched_mm == -1.0f);
 }
 
 #endif /* APP_TEST */
