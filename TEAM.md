@@ -167,16 +167,21 @@ What students *can* do:
 
 ## 4. Task priorities
 
-1 is the highest. 1–4 are used by the kernel (USB console 3, WiFi 4). Each subsystem gets its own band by default;
-change it only by team agreement. Write down every task you create.
+1 is the highest. 1–4 are used by the kernel: the initial task 1 (it runs
+the tests in `make TEST=1` builds), USB console 3 and Wi-Fi 4, both pinned
+to core 0. Application tasks follow the order of the Week 6 design freeze,
+each at its freeze priority + 3 so they sit below the kernel's tasks.
+Change it only by team agreement. Write down every task you create.
 
-| Subsystem | Priority band | Tasks (name – priority – core) |
+| Subsystem | Priority | Tasks (name – priority – core) |
 |---|---|---|
-| obstacle | 12–13 | `obstacle_scan_task` – 12 – core 0 (`TP_PRC1`; the echo interrupt is on core 0); with the bypass on, it also holds INHIBIT from start-up and sends motion commands (IF-06) |
-| motion | 14–15 | `tMotion` – 14 – any (design freeze says 3: to settle) |
-| line_follow | 16–17 | `line_follow_task` – 16 – any |
-| terrain | 18–19 | `terrain_task` – 18 – any |
-| communication | 20–21 | `communication_task` – 20 – any |
+| *safety (unassigned)* | 5 | *tSafety – 5 (reserved)* |
+| motion | 6 | `tMotion` – 6 – core 1 (`TP_PRC2`; nothing above it runs there, NFR1) |
+| line_follow | 7–8 | `line_follow_task` (tLine) – 7 – any; *tBarcode – 8 (reserved)* |
+| terrain | 9 | `terrain_task` (tImu) – 9 – any |
+| *mission (unassigned)* | 10 | *tMission – 10 (reserved)* |
+| obstacle | 11–12 | `obstacle_scan_task` (tScan) – 11 – core 0 (`TP_PRC1`; the echo interrupt is on core 0); its test helper task 12; with the bypass on, it also holds INHIBIT from start-up and sends motion commands (IF-06) |
+| communication | 13 | `communication_task` (tComms) – 13 – any |
 
 Core: `TP_PRC1` = core 0, `TP_PRC2` = core 1, or "any".
 

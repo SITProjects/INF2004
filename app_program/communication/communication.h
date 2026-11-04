@@ -17,8 +17,8 @@
 
 /* Public types, constants, and macros. */
 
-/** Wi-Fi task priority; the communication band is 20-21 (TEAM.md). */
-#define COMMUNICATION_PRI_WIFI 20
+/** Wi-Fi task priority: tComms, design freeze 10 + 3 (TEAM.md section 4). */
+#define COMMUNICATION_PRI_WIFI 13
 
 /** ID of the Wi-Fi status task. */
 extern ID communication_tid_wifi;

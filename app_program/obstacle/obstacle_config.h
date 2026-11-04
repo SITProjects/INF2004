@@ -24,8 +24,8 @@
 #define OBSTACLE_ECHO_PIN 17u
 #define OBSTACLE_SERVO_PIN 12u
 
-/* Task configuration: preserve the current priority and polling period. */
-#define OBSTACLE_PRI_SCAN 12
+/* Task configuration: tScan, design freeze 8 + 3 (TEAM.md section 4). */
+#define OBSTACLE_PRI_SCAN 11
 #define OBSTACLE_UPDATE_PERIOD_MS 10u
 
 /* Mechanically permitted sweep. Verify the complete arc on the car. */
