@@ -10,6 +10,7 @@
 
 #include "../test_report.h"
 #include "obstacle.h"
+#include "obstacle_avoid.h"
 #include "obstacle_decision.h"
 #include "obstacle_scan.h"
 #include "obstacle_width.h"
@@ -110,6 +111,21 @@ static bool start_side_scan (obstacle_scan_test_snapshot_t * p_snapshot);
 static bool wait_command (obstacle_scan_test_snapshot_t * p_snapshot);
 static bool corridor_valid (void);
 static bool corridor_refused_valid (void);
+static obstacle_avoid_geometry_t avoid_fixture (void);
+static robot_obstacle_result_t path_result (robot_obstacle_direction_t dir,
+                                            bool b_left_found,
+                                            bool b_right_found);
+static obstacle_scan_geometry_t
+geometry_at (uint16_t centre_mm, int16_t left_x_mm, int16_t right_x_mm);
+static bool plan_is (obstacle_avoid_plan_t plan, bool b_gap_right,
+                     bool b_edge_unknown, uint16_t sidestep_mm,
+                     uint16_t pass_mm);
+static bool plan_left_valid (void);
+static bool plan_right_valid (void);
+static bool plan_limits_valid (void);
+static bool plan_refusals_valid (void);
+static obstacle_scan_corridor_t empty_corridor (void);
+static bool corridor_check_valid (void);
 
 /* Public function definitions. */
 
@@ -150,10 +166,20 @@ obstacle_test (void)
                "width: 20 mm pole reads 22 mm; over-correction collapses");
     TEST_CHECK("OBS-U11", width_limits_valid(),
                "width: saturates at 511 mm; invalid input unavailable");
+    TEST_CHECK("OBS-U35", plan_left_valid(),
+               "plan left: sidestep and pass from the formulas");
+    TEST_CHECK("OBS-U36", plan_right_valid(),
+               "plan right: mirror of left using -right_x");
+    TEST_CHECK("OBS-U37", plan_limits_valid(),
+               "plan limits: refuse, never clamp down; unknown edge is max");
+    TEST_CHECK("OBS-U38", plan_refusals_valid(),
+               "plan refusals: not PATH_FOUND to a side, or no geometry");
     TEST_CHECK("OBS-U39", width_offsets_valid(),
                "width: centred box edges at +/-102 mm; unavailable is 0");
     TEST_CHECK("OBS-U40", range_valid(),
                "range: from the pivot, radial offset added once");
+    TEST_CHECK("OBS-U41", corridor_check_valid(),
+               "corridor: clear, shift to the far side, limits, invalid");
 
     TEST_CHECK("OBS-U10", packed_obstacle_fields_valid(),
                "packed obstacle fields clamp without changing neighbours");
@@ -1196,6 +1222,247 @@ corridor_refused_valid (void)
         tm_printf((UB *)"[TEST] OBS-U51 refusal check failed\n");
     }
     return b_rearmed && ok;
+}
+
+/* Fixed car for the pure bypass tests, independent of the config. */
+static obstacle_avoid_geometry_t
+avoid_fixture (void)
+{
+    obstacle_avoid_geometry_t geometry = {.half_width_mm = 75u,
+                                          .margin_mm = 60u,
+                                          .axle_to_pivot_mm = 80u,
+                                          .rear_mm = 60u,
+                                          .depth_mm = 200u,
+                                          .sidestep_min_mm = 100u,
+                                          .sidestep_max_mm = 400u,
+                                          .lateral_max_mm = 500u,
+                                          .pass_max_mm = 1500u,
+                                          .return_extra_mm = 150u,
+                                          .overshoot_mm = 40u};
+    return geometry;
+}
+
+static robot_obstacle_result_t
+path_result (robot_obstacle_direction_t dir, bool b_left_found,
+             bool b_right_found)
+{
+    robot_obstacle_result_t result = {
+        .flags = robot_obstacle_pack_flags(ROBOT_OBSTACLE_PATH_FOUND, dir,
+                                           b_left_found, b_right_found),
+        .edges = robot_obstacle_pack_edges(1u, 11u),
+        .width_mm = 200u,
+        .sequence = 1u};
+    return result;
+}
+
+static obstacle_scan_geometry_t
+geometry_at (uint16_t centre_mm, int16_t left_x_mm, int16_t right_x_mm)
+{
+    obstacle_scan_geometry_t geometry = {.centre_mm = centre_mm,
+                                         .left_x_mm = left_x_mm,
+                                         .right_x_mm = right_x_mm};
+    return geometry;
+}
+
+static bool
+plan_is (obstacle_avoid_plan_t plan, bool b_gap_right, bool b_edge_unknown,
+         uint16_t sidestep_mm, uint16_t pass_mm)
+{
+    return (plan.status == OBSTACLE_AVOID_PLAN_OK) &&
+           (plan.b_gap_right == b_gap_right) &&
+           (plan.b_edge_unknown == b_edge_unknown) &&
+           (plan.sidestep_mm == sidestep_mm) && (plan.pass_mm == pass_mm);
+}
+
+/* OBS-U35: left_x 100 needs 100 + 75 + 60 = 235 mm; the pass is
+ * 250 + 80 + 200 + 60 + 60 = 650 mm. */
+static bool
+plan_left_valid (void)
+{
+    obstacle_avoid_geometry_t car = avoid_fixture();
+    obstacle_avoid_plan_t plan =
+        obstacle_avoid_plan(path_result(ROBOT_OBSTACLE_DIR_LEFT_60, true, true),
+                            geometry_at(250u, 100, -100), &car);
+    return plan_is(plan, false, false, 235u, 650u);
+}
+
+/* OBS-U36: edges at +40 and -120 need 175 mm on the left and 255 mm on
+ * the right, so each side uses its own edge. */
+static bool
+plan_right_valid (void)
+{
+    obstacle_avoid_geometry_t car = avoid_fixture();
+    obstacle_scan_geometry_t geometry = geometry_at(250u, 40, -120);
+    obstacle_avoid_plan_t right = obstacle_avoid_plan(
+        path_result(ROBOT_OBSTACLE_DIR_RIGHT_120, true, true), geometry, &car);
+    obstacle_avoid_plan_t left = obstacle_avoid_plan(
+        path_result(ROBOT_OBSTACLE_DIR_LEFT_60, true, true), geometry, &car);
+    return plan_is(right, true, false, 255u, 650u) &&
+           plan_is(left, false, false, 175u, 650u);
+}
+
+/* OBS-U37: refuse rather than clamp, raise to the minimum, use the
+ * maximum without the gap-side edge, and split long moves evenly. */
+static bool
+plan_limits_valid (void)
+{
+    obstacle_avoid_geometry_t car = avoid_fixture();
+    robot_obstacle_result_t both =
+        path_result(ROBOT_OBSTACLE_DIR_LEFT_60, true, true);
+    robot_obstacle_result_t no_left =
+        path_result(ROBOT_OBSTACLE_DIR_LEFT_60, false, true);
+    robot_obstacle_result_t no_width = both;
+    no_width.width_mm = ROBOT_OBSTACLE_WIDTH_UNAVAILABLE;
+
+    bool ok =
+        obstacle_avoid_plan(both, geometry_at(250u, 266, -100), &car).status ==
+        OBSTACLE_AVOID_PLAN_TOO_WIDE;
+    ok = ok &&
+         plan_is(obstacle_avoid_plan(both, geometry_at(250u, 265, -100), &car),
+                 false, false, 400u, 650u);
+    ok = ok &&
+         plan_is(obstacle_avoid_plan(both, geometry_at(250u, -50, -200), &car),
+                 false, false, 100u, 650u);
+    ok = ok &&
+         plan_is(obstacle_avoid_plan(no_left, geometry_at(250u, 0, -100), &car),
+                 false, true, 400u, 650u);
+    ok = ok && plan_is(obstacle_avoid_plan(no_width,
+                                           geometry_at(250u, 100, -100), &car),
+                       false, true, 400u, 650u);
+    ok = ok &&
+         plan_is(obstacle_avoid_plan(both, geometry_at(1100u, 100, -100), &car),
+                 false, false, 235u, 1500u);
+    ok = ok && (obstacle_avoid_plan(both, geometry_at(1101u, 100, -100), &car)
+                    .status == OBSTACLE_AVOID_PLAN_TOO_FAR);
+    ok = ok && (obstacle_avoid_split_count(0u) == 0u) &&
+         (obstacle_avoid_split_count(1u) == 1u) &&
+         (obstacle_avoid_split_count(1023u) == 1u) &&
+         (obstacle_avoid_split_count(1024u) == 2u) &&
+         (obstacle_avoid_split_count(2046u) == 2u) &&
+         (obstacle_avoid_split_count(2047u) == 3u);
+    ok = ok && (obstacle_avoid_next_part(0u) == 0u) &&
+         (obstacle_avoid_next_part(1023u) == 1023u) &&
+         (obstacle_avoid_next_part(1500u) == 750u) &&
+         (obstacle_avoid_next_part(2047u) == 683u);
+    return ok;
+}
+
+/* OBS-U38: only PATH_FOUND toward 60 or 120 degrees with a centre range. */
+static bool
+plan_refusals_valid (void)
+{
+    obstacle_avoid_geometry_t car = avoid_fixture();
+    obstacle_scan_geometry_t geometry = geometry_at(250u, 100, -100);
+    robot_obstacle_status_t const statuses[] = {
+        ROBOT_OBSTACLE_SCANNING, ROBOT_OBSTACLE_CLEAR, ROBOT_OBSTACLE_BLOCKED,
+        ROBOT_OBSTACLE_UNKNOWN};
+    bool ok = true;
+    for (size_t index = 0u; index < ARRAY_COUNT(statuses); ++index)
+    {
+        robot_obstacle_result_t result =
+            path_result(ROBOT_OBSTACLE_DIR_LEFT_60, true, true);
+        result.flags = robot_obstacle_pack_flags(
+            statuses[index], ROBOT_OBSTACLE_DIR_LEFT_60, true, true);
+        ok = ok && (obstacle_avoid_plan(result, geometry, &car).status ==
+                    OBSTACLE_AVOID_PLAN_NOT_PATH);
+    }
+    ok = ok &&
+         (obstacle_avoid_plan(path_result(ROBOT_OBSTACLE_DIR_NONE, true, true),
+                              geometry, &car)
+              .status == OBSTACLE_AVOID_PLAN_NOT_PATH) &&
+         (obstacle_avoid_plan(
+              path_result(ROBOT_OBSTACLE_DIR_CENTRE_90, true, true), geometry,
+              &car)
+              .status == OBSTACLE_AVOID_PLAN_NOT_PATH) &&
+         (obstacle_avoid_plan(
+              path_result(ROBOT_OBSTACLE_DIR_LEFT_60, true, true),
+              geometry_at(0u, 100, -100), &car)
+              .status == OBSTACLE_AVOID_PLAN_NO_GEOMETRY) &&
+         (obstacle_avoid_plan(
+              path_result(ROBOT_OBSTACLE_DIR_LEFT_60, true, true), geometry,
+              NULL)
+              .status == OBSTACLE_AVOID_PLAN_NOT_PATH);
+    return ok;
+}
+
+static obstacle_scan_corridor_t
+empty_corridor (void)
+{
+    obstacle_scan_corridor_t corridor = {
+        .sequence = 1u,
+        .valid_mask = (uint16_t)((1u << OBSTACLE_SWEEP_POINTS) - 1u),
+        .echo_us = {0u}};
+    return corridor;
+}
+
+/* OBS-U41: fixture scale, pass 650 mm, so points count below 730 mm from
+ * the axle; the path half width is 75 + 60 = 135 mm. Echoes: 1458 us is
+ * 250 mm, 1691 us 290 mm, 2332 us 400 mm, 4665 us 800 mm. */
+static bool
+corridor_check_valid (void)
+{
+    obstacle_avoid_geometry_t car = avoid_fixture();
+    obstacle_width_config_t width = width_fixture(0.0f);
+    uint16_t shift_mm = 1u;
+    obstacle_scan_corridor_t corridor = empty_corridor();
+    bool ok = (obstacle_avoid_check_corridor(&corridor, &width, &car, 650u,
+                                             false, &shift_mm) ==
+               OBSTACLE_AVOID_CORRIDOR_CLEAR) &&
+              (shift_mm == 0u);
+
+    /* Straight ahead at 250 mm: shift the full 135 mm. */
+    corridor.echo_us[CENTRE_EDGE_INDEX] = 1458u;
+    ok = ok &&
+         (obstacle_avoid_check_corridor(&corridor, &width, &car, 650u, false,
+                                        &shift_mm) ==
+          OBSTACLE_AVOID_CORRIDOR_SHIFT) &&
+         (shift_mm == 135u);
+
+    /* 100 degrees at 290 mm is 50.4 mm right: 85 mm more to the left. */
+    corridor = empty_corridor();
+    corridor.echo_us[8] = 1691u;
+    ok = ok &&
+         (obstacle_avoid_check_corridor(&corridor, &width, &car, 650u, false,
+                                        &shift_mm) ==
+          OBSTACLE_AVOID_CORRIDOR_SHIFT) &&
+         (shift_mm == 85u);
+
+    /* The mirror: 80 degrees at 290 mm with the gap on the right. */
+    corridor = empty_corridor();
+    corridor.echo_us[4] = 1691u;
+    ok = ok &&
+         (obstacle_avoid_check_corridor(&corridor, &width, &car, 650u, true,
+                                        &shift_mm) ==
+          OBSTACLE_AVOID_CORRIDOR_SHIFT) &&
+         (shift_mm == 85u);
+
+    /* Beyond the pass, or a wall on the gap side outside the path: clear. */
+    corridor = empty_corridor();
+    corridor.echo_us[CENTRE_EDGE_INDEX] = 4665u;
+    corridor.echo_us[0] = 2332u;
+    ok = ok && (obstacle_avoid_check_corridor(&corridor, &width, &car, 650u,
+                                              false, &shift_mm) ==
+                OBSTACLE_AVOID_CORRIDOR_CLEAR);
+
+    /* That wall leaves 200 - 135 = 65 mm, less than the 135 mm needed. */
+    corridor.echo_us[CENTRE_EDGE_INDEX] = 1458u;
+    ok = ok &&
+         (obstacle_avoid_check_corridor(&corridor, &width, &car, 650u, false,
+                                        &shift_mm) ==
+          OBSTACLE_AVOID_CORRIDOR_BLOCKED) &&
+         (shift_mm == 0u);
+
+    /* One invalid position blocks, as do missing arguments. */
+    corridor = empty_corridor();
+    corridor.valid_mask &= (uint16_t) ~(1u << 2u);
+    ok = ok &&
+         (obstacle_avoid_check_corridor(&corridor, &width, &car, 650u, false,
+                                        &shift_mm) ==
+          OBSTACLE_AVOID_CORRIDOR_BLOCKED) &&
+         (obstacle_avoid_check_corridor(NULL, &width, &car, 650u, false,
+                                        &shift_mm) ==
+          OBSTACLE_AVOID_CORRIDOR_BLOCKED);
+    return ok;
 }
 
 #endif /* APP_TEST */
