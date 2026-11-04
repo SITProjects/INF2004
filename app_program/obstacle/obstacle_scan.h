@@ -73,8 +73,10 @@ typedef struct
  *
  * A blocked centre starts left then right sensing; a completed side result
  * is published only after both positions. NO_ECHO ranks beyond finite clear
- * readings, finite readings use the configured detection threshold, and ties
- * select left. If neither side is clear, publish BLOCKED, or UNKNOWN if a
+ * readings. A finite clear echo must reach both the detection threshold and
+ * the confirming centre group's median echo + OBSTACLE_EDGE_JUMP_US (the
+ * width classifier's MISS).
+ * Ties select left. If neither side is clear, publish BLOCKED, or UNKNOWN if a
  * side was invalid. A clear side can still be selected when the other failed.
  *
  * Critical (flags bit 7): one VALID centre echo below

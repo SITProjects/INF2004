@@ -54,6 +54,7 @@ typedef struct
     uint16_t left_us;
     ultrasonic_result_t right;
     uint16_t right_us;
+    uint16_t centre_us;
     robot_obstacle_status_t status;
     robot_obstacle_direction_t direction;
 } side_case_t;
@@ -92,6 +93,7 @@ static bool median_valid (void);
 static bool position_valid (void);
 static bool centre_valid (void);
 static bool sides_valid (void);
+static bool sides_agree_valid (void);
 static bool sleeping_valid (void);
 static void sleep_sampler (INT stacd, void * p_exinf);
 static bool critical_valid (void);
@@ -244,7 +246,9 @@ obstacle_test (void)
                "centre: no echo or far is CLEAR, near scans, fault UNKNOWN");
 
     TEST_CHECK("OBS-U19", sides_valid(),
-               "sides: farther clear wins, no echo first, ties go left");
+               "sides: miss the obstacle, farther wins, ties go left");
+    TEST_CHECK("OBS-U52", sides_agree_valid(),
+               "side clearance agrees with width MISS and threshold");
 
     tm_printf((UB *)"[TEST] OBS-U20 critical boundary %lu mm (%lu us)\n",
               (UW)OBSTACLE_CRITICAL_DISTANCE_MM, (UW)OBSTACLE_CRITICAL_ECHO_US);
@@ -766,52 +770,129 @@ sides_valid (void)
 {
     const side_case_t cases[] = {
         /* Both near: no path. */
-        {ULTRASONIC_VALID, NEAR_US, ULTRASONIC_VALID, NEAR_US,
+        {ULTRASONIC_VALID, NEAR_US, ULTRASONIC_VALID, NEAR_US, 0u,
          ROBOT_OBSTACLE_BLOCKED, ROBOT_OBSTACLE_DIR_NONE},
         /* Exactly at the threshold counts as clear. */
-        {ULTRASONIC_VALID, THRESHOLD_US, ULTRASONIC_VALID, NEAR_US,
+        {ULTRASONIC_VALID, THRESHOLD_US, ULTRASONIC_VALID, NEAR_US, 0u,
          ROBOT_OBSTACLE_PATH_FOUND, ROBOT_OBSTACLE_DIR_LEFT_60},
-        {ULTRASONIC_VALID, NEAR_US, ULTRASONIC_VALID, THRESHOLD_US,
+        {ULTRASONIC_VALID, NEAR_US, ULTRASONIC_VALID, THRESHOLD_US, 0u,
          ROBOT_OBSTACLE_PATH_FOUND, ROBOT_OBSTACLE_DIR_RIGHT_120},
         /* Equal clear distances select left. */
-        {ULTRASONIC_VALID, CLEAR_US, ULTRASONIC_VALID, CLEAR_US,
+        {ULTRASONIC_VALID, CLEAR_US, ULTRASONIC_VALID, CLEAR_US, 0u,
          ROBOT_OBSTACLE_PATH_FOUND, ROBOT_OBSTACLE_DIR_LEFT_60},
         /* The farther clear side wins. */
-        {ULTRASONIC_VALID, CLEAR_US, ULTRASONIC_VALID, FARTHER_US,
+        {ULTRASONIC_VALID, CLEAR_US, ULTRASONIC_VALID, FARTHER_US, 0u,
          ROBOT_OBSTACLE_PATH_FOUND, ROBOT_OBSTACLE_DIR_RIGHT_120},
-        {ULTRASONIC_VALID, FARTHER_US, ULTRASONIC_VALID, CLEAR_US,
+        {ULTRASONIC_VALID, FARTHER_US, ULTRASONIC_VALID, CLEAR_US, 0u,
          ROBOT_OBSTACLE_PATH_FOUND, ROBOT_OBSTACLE_DIR_LEFT_60},
         /* No echo ranks beyond any finite echo. */
-        {ULTRASONIC_NO_ECHO, 0u, ULTRASONIC_VALID, UINT16_MAX,
+        {ULTRASONIC_NO_ECHO, 0u, ULTRASONIC_VALID, UINT16_MAX, 0u,
          ROBOT_OBSTACLE_PATH_FOUND, ROBOT_OBSTACLE_DIR_LEFT_60},
-        {ULTRASONIC_VALID, UINT16_MAX, ULTRASONIC_NO_ECHO, 0u,
+        {ULTRASONIC_VALID, UINT16_MAX, ULTRASONIC_NO_ECHO, 0u, 0u,
          ROBOT_OBSTACLE_PATH_FOUND, ROBOT_OBSTACLE_DIR_RIGHT_120},
-        {ULTRASONIC_NO_ECHO, 0u, ULTRASONIC_NO_ECHO, 0u,
+        {ULTRASONIC_NO_ECHO, 0u, ULTRASONIC_NO_ECHO, 0u, 0u,
          ROBOT_OBSTACLE_PATH_FOUND, ROBOT_OBSTACLE_DIR_LEFT_60},
         /* A fault with no clear side is UNKNOWN, not BLOCKED. */
-        {ULTRASONIC_FAULT, 0u, ULTRASONIC_VALID, NEAR_US,
+        {ULTRASONIC_FAULT, 0u, ULTRASONIC_VALID, NEAR_US, 0u,
          ROBOT_OBSTACLE_UNKNOWN, ROBOT_OBSTACLE_DIR_NONE},
-        {ULTRASONIC_VALID, NEAR_US, ULTRASONIC_FAULT, 0u,
+        {ULTRASONIC_VALID, NEAR_US, ULTRASONIC_FAULT, 0u, 0u,
          ROBOT_OBSTACLE_UNKNOWN, ROBOT_OBSTACLE_DIR_NONE},
-        {ULTRASONIC_FAULT, 0u, ULTRASONIC_FAULT, 0u, ROBOT_OBSTACLE_UNKNOWN,
+        {ULTRASONIC_FAULT, 0u, ULTRASONIC_FAULT, 0u, 0u, ROBOT_OBSTACLE_UNKNOWN,
          ROBOT_OBSTACLE_DIR_NONE},
         /* A clear side is still chosen when the other side faulted. */
-        {ULTRASONIC_FAULT, 0u, ULTRASONIC_VALID, CLEAR_US,
+        {ULTRASONIC_FAULT, 0u, ULTRASONIC_VALID, CLEAR_US, 0u,
          ROBOT_OBSTACLE_PATH_FOUND, ROBOT_OBSTACLE_DIR_RIGHT_120},
-        {ULTRASONIC_NO_ECHO, 0u, ULTRASONIC_FAULT, 0u,
+        {ULTRASONIC_NO_ECHO, 0u, ULTRASONIC_FAULT, 0u, 0u,
          ROBOT_OBSTACLE_PATH_FOUND, ROBOT_OBSTACLE_DIR_LEFT_60},
+        /* A square-on wall near detection still occupies both sides. */
+        {ULTRASONIC_VALID, (uint16_t)((uint32_t)NEAR_US * 1155u / 1000u),
+         ULTRASONIC_VALID, (uint16_t)((uint32_t)NEAR_US * 1155u / 1000u),
+         NEAR_US, ROBOT_OBSTACLE_BLOCKED, ROBOT_OBSTACLE_DIR_NONE},
+        /* The jump boundary is inclusive, on either side. */
+        {ULTRASONIC_VALID, NEAR_US + OBSTACLE_EDGE_JUMP_US, ULTRASONIC_VALID,
+         NEAR_US, NEAR_US, ROBOT_OBSTACLE_PATH_FOUND,
+         ROBOT_OBSTACLE_DIR_LEFT_60},
+        {ULTRASONIC_VALID, NEAR_US, ULTRASONIC_VALID,
+         NEAR_US + OBSTACLE_EDGE_JUMP_US, NEAR_US, ROBOT_OBSTACLE_PATH_FOUND,
+         ROBOT_OBSTACLE_DIR_RIGHT_120},
+        {ULTRASONIC_VALID, NEAR_US + OBSTACLE_EDGE_JUMP_US - 1u,
+         ULTRASONIC_VALID, NEAR_US, NEAR_US, ROBOT_OBSTACLE_BLOCKED,
+         ROBOT_OBSTACLE_DIR_NONE},
+        /* A tiny centre echo leaves the detection threshold in charge. */
+        {ULTRASONIC_VALID, NEAR_US, ULTRASONIC_VALID, NEAR_US, 1u,
+         ROBOT_OBSTACLE_BLOCKED, ROBOT_OBSTACLE_DIR_NONE},
+        /* A large centre must not wrap the jump into a clear side. */
+        {ULTRASONIC_VALID, UINT16_MAX, ULTRASONIC_VALID, UINT16_MAX,
+         UINT16_MAX - 1u, ROBOT_OBSTACLE_BLOCKED, ROBOT_OBSTACLE_DIR_NONE},
+        {ULTRASONIC_NO_ECHO, 0u, ULTRASONIC_VALID, UINT16_MAX, UINT16_MAX - 1u,
+         ROBOT_OBSTACLE_PATH_FOUND, ROBOT_OBSTACLE_DIR_LEFT_60},
+        {ULTRASONIC_VALID, UINT16_MAX, ULTRASONIC_NO_ECHO, 0u, UINT16_MAX - 1u,
+         ROBOT_OBSTACLE_PATH_FOUND, ROBOT_OBSTACLE_DIR_RIGHT_120},
     };
 
     for (unsigned int index = 0u; index < ARRAY_COUNT(cases); ++index)
     {
-        obstacle_side_decision_t decision =
-            obstacle_decision_sides(cases[index].left, cases[index].left_us,
-                                    cases[index].right, cases[index].right_us);
+        obstacle_side_decision_t decision = obstacle_decision_sides(
+            cases[index].left, cases[index].left_us, cases[index].right,
+            cases[index].right_us, cases[index].centre_us);
         if ((decision.status != cases[index].status) ||
             (decision.direction != cases[index].direction))
         {
             tm_printf((UB *)"obstacle_test: OBS-U19 case %u failed\n", index);
             return false;
+        }
+    }
+    return true;
+}
+
+/* OBS-U52: both sides agree with width classification at both boundaries.
+ * Include sums beyond UINT16_MAX; no wrapped sample is tested as valid. */
+static bool
+sides_agree_valid (void)
+{
+    static const uint16_t centres[] = {0u,
+                                       1u,
+                                       THRESHOLD_US / 2u,
+                                       NEAR_US,
+                                       THRESHOLD_US,
+                                       UINT16_MAX - OBSTACLE_EDGE_JUMP_US,
+                                       UINT16_MAX - OBSTACLE_EDGE_JUMP_US + 1u,
+                                       UINT16_MAX};
+
+    for (unsigned int c = 0u; c < ARRAY_COUNT(centres); ++c)
+    {
+        uint32_t const jump = (uint32_t)centres[c] + OBSTACLE_EDGE_JUMP_US;
+        uint32_t const echoes[] = {
+            0u,         1u,        NEAR_US, THRESHOLD_US, CLEAR_US,
+            FARTHER_US, jump - 1u, jump,    jump + 1u,    UINT16_MAX};
+        for (unsigned int e = 0u; e < ARRAY_COUNT(echoes); ++e)
+        {
+            if (echoes[e] > UINT16_MAX)
+            {
+                continue;
+            }
+            uint16_t const echo = (uint16_t)echoes[e];
+            bool const b_clear =
+                (echo >= OBSTACLE_DETECT_ECHO_US) &&
+                (obstacle_width_classify(ULTRASONIC_VALID, echo, centres[c]) ==
+                 OBSTACLE_WIDTH_MISS);
+            obstacle_side_decision_t const left = obstacle_decision_sides(
+                ULTRASONIC_VALID, echo, ULTRASONIC_FAULT, 0u, centres[c]);
+            obstacle_side_decision_t const right = obstacle_decision_sides(
+                ULTRASONIC_FAULT, 0u, ULTRASONIC_VALID, echo, centres[c]);
+            robot_obstacle_status_t const expected =
+                b_clear ? ROBOT_OBSTACLE_PATH_FOUND : ROBOT_OBSTACLE_UNKNOWN;
+            if ((left.status != expected) || (right.status != expected) ||
+                (left.direction != (b_clear ? ROBOT_OBSTACLE_DIR_LEFT_60
+                                            : ROBOT_OBSTACLE_DIR_NONE)) ||
+                (right.direction != (b_clear ? ROBOT_OBSTACLE_DIR_RIGHT_120
+                                             : ROBOT_OBSTACLE_DIR_NONE)))
+            {
+                tm_printf(
+                    (UB *)"obstacle_test: OBS-U52 centre %u echo %u failed\n",
+                    (unsigned int)centres[c], (unsigned int)echo);
+                return false;
+            }
         }
     }
     return true;
