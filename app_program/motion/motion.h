@@ -62,6 +62,8 @@
 #define MOTION_EVT_REJECTED 0x08u
 /** Following ended because line readings stopped arriving. */
 #define MOTION_EVT_FOLLOW_ENDED 0x10u
+/** Every MOTION_EVT_ bit, for clearing them all before a new command. */
+#define MOTION_EVT_ALL 0x1Fu
 
 /**
  * Odometry as of tMotion's last update (IF-05, motion -> terrain). Units as
@@ -114,6 +116,9 @@ extern ID motion_flg_event;
  * @return Snapshot as of tMotion's last update; ROBOT_MOTION_MODE_STOPPED
  * before the first.
  * Any task, either core: the snapshot is one 32-bit word.
+ * tMotion publishes the status before it sets any MOTION_EVT_ bit, so a
+ * task that reads an event and then calls this sees the done reason of
+ * the command that raised it.
  */
 motion_task_status_t motion_get_status (void);
 

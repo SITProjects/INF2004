@@ -231,12 +231,25 @@
      (2u * OBSTACLE_SIDE_POSITION_WORST_MS) + OBSTACLE_FINE_SCAN_WORST_MS)
 
 /*
+ * Worst case for a corridor sweep (bypass verification): the move from
+ * centre to 60 degrees, then every grid position as a side position, with
+ * a one-step move before each after the first.
+ * Today: 1000 + 12 * 1000 + 13 * 385 = 18005 ms.
+ */
+#define OBSTACLE_CORRIDOR_WORST_MS                                             \
+    (OBSTACLE_SETTLE_MS(OBSTACLE_CENTRE_DEG - OBSTACLE_SWEEP_FIRST_DEG) +      \
+     ((OBSTACLE_SWEEP_POINTS - 1u) *                                           \
+      OBSTACLE_SETTLE_MS(OBSTACLE_SWEEP_STEP_DEG)) +                           \
+     (OBSTACLE_SWEEP_POINTS * OBSTACLE_SIDE_POSITION_WORST_MS))
+
+/*
  * Watchdog limits. The stop acknowledgement timeout belongs to the motion
  * handshake (integration). The side-scan timeout is twice the worst case,
  * 32440 ms today. It is a fail-safe bound, not a performance target.
  */
 #define OBSTACLE_STOP_ACK_TIMEOUT_MS 500u
 #define OBSTACLE_SCAN_TIMEOUT_MS (2u * OBSTACLE_SIDE_SCAN_WORST_MS)
+#define OBSTACLE_CORRIDOR_TIMEOUT_MS (2u * OBSTACLE_CORRIDOR_WORST_MS)
 
 /*
  * Calibration uses the scan task instead of normal obstacle scanning.

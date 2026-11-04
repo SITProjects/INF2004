@@ -57,6 +57,17 @@ typedef struct
     robot_obstacle_direction_t direction;
 } side_case_t;
 
+/* Static data. */
+
+/* The initial task's stack is 1 KB: keep scripts and snapshots here. Only
+ * the initial task runs these tests, one at a time. */
+static obstacle_scan_test_reading_t
+    script_buffer[OBSTACLE_SCAN_TEST_SCRIPT_MAX];
+static obstacle_scan_test_snapshot_t snap_before;
+static obstacle_scan_test_snapshot_t snap_after;
+static obstacle_scan_test_snapshot_t snap_later;
+static obstacle_scan_test_snapshot_t snap_cleared;
+
 /* Private function declarations. */
 static bool packed_obstacle_fields_valid (void);
 static bool median_valid (void);
@@ -85,6 +96,20 @@ static bool width_box_valid (void);
 static bool width_shifted_valid (void);
 static bool width_pole_valid (void);
 static bool width_limits_valid (void);
+static bool width_offsets_valid (void);
+static bool range_valid (void);
+static bool geometry_persists_valid (void);
+static bool wait_result (obstacle_scan_test_snapshot_t * p_snapshot,
+                         robot_obstacle_status_t status, uint8_t after_sequence,
+                         uint32_t timeout_ms);
+static obstacle_scan_test_reading_t reading (ultrasonic_result_t measurement,
+                                             uint16_t echo_us);
+static bool rearm_valid (void);
+static bool rearm_case (bool b_during_sides);
+static bool start_side_scan (obstacle_scan_test_snapshot_t * p_snapshot);
+static bool wait_command (obstacle_scan_test_snapshot_t * p_snapshot);
+static bool corridor_valid (void);
+static bool corridor_refused_valid (void);
 
 /* Public function definitions. */
 
@@ -125,6 +150,10 @@ obstacle_test (void)
                "width: 20 mm pole reads 22 mm; over-correction collapses");
     TEST_CHECK("OBS-U11", width_limits_valid(),
                "width: saturates at 511 mm; invalid input unavailable");
+    TEST_CHECK("OBS-U39", width_offsets_valid(),
+               "width: centred box edges at +/-102 mm; unavailable is 0");
+    TEST_CHECK("OBS-U40", range_valid(),
+               "range: from the pivot, radial offset added once");
 
     TEST_CHECK("OBS-U10", packed_obstacle_fields_valid(),
                "packed obstacle fields clamp without changing neighbours");
@@ -155,6 +184,12 @@ obstacle_test (void)
                "stale watchdog event, UNKNOWN, and clear-path recovery");
     TEST_CHECK("OBS-U24", scan_timeout_valid(),
                "side timeout event, UNKNOWN, and clear-path recovery");
+    TEST_CHECK("OBS-U49", geometry_persists_valid(),
+               "scripted sweep: geometry kept with PATH_FOUND until next");
+    TEST_CHECK("OBS-U50", rearm_valid(),
+               "rearm: new SCANNING, stop latched, full fresh group to clear");
+    TEST_CHECK("OBS-U51", corridor_valid() && corridor_refused_valid(),
+               "corridor: 13 medians and mask, refused during side scan");
 
     TEST_SUMMARY("obstacle");
 }
@@ -828,6 +863,339 @@ packed_obstacle_fields_valid (void)
         return false;
     }
     return true;
+}
+
+/* OBS-U39: the OBS-U07 box (edges 67.5 and 112.5 deg at 266 mm) lies
+ * 266 * cos(67.5 deg) = 102 mm either side of the pivot. */
+static bool
+width_offsets_valid (void)
+{
+    obstacle_width_config_t config = width_fixture(0.0f);
+    obstacle_width_edge_t left = {.index = 2u, .echo_us = 1551u};
+    obstacle_width_edge_t right = {.index = 10u, .echo_us = 1551u};
+    obstacle_width_result_t width =
+        obstacle_width_estimate(left, right, &config);
+    obstacle_width_result_t none = obstacle_width_unavailable();
+    return (width.left_x_mm >= 99) && (width.left_x_mm <= 105) &&
+           (width.right_x_mm <= -99) && (width.right_x_mm >= -105) &&
+           (none.left_x_mm == 0) && (none.right_x_mm == 0);
+}
+
+/* OBS-U40: 1551 us is 266.0 mm at the fixture scale; a 20 mm radial
+ * offset gives 286.0 mm from the pivot, not 306.0 mm. */
+static bool
+range_valid (void)
+{
+    obstacle_width_config_t config = width_fixture(0.0f);
+    config.radial_offset_mm = 20.0f;
+    float range_mm = 0.0f;
+    bool b_ok = obstacle_width_range_mm(1551u, &config, &range_mm) &&
+                (range_mm > 285.5f) && (range_mm < 286.5f);
+
+    float untouched_mm = -1.0f;
+    b_ok = b_ok && !obstacle_width_range_mm(0u, &config, &untouched_mm) &&
+           !obstacle_width_range_mm(1551u, NULL, &untouched_mm) &&
+           !obstacle_width_range_mm(1551u, &config, NULL);
+    config.echo_offset_mm = -400;
+    b_ok = b_ok && !obstacle_width_range_mm(100u, &config, &untouched_mm);
+    return b_ok && (untouched_mm == -1.0f);
+}
+
+static obstacle_scan_test_reading_t
+reading (ultrasonic_result_t measurement, uint16_t echo_us)
+{
+    obstacle_scan_test_reading_t entry = {.measurement = measurement,
+                                          .echo_us = echo_us};
+    return entry;
+}
+
+/* Wait for a published status whose sequence differs from after_sequence. */
+static bool
+wait_result (obstacle_scan_test_snapshot_t * p_snapshot,
+             robot_obstacle_status_t status, uint8_t after_sequence,
+             uint32_t timeout_ms)
+{
+    SYSTIM start;
+    if (tk_get_otm(&start) != E_OK)
+    {
+        return false;
+    }
+    for (;;)
+    {
+        SYSTIM now;
+        if ((tk_get_otm(&now) != E_OK) ||
+            ((uint32_t)(now.lo - start.lo) > timeout_ms) ||
+            (obstacle_scan_test_snapshot(p_snapshot) != 0))
+        {
+            return false;
+        }
+        if ((robot_obstacle_get_status(p_snapshot->result.flags) == status) &&
+            (p_snapshot->result.sequence != after_sequence))
+        {
+            return true;
+        }
+        if (tk_dly_tsk(TEST_POLL_MS) != E_OK)
+        {
+            return false;
+        }
+    }
+}
+
+/* OBS-U49: a scripted sweep (near centre, both ends no echo, fine hits at
+ * 115 and 65 degrees) publishes PATH_FOUND left with its geometry. The
+ * geometry outlives reset_sweep() and is replaced by the next publish. */
+static bool
+geometry_persists_valid (void)
+{
+    obstacle_scan_test_snapshot_t * const p_before = &snap_before;
+    obstacle_scan_test_snapshot_t * const p_found = &snap_after;
+    obstacle_scan_test_snapshot_t * const p_later = &snap_later;
+    obstacle_scan_test_snapshot_t * const p_cleared = &snap_cleared;
+    obstacle_scan_test_reading_t * const script = script_buffer;
+    uint8_t count = 0u;
+    for (uint8_t index = 0u; index < 3u; ++index)
+    {
+        script[count++] = reading(ULTRASONIC_VALID, NEAR_US);
+    }
+    for (uint8_t index = 0u; index < 6u; ++index)
+    {
+        script[count++] = reading(ULTRASONIC_NO_ECHO, 0u);
+    }
+    script[count++] = reading(ULTRASONIC_VALID, NEAR_US);
+    script[count++] = reading(ULTRASONIC_VALID, NEAR_US);
+    for (uint8_t index = 0u; index < 3u; ++index)
+    {
+        script[count++] = reading(ULTRASONIC_VALID, CLEAR_US);
+    }
+
+    obstacle_width_config_t config = {
+        .scale_mm_per_10k = OBSTACLE_SOUND_MM_PER_10K_US,
+        .echo_offset_mm = OBSTACLE_ECHO_OFFSET_MM,
+        .radial_offset_mm = OBSTACLE_SENSOR_RADIAL_OFFSET_MM,
+        .edge_correction_deg = OBSTACLE_EDGE_CORRECTION_DEG};
+    float centre_mm = 0.0f;
+    tm_printf((UB *)"[TEST] OBS-U49 keep path clear beyond %lu mm\n",
+              (UW)(OBSTACLE_DETECT_DISTANCE_MM + 100u));
+    bool ok = obstacle_width_range_mm(NEAR_US, &config, &centre_mm) &&
+              wait_snapshot(p_before, false, true, false, 5000u) &&
+              (obstacle_scan_test_script(script, count) == 0) &&
+              wait_result(p_found, ROBOT_OBSTACLE_PATH_FOUND,
+                          p_before->result.sequence,
+                          OBSTACLE_SCAN_TIMEOUT_MS + TEST_MARGIN_MS) &&
+              (tk_dly_tsk(TEST_POLL_MS) == E_OK) &&
+              (obstacle_scan_test_snapshot(p_later) == 0);
+    if (ok)
+    {
+        int32_t centre_error =
+            (int32_t)p_found->geometry.centre_mm - (int32_t)(centre_mm + 0.5f);
+        tm_printf((UB *)"[TEST] OBS-U49 centre %u mm x %d..%d mm\n",
+                  (unsigned int)p_found->geometry.centre_mm,
+                  (int)p_found->geometry.left_x_mm,
+                  (int)p_found->geometry.right_x_mm);
+        ok = (robot_obstacle_get_direction(p_found->result.flags) ==
+              ROBOT_OBSTACLE_DIR_LEFT_60) &&
+             (centre_error >= -1) && (centre_error <= 1) &&
+             (p_found->geometry.left_x_mm > 0) &&
+             (p_found->geometry.right_x_mm < 0) &&
+             ((p_later->result.sequence != p_found->result.sequence) ||
+              ((p_later->geometry.centre_mm == p_found->geometry.centre_mm) &&
+               (p_later->geometry.left_x_mm == p_found->geometry.left_x_mm) &&
+               (p_later->geometry.right_x_mm == p_found->geometry.right_x_mm)));
+    }
+    ok = ok &&
+         wait_result(p_cleared, ROBOT_OBSTACLE_CLEAR, p_found->result.sequence,
+                     OBSTACLE_SCAN_TIMEOUT_MS + TEST_MARGIN_MS) &&
+         (p_cleared->geometry.centre_mm == 0u) &&
+         (p_cleared->geometry.left_x_mm == 0) &&
+         (p_cleared->geometry.right_x_mm == 0) &&
+         (p_cleared->script_remaining == 0u);
+    if (!ok)
+    {
+        tm_printf((UB *)"[TEST] OBS-U49 setup, sweep or check failed\n");
+    }
+    return (obstacle_scan_test_script(NULL, 0u) == 0) && ok;
+}
+
+/* Wait until the scan task has run the last test command. */
+static bool
+wait_command (obstacle_scan_test_snapshot_t * p_snapshot)
+{
+    for (uint32_t waited_ms = 0u; waited_ms <= TEST_ACK_MS;
+         waited_ms += TEST_POLL_MS)
+    {
+        if (obstacle_scan_test_snapshot(p_snapshot) != 0)
+        {
+            return false;
+        }
+        if (!p_snapshot->command_pending)
+        {
+            return true;
+        }
+        if (tk_dly_tsk(TEST_POLL_MS) != E_OK)
+        {
+            return false;
+        }
+    }
+    return false;
+}
+
+/* From a clear path, script three near pings and wait for the side scan. */
+static bool
+start_side_scan (obstacle_scan_test_snapshot_t * p_snapshot)
+{
+    obstacle_scan_test_reading_t near[3] = {reading(ULTRASONIC_VALID, NEAR_US),
+                                            reading(ULTRASONIC_VALID, NEAR_US),
+                                            reading(ULTRASONIC_VALID, NEAR_US)};
+    return wait_snapshot(p_snapshot, false, true, false, 5000u) &&
+           (obstacle_scan_test_script(near, 3u) == 0) &&
+           wait_snapshot(p_snapshot, false, false, true, TEST_RECOVERY_MS);
+}
+
+/* One rearm: SCANNING with the returned sequence and the stop latched at
+ * once; CLEAR only after all three scripted clear pings were used. */
+static bool
+rearm_case (bool b_during_sides)
+{
+    obstacle_scan_test_snapshot_t * const p_before = &snap_before;
+    obstacle_scan_test_snapshot_t * const p_after = &snap_after;
+    obstacle_scan_test_snapshot_t * const p_cleared = &snap_cleared;
+    obstacle_scan_test_reading_t clear[3] = {
+        reading(ULTRASONIC_VALID, CLEAR_US),
+        reading(ULTRASONIC_VALID, CLEAR_US),
+        reading(ULTRASONIC_VALID, CLEAR_US)};
+    bool ok = b_during_sides
+                  ? start_side_scan(p_before)
+                  : wait_snapshot(p_before, false, true, false, 5000u);
+    ok = ok &&
+         (obstacle_scan_test_command(OBSTACLE_SCAN_TEST_REARM, clear, 3u) ==
+          0) &&
+         wait_command(p_after) &&
+         (robot_obstacle_get_status(p_after->result.flags) ==
+          ROBOT_OBSTACLE_SCANNING) &&
+         p_after->stop_requested && !p_after->scanning_sides &&
+         (p_after->result.sequence == p_after->rearm_sequence) &&
+         (p_after->result.sequence != p_before->result.sequence) &&
+         wait_result(p_cleared, ROBOT_OBSTACLE_CLEAR, p_after->rearm_sequence,
+                     TEST_RECOVERY_MS) &&
+         !p_cleared->stop_requested && (p_cleared->script_remaining == 0u);
+    if (!ok)
+    {
+        tm_printf((UB *)"[TEST] OBS-U50 rearm %s failed\n",
+                  b_during_sides ? "during side scan" : "while clear");
+    }
+    return ok;
+}
+
+/* OBS-U50: rearm while clear and during a side scan. */
+static bool
+rearm_valid (void)
+{
+    tm_printf((UB *)"[TEST] OBS-U50 keep path clear beyond %lu mm\n",
+              (UW)(OBSTACLE_DETECT_DISTANCE_MM + 100u));
+    bool ok = rearm_case(false);
+    ok = rearm_case(true) && ok;
+    return (obstacle_scan_test_script(NULL, 0u) == 0) && ok;
+}
+
+/* OBS-U51: echoes 1000 + 20 * i us, no echo at index 3, and index 6
+ * faulted past its retries (three FAULTs, then two pings). */
+static bool
+corridor_valid (void)
+{
+    obstacle_scan_test_snapshot_t * const p_before = &snap_before;
+    obstacle_scan_test_snapshot_t * const p_after = &snap_after;
+    obstacle_scan_test_reading_t * const script = script_buffer;
+    uint8_t count = 0u;
+    for (uint8_t index = 0u; index < LAST_EDGE_INDEX + 1u; ++index)
+    {
+        uint16_t echo_us = (uint16_t)(1000u + (20u * index));
+        if (index == 3u)
+        {
+            for (uint8_t ping = 0u; ping < OBSTACLE_PINGS_PER_ANGLE; ++ping)
+            {
+                script[count++] = reading(ULTRASONIC_NO_ECHO, 0u);
+            }
+            continue;
+        }
+        if (index == 6u)
+        {
+            for (uint8_t fault = 0u; fault <= OBSTACLE_EXTRA_ATTEMPTS_PER_ANGLE;
+                 ++fault)
+            {
+                script[count++] = reading(ULTRASONIC_FAULT, 0u);
+            }
+            for (uint8_t ping = 1u; ping < OBSTACLE_PINGS_PER_ANGLE; ++ping)
+            {
+                script[count++] = reading(ULTRASONIC_VALID, echo_us);
+            }
+            continue;
+        }
+        for (uint8_t ping = 0u; ping < OBSTACLE_PINGS_PER_ANGLE; ++ping)
+        {
+            script[count++] = reading(ULTRASONIC_VALID, echo_us);
+        }
+    }
+
+    tm_printf((UB *)"[TEST] OBS-U51 keep path clear; corridor takes up to "
+                    "%lu ms\n",
+              (UW)OBSTACLE_CORRIDOR_WORST_MS);
+    bool ok = wait_snapshot(p_before, false, true, false, 5000u) &&
+              (obstacle_scan_test_command(OBSTACLE_SCAN_TEST_CORRIDOR, script,
+                                          count) == 0) &&
+              wait_command(p_after) && p_after->stop_requested;
+    for (uint32_t waited_ms = 0u;
+         ok && (p_after->corridor.sequence == p_before->corridor.sequence);
+         waited_ms += TEST_POLL_MS)
+    {
+        ok = (waited_ms <= OBSTACLE_CORRIDOR_TIMEOUT_MS) &&
+             (tk_dly_tsk(TEST_POLL_MS) == E_OK) &&
+             (obstacle_scan_test_snapshot(p_after) == 0);
+    }
+    uint16_t expected_mask =
+        (uint16_t)(((1u << OBSTACLE_SWEEP_POINTS) - 1u) & ~(1u << 6u));
+    ok = ok &&
+         (p_after->corridor.sequence ==
+          (uint8_t)(p_before->corridor.sequence + 1u)) &&
+         (p_after->corridor.valid_mask == expected_mask) &&
+         (p_after->script_remaining == 0u);
+    for (uint8_t index = 0u; ok && (index < LAST_EDGE_INDEX + 1u); ++index)
+    {
+        uint16_t expected_us = ((index == 3u) || (index == 6u))
+                                   ? 0u
+                                   : (uint16_t)(1000u + (20u * index));
+        ok = p_after->corridor.echo_us[index] == expected_us;
+    }
+    if (!ok)
+    {
+        tm_printf((UB *)"[TEST] OBS-U51 corridor seq %u mask 0x%04X\n",
+                  (unsigned int)p_after->corridor.sequence,
+                  (unsigned int)p_after->corridor.valid_mask);
+    }
+    /* The corridor rearms afterwards; wait for the clear path to return. */
+    return wait_snapshot(p_after, false, true, false, TEST_RECOVERY_MS) && ok;
+}
+
+/* OBS-U51: a corridor request during a side scan is refused. */
+static bool
+corridor_refused_valid (void)
+{
+    obstacle_scan_test_snapshot_t * const p_before = &snap_before;
+    obstacle_scan_test_snapshot_t * const p_after = &snap_after;
+    bool ok = start_side_scan(p_before) &&
+              (obstacle_scan_test_command(OBSTACLE_SCAN_TEST_CORRIDOR, NULL,
+                                          0u) == 0) &&
+              wait_command(p_after) &&
+              (p_after->corridor_refused == p_before->corridor_refused + 1u) &&
+              (p_after->corridor.sequence == p_before->corridor.sequence);
+    bool b_rearmed =
+        (obstacle_scan_test_command(OBSTACLE_SCAN_TEST_REARM, NULL, 0u) == 0) &&
+        wait_command(p_after) &&
+        wait_snapshot(p_after, false, true, false, TEST_RECOVERY_MS);
+    if (!ok)
+    {
+        tm_printf((UB *)"[TEST] OBS-U51 refusal check failed\n");
+    }
+    return b_rearmed && ok;
 }
 
 #endif /* APP_TEST */

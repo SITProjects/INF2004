@@ -44,6 +44,16 @@ change the expected values.
 | OBS-U33 | width accuracy and edge correction | scanner → obstacle word | manual | After OBS-U28/U29/U30 and the pivot measurement, with the car unable to move: fit the edge correction on centred 200 mm boxes at 200 and 250 mm (c = 0 build, boundary angles from the log), then run the validation matrix in the #48 plan, 5 runs per case. Measure d from the servo axis | Eligible cases (\|x0\| + W/2 < 0.577 d, 10 mm margin): both edges found and every run within 10 %; a missed edge is a FAIL. Clipped cases: clipped side not found, width ≤ visible width ±10 mm. Two-box case recorded as a limitation |
 | OBS-U34 | sweep time | scanner | manual | 200 mm box at 250 mm, 10 runs: `side scan started` to `side scan completed after N ms` | Every run below `OBSTACLE_SIDE_SCAN_WORST_MS`; mean and max recorded. Does not show the whole-bypass < 3 s target (integration) |
 
+Bypass geometry, planner and state machine (issue #86):
+
+| ID | What is tested | Requirement / interface | Method | Steps / how | Expected result |
+|---|---|---|---|---|---|
+| OBS-U39 | edge lateral offsets | `obstacle_width.c` | auto | OBS-U07 box (edges 67.5° and 112.5° at 266 mm); unavailable result | `left_x_mm` 99..105, `right_x_mm` −105..−99; unavailable gives 0, 0 |
+| OBS-U40 | range reference point | `obstacle_width.c` | auto | 1551 µs at the fixture scale with a 20 mm radial offset; echo 0, NULL config or output, range at or below zero | 286 ±0.5 mm from the pivot (offset added once); every invalid case false with the output untouched |
+| OBS-U49 | geometry kept with its result | scanner (test script seam) | auto (bench: clear path) | From a clear, released snapshot, script 3 near centre pings, no echo at both ends, fine hits at 115° and 65°, then 3 clear pings | PATH_FOUND left with centre = pivot range of the near echo ±1 mm, `left_x > 0 > right_x`, unchanged after the sweep state resets; the next CLEAR has a new sequence and zero geometry; script used up |
+| OBS-U50 | scanner rearm | scanner (test command) | auto (bench: clear path) | Rearm while clear, and again during a scripted side scan, each followed by 3 scripted clear pings | Straight after each rearm: SCANNING with the returned sequence (new), stop latched, no side scan. CLEAR comes only once all 3 scripted pings are used |
+| OBS-U51 | corridor sweep | scanner (test command) | auto (bench: clear path) | Script 13 positions: 1000 + 20·i µs, no echo at index 3, index 6 faulted past its retries. Then request a corridor during a scripted side scan | Corridor sequence +1, `valid_mask` all but bit 6, medians as scripted (index 3 and 6 zero), script used up, then the scanner rearms and clears. The request during the side scan is refused and publishes nothing |
+
 Critical/freshness cases (all on-target and physical results remain pending):
 
 | ID | What is tested | Requirement / interface | Method | Steps / how | Expected result |
