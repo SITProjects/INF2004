@@ -21,6 +21,10 @@
 /* obstacle_get_state() gives up after this many torn reads. */
 #define STATE_READ_TRIES 4u
 
+/* Compiler and memory barrier: keeps the shared_state copy between the
+ * sequence counter accesses, on both cores. */
+#define STATE_BARRIER() __asm__ volatile("dmb" ::: "memory")
+
 /* Level bits of obstacle_flg_event. */
 #define EVT_LEVELS                                                             \
     (OBSTACLE_EVT_STOP | OBSTACLE_EVT_CRITICAL | OBSTACLE_EVT_FAULT)
@@ -37,7 +41,12 @@ static const obstacle_servo_timing_t servo_timing = {
 ID obstacle_tid_scan;
 ID obstacle_flg_event;
 
-/* Odd while the scan task writes shared_state; readers retry. */
+/*
+ * State for obstacle_get_state(), written by the scan task only. The
+ * sequence is odd while it writes; a reader that sees it odd or changed
+ * reads again. shared_state is not volatile, so STATE_BARRIER() stops the
+ * compiler moving its copy across the counter accesses.
+ */
 static volatile uint32_t state_sequence;
 static obstacle_shared_state_t shared_state;
 
@@ -98,7 +107,9 @@ obstacle_get_state (obstacle_shared_state_t * p_state)
         uint32_t before = state_sequence;
         if ((before & 1u) == 0u)
         {
+            STATE_BARRIER(); /* Copy only after reading the counter. */
             *p_state = shared_state;
+            STATE_BARRIER(); /* Finish the copy before checking again. */
             if (state_sequence == before)
             {
                 return true;
@@ -255,7 +266,9 @@ publish_state (obstacle_shared_state_t const * p_state, bool b_new_result)
     static uint32_t levels;
 
     state_sequence = state_sequence + 1u; /* Odd: readers retry. */
+    STATE_BARRIER();
     shared_state = *p_state;
+    STATE_BARRIER();
     state_sequence = state_sequence + 1u; /* Even: whole again. */
 
     uint32_t now = 0u;
