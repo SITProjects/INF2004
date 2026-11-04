@@ -35,6 +35,19 @@ typedef struct
     int16_t right_x_mm; /**< Right boundary, lateral mm from pivot. */
 } obstacle_scan_geometry_t;
 
+/**
+ * One stationary corridor sweep: every grid position from 60 to 120
+ * degrees, index 0 at 60 degrees (left). Echoes are medians in
+ * microseconds; 0 is no echo. A position whose faults exhausted its retries
+ * has its valid bit clear; a timed-out or cancelled sweep has none set.
+ */
+typedef struct
+{
+    uint8_t sequence;    /**< Advances once per finished corridor sweep. */
+    uint16_t valid_mask; /**< Bit i set: echo_us[i] is usable. */
+    uint16_t echo_us[ROBOT_OBSTACLE_SWEEP_POINTS]; /**< Median, 0 = none. */
+} obstacle_scan_corridor_t;
+
 /* Public function declarations. */
 
 /**
@@ -122,6 +135,44 @@ bool obstacle_scan_stop_requested (void);
 obstacle_scan_geometry_t obstacle_scan_geometry (void);
 
 /**
+ * @brief Discard every reading so far and start forward sensing afresh.
+ *
+ * Use after the car has moved: readings taken while turning or driving
+ * describe another heading. Cancels any side or corridor sweep (a corridor
+ * sweep is published with no valid positions), discards pings and votes,
+ * latches the stop request and publishes SCANNING with a new sequence, then
+ * centres the servo and waits for it to settle. A full centre group must
+ * then confirm a clear path before the stop request is released; a near
+ * group starts a normal side scan. The critical flag is kept until a
+ * centre group clears it.
+ * @return Sequence of the SCANNING result just published. A result is
+ * fresh only if its sequence is newer than this one.
+ * Call only from the scan task.
+ */
+uint8_t obstacle_scan_rearm (void);
+
+/**
+ * @brief Start a corridor sweep for bypass verification.
+ *
+ * Latches the stop request, then measures every grid position from 60 to
+ * 120 degrees with the side-position ping count, retries and median. When
+ * done, or after OBSTACLE_CORRIDOR_TIMEOUT_MS, the sweep is published for
+ * obstacle_scan_corridor() and obstacle_scan_rearm() runs. Assumes the car
+ * is stationary throughout.
+ * @return true if started; false while a side or corridor sweep is running
+ * (try again on a later update).
+ * Call only from the scan task.
+ */
+bool obstacle_scan_request_corridor (void);
+
+/**
+ * @brief Read the latest published corridor sweep.
+ * @return Copy of the last finished sweep; sequence 0 and no valid
+ * positions before the first. Call only from the scan task.
+ */
+obstacle_scan_corridor_t obstacle_scan_corridor (void);
+
+/**
  * @brief Initialize the sensor and centre the servo before sensing.
  * @param trig_pin Ultrasonic trigger GPIO number.
  * @param echo_pin Ultrasonic echo GPIO number, distinct from trig_pin.
@@ -170,10 +221,21 @@ typedef struct
     robot_obstacle_result_t result;    /**< Latest published result. */
     obstacle_scan_geometry_t geometry; /**< Published with result. */
     uint8_t script_remaining;          /**< Scripted readings not yet used. */
+    obstacle_scan_corridor_t corridor; /**< Latest corridor sweep. */
+    uint8_t rearm_sequence;            /**< Returned by the last test rearm. */
+    bool command_pending;              /**< A test command not yet run. */
+    uint32_t corridor_refused;         /**< Corridor requests refused. */
 } obstacle_scan_test_snapshot_t;
 
 /** Largest number of scripted readings one request can queue. */
-#define OBSTACLE_SCAN_TEST_SCRIPT_MAX 24u
+#define OBSTACLE_SCAN_TEST_SCRIPT_MAX 48u
+
+/** Scan-task calls a test can ask for through the test mailbox. */
+typedef enum
+{
+    OBSTACLE_SCAN_TEST_REARM,   /**< obstacle_scan_rearm(). */
+    OBSTACLE_SCAN_TEST_CORRIDOR /**< obstacle_scan_request_corridor(). */
+} obstacle_scan_test_command_t;
 
 /** One scripted reading, used in place of the next real ultrasonic result. */
 typedef struct
@@ -217,6 +279,21 @@ int obstacle_scan_test_snapshot (obstacle_scan_test_snapshot_t * snapshot);
  */
 int obstacle_scan_test_script (obstacle_scan_test_reading_t const * p_readings,
                                uint8_t count);
+/**
+ * @brief Ask the scan task to run a command, then start a script.
+ *
+ * On its next update the scan task runs the command and only then replaces
+ * the script with these readings, so none of them is used before the
+ * command. A refused corridor request increments corridor_refused.
+ * @param command Scan-task call to make.
+ * @param p_readings Readings for after the command; NULL when count is 0.
+ * @param count Number of entries, at most OBSTACLE_SCAN_TEST_SCRIPT_MAX.
+ * @return 0 on success, 1 for invalid arguments, a command still pending,
+ * or synchronization failure. Any task, after obstacle_scan_test_init().
+ */
+int obstacle_scan_test_command (obstacle_scan_test_command_t command,
+                                obstacle_scan_test_reading_t const * p_readings,
+                                uint8_t count);
 #endif
 
 #endif /* OBSTACLE_SCAN_H */

@@ -30,8 +30,8 @@
 
 /* Packed scan_state: phase 0..1, count 2..3, side 4 (coarse side, then fine
  * side: 1 = right), scanning 5, retries 6..7, invalid position 8, left side
- * result 9..10, critical 11, critical hold 12, fine walk 13. Bits 14..15 are
- * unused.
+ * result 9..10, critical 11, critical hold 12, fine walk 13, corridor sweep
+ * 14. Bit 15 is unused.
  */
 #define SCAN_PHASE_MASK 0x0003u
 #define SCAN_PHASE_SHIFT 0u
@@ -48,6 +48,7 @@
 #define SCAN_CRITICAL 0x0800u
 #define SCAN_CRITICAL_HOLD 0x1000u
 #define SCAN_FINE 0x2000u
+#define SCAN_CORRIDOR 0x4000u
 
 _Static_assert(OBSTACLE_PINGS_PER_ANGLE >= 1u && OBSTACLE_PINGS_PER_ANGLE <= 3u,
                "Ping count must fit two bits and the small median helper");
@@ -95,6 +96,12 @@ static uint8_t pending_flags; /* Coarse status and direction. */
 /* Written only by publish_result(), so it always matches result. */
 static obstacle_scan_geometry_t published_geometry;
 
+/* Corridor sweep: published copy, working copy and next grid index. */
+static obstacle_scan_corridor_t corridor;
+static obstacle_scan_corridor_t corridor_work;
+static uint8_t corridor_index;
+static uint32_t corridor_start_ms;
+
 static const obstacle_width_config_t width_config = {
     .scale_mm_per_10k = OBSTACLE_SOUND_MM_PER_10K_US,
     .echo_offset_mm = OBSTACLE_ECHO_OFFSET_MM,
@@ -121,6 +128,13 @@ static uint32_t test_timeout_ms;
 static obstacle_scan_test_reading_t test_script[OBSTACLE_SCAN_TEST_SCRIPT_MAX];
 static uint8_t test_script_count;
 static uint8_t test_script_next;
+static obstacle_scan_test_reading_t
+    test_pending_script[OBSTACLE_SCAN_TEST_SCRIPT_MAX];
+static uint8_t test_pending_count;
+static bool test_command_pending;
+static obstacle_scan_test_command_t test_command;
+static uint8_t test_rearm_sequence;
+static uint32_t test_corridor_refused;
 #endif
 
 /* Private function declarations. */
@@ -128,6 +142,7 @@ static uint8_t test_script_next;
 static robot_obstacle_result_t scan_update (void);
 static void script_take (ultrasonic_result_t * p_measurement,
                          uint16_t * p_echo_us);
+static void run_test_command (void);
 #endif
 
 static uint16_t state_get (uint16_t mask, uint8_t shift);
@@ -160,7 +175,10 @@ static void publish_result (robot_obstacle_status_t status,
 static obstacle_scan_geometry_t
 sweep_geometry (obstacle_width_result_t const * p_width);
 static void check_watchdogs (void);
+static void stop_side_scan (void);
 static void cancel_side_scan (void);
+static void record_corridor (ultrasonic_result_t measurement, uint16_t echo_us);
+static void finish_corridor (bool b_complete);
 static void update_critical (ultrasonic_result_t measurement, uint16_t echo_us);
 
 /* Public function definitions. */
@@ -202,6 +220,10 @@ obstacle_scan_init (int trig_pin, int echo_pin, int servo_pin,
         .width_mm = ROBOT_OBSTACLE_WIDTH_UNAVAILABLE,
         .sequence = 0u};
     published_geometry = (obstacle_scan_geometry_t){0u, 0, 0};
+    corridor = (obstacle_scan_corridor_t){0};
+    corridor_work = corridor;
+    corridor_index = 0u;
+    corridor_start_ms = 0u;
     move_sensor(CENTRE_ANGLE);
 #if APP_TEST
     test_initialized = true;
@@ -270,6 +292,36 @@ obstacle_scan_test_script (obstacle_scan_test_reading_t const * p_readings,
     return 0;
 }
 
+int
+obstacle_scan_test_command (obstacle_scan_test_command_t command,
+                            obstacle_scan_test_reading_t const * p_readings,
+                            uint8_t count)
+{
+    if ((count > OBSTACLE_SCAN_TEST_SCRIPT_MAX) ||
+        ((p_readings == NULL) && (count != 0u)) ||
+        ((command != OBSTACLE_SCAN_TEST_REARM) &&
+         (command != OBSTACLE_SCAN_TEST_CORRIDOR)) ||
+        (test_mutex <= 0) || (tk_loc_mtx(test_mutex, TMO_FEVR) != E_OK))
+    {
+        return 1;
+    }
+    int status = 1;
+    if (!test_command_pending)
+    {
+        for (uint8_t index = 0u; index < count; ++index)
+        {
+            test_pending_script[index] = p_readings[index];
+        }
+        test_pending_count = count;
+        test_command = command;
+        test_command_pending = true;
+        test_snapshot.command_pending = true;
+        status = 0;
+    }
+    (void)tk_unl_mtx(test_mutex);
+    return status;
+}
+
 robot_obstacle_result_t
 obstacle_scan_update (void)
 {
@@ -302,6 +354,7 @@ obstacle_scan_update (void)
     }
     else
     {
+        run_test_command();
         (void)scan_update();
     }
     if (tk_loc_mtx(test_mutex, TMO_FEVR) == E_OK)
@@ -327,6 +380,10 @@ obstacle_scan_update (void)
         test_snapshot.geometry = published_geometry;
         test_snapshot.script_remaining =
             (uint8_t)(test_script_count - test_script_next);
+        test_snapshot.corridor = corridor;
+        test_snapshot.rearm_sequence = test_rearm_sequence;
+        test_snapshot.command_pending = test_command_pending;
+        test_snapshot.corridor_refused = test_corridor_refused;
         (void)tk_unl_mtx(test_mutex);
     }
     return result;
@@ -365,7 +422,8 @@ obstacle_scan_update (void)
         }
         case SCAN_READY:
         {
-            bool b_centre = !state_has(SCAN_SCANNING_SIDES);
+            bool b_centre =
+                !state_has(SCAN_SCANNING_SIDES) && !state_has(SCAN_CORRIDOR);
             uint32_t trigger_ms = now_ms();
             if (b_centre && b_forward_triggered &&
                 ((uint32_t)(trigger_ms - last_forward_trigger_ms) <
@@ -421,6 +479,48 @@ obstacle_scan_geometry_t
 obstacle_scan_geometry (void)
 {
     return published_geometry;
+}
+
+uint8_t
+obstacle_scan_rearm (void)
+{
+    if (state_has(SCAN_CORRIDOR))
+    {
+        finish_corridor(false);
+    }
+    stop_side_scan();
+    b_stop_requested = true;
+    publish_result(ROBOT_OBSTACLE_SCANNING, ROBOT_OBSTACLE_DIR_NONE, NULL,
+                   NULL);
+    /* move_sensor() also discards pings, votes and retries. */
+    move_sensor(CENTRE_ANGLE);
+    tm_printf((UB *)"[%lu ms]obstacle: rearmed, sequence %u\n",
+              (unsigned long)now_ms(), (unsigned int)result.sequence);
+    return result.sequence;
+}
+
+bool
+obstacle_scan_request_corridor (void)
+{
+    if (state_has(SCAN_SCANNING_SIDES) || state_has(SCAN_CORRIDOR))
+    {
+        return false;
+    }
+    request_stop();
+    corridor_work = (obstacle_scan_corridor_t){0};
+    corridor_index = 0u;
+    corridor_start_ms = now_ms();
+    state_flag(SCAN_CORRIDOR, true);
+    move_sensor(index_angle(0u));
+    tm_printf((UB *)"[%lu ms]obstacle: corridor sweep started\n",
+              (unsigned long)corridor_start_ms);
+    return true;
+}
+
+obstacle_scan_corridor_t
+obstacle_scan_corridor (void)
+{
+    return corridor;
 }
 
 char const *
@@ -520,7 +620,7 @@ read_result (void)
     test_receipt_us = (uint32_t)in_w(TIMER_TIMERAWL);
     script_take(&measurement, &echo_us);
 #endif
-    if (!state_has(SCAN_SCANNING_SIDES))
+    if (!state_has(SCAN_SCANNING_SIDES) && !state_has(SCAN_CORRIDOR))
     {
         read_centre(measurement, echo_us);
         return result;
@@ -563,7 +663,14 @@ read_result (void)
     echo_us = obstacle_decision_median(pings_us, OBSTACLE_PINGS_PER_ANGLE);
     measurement =
         obstacle_decision_position(echo_us, state_has(SCAN_POSITION_INVALID));
-    scan_sides(measurement, echo_us);
+    if (state_has(SCAN_CORRIDOR))
+    {
+        record_corridor(measurement, echo_us);
+    }
+    else
+    {
+        scan_sides(measurement, echo_us);
+    }
     return result;
 }
 
@@ -1007,6 +1114,17 @@ check_watchdogs (void)
             cancel_side_scan();
         }
     }
+    else if (state_has(SCAN_CORRIDOR))
+    {
+        if (obstacle_decision_elapsed_exceeds(now, corridor_start_ms,
+                                              OBSTACLE_CORRIDOR_TIMEOUT_MS))
+        {
+            tm_printf((UB *)"[%lu ms]obstacle: corridor sweep timed out\n",
+                      (unsigned long)now);
+            finish_corridor(false);
+            (void)obstacle_scan_rearm();
+        }
+    }
     else if (!b_stop_requested &&
              obstacle_decision_elapsed_exceeds(now, last_usable_centre_ms,
                                                OBSTACLE_FORWARD_MAX_AGE_MS))
@@ -1025,16 +1143,27 @@ check_watchdogs (void)
     }
 }
 
+/* Leave side scanning, keeping the stop request and published result. */
 static void
-cancel_side_scan (void)
+stop_side_scan (void)
 {
-    b_stop_requested = true;
     state_flag(SCAN_SCANNING_SIDES, false);
     state_set(SCAN_SIDE_MASK, SCAN_SIDE_SHIFT, 0u);
     state_set(SCAN_LEFT_RESULT_MASK, SCAN_LEFT_RESULT_SHIFT,
               ULTRASONIC_PENDING);
     left_echo_us = 0u;
     reset_sweep();
+}
+
+static void
+cancel_side_scan (void)
+{
+    b_stop_requested = true;
+    if (state_has(SCAN_CORRIDOR))
+    {
+        finish_corridor(false);
+    }
+    stop_side_scan();
     publish_result(ROBOT_OBSTACLE_UNKNOWN, ROBOT_OBSTACLE_DIR_NONE, NULL, NULL);
     move_sensor(CENTRE_ANGLE);
 }
@@ -1070,6 +1199,45 @@ update_critical (ultrasonic_result_t measurement, uint16_t echo_us)
     }
 }
 
+/* A faulted position stays invalid; NO_ECHO is a usable zero. */
+static void
+record_corridor (ultrasonic_result_t measurement, uint16_t echo_us)
+{
+    if (measurement != ULTRASONIC_FAULT)
+    {
+        corridor_work.valid_mask |= (uint16_t)(1u << corridor_index);
+        corridor_work.echo_us[corridor_index] =
+            (measurement == ULTRASONIC_VALID) ? echo_us : 0u;
+    }
+    ++corridor_index;
+    if (corridor_index < OBSTACLE_SWEEP_POINTS)
+    {
+        move_sensor(index_angle(corridor_index));
+        return;
+    }
+    finish_corridor(true);
+    (void)obstacle_scan_rearm();
+}
+
+/* Publish the sweep; an incomplete one has no valid positions. */
+static void
+finish_corridor (bool b_complete)
+{
+    if (!b_complete)
+    {
+        corridor_work.valid_mask = 0u;
+    }
+    corridor_work.sequence = (uint8_t)(corridor.sequence + 1u);
+    corridor = corridor_work;
+    state_flag(SCAN_CORRIDOR, false);
+    uint32_t done_ms = now_ms();
+    tm_printf((UB *)"[%lu ms]obstacle: corridor sweep %s, valid 0x%04X "
+                    "after %lu ms\n",
+              (unsigned long)done_ms, b_complete ? "completed" : "cancelled",
+              (unsigned int)corridor.valid_mask,
+              (unsigned long)(uint32_t)(done_ms - corridor_start_ms));
+}
+
 #if APP_TEST
 /* Scan task: replace a completed reading with the next scripted one. */
 static void
@@ -1087,6 +1255,50 @@ script_take (ultrasonic_result_t * p_measurement, uint16_t * p_echo_us)
                          : 0u;
         ++test_script_next;
     }
+    (void)tk_unl_mtx(test_mutex);
+}
+
+/* Scan task: run a requested command, then start its script. */
+static void
+run_test_command (void)
+{
+    if (tk_loc_mtx(test_mutex, TMO_FEVR) != E_OK)
+    {
+        return;
+    }
+    bool b_pending = test_command_pending;
+    obstacle_scan_test_command_t command = test_command;
+    (void)tk_unl_mtx(test_mutex);
+    if (!b_pending)
+    {
+        return;
+    }
+    uint8_t sequence = test_rearm_sequence;
+    bool b_refused = false;
+    if (command == OBSTACLE_SCAN_TEST_REARM)
+    {
+        sequence = obstacle_scan_rearm();
+    }
+    else
+    {
+        b_refused = !obstacle_scan_request_corridor();
+    }
+    if (tk_loc_mtx(test_mutex, TMO_FEVR) != E_OK)
+    {
+        return;
+    }
+    test_rearm_sequence = sequence;
+    if (b_refused)
+    {
+        ++test_corridor_refused;
+    }
+    for (uint8_t index = 0u; index < test_pending_count; ++index)
+    {
+        test_script[index] = test_pending_script[index];
+    }
+    test_script_count = test_pending_count;
+    test_script_next = 0u;
+    test_command_pending = false;
     (void)tk_unl_mtx(test_mutex);
 }
 #endif
