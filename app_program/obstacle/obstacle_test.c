@@ -94,6 +94,7 @@ static bool position_valid (void);
 static bool centre_valid (void);
 static bool sides_valid (void);
 static bool sides_agree_valid (void);
+static bool timer_rate_valid (void);
 static bool sleeping_valid (void);
 static void sleep_sampler (INT stacd, void * p_exinf);
 static bool critical_valid (void);
@@ -249,6 +250,8 @@ obstacle_test (void)
                "sides: miss the obstacle, farther wins, ties go left");
     TEST_CHECK("OBS-U52", sides_agree_valid(),
                "side clearance agrees with width MISS and threshold");
+    TEST_CHECK("OBS-U53", timer_rate_valid(),
+               "TIMER rate agrees with elapsed kernel time within 1 percent");
 
     tm_printf((UB *)"[TEST] OBS-U20 critical boundary %lu mm (%lu us)\n",
               (UW)OBSTACLE_CRITICAL_DISTANCE_MM, (UW)OBSTACLE_CRITICAL_ECHO_US);
@@ -896,6 +899,35 @@ sides_agree_valid (void)
         }
     }
     return true;
+}
+
+/* OBS-U53: SysTick uses clk_sys, independently of the watchdog tick.
+ * Compare actual elapsed time: tk_dly_tsk(1000) can sleep more than 1 s. */
+static bool
+timer_rate_valid (void)
+{
+    SYSTIM start;
+    SYSTIM end;
+    if (tk_get_otm(&start) < E_OK)
+    {
+        return false;
+    }
+    uint32_t const timer_start = (uint32_t)in_w(TIMER_TIMERAWL);
+    ER const delayed = tk_dly_tsk(1000u);
+    uint32_t const timer_end = (uint32_t)in_w(TIMER_TIMERAWL);
+    if ((delayed < E_OK) || (tk_get_otm(&end) < E_OK))
+    {
+        return false;
+    }
+    uint32_t const elapsed_ms = (uint32_t)end.lo - (uint32_t)start.lo;
+    uint32_t const elapsed_us = timer_end - timer_start;
+    uint64_t const expected_us = (uint64_t)elapsed_ms * 1000u;
+    uint64_t const tolerance_us = expected_us / 100u;
+    tm_printf((UB *)"[TEST] OBS-U53 kernel %lu ms TIMER %lu us\n",
+              (UW)elapsed_ms, (UW)elapsed_us);
+    return (elapsed_ms >= 1000u) &&
+           ((uint64_t)elapsed_us >= expected_us - tolerance_us) &&
+           ((uint64_t)elapsed_us <= expected_us + tolerance_us);
 }
 
 /* Exercise independent packed fields and the explicit saturation rules. */

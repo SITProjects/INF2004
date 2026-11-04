@@ -35,6 +35,8 @@
 #include "app.h"
 
 /* Private types, constants, and macros. */
+#define WATCHDOG_TICK 0x4005802Cu
+#define WATCHDOG_TICK_ENABLE 0x200u
 
 /* Static data. */
 
@@ -87,6 +89,11 @@ app_check (ER er, char const * p_what)
 INT
 usermain (void)
 {
+    /* TIMER counts the watchdog tick. CLK_REF is the 12 MHz crystal;
+     * explicitly start 1 MHz ticks on cold boots as well as after BOOTSEL.
+     * Do this before any blocking call lets the radio task use TIMER. */
+    out_w(WATCHDOG_TICK, (UW)XOSC_MHz | WATCHDOG_TICK_ENABLE);
+
     T_RVER ver;
 
     /* tk_ref_ver: ask the kernel who it is. */
