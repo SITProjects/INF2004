@@ -18,6 +18,13 @@
 /* Private types, constants, and macros. */
 #define TELEMETRY_SAMPLE_PERIOD_MS 1000u
 
+/* obstacle_get_state() gives up after this many torn reads. */
+#define STATE_READ_TRIES 4u
+
+/* Level bits of obstacle_flg_event. */
+#define EVT_LEVELS                                                             \
+    (OBSTACLE_EVT_STOP | OBSTACLE_EVT_CRITICAL | OBSTACLE_EVT_FAULT)
+
 /* Static data. */
 
 #if OBSTACLE_CALIBRATION_MODE == OBSTACLE_CAL_MODE_OFF
@@ -28,9 +35,18 @@ static const obstacle_servo_timing_t servo_timing = {
 #endif
 
 ID obstacle_tid_scan;
+ID obstacle_flg_event;
+
+/* Odd while the scan task writes shared_state; readers retry. */
+static volatile uint32_t state_sequence;
+static obstacle_shared_state_t shared_state;
 
 /* Private function declarations. */
 static void scan_task (INT stacd, void * p_exinf);
+#if OBSTACLE_CALIBRATION_MODE == OBSTACLE_CAL_MODE_OFF
+static void publish_state (obstacle_shared_state_t const * p_state,
+                           bool b_new_result);
+#endif
 
 #if OBSTACLE_CALIBRATION_MODE == OBSTACLE_CAL_MODE_OFF
 static int direction_degrees (robot_obstacle_direction_t direction);
@@ -44,6 +60,14 @@ static uint32_t log_time_ms (void);
 ER
 obstacle_init (void)
 {
+    T_CFLG cflg = {0};
+    cflg.flgatr = TA_TFIFO | TA_WMUL;
+    cflg.iflgptn = 0u;
+    obstacle_flg_event = tk_cre_flg(&cflg);
+    if (obstacle_flg_event < E_OK)
+    {
+        return obstacle_flg_event;
+    }
 #if APP_TEST
     if (obstacle_scan_test_init() != 0)
     {
@@ -60,6 +84,28 @@ obstacle_start (void)
     obstacle_tid_scan = app_start_task(scan_task, OBSTACLE_PRI_SCAN, TP_PRC1,
                                        "obstacle_scan_task");
     return (obstacle_tid_scan < E_OK) ? obstacle_tid_scan : E_OK;
+}
+
+bool
+obstacle_get_state (obstacle_shared_state_t * p_state)
+{
+    if (p_state == NULL)
+    {
+        return false;
+    }
+    for (uint32_t attempt = 0u; attempt < STATE_READ_TRIES; ++attempt)
+    {
+        uint32_t before = state_sequence;
+        if ((before & 1u) == 0u)
+        {
+            *p_state = shared_state;
+            if (state_sequence == before)
+            {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 /* Private function definitions. */
@@ -123,12 +169,17 @@ scan_task (INT stacd, void * p_exinf)
                       log_time_ms(), b_stop ? "ACTIVE" : "RELEASED");
             b_last_stop_requested = b_stop;
         }
-        /* Integration: send the stop request to the motor owner here. */
         robot_obstacle_status_t status = robot_obstacle_get_status(scan.flags);
         robot_obstacle_direction_t direction =
             robot_obstacle_get_direction(scan.flags);
         bool new_result = scan.sequence != last_sequence;
         last_sequence = scan.sequence;
+        obstacle_shared_state_t state = {.result = scan,
+                                         .geometry = obstacle_scan_geometry(),
+                                         .b_stop_requested = b_stop,
+                                         .avoid_state = 0u,
+                                         .fault_reason = 0u};
+        publish_state(&state, new_result);
         if (new_result && (scan.width_mm != ROBOT_OBSTACLE_WIDTH_UNAVAILABLE))
         {
             tm_printf((UB *)"[%lu ms]obstacle: [0x%02X] %s dir %d width %u mm "
@@ -196,6 +247,48 @@ scan_task (INT stacd, void * p_exinf)
 }
 
 #if OBSTACLE_CALIBRATION_MODE == OBSTACLE_CAL_MODE_OFF
+/* Copy the state for obstacle_get_state(), then update the event flag:
+ * level bits only when they change, RESULT on every new sequence. */
+static void
+publish_state (obstacle_shared_state_t const * p_state, bool b_new_result)
+{
+    static uint32_t levels;
+
+    state_sequence = state_sequence + 1u; /* Odd: readers retry. */
+    shared_state = *p_state;
+    state_sequence = state_sequence + 1u; /* Even: whole again. */
+
+    uint32_t now = 0u;
+    if (p_state->b_stop_requested)
+    {
+        now |= OBSTACLE_EVT_STOP;
+    }
+    if (robot_obstacle_get_critical(p_state->result.flags))
+    {
+        now |= OBSTACLE_EVT_CRITICAL;
+    }
+    if (p_state->fault_reason != 0u)
+    {
+        now |= OBSTACLE_EVT_FAULT;
+    }
+    uint32_t set = (now & ~levels) & EVT_LEVELS;
+    uint32_t cleared = (levels & ~now) & EVT_LEVELS;
+    if (b_new_result)
+    {
+        set |= OBSTACLE_EVT_RESULT;
+    }
+    if (set != 0u)
+    {
+        app_check(tk_set_flg(obstacle_flg_event, set), "obstacle event set");
+    }
+    if (cleared != 0u)
+    {
+        app_check(tk_clr_flg(obstacle_flg_event, ~cleared),
+                  "obstacle event clear");
+    }
+    levels = now;
+}
+
 /* Convert the packed direction code only for logging, without geometry. */
 static int
 direction_degrees (robot_obstacle_direction_t direction)
