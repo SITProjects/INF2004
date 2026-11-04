@@ -252,6 +252,42 @@
 #define OBSTACLE_CORRIDOR_TIMEOUT_MS (2u * OBSTACLE_CORRIDOR_WORST_MS)
 
 /*
+ * Bypass (issue #86): stop, drive a box around the obstacle and rejoin the
+ * line, through tMotion (IF-06). Off until the car is measured: every car
+ * dimension below is 0 until it is recorded (OBS-U31 and a ruler), and
+ * enabling the bypass with any of them still 0 is a build error. With the
+ * bypass off, obstacle never sets INHIBIT or sends motion commands.
+ */
+#define OBSTACLE_AVOID_ENABLED 0
+#define OBSTACLE_CAR_WIDTH_MM 0u            /* W, OBS-U31; not measured. */
+#define OBSTACLE_CAR_AXLE_TO_PIVOT_MM 0u    /* Axle midpoint to servo pivot. */
+#define OBSTACLE_CAR_REAR_MM 0u             /* Axle midpoint to rear bumper. */
+#define OBSTACLE_AVOID_LINE_OVERSHOOT_MM 0u /* IR row to axle; 0 skips. */
+#define OBSTACLE_AVOID_MARGIN_MM 60u
+#define OBSTACLE_AVOID_DEPTH_MM 200u /* Largest test obstacle's depth. */
+#define OBSTACLE_AVOID_SIDESTEP_MIN_MM 100u
+#define OBSTACLE_AVOID_SIDESTEP_MAX_MM 400u
+#define OBSTACLE_AVOID_LATERAL_MAX_MM 500u
+#define OBSTACLE_AVOID_PASS_MAX_MM 1500u
+#define OBSTACLE_AVOID_RETURN_EXTRA_MM 150u
+#define OBSTACLE_AVOID_MAX_SIDESTEPS 3u /* First plus two extra. */
+#define OBSTACLE_AVOID_RESUME_MIN_MM 10u
+#define OBSTACLE_AVOID_RESUME_MIN_DEG 3u
+
+/*
+ * Bypass time limits. A rearm may start a full side scan, and a corridor
+ * sweep has its own watchdog, so those limits sit above the scanner's. A
+ * blocked bypass may re-sweep the corridor, so its wait exceeds one sweep.
+ */
+#define OBSTACLE_AVOID_SEND_TIMEOUT_MS 200u
+#define OBSTACLE_AVOID_PREPARE_TIMEOUT_MS                                      \
+    (OBSTACLE_SCAN_TIMEOUT_MS +                                                \
+     OBSTACLE_SETTLE_MS(OBSTACLE_SWEEP_LAST_DEG - OBSTACLE_SWEEP_FIRST_DEG))
+#define OBSTACLE_AVOID_VERIFY_TIMEOUT_MS (OBSTACLE_CORRIDOR_TIMEOUT_MS + 1000u)
+#define OBSTACLE_AVOID_BLOCK_WAIT_MS 30000u
+#define OBSTACLE_AVOID_RETRY_DELAY_MS 1000u
+
+/*
  * Calibration uses the scan task instead of normal obstacle scanning.
  * Keep OFF in committed configuration; select 1..4 only for bench runs.
  */
@@ -407,6 +443,30 @@
 
 #if (OBSTACLE_SERVO_TRIM_DEG < -10) || (OBSTACLE_SERVO_TRIM_DEG > 10)
 #error "Servo trim beyond 10 degrees: re-seat the horn instead"
+#endif
+
+#if OBSTACLE_AVOID_ENABLED
+#if (OBSTACLE_CAR_WIDTH_MM == 0u) || (OBSTACLE_CAR_AXLE_TO_PIVOT_MM == 0u) ||  \
+    (OBSTACLE_CAR_REAR_MM == 0u)
+#error "Measure the car (OBS-U31, ruler) before enabling the bypass"
+#endif
+#endif
+#if !((OBSTACLE_AVOID_SIDESTEP_MIN_MM <= OBSTACLE_AVOID_SIDESTEP_MAX_MM) &&    \
+      (OBSTACLE_AVOID_SIDESTEP_MAX_MM <= OBSTACLE_AVOID_LATERAL_MAX_MM) &&     \
+      (OBSTACLE_AVOID_RESUME_MIN_MM < OBSTACLE_AVOID_SIDESTEP_MIN_MM))
+#error "Bypass sidesteps must satisfy resume < min <= max <= lateral max"
+#endif
+#if (OBSTACLE_AVOID_MAX_SIDESTEPS < 1u) || (OBSTACLE_AVOID_MAX_SIDESTEPS > 255u)
+#error "Bypass sidestep count must be 1..255"
+#endif
+#if (OBSTACLE_AVOID_LATERAL_MAX_MM + OBSTACLE_AVOID_RETURN_EXTRA_MM >          \
+     65535u) ||                                                                \
+    (OBSTACLE_AVOID_PASS_MAX_MM > 65535u) ||                                   \
+    (OBSTACLE_CAR_WIDTH_MM > 65535u) || (OBSTACLE_AVOID_RESUME_MIN_DEG > 255u)
+#error "Bypass distances must fit 16 bits"
+#endif
+#if OBSTACLE_AVOID_BLOCK_WAIT_MS <= OBSTACLE_CORRIDOR_WORST_MS
+#error "A blocked bypass must be able to wait through one corridor sweep"
 #endif
 
 /* Public function declarations. */

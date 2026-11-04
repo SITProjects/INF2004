@@ -172,7 +172,7 @@ change it only by team agreement. Write down every task you create.
 
 | Subsystem | Priority band | Tasks (name – priority – core) |
 |---|---|---|
-| obstacle | 12–13 | `obstacle_scan_task` – 12 – core 0 (`TP_PRC1`; the echo interrupt is on core 0) |
+| obstacle | 12–13 | `obstacle_scan_task` – 12 – core 0 (`TP_PRC1`; the echo interrupt is on core 0); with the bypass on, it also holds INHIBIT from start-up and sends motion commands (IF-06) |
 | motion | 14–15 | `tMotion` – 14 – any (design freeze says 3: to settle) |
 | line_follow | 16–17 | `line_follow_task` – 16 – any |
 | terrain | 18–19 | `terrain_task` – 18 – any |
@@ -186,16 +186,18 @@ Every arrow between two subsystems is listed here. The **provider** creates
 the kernel object and publishes its ID in its own `<name>.h`; the **user**
 only sends to it or waits on it. Agree on the data format before coding.
 
-Rows marked *proposed* or *interim* are not agreed yet; the obstacle
-results and line commands are still TODOs.
+Rows marked *proposed* or *interim* are not agreed yet; the line commands
+are still TODOs.
 
 | ID | From → To | Mechanism | Object ID name | Data / meaning | Agreed by |
 |---|---|---|---|---|---|
 | IF-01 | tMission → motion | Message buffer | `motion_mbf_cmd` (MBF_MOTION_CMD) | one `uint32_t` command word, packed with the `robot_motion_cmd_` helpers in `robot_types.h` (22-bit layout, Tribunal 1) | proposed by motion; tMission owner to agree |
 | IF-02 | tSafety → motion | Event flag | `motion_flg_ctrl` (FLG_MOTION), bit `MOTION_FLG_INHIBIT` | set: brake at once and discard commands; clear: back to STOPPED | proposed by motion; tSafety owner to agree |
-| IF-03 | motion → tMission | Event flag + status word | `motion_flg_event` (`MOTION_EVT_` bits), `motion_get_status()` | MOVE_DONE (reason in status), STALL, ENC_FAULT, REJECTED, FOLLOW_ENDED; mode 3 bits | interim until FLG_MISSION exists |
+| IF-03 | motion → tMission | Event flag + status word | `motion_flg_event` (`MOTION_EVT_` bits), `motion_get_status()` | MOVE_DONE (reason in status), STALL, ENC_FAULT, REJECTED, FOLLOW_ENDED; mode 3 bits. The status is published before any event bit is set, so a reader that sees an event and then reads the status gets that command's done reason | interim until FLG_MISSION exists |
 | IF-04 | line_follow → motion | Function (one 32-bit store) | `motion_set_line_input()` | signed line error −1000..+1000 and line-seen, every reading | interim until `line_state_t` under MTX_LINE; kaiwenteoo to agree |
 | IF-05 | motion → terrain | Shared copy, sequence-checked (no lock, never waits) | `motion_get_odometry()` | `motion_shared_odometry_t`: update count, distance mm and heading deg (`int32`), speed and both wheel speeds mm/s (`int16`); + forward and left; updated every 20 ms | proposed by motion; ann to agree; moves into `telemetry_t` under MTX_TELEM in step 8 |
+| IF-06 | obstacle → motion | Uses IF-01, IF-02, IF-03 | `motion_mbf_cmd`, `motion_flg_ctrl` (`MOTION_FLG_INHIBIT`), `motion_flg_event` | interim tMission/tSafety for obstacles, only while `OBSTACLE_AVOID_ENABLED`: INHIBIT from start-up until a confirmed clear path and on every stop; box-bypass commands; FOLLOW to resume; a latched FAULT keeps INHIBIT until reboot. The only task that sets or clears INHIBIT and the only consumer of MOVE_DONE (clears every `MOTION_EVT_` bit before each command); hands both to tSafety/tMission when they exist | proposed by obstacle; felicia-chuaxy to agree |
+| IF-07 | obstacle → any | Event flag + shared copy, sequence-checked (no lock, never waits) | `obstacle_flg_event` (FLG_OBSTACLE), `obstacle_get_state()` | STOP, CRITICAL and FAULT levels; RESULT edge on a new result sequence (one consumer clears it); `obstacle_shared_state_t`: packed result, its geometry (mm from the servo pivot), stop request, bypass state and fault reason | proposed by obstacle |
 
 Each interface is tested by at least one integration test
 (`testing/integration/TEST_LOG.md`).
@@ -209,7 +211,7 @@ limit there.
 |---|---|---|---|---|---|---|
 | Task | 32 | 1 | 1 | 1 | 1 | 1 |
 | Semaphore | 16 | | | | | |
-| Event flag | 16 | | 2 | | | |
+| Event flag | 16 | 1 | 2 | | | |
 | Mailbox | 12 | | | | | |
 | Mutex | 12 | | | | | |
 | Message buffer | 12 | | 1 | | | |
