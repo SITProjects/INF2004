@@ -3,13 +3,22 @@
  * @brief Terrain detectors: the hump state machine.
  *
  * Pure C with no kernel calls, so it can be tested on a PC. Each step
- * takes the detector word and one sample's results and returns the event
- * it found, if any. Waits are counted in samples, so no clock is needed.
+ * takes the detector word and one sample's roll and returns the event it
+ * found, if any. Waits are counted in samples, so no clock is needed.
+ *
+ * The course's humps are ramps under one drive wheel: the car leans
+ * sideways while that wheel is up, and its nose rises only half as much.
+ * So the machine follows the lean, the size of the roll: either wheel
+ * counts the same, and the lean never goes negative, so coming down is a
+ * drop from the highest lean of the hump (its peak), not a dip.
  *
  * Detector word, masks and shifts, bit 0 first; all zero is the resting
- * state (LEVEL, counters 0):
- *   hump state 2 | climb counter 4 | other counter 4 | spare 22
- * The spare bits are kept as they are, for later detectors.
+ * state (LEVEL, counters 0, no peak):
+ *   hump state 2 | climb counter 4 | other counter 4 | peak lean 8 |
+ *   spare 14
+ * The peak lean is in tenths of a degree, 0 to 25.5 degrees (stops
+ * there): about a 46 mm lift of one wheel on the car's track, far above
+ * any ramp it can climb. The spare bits are kept as they are.
  *
  * Internal to the terrain module; other modules should use
  * terrain_monitor.h.
@@ -30,16 +39,17 @@
 /* Largest sample count the 4-bit hump counters hold. */
 #define TERRAIN_DETECT_COUNT_MAX 15u
 
-/** @brief Limits of the hump state machine. */
+/** @brief Limits of the hump state machine, on the lean (size of roll). */
 typedef struct
 {
-    float up_deg;          /**< Pitch above +up_deg is climbing. */
-    float top_deg;         /**< While ascending, pitch below +top_deg is the
-                                top. */
-    float down_deg;        /**< Pitch below -down_deg is coming down. */
-    float level_deg;       /**< Pitch within +/-level_deg is flat. */
+    float up_deg;          /**< Lean above this is climbing. */
+    float drop_deg;        /**< Lean this far below the hump's peak is
+                                coming down. */
+    float level_deg;       /**< Lean below this is flat. */
     uint8_t enter_samples; /**< Samples in a row to start a climb or
                                 descent, 1 to TERRAIN_DETECT_COUNT_MAX. */
+    uint8_t top_samples;   /**< Samples in a row with no new peak to reach
+                                the top, 1 to TERRAIN_DETECT_COUNT_MAX. */
     uint8_t level_samples; /**< Flat samples in a row to end a descent, 1 to
                                 TERRAIN_DETECT_COUNT_MAX. */
 } terrain_hump_limits_t;
@@ -49,26 +59,26 @@ typedef struct
 /**
  * @brief Run the hump state machine on one sample.
  * @param p_word Detector word; start from 0.
- * @param pitch_deg Pitch of this sample, degrees; nose up is positive.
+ * @param roll_deg Roll of this sample, degrees; either sign. Only its
+ *        size, the lean, is used.
  * @param p_limits Limits; sample counts of 0 count as 1, and counts over
  *        TERRAIN_DETECT_COUNT_MAX can never be reached.
  * @return The event the sample caused: ASCENDING, DESCENDING, LEVEL or
  *         NONE. NONE, with nothing changed, if a pointer is NULL.
  *
- * LEVEL -> ASCENDING (event) after enter_samples above +up_deg.
- * LEVEL -> DESCENDING (event) after enter_samples below -down_deg (a dip).
- * ASCENDING -> TOP (no event) as soon as pitch is below +top_deg.
- * TOP -> DESCENDING (event) after enter_samples below -down_deg.
- * TOP -> ASCENDING (no event: same hump) after enter_samples above
- * +up_deg.
- * DESCENDING -> LEVEL (event) after level_samples within +/-level_deg.
- * DESCENDING -> ASCENDING (event: next hump) after enter_samples above
- * +up_deg.
- * A counter restarts when its condition breaks; both restart on a change
- * of state.
+ * LEVEL -> ASCENDING (event) after enter_samples above up_deg; the peak
+ * starts there.
+ * ASCENDING -> TOP (no event) after top_samples with no new peak.
+ * TOP -> DESCENDING (event) after enter_samples at least drop_deg below
+ * the peak.
+ * DESCENDING -> LEVEL (event) after level_samples below level_deg; the
+ * peak goes back to 0.
+ * While ASCENDING or TOP, a higher lean raises the peak (in TOP it also
+ * restarts the descent count). A counter restarts when its condition
+ * breaks; both restart on a change of state.
  */
 terrain_event_type_t
-terrain_detect_hump_step (uint32_t * p_word, float pitch_deg,
+terrain_detect_hump_step (uint32_t * p_word, float roll_deg,
                           terrain_hump_limits_t const * p_limits);
 
 /**

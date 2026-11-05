@@ -219,40 +219,44 @@
 #endif
 
 /*
- * Hump state machine (terrain_detect.h), on the smoothed pitch while
- * calibrated. All are guesses until car day: a 1 cm hump may tip the car
- * less than 4 degrees, depending on its wheelbase.
+ * Hump state machine (terrain_detect.h), on the lean (size of the
+ * smoothed roll) while calibrated. The course's humps are ramps under one
+ * drive wheel, so the car leans sideways. A wheel lifted h mm leans the
+ * car by asin(h / TERRAIN_TRACK_WIDTH_MM): on a 107.5 mm track, 1 mm is
+ * about 0.53 degrees, and an 11 mm ramp about 5.9 degrees.
  *
- * Climb: pitch above +TERRAIN_HUMP_UP_DEG for TERRAIN_HUMP_ENTER_SAMPLES
- * samples in a row (5 = 50 ms, so a single jolt does not count).
+ * Climb: lean above TERRAIN_HUMP_UP_DEG for TERRAIN_HUMP_ENTER_SAMPLES
+ * samples in a row (5 = 50 ms, so a single jolt does not count). 2.1
+ * degrees is about 4 mm: above the lean that line-following turns fake
+ * (about 1 degree), well below an 11 mm ramp.
  */
 #ifndef TERRAIN_HUMP_UP_DEG
-#define TERRAIN_HUMP_UP_DEG 4.0f
-#endif
-
-/* Top of the hump: while climbing, pitch falls below this, degrees. */
-#ifndef TERRAIN_HUMP_TOP_DEG
-#define TERRAIN_HUMP_TOP_DEG 1.0f
+#define TERRAIN_HUMP_UP_DEG 2.1f
 #endif
 
 /*
- * Descent: pitch below -TERRAIN_HUMP_DOWN_DEG for
- * TERRAIN_HUMP_ENTER_SAMPLES samples. If a hump's far side is gentler
- * than this, the state stays TOP and the next hump's ASCENDING is missed:
- * lower it then.
+ * Descent: lean at least this far below the hump's peak for
+ * TERRAIN_HUMP_ENTER_SAMPLES samples, degrees. 1.1 degrees is about
+ * 2 mm, so wobbles on the top of a ramp do not count.
  */
-#ifndef TERRAIN_HUMP_DOWN_DEG
-#define TERRAIN_HUMP_DOWN_DEG 4.0f
+#ifndef TERRAIN_HUMP_DROP_DEG
+#define TERRAIN_HUMP_DROP_DEG 1.1f
 #endif
 
-/* Flat again: pitch within +/- this for TERRAIN_HUMP_LEVEL_SAMPLES. */
+/* Flat again: lean below this for TERRAIN_HUMP_LEVEL_SAMPLES (about
+ * 2 mm). */
 #ifndef TERRAIN_HUMP_LEVEL_DEG
-#define TERRAIN_HUMP_LEVEL_DEG 2.0f
+#define TERRAIN_HUMP_LEVEL_DEG 1.1f
 #endif
 
 /* Samples in a row to start a climb or a descent: 5 = 50 ms. */
 #ifndef TERRAIN_HUMP_ENTER_SAMPLES
 #define TERRAIN_HUMP_ENTER_SAMPLES 5u
+#endif
+
+/* Samples in a row with no new peak to reach the top: 10 = 100 ms. */
+#ifndef TERRAIN_HUMP_TOP_SAMPLES
+#define TERRAIN_HUMP_TOP_SAMPLES 10u
 #endif
 
 /* Flat samples in a row to end a descent: 10 = 100 ms. */
@@ -267,43 +271,28 @@
 #if (TERRAIN_HUMP_LEVEL_SAMPLES < 1) || (TERRAIN_HUMP_LEVEL_SAMPLES > 15)
 #error "TERRAIN_HUMP_LEVEL_SAMPLES must be 1 to 15"
 #endif
+#if (TERRAIN_HUMP_TOP_SAMPLES < 1) || (TERRAIN_HUMP_TOP_SAMPLES > 15)
+#error "TERRAIN_HUMP_TOP_SAMPLES must be 1 to 15"
+#endif
 
 /*
- * Hump height (terrain_height.h). Wheelbase: drive axle to the caster's
- * floor contact, front to back, in mm. The tilt estimate is wheelbase x
- * sin(pitch), so a wheelbase 10 % too long reads every such height 10 %
- * too high. Measured on the car (4 Nov 2026): 80 mm.
+ * Hump height (terrain_height.h). Track width: centre of one drive wheel
+ * to the centre of the other, in mm. The height is track width x
+ * sin(lean), so a track width 10 % too wide reads every height 10 % too
+ * high. 107.5 mm is motion's MOTION_TRACK_WIDTH_MM (same car).
  */
-#ifndef TERRAIN_WHEELBASE_MM
-#define TERRAIN_WHEELBASE_MM 80u
-#endif
-
-#if (TERRAIN_WHEELBASE_MM < 50) || (TERRAIN_WHEELBASE_MM > 160)
-#error "TERRAIN_WHEELBASE_MM must be 50 to 160"
+#ifndef TERRAIN_TRACK_WIDTH_MM
+#define TERRAIN_TRACK_WIDTH_MM 107.5f
 #endif
 
 /*
- * Pitch smoothing for the hump height only, in seconds: lighter than
- * TERRAIN_TILT_TAU_S, whose 0.15 s cuts the short tilt peak of a hump
- * (a 40 mm hump read 31-36 mm at 200 mm/s in host tests; 38-39 mm at
- * 0.05 s). Lighter lets more motor vibration through, which can read
- * high. TODO(car day): tune over a measured hump at race speed.
+ * Roll smoothing for the hump height only, in seconds: lighter than
+ * TERRAIN_TILT_TAU_S, whose 0.15 s can cut the short lean of a short ramp
+ * and read it low. Lighter lets more motor vibration through, which can
+ * read high. TODO(car day): tune over a measured ramp at race speed.
  */
 #ifndef TERRAIN_HUMP_HEIGHT_TAU_S
 #define TERRAIN_HUMP_HEIGHT_TAU_S 0.05f
-#endif
-
-/*
- * Largest believable distance step between two updates, in mm. The
- * fastest wheel speed (500 mm/s) over a full sensor FIFO (320 ms) is
- * 160 mm; a bigger jump is a glitch or a reset and is not added.
- */
-#ifndef TERRAIN_HEIGHT_MAX_STEP_MM
-#define TERRAIN_HEIGHT_MAX_STEP_MM 160u
-#endif
-
-#if (TERRAIN_HEIGHT_MAX_STEP_MM < 1) || (TERRAIN_HEIGHT_MAX_STEP_MM > 1000)
-#error "TERRAIN_HEIGHT_MAX_STEP_MM must be 1 to 1000"
 #endif
 
 /*

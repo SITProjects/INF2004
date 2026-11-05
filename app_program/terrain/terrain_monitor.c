@@ -8,6 +8,7 @@
  */
 
 #include "terrain_monitor.h"
+#include <math.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include "drv_imu.h"
@@ -134,13 +135,12 @@ static terrain_calib_limits_t const calib_limits = {
     TERRAIN_LEVEL_MAX_DEG};
 
 static terrain_hump_limits_t const hump_limits = {
-    TERRAIN_HUMP_UP_DEG,        TERRAIN_HUMP_TOP_DEG,
-    TERRAIN_HUMP_DOWN_DEG,      TERRAIN_HUMP_LEVEL_DEG,
-    TERRAIN_HUMP_ENTER_SAMPLES, TERRAIN_HUMP_LEVEL_SAMPLES};
+    TERRAIN_HUMP_UP_DEG,      TERRAIN_HUMP_DROP_DEG,
+    TERRAIN_HUMP_LEVEL_DEG,   TERRAIN_HUMP_ENTER_SAMPLES,
+    TERRAIN_HUMP_TOP_SAMPLES, TERRAIN_HUMP_LEVEL_SAMPLES};
 
 static terrain_height_limits_t const height_limits = {
-    (float)TERRAIN_WHEELBASE_MM, TERRAIN_HUMP_LEVEL_DEG,
-    (float)TERRAIN_HEIGHT_MAX_STEP_MM,
+    TERRAIN_TRACK_WIDTH_MM, TERRAIN_HUMP_LEVEL_DEG,
     TERRAIN_PROCESS_LOWPASS_ALPHA(TERRAIN_HUMP_HEIGHT_TAU_S,
                                   TERRAIN_SAMPLE_PERIOD_S)};
 
@@ -177,8 +177,7 @@ static bool take_recal_request (void);
 static void calib_start (void);
 static void calib_add (terrain_vec3_t const * p_sample);
 static void handle_fault (void);
-static void detect_sample (terrain_vec3_t const * p_accel, uint32_t now_10ms,
-                           float step_mm, bool b_step);
+static void detect_sample (terrain_vec3_t const * p_accel, uint32_t now_10ms);
 static void show_calibrating (terrain_data_t * p_data);
 static void clear_calib_info (terrain_calib_info_t * p_info);
 static void publish (terrain_vec3_t const * p_accel, uint32_t new_samples,
@@ -272,14 +271,6 @@ terrain_monitor_update (void)
     bool const b_hold_pitch = hint.b_speed_known && hint.b_speed_changing;
     bool const b_hold_roll = hint.b_turn_known && hint.b_turning;
 
-    /* Distance driven since the last batch, shared evenly by its samples
-     * (they are 10 ms apart). Tracked even while not calibrated. */
-    float batch_mm = 0.0f;
-    bool const b_step = terrain_height_distance_step(
-        &height, hint.b_distance_known, hint.distance_mm,
-        height_limits.max_step_mm, &batch_mm);
-    float const step_mm = batch_mm / (float)count;
-
     for (uint32_t i = 0u; i < count; i++)
     {
         int16_t const board[TERRAIN_AXES] = {buf[i].x, buf[i].y, buf[i].z};
@@ -306,7 +297,7 @@ terrain_monitor_update (void)
             accel = terrain_process_correct(&sample, &bias);
             terrain_process_tilt_update(&tilt, &accel, tilt_alpha, b_hold_pitch,
                                         b_hold_roll);
-            detect_sample(&accel, now_10ms, step_mm, b_step);
+            detect_sample(&accel, now_10ms);
         }
     }
 
@@ -765,10 +756,9 @@ calib_start (void)
     terrain_process_calib_reset(&calib_acc);
     terrain_process_tilt_reset(&tilt);
 
-    /* A hump cut short just ends: no event, queued events are kept. The
-     * last distance is kept, so the distance step is known straight away. */
+    /* A hump cut short just ends: no event, queued events are kept. */
     detect_word = 0u;
-    terrain_height_restart(&height);
+    terrain_height_reset(&height);
 }
 
 /* Collect one sample; after a full attempt, judge it. */
@@ -846,39 +836,36 @@ handle_fault (void)
 
 /*
  * Run the hump height and the hump state machine on the newest sample and
- * queue the event. The machine uses the smoothed pitch; the height its own
- * lighter smoothing of this sample's pitch. Paused while pitch is held.
- * step_mm is the distance driven during this sample (valid if b_step).
+ * queue the event. The machine uses the smoothed roll; the height its own
+ * lighter smoothing of this sample's roll. Paused while roll is held.
  * The lock is held only to add the event and the highest hump.
  */
 static void
-detect_sample (terrain_vec3_t const * p_accel, uint32_t now_10ms, float step_mm,
-               bool b_step)
+detect_sample (terrain_vec3_t const * p_accel, uint32_t now_10ms)
 {
-    /* A held pitch is an old value, not news: pause the machine with it. */
-    if ((tilt.flags & TERRAIN_TILT_PITCH_HELD) != 0u)
+    /* A held roll is an old value, not news: pause the machine with it. */
+    if ((tilt.flags & TERRAIN_TILT_ROLL_HELD) != 0u)
     {
         return;
     }
 
     /* Height first: it needs the state before this sample's step. */
     terrain_height_step(&height, terrain_detect_hump_state(detect_word),
-                        terrain_process_pitch_deg(p_accel), step_mm, b_step,
-                        &height_limits);
+                        terrain_process_roll_deg(p_accel), &height_limits);
 
     terrain_event_type_t const type =
-        terrain_detect_hump_step(&detect_word, tilt.pitch_deg, &hump_limits);
+        terrain_detect_hump_step(&detect_word, tilt.roll_deg, &hump_limits);
     if (type == TERRAIN_EVENT_NONE)
     {
         return;
     }
 
-    /* ASCENDING and DESCENDING carry the pitch; LEVEL the hump height. */
+    /* ASCENDING and DESCENDING carry the lean; LEVEL the hump height. */
     uint32_t value = 0u;
     if ((type == TERRAIN_EVENT_ASCENDING) || (type == TERRAIN_EVENT_DESCENDING))
     {
-        value = terrain_process_encode_signed(tilt.pitch_deg, DDEG_PER_DEG,
-                                              TERRAIN_EVENT_VALUE_BITS);
+        value = terrain_process_encode_signed(
+            fabsf(tilt.roll_deg), DDEG_PER_DEG, TERRAIN_EVENT_VALUE_BITS);
     }
     else if (type == TERRAIN_EVENT_LEVEL)
     {

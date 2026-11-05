@@ -54,14 +54,16 @@ typedef enum
 } terrain_calib_state_t;
 
 /**
- * @brief Where the car is on a hump, judged from pitch. Resting value 0.
+ * @brief Where the car is on a hump, judged from the lean (size of roll):
+ *        the course's humps are ramps under one drive wheel. Resting
+ *        value 0.
  */
 typedef enum
 {
     TERRAIN_HUMP_LEVEL = 0, /**< Flat, no hump in progress. */
-    TERRAIN_HUMP_ASCENDING, /**< Nose up: climbing. */
-    TERRAIN_HUMP_TOP,       /**< Over the top, not coming down yet. */
-    TERRAIN_HUMP_DESCENDING /**< Nose down: coming off a hump, or a dip. */
+    TERRAIN_HUMP_ASCENDING, /**< Leaning more: a wheel is climbing. */
+    TERRAIN_HUMP_TOP,       /**< On the top, not coming down yet. */
+    TERRAIN_HUMP_DESCENDING /**< Leaning less: the wheel is coming down. */
 } terrain_hump_state_t;
 
 /**
@@ -113,9 +115,10 @@ typedef struct
  * the same goes for roll. Those hints come from other subsystems; until
  * they exist, nothing is held.
  *
- * The hump state follows pitch through LEVEL, ASCENDING, TOP and
- * DESCENDING; see terrain_monitor_poll_event() for the events it sends.
- * While pitch is held, the hump state and its waits pause too.
+ * The hump state follows the lean (size of roll) through LEVEL,
+ * ASCENDING, TOP and DESCENDING; see terrain_monitor_poll_event() for the
+ * events it sends. While roll is held, the hump state and its waits pause
+ * too.
  *
  * The highest hump is the largest LEVEL event height since init, in mm
  * (see terrain_monitor_poll_event()). It is kept through a recalibration.
@@ -228,25 +231,25 @@ terrain_status_t terrain_monitor_recalibrate (void);
  * Never waits. A poll removes the event, so only one task should read
  * events. Calling it until it gives NONE empties the queue.
  *
- * Events, while the calibration state is VALID:
- * - ASCENDING: pitch stayed above TERRAIN_HUMP_UP_DEG for
- *   TERRAIN_HUMP_ENTER_SAMPLES samples. Value: pitch then, tenths of a
- *   degree.
- * - DESCENDING: pitch stayed below -TERRAIN_HUMP_DOWN_DEG for
- *   TERRAIN_HUMP_ENTER_SAMPLES samples. Value: pitch then, tenths of a
- *   degree (negative).
- * - LEVEL: after a descent, pitch stayed within TERRAIN_HUMP_LEVEL_DEG of
- *   0 for TERRAIN_HUMP_LEVEL_SAMPLES samples. Value: the hump's height,
- *   mm, 0 to 255 (stops at 255). A dip (a descent first) reads about 0.
+ * Events, while the calibration state is VALID. The course's humps are
+ * ramps under one drive wheel, so they are found from the lean, the size
+ * of the roll; either wheel counts the same:
+ * - ASCENDING: the lean stayed above TERRAIN_HUMP_UP_DEG for
+ *   TERRAIN_HUMP_ENTER_SAMPLES samples. Value: lean then, tenths of a
+ *   degree (0 or more).
+ * - DESCENDING: on the top (no new peak for TERRAIN_HUMP_TOP_SAMPLES),
+ *   the lean stayed at least TERRAIN_HUMP_DROP_DEG below the hump's
+ *   highest lean for TERRAIN_HUMP_ENTER_SAMPLES samples. Value: lean
+ *   then, tenths of a degree (0 or more).
+ * - LEVEL: after a descent, the lean stayed below TERRAIN_HUMP_LEVEL_DEG
+ *   for TERRAIN_HUMP_LEVEL_SAMPLES samples. Value: the hump's height, mm,
+ *   0 to 255 (stops at 255).
  *
- * The height is the larger of two estimates, each kept at its highest
- * from the start of the climb: TERRAIN_WHEELBASE_MM x sin(pitch), right
- * for humps narrower than the car, and the sum of sin(pitch) x distance
- * driven, right for wider humps. The second needs the driven distance
- * from the motion subsystem; without it only the first is used.
+ * The height is TERRAIN_TRACK_WIDTH_MM x sin(lean), kept at its highest
+ * from the start of the climb: how far the wheel on the ramp was lifted.
  *
- * While pitch is held (the car speeds up or brakes), no hump events are
- * found and the height pauses: the held value is not a new reading.
+ * While roll is held (the car is turning), no hump events are found and
+ * the height pauses: the held value is not a new reading.
  *
  * The queue holds TERRAIN_EVENT_QUEUE_LEN events; when it is full the
  * oldest is dropped and counted (terrain_monitor_events_dropped()). A

@@ -157,8 +157,8 @@ print_events (void)
 
 /*
  * One line per event, with its time since boot in seconds (comes round
- * every 655.36 s). ASCENDING and DESCENDING carry the pitch then, LEVEL
- * the hump's height.
+ * every 655.36 s). ASCENDING and DESCENDING carry the lean (size of roll)
+ * then, LEVEL the hump's height.
  */
 static void
 print_event (terrain_event_t const * p_event)
@@ -181,7 +181,7 @@ print_event (terrain_event_t const * p_event)
             p_sign = "-";
             tenths = -tenths;
         }
-        tm_printf((UB *)" pitch %s%d.%d deg", p_sign, tenths / TENTHS_PER_UNIT,
+        tm_printf((UB *)" lean %s%d.%d deg", p_sign, tenths / TENTHS_PER_UNIT,
                   tenths % TENTHS_PER_UNIT);
     }
     tm_printf((UB *)" t %d.%02d s\n", time_10ms / HUNDREDTHS_PER_UNIT,

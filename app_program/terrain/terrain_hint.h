@@ -9,9 +9,10 @@
  * tilt is held.
  *
  * They come from the motion subsystem's odometry (motion_get_odometry(),
- * TEAM.md IF-05). For now only the distance is given; speed and turn are
- * unknown, so the terrain module never holds tilt. Adding them changes
- * only terrain_hint.c.
+ * TEAM.md IF-05). For now only the distance is given, and nothing uses
+ * it: the hump height comes from the lean alone (one wheel on a ramp).
+ * Speed and turn are unknown, so the terrain module never holds tilt.
+ * Adding them changes only terrain_hint.c.
  *
  * Internal to the terrain module; other modules should not call it.
  *
@@ -41,8 +42,8 @@ typedef struct
     bool b_turning;        /**< The car is turning; holds roll. */
     bool b_distance_known; /**< distance_mm is valid. */
     int32_t distance_mm;   /**< Distance driven since start, mm; + is
-                                forward (hump height). May wrap round:
-                                only differences are used. */
+                                forward. May wrap round: use only
+                                differences. Not used yet. */
 } terrain_hint_t;
 
 /* Public function declarations. */
