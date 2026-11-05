@@ -134,12 +134,14 @@ typedef struct
 #define RECORD_MAX_SAMPLES 400
 
 /*
- * Long traces pause every PRINT_BURST_LINES lines so the USB console task
- * can send them: it runs below this task, and its 4 KB buffer drops what
- * does not fit (about 90 trace lines).
+ * Long traces wait every PRINT_BURST_LINES lines until the USB console task
+ * has sent them: it runs below this task, and its 4 KB buffer drops what
+ * does not fit (about 90 trace lines). The wait is bounded, so a host that
+ * has stopped reading cannot hang the test run.
  */
 #define PRINT_BURST_LINES 20
 #define PRINT_PAUSE_MS 20
+#define PRINT_DRAIN_MAX_MS 500
 
 /* One speed-loop update: what was asked, and what the wheels did. */
 typedef struct
@@ -296,6 +298,13 @@ static void run_sync_move (char const * p_id, char const * p_label,
                            sync_record_t * p_record);
 static void print_sync_trace (char const * p_id,
                               sync_record_t const * p_record);
+#endif
+#if MOTION_SPEED_TESTS || MOTION_SYNC_TESTS
+static void wait_console_drained (void);
+#if TM_CONSOLE_USB_CDC
+/* Bytes queued for the host (lib/libtm usb_console.c; no public header). */
+extern UW tm_usb_pending (void);
+#endif
 #endif
 #if MOTION_FOLLOW_TESTS
 static BOOL check_follow_lifted (void);
@@ -1560,7 +1569,7 @@ print_record (char const * p_id, char const * p_label,
                   (INT)p_sample->command.right_duty_permille);
         if (((i + 1) % PRINT_BURST_LINES) == 0)
         {
-            (void)tk_dly_tsk((TMO)PRINT_PAUSE_MS);
+            wait_console_drained();
         }
         if (i >= half)
         {
@@ -1742,11 +1751,32 @@ print_sync_trace (char const * p_id, sync_record_t const * p_record)
                   (INT)p_sample->command.right_setpoint_mm_s);
         if (((i + 1) % PRINT_BURST_LINES) == 0)
         {
-            (void)tk_dly_tsk((TMO)PRINT_PAUSE_MS);
+            wait_console_drained();
         }
     }
 }
 #endif /* MOTION_SYNC_TESTS */
+
+#if MOTION_SPEED_TESTS || MOTION_SYNC_TESTS
+/*
+ * Wait until the USB console has sent everything queued, for at most
+ * PRINT_DRAIN_MAX_MS; with another console, just pause.
+ */
+static void
+wait_console_drained (void)
+{
+#if TM_CONSOLE_USB_CDC
+    for (INT waited_ms = 0;
+         (tm_usb_pending() > 0u) && (waited_ms < PRINT_DRAIN_MAX_MS);
+         waited_ms += PRINT_PAUSE_MS)
+    {
+        (void)tk_dly_tsk((TMO)PRINT_PAUSE_MS);
+    }
+#else
+    (void)tk_dly_tsk((TMO)PRINT_PAUSE_MS);
+#endif
+}
+#endif
 
 #if MOTION_FOLLOW_TESTS
 /*

@@ -77,20 +77,24 @@
 
 /*
  * Highest wheel speed any command may request, in mm/s.
- * TODO(calibrate): about 10-15 % below the slower wheel's speed at duty
- * 1000 in MOT-U19, so the speed loop always has duty in hand (also
- * confirms the 16-bit counter margin).
+ * Set about 10-15 % below the slower wheel's speed at duty 1000 in MOT-U19,
+ * so the speed loop always has duty in hand (also confirms the 16-bit
+ * counter margin). MOT-U19 (2026-11-05): the slower wheel reached 728 mm/s.
  */
 #define MOTION_MAX_SPEED_MM_S 620.0f
 
 /*
  * Feed-forward duty = MOTION_FF_OFFSET + MOTION_FF_GAIN * speed_mm_s; the
  * speed PI loop corrects what this misses.
- * OFFSET: smallest duty that just starts the wheel turning.
- * GAIN: duty per mm/s above that.
- * TODO(calibrate): fit a straight line to the MOT-U19 duty/speed lines of
- * both wheels: GAIN = duty change / speed change between two lines above
- * the start-up duty, OFFSET = duty - GAIN * speed at either of them.
+ * GAIN: duty per mm/s, from a straight line through the lifted MOT-U19
+ * duty/speed lines of both wheels (2026-11-05, duty 200-600).
+ * OFFSET: deliberately tuned for the floor, not taken from that line, whose
+ * lifted fit is 0.009. Do not re-fit it from MOT-U19 alone. The floor needs
+ * about duty 300 for 200 mm/s (MOT-U21), and at 0.009 the gentle start let
+ * the castor flip swallow a short reverse: 100 mm moved 75-85 mm (MOT-U09).
+ * The cost is overshoot when lifted: +17/+21 % on the first MOT-U20 step,
+ * still settling within 5 % in about 0.5 s. If this changes, repeat MOT-U09
+ * and MOT-U20 and check MOTION_MOVE_STOP_EARLY_MM.
  */
 #define MOTION_FF_OFFSET 0.05f
 #define MOTION_FF_GAIN 0.00122f
@@ -98,21 +102,22 @@
 /*
  * Speed PI loop of each wheel, on top of the feed-forward duty (report
  * 8.1). KP: duty per mm/s of speed error. KI: duty per mm/s of error per
- * second. TODO(calibrate) with MOT-U20 (lifted): with KI 0, raise KP until
- * the speed overshoots a step, then halve it; then raise KI until the
- * speed settles on the setpoint within about 0.5 s without oscillating.
- * Check on the floor with MOT-U21.
+ * second. MOT-U20 and MOT-U21 (2026-11-05): KP kept, KI raised from 0.003
+ * until each step settled within 5 % in about 0.5 s.
+ * To retune with MOT-U20 (lifted): with KI 0, raise KP until the speed
+ * overshoots a step, then halve it; then raise KI until the speed settles
+ * on the setpoint within about 0.5 s without oscillating. Check on the
+ * floor with MOT-U21.
  */
 #define MOTION_SPEED_KP 0.001f
 #define MOTION_SPEED_KI 0.006f
 
 /*
- * Updates over which each wheel's speed is averaged. At 2 mm per count
- * and 200 mm/s a wheel moves only about 2 counts per update, so one
- * update's speed is too coarse to control on. More updates are smoother
- * but slower to respond.
- * TODO(calibrate): choose once MOT-U04 gives the counts per revolution;
- * fewer if each update sees 10 or more counts at 200 mm/s.
+ * Updates over which each wheel's speed is averaged. More updates are
+ * smoother but slower to respond. MOT-U04 (2026-11-05) gives about 0.08 mm
+ * per count: about 50 counts per update at 200 mm/s and 25 at 100 mm/s.
+ * MOT-U20 and MOT-U21 (2026-11-05) pass with 5. Fewer may respond faster;
+ * repeat MOT-U08..U10 and MOT-U19..U21 if this changes.
  */
 #define MOTION_SPEED_WINDOW_UPDATES 5u
 
@@ -121,7 +126,7 @@
  * heading a move started on by adding a turn rate, in deg/s, to both
  * wheels' setpoints. The error is the heading change since the move
  * started, from the right - left count difference; one count of
- * difference is about 1 deg at 2 mm per count. KP: deg/s per deg of
+ * difference is about 0.04 deg at 0.08 mm per count. KP: deg/s per deg of
  * error. KI: deg/s per deg of error per second.
  * TODO(calibrate) with MOT-U25 on the floor: with KI 0, raise KP until the
  * car weaves visibly over 1 m, then halve it; then raise KI only if the
@@ -208,10 +213,9 @@
  * MOTION_MOVE_SPEED_MM_S; measure again if that changes. The target is
  * checked once per update, so a move also brakes up to one update's
  * travel (4 mm at 200 mm/s) late.
- * MOT-U08/U09 (2026-11-03): 1 m and 10 cm moves both ended about 5 mm
- * past the target by ruler.
- * TODO(calibrate): confirm by ruler with MOT-U08/U09 that both moves now
- * end within 3 percent.
+ * MOT-U08/U09 (2026-11-05): with MOTION_FF_OFFSET 0.05, 9 mm ends 1 m moves
+ * at 996-998 mm and 10 cm reverses at 99-102 mm by odometry; the ruler
+ * agreed by eye. It depends on that offset as well as on the speed.
  */
 #define MOTION_MOVE_STOP_EARLY_MM 9.0f
 
