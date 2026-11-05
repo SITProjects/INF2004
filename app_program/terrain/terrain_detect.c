@@ -1,6 +1,6 @@
 /**
  * @file terrain_detect.c
- * @brief Terrain detectors: the hump state machine.
+ * @brief Terrain detectors: the hump and collision state machines.
  *
  * Copyright (c) 2026 10x Slackers
  * SPDX-License-Identifier: MIT
@@ -27,16 +27,39 @@
 /* Lean and peak in tenths of a degree. */
 #define DDEG_PER_DEG 10.0f
 
+/* Collision word: cooldown 6 | check countdown 4 | speed at the push 8 |
+ * biggest push 7. */
+#define COOLDOWN_SHIFT 0u
+#define COOLDOWN_BITS 6u
+#define CHECK_SHIFT 6u
+#define CHECK_BITS 4u
+#define SPEED_SHIFT 10u
+#define SPEED_BITS 8u
+#define PUSH_SHIFT 18u
+#define PUSH_BITS 7u
+
+/* Speed in 4 mm/s steps; push in tenths of a g. */
+#define SPEED_STEPS_PER_MM_S 0.25f
+#define SPEED_MM_S_PER_STEP 4.0f
+#define DG_PER_G 10.0f
+
 _Static_assert(TERRAIN_HUMP_DESCENDING < (1u << HUMP_BITS),
                "hump states must fit their field");
 _Static_assert(TERRAIN_DETECT_COUNT_MAX == ((1u << COUNT_BITS) - 1u),
                "count limit must match the counter width");
+_Static_assert(TERRAIN_DETECT_CHECK_MAX == ((1u << CHECK_BITS) - 1u),
+               "check limit must match the countdown width");
+_Static_assert(TERRAIN_DETECT_COOLDOWN_MAX == ((1u << COOLDOWN_BITS) - 1u),
+               "cooldown limit must match the cooldown width");
+_Static_assert(TERRAIN_DETECT_PUSH_MAX_DG == ((1u << PUSH_BITS) - 1u),
+               "push limit must match the push width");
 
 /* Static data. */
 
 /* Private function declarations. */
 static uint32_t count_if (bool b_condition, uint32_t count);
 static uint32_t samples_needed (uint8_t samples);
+static uint32_t samples_capped (uint8_t samples, uint32_t max);
 static uint32_t to_ddeg (float deg);
 
 /* Public function definitions. */
@@ -142,6 +165,113 @@ terrain_detect_hump_state (uint32_t word)
                                                            HUMP_BITS);
 }
 
+terrain_event_type_t
+terrain_detect_collision_step (uint32_t * p_word,
+                               terrain_collision_input_t const * p_in,
+                               terrain_collision_limits_t const * p_limits,
+                               uint32_t * p_value)
+{
+    if ((p_word == NULL) || (p_in == NULL) || (p_limits == NULL) ||
+        (p_value == NULL))
+    {
+        return TERRAIN_EVENT_NONE;
+    }
+
+    uint32_t word = *p_word;
+    uint32_t cooldown =
+        terrain_process_field_get(word, COOLDOWN_SHIFT, COOLDOWN_BITS);
+    uint32_t check = terrain_process_field_get(word, CHECK_SHIFT, CHECK_BITS);
+    uint32_t speed_code =
+        terrain_process_field_get(word, SPEED_SHIFT, SPEED_BITS);
+    uint32_t biggest = terrain_process_field_get(word, PUSH_SHIFT, PUSH_BITS);
+
+    uint32_t const push = terrain_process_encode_unsigned(
+        p_in->push_g, DG_PER_G, PUSH_BITS, false);
+    float const speed = fabsf((float)p_in->speed_mm_s);
+
+    /* Ramps push the car about too: only flat ground counts. */
+    bool const b_level = (p_in->hump == TERRAIN_HUMP_LEVEL);
+    bool const b_pushed = b_level && (p_in->push_g >= p_limits->limit_g);
+    bool const b_sure = b_level && (p_in->push_g >= p_limits->sure_g);
+    bool b_hit = false;
+
+    if (cooldown > 0u)
+    {
+        /* COOLDOWN: the same hit may still be shaking the car. */
+        cooldown--;
+    }
+    else if (check > 0u)
+    {
+        /* CHECKING: did the push stop the car, or was it a jolt? */
+        if (!b_level)
+        {
+            check = 0u;
+        }
+        else
+        {
+            if (push > biggest)
+            {
+                biggest = push;
+            }
+            float const kept_mm_s = (float)speed_code * SPEED_MM_S_PER_STEP;
+            bool const b_halved =
+                !p_in->b_speed_known || ((speed * 2.0f) <= kept_mm_s);
+            if (b_sure || b_halved)
+            {
+                b_hit = true;
+            }
+            else
+            {
+                check--;
+            }
+        }
+    }
+    else if (b_pushed)
+    {
+        /* READY, and pushed hard enough to be a hit. */
+        biggest = push;
+        if (b_sure || !p_in->b_speed_known ||
+            (speed < p_limits->min_speed_mm_s))
+        {
+            /* Sure, or no speed to watch drop: the push decides. */
+            b_hit = true;
+        }
+        else
+        {
+            check = samples_capped(p_limits->check_samples,
+                                   TERRAIN_DETECT_CHECK_MAX);
+            speed_code = terrain_process_encode_unsigned(
+                speed, SPEED_STEPS_PER_MM_S, SPEED_BITS, false);
+        }
+    }
+    else
+    {
+        /* READY, no hit. */
+    }
+
+    if (b_hit)
+    {
+        *p_value = biggest;
+        cooldown = samples_capped(p_limits->cooldown_samples,
+                                  TERRAIN_DETECT_COOLDOWN_MAX);
+        check = 0u;
+    }
+    if (check == 0u)
+    {
+        /* Not checking: nothing to remember, so the word rests at 0. */
+        speed_code = 0u;
+        biggest = 0u;
+    }
+
+    word = terrain_process_field_put(word, COOLDOWN_SHIFT, COOLDOWN_BITS,
+                                     cooldown);
+    word = terrain_process_field_put(word, CHECK_SHIFT, CHECK_BITS, check);
+    word = terrain_process_field_put(word, SPEED_SHIFT, SPEED_BITS, speed_code);
+    word = terrain_process_field_put(word, PUSH_SHIFT, PUSH_BITS, biggest);
+    *p_word = word;
+    return b_hit ? TERRAIN_EVENT_COLLISION : TERRAIN_EVENT_NONE;
+}
+
 /* Private function definitions. */
 
 /* One more sample in a row while the condition holds, else start again. */
@@ -167,4 +297,12 @@ static uint32_t
 samples_needed (uint8_t samples)
 {
     return (samples == 0u) ? 1u : (uint32_t)samples;
+}
+
+/* As samples_needed(), and no more than a countdown field holds. */
+static uint32_t
+samples_capped (uint8_t samples, uint32_t max)
+{
+    uint32_t const needed = samples_needed(samples);
+    return (needed > max) ? max : needed;
 }

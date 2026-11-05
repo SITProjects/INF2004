@@ -94,6 +94,7 @@
 
 /* Units of the packed fields. */
 #define DDEG_PER_DEG 10.0f
+#define DG_PER_G 10.0f
 #define MG_PER_STEP 4
 #define STEPS_PER_MPS2 (1000.0f / (TERRAIN_GRAVITY_MPS2 * (float)MG_PER_STEP))
 #define US_PER_TICK 10000u
@@ -139,6 +140,12 @@ static terrain_hump_limits_t const hump_limits = {
     TERRAIN_HUMP_LEVEL_DEG,   TERRAIN_HUMP_ENTER_SAMPLES,
     TERRAIN_HUMP_TOP_SAMPLES, TERRAIN_HUMP_LEVEL_SAMPLES};
 
+static terrain_collision_limits_t const collision_limits = {
+    (float)TERRAIN_COLLISION_LIMIT_DG / DG_PER_G,
+    (float)TERRAIN_COLLISION_SURE_DG / DG_PER_G,
+    (float)TERRAIN_COLLISION_MIN_SPEED_MM_S, TERRAIN_COLLISION_CHECK_SAMPLES,
+    TERRAIN_COLLISION_COOLDOWN_SAMPLES};
+
 static terrain_height_limits_t const height_limits = {
     TERRAIN_TRACK_WIDTH_MM, TERRAIN_HUMP_LEVEL_DEG,
     TERRAIN_PROCESS_LOWPASS_ALPHA(TERRAIN_HUMP_HEIGHT_TAU_S,
@@ -162,7 +169,8 @@ static uint32_t own_state = 0u; /* OWN_* fields. */
 static terrain_calib_acc_t calib_acc;
 static terrain_vec3_t bias;
 static terrain_tilt_t tilt;
-static uint32_t detect_word = 0u; /* terrain_detect.h layout. */
+static uint32_t detect_word = 0u;  /* terrain_detect.h layout. */
+static uint32_t collide_word = 0u; /* terrain_detect.h layout. */
 static terrain_height_t height;
 
 /* Worked out when building, so it lives in flash. */
@@ -177,7 +185,13 @@ static bool take_recal_request (void);
 static void calib_start (void);
 static void calib_add (terrain_vec3_t const * p_sample);
 static void handle_fault (void);
-static void detect_sample (terrain_vec3_t const * p_accel, uint32_t now_10ms);
+static void detect_sample (terrain_vec3_t const * p_accel,
+                           terrain_hint_t const * p_hint, uint32_t now_10ms);
+static void detect_hump (terrain_vec3_t const * p_accel, uint32_t now_10ms);
+static void detect_collision (terrain_vec3_t const * p_accel,
+                              terrain_hint_t const * p_hint, uint32_t now_10ms);
+static void queue_event (terrain_event_type_t type, uint32_t value,
+                         uint32_t now_10ms);
 static void show_calibrating (terrain_data_t * p_data);
 static void clear_calib_info (terrain_calib_info_t * p_info);
 static void publish (terrain_vec3_t const * p_accel, uint32_t new_samples,
@@ -297,7 +311,7 @@ terrain_monitor_update (void)
             accel = terrain_process_correct(&sample, &bias);
             terrain_process_tilt_update(&tilt, &accel, tilt_alpha, b_hold_pitch,
                                         b_hold_roll);
-            detect_sample(&accel, now_10ms);
+            detect_sample(&accel, &hint, now_10ms);
         }
     }
 
@@ -756,8 +770,10 @@ calib_start (void)
     terrain_process_calib_reset(&calib_acc);
     terrain_process_tilt_reset(&tilt);
 
-    /* A hump cut short just ends: no event, queued events are kept. */
+    /* A hump or collision check cut short just ends: no event, queued
+     * events are kept. */
     detect_word = 0u;
+    collide_word = 0u;
     terrain_height_reset(&height);
 }
 
@@ -834,21 +850,28 @@ handle_fault (void)
     store_latest(&next);
 }
 
+/* Run the detectors on the newest sample: humps first, because the
+ * collision check needs this sample's hump state. */
+static void
+detect_sample (terrain_vec3_t const * p_accel, terrain_hint_t const * p_hint,
+               uint32_t now_10ms)
+{
+    /* A held roll is an old value, not news: pause the humps with it. */
+    if ((tilt.flags & TERRAIN_TILT_ROLL_HELD) == 0u)
+    {
+        detect_hump(p_accel, now_10ms);
+    }
+    detect_collision(p_accel, p_hint, now_10ms);
+}
+
 /*
  * Run the hump height and the hump state machine on the newest sample and
  * queue the event. The machine uses the smoothed roll; the height its own
- * lighter smoothing of this sample's roll. Paused while roll is held.
- * The lock is held only to add the event and the highest hump.
+ * lighter smoothing of this sample's roll.
  */
 static void
-detect_sample (terrain_vec3_t const * p_accel, uint32_t now_10ms)
+detect_hump (terrain_vec3_t const * p_accel, uint32_t now_10ms)
 {
-    /* A held roll is an old value, not news: pause the machine with it. */
-    if ((tilt.flags & TERRAIN_TILT_ROLL_HELD) != 0u)
-    {
-        return;
-    }
-
     /* Height first: it needs the state before this sample's step. */
     terrain_height_step(&height, terrain_detect_hump_state(detect_word),
                         terrain_process_roll_deg(p_accel), &height_limits);
@@ -876,6 +899,39 @@ detect_sample (terrain_vec3_t const * p_accel, uint32_t now_10ms)
     {
         /* The hump step sends no other kinds. */
     }
+    queue_event(type, value, now_10ms);
+}
+
+/*
+ * Run the collision state machine on the newest sample: the horizontal
+ * push of the unsmoothed acceleration (a hit lasts about 50 ms, which the
+ * tilt smoothing would flatten) and motion's ground speed.
+ */
+static void
+detect_collision (terrain_vec3_t const * p_accel, terrain_hint_t const * p_hint,
+                  uint32_t now_10ms)
+{
+    terrain_collision_input_t const in = {
+        sqrtf((p_accel->x * p_accel->x) + (p_accel->y * p_accel->y)) /
+            TERRAIN_GRAVITY_MPS2,
+        terrain_detect_hump_state(detect_word), p_hint->b_distance_known,
+        (int32_t)p_hint->speed_mm_s};
+    uint32_t value = 0u;
+
+    if (terrain_detect_collision_step(&collide_word, &in, &collision_limits,
+                                      &value) == TERRAIN_EVENT_COLLISION)
+    {
+        queue_event(TERRAIN_EVENT_COLLISION, value, now_10ms);
+    }
+}
+
+/*
+ * Add an event to the queue; a LEVEL event also raises the highest hump.
+ * The lock is held only for that.
+ */
+static void
+queue_event (terrain_event_type_t type, uint32_t value, uint32_t now_10ms)
+{
     terrain_event_t const event = terrain_event_make(type, value, now_10ms);
 
     uint32_t saved = terrain_platform_lock();

@@ -7,12 +7,12 @@
  * output to testing/terrain/logs/ and record the result in
  * testing/terrain/TEST_LOG.md. Test IDs: TER-U01, TER-U02, ...
  *
- * TER-U12 runs the hump state machine and event queue on made-up data, and
- * TER-U15 the hump height on made-up one-wheel ramps; both need only the
- * Pico. The
- * other tests need the GY-511 connected; TER-U02, TER-U04 and TER-U13
- * also need the car standing still on level ground during power-up. No
- * test waits for a person: every wait is bounded.
+ * TER-U12 runs the hump state machine and event queue on made-up data,
+ * TER-U15 the hump height on made-up one-wheel ramps, and TER-U19 the
+ * collision state machine on made-up pushes and speeds; they need only
+ * the Pico. The other tests need the GY-511 connected; TER-U02, TER-U04
+ * and TER-U13 also need the car standing still on level ground during
+ * power-up. No test waits for a person: every wait is bounded.
  *
  * The bench tests TER-U06 and TER-U07 are added only with
  * TERRAIN_TEST_BENCH set to 1 in terrain_config.h. They print what to do
@@ -47,6 +47,22 @@
 #define TRACE_UP_DDEG 80 /* The lean: the size of the roll. */
 #define DDEG_PER_DEG 10.0f
 
+/* TER-U19 pushes (g) and speeds (mm/s): line-following speed, a stop,
+ * pushes below the limit, between the limit and sure, and sure. */
+#define CRASH_CRUISE_MM_S 120
+#define CRASH_STOP_MM_S 40
+#define CRASH_SOFT_G 0.8f
+#define CRASH_HIT_G 1.5f
+#define CRASH_BIG_G 1.8f
+#define CRASH_SURE_G 2.5f
+#define CRASH_HIT_DG 15u
+#define CRASH_BIG_DG 18u
+#define CRASH_SURE_DG 25u
+#define CRASH_WAIT 3u  /* Samples before the speed drops. */
+#define CRASH_LONG 20u /* Longer than the 12-sample check. */
+#define CRASH_GAP 60u  /* Longer than the 50-sample cooldown. */
+#define DG_PER_G 10.0f
+
 /* TER-U15 ramps under one wheel, driven at 1.2 mm a sample (120 mm/s,
  * the line-following speed). */
 #define HUMP_STEP_MM 1.2f
@@ -70,6 +86,16 @@ typedef struct
     uint32_t samples; /**< Length, samples. */
 } trace_part_t;
 
+/** @brief One stretch of a TER-U19 collision trace. */
+typedef struct
+{
+    float push_g;              /**< Horizontal push for the whole stretch. */
+    terrain_hump_state_t hump; /**< Hump state for the stretch. */
+    bool b_speed_known;        /**< Motion's speed is fresh. */
+    int32_t speed_mm_s;        /**< Ground speed. */
+    uint32_t samples;          /**< Length, samples. */
+} crash_part_t;
+
 /** @brief A TER-U15 trapezoid ramp under one wheel, mm. */
 typedef struct
 {
@@ -85,6 +111,11 @@ static int32_t drive_hump (hump_shape_t const * p_shape);
 static float hump_ground_mm (hump_shape_t const * p_shape, float x_mm);
 static float root (float square);
 static bool queue_drops_oldest (void);
+static bool crash_ignored_ok (void);
+static bool crash_confirmed_ok (void);
+static bool crash_at_once_ok (void);
+static uint32_t run_crash (crash_part_t const * p_parts, uint32_t n_parts,
+                           uint32_t * p_value);
 #if TERRAIN_TEST_BENCH
 static bool bench_step (char const * p_instruction,
                         terrain_calib_info_t * p_out);
@@ -152,6 +183,14 @@ terrain_test (void)
     /* TER-U15: hump height on made-up humps (no IMU needed). */
     TEST_CHECK("TER-U15", hump_heights_ok(),
                "6, 11 and 20 mm one-wheel ramps read their height");
+
+    /* TER-U19: collision machine on made-up data (no IMU needed). */
+    TEST_CHECK("TER-U19", crash_ignored_ok(),
+               "soft push, jolt with no stop, and pushes on a ramp ignored");
+    TEST_CHECK("TER-U19", crash_confirmed_ok(),
+               "push then speed halved gives one COLLISION, biggest push");
+    TEST_CHECK("TER-U19", crash_at_once_ok(),
+               "sure push or unknown speed at once; one event per cooldown");
 
     /* TER-U13: still and level, so no hump and no events. */
     terrain_data_t still = {0};
@@ -267,6 +306,112 @@ hump_trace_ok (void)
     }
     return b_ok && (terrain_event_type(terrain_event_queue_pop(&queue)) ==
                     TERRAIN_EVENT_NONE);
+}
+
+/*
+ * TER-U19: no COLLISION for a push under the limit, for a push over it
+ * where the car keeps going (a jolt), or for any push on a ramp.
+ */
+static bool
+crash_ignored_ok (void)
+{
+    static crash_part_t const soft[] = {
+        {CRASH_SOFT_G, TERRAIN_HUMP_LEVEL, true, CRASH_CRUISE_MM_S, 1u},
+        {0.0f, TERRAIN_HUMP_LEVEL, true, CRASH_STOP_MM_S, CRASH_LONG}};
+    static crash_part_t const jolt[] = {
+        {CRASH_HIT_G, TERRAIN_HUMP_LEVEL, true, CRASH_CRUISE_MM_S, 1u},
+        {0.0f, TERRAIN_HUMP_LEVEL, true, CRASH_CRUISE_MM_S, CRASH_LONG},
+        {0.0f, TERRAIN_HUMP_LEVEL, true, CRASH_STOP_MM_S, CRASH_LONG}};
+    static crash_part_t const ramp[] = {
+        {CRASH_SURE_G, TERRAIN_HUMP_ASCENDING, true, CRASH_CRUISE_MM_S, 1u},
+        {CRASH_HIT_G, TERRAIN_HUMP_DESCENDING, false, 0, 1u},
+        {CRASH_HIT_G, TERRAIN_HUMP_LEVEL, true, CRASH_CRUISE_MM_S, 1u},
+        {0.0f, TERRAIN_HUMP_ASCENDING, true, CRASH_STOP_MM_S, CRASH_LONG}};
+    uint32_t value = 0u;
+
+    return (run_crash(soft, sizeof(soft) / sizeof(soft[0]), &value) == 0u) &&
+           (run_crash(jolt, sizeof(jolt) / sizeof(jolt[0]), &value) == 0u) &&
+           (run_crash(ramp, sizeof(ramp) / sizeof(ramp[0]), &value) == 0u);
+}
+
+/*
+ * TER-U19: a push over the limit, a bigger one, then the speed halves a
+ * few samples later: one COLLISION carrying the bigger push.
+ */
+static bool
+crash_confirmed_ok (void)
+{
+    static crash_part_t const hit[] = {
+        {CRASH_HIT_G, TERRAIN_HUMP_LEVEL, true, CRASH_CRUISE_MM_S, 1u},
+        {CRASH_BIG_G, TERRAIN_HUMP_LEVEL, true, CRASH_CRUISE_MM_S, 1u},
+        {0.0f, TERRAIN_HUMP_LEVEL, true, CRASH_CRUISE_MM_S, CRASH_WAIT},
+        {0.0f, TERRAIN_HUMP_LEVEL, true, CRASH_STOP_MM_S, CRASH_LONG}};
+    uint32_t value = 0u;
+
+    return (run_crash(hit, sizeof(hit) / sizeof(hit[0]), &value) == 1u) &&
+           (value == CRASH_BIG_DG);
+}
+
+/*
+ * TER-U19: a sure push counts with no stop; so does a push over the limit
+ * while motion's speed is unknown. Two sure pushes inside the cooldown
+ * give one event; one after it gives another.
+ */
+static bool
+crash_at_once_ok (void)
+{
+    static crash_part_t const sure[] = {
+        {CRASH_SURE_G, TERRAIN_HUMP_LEVEL, true, CRASH_CRUISE_MM_S, 1u},
+        {0.0f, TERRAIN_HUMP_LEVEL, true, CRASH_CRUISE_MM_S, CRASH_LONG}};
+    static crash_part_t const unknown[] = {
+        {CRASH_HIT_G, TERRAIN_HUMP_LEVEL, false, CRASH_CRUISE_MM_S, 1u}};
+    static crash_part_t const twice[] = {
+        {CRASH_SURE_G, TERRAIN_HUMP_LEVEL, true, CRASH_CRUISE_MM_S, 1u},
+        {0.0f, TERRAIN_HUMP_LEVEL, true, CRASH_CRUISE_MM_S, CRASH_LONG},
+        {CRASH_SURE_G, TERRAIN_HUMP_LEVEL, true, CRASH_CRUISE_MM_S, 1u},
+        {0.0f, TERRAIN_HUMP_LEVEL, true, CRASH_CRUISE_MM_S, CRASH_GAP},
+        {CRASH_SURE_G, TERRAIN_HUMP_LEVEL, true, CRASH_CRUISE_MM_S, 1u}};
+    uint32_t sure_value = 0u;
+    uint32_t unknown_value = 0u;
+    uint32_t value = 0u;
+
+    return (run_crash(sure, sizeof(sure) / sizeof(sure[0]), &sure_value) ==
+            1u) &&
+           (sure_value == CRASH_SURE_DG) &&
+           (run_crash(unknown, sizeof(unknown) / sizeof(unknown[0]),
+                      &unknown_value) == 1u) &&
+           (unknown_value == CRASH_HIT_DG) &&
+           (run_crash(twice, sizeof(twice) / sizeof(twice[0]), &value) == 2u);
+}
+
+/* Feed a TER-U19 trace through the collision machine from READY; count
+ * the COLLISION events and keep the last one's value. */
+static uint32_t
+run_crash (crash_part_t const * p_parts, uint32_t n_parts, uint32_t * p_value)
+{
+    terrain_collision_limits_t const limits = {
+        (float)TERRAIN_COLLISION_LIMIT_DG / DG_PER_G,
+        (float)TERRAIN_COLLISION_SURE_DG / DG_PER_G,
+        (float)TERRAIN_COLLISION_MIN_SPEED_MM_S,
+        TERRAIN_COLLISION_CHECK_SAMPLES, TERRAIN_COLLISION_COOLDOWN_SAMPLES};
+    uint32_t word = 0u;
+    uint32_t events = 0u;
+
+    for (uint32_t part = 0u; part < n_parts; part++)
+    {
+        terrain_collision_input_t const in = {
+            p_parts[part].push_g, p_parts[part].hump,
+            p_parts[part].b_speed_known, p_parts[part].speed_mm_s};
+        for (uint32_t i = 0u; i < p_parts[part].samples; i++)
+        {
+            if (terrain_detect_collision_step(&word, &in, &limits, p_value) ==
+                TERRAIN_EVENT_COLLISION)
+            {
+                events++;
+            }
+        }
+    }
+    return events;
 }
 
 /*

@@ -296,6 +296,69 @@
 #endif
 
 /*
+ * Collision detection (terrain_detect.h), from the horizontal push: the
+ * forward/back and sideways acceleration, in tenths of a g (10 = 1 g,
+ * the pull of gravity). Hard braking is about 0.3 g; leaning on an 11 mm
+ * ramp about 0.1 g. A push of at least TERRAIN_COLLISION_LIMIT_DG may be
+ * a collision: it counts if the car's speed (motion's odometry) then
+ * drops to half or less within TERRAIN_COLLISION_CHECK_SAMPLES, so a
+ * wheel jolting on a ramp edge, where the car keeps going, does not. A
+ * push of at least TERRAIN_COLLISION_SURE_DG counts at once, for hits
+ * where the wheels keep spinning and the speed never drops.
+ * TODO(car day): set both from wall hits and ramp runs (TER-U21).
+ */
+#ifndef TERRAIN_COLLISION_LIMIT_DG
+#define TERRAIN_COLLISION_LIMIT_DG 10u
+#endif
+
+#ifndef TERRAIN_COLLISION_SURE_DG
+#define TERRAIN_COLLISION_SURE_DG 20u
+#endif
+
+/*
+ * Samples to wait for the speed to halve: 12 = 120 ms, motion's 100 ms
+ * speed average (5 x 20 ms updates) plus one update.
+ */
+#ifndef TERRAIN_COLLISION_CHECK_SAMPLES
+#define TERRAIN_COLLISION_CHECK_SAMPLES 12u
+#endif
+
+/* Samples after a collision before the next: 50 = 500 ms, one hit gives
+ * one event. */
+#ifndef TERRAIN_COLLISION_COOLDOWN_SAMPLES
+#define TERRAIN_COLLISION_COOLDOWN_SAMPLES 50u
+#endif
+
+/*
+ * Below this speed, in mm/s, there is nothing to drop from (or the car
+ * is standing and was hit): the push alone decides. Line following is
+ * about 120 mm/s.
+ */
+#ifndef TERRAIN_COLLISION_MIN_SPEED_MM_S
+#define TERRAIN_COLLISION_MIN_SPEED_MM_S 40u
+#endif
+
+/* The push field stops at 12.7 g; the countdowns are 4 and 6 bits. */
+#if (TERRAIN_COLLISION_LIMIT_DG < 5) || (TERRAIN_COLLISION_LIMIT_DG > 80)
+#error "TERRAIN_COLLISION_LIMIT_DG must be 5 to 80 (0.5 to 8 g)"
+#endif
+#if (TERRAIN_COLLISION_SURE_DG < TERRAIN_COLLISION_LIMIT_DG) ||                \
+    (TERRAIN_COLLISION_SURE_DG > 127)
+#error "TERRAIN_COLLISION_SURE_DG must be TERRAIN_COLLISION_LIMIT_DG to 127"
+#endif
+#if (TERRAIN_COLLISION_CHECK_SAMPLES < 1) ||                                   \
+    (TERRAIN_COLLISION_CHECK_SAMPLES > 15)
+#error "TERRAIN_COLLISION_CHECK_SAMPLES must be 1 to 15"
+#endif
+#if (TERRAIN_COLLISION_COOLDOWN_SAMPLES < 1) ||                                \
+    (TERRAIN_COLLISION_COOLDOWN_SAMPLES > 63)
+#error "TERRAIN_COLLISION_COOLDOWN_SAMPLES must be 1 to 63"
+#endif
+#if TERRAIN_COLLISION_MIN_SPEED_MM_S > 1000
+#error "TERRAIN_COLLISION_MIN_SPEED_MM_S must be 0 to 1000"
+#endif
+
+/*
  * Motion's odometry (TEAM.md IF-05) counts as stale, and its distance as
  * unknown, once its update count has not changed for this long, in ms.
  * tMotion publishes every 20 ms, so 2 s means it has stopped, not that

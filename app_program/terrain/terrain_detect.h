@@ -1,10 +1,10 @@
 /**
  * @file terrain_detect.h
- * @brief Terrain detectors: the hump state machine.
+ * @brief Terrain detectors: the hump and collision state machines.
  *
  * Pure C with no kernel calls, so it can be tested on a PC. Each step
- * takes the detector word and one sample's roll and returns the event it
- * found, if any. Waits are counted in samples, so no clock is needed.
+ * takes its machine's word and one sample and returns the event it found,
+ * if any. Waits are counted in samples, so no clock is needed.
  *
  * The course's humps are ramps under one drive wheel: the car leans
  * sideways while that wheel is up, and its nose rises only half as much.
@@ -20,6 +20,18 @@
  * there): about a 46 mm lift of one wheel on the car's track, far above
  * any ramp it can climb. The spare bits are kept as they are.
  *
+ * Collisions are found from the horizontal push (forward/back and
+ * sideways): a wall shoves the car back or sideways, a wheel landing
+ * mostly pushes up. A push that might be a jolt is confirmed by the
+ * car's speed dropping; see terrain_detect_collision_step().
+ *
+ * Collision word, masks and shifts, bit 0 first; all zero is READY:
+ *   cooldown 6 | check countdown 4 | speed at the push 8 |
+ *   biggest push 7 | spare 7
+ * Cooldown and countdown are in samples (0 to 63, 0 to 15); the speed in
+ * 4 mm/s steps, 0 to 1020 mm/s (stops there); the push in 0.1 g steps, 0
+ * to 12.7 g (stops there; two axes of +/-8 g give at most 11.3 g).
+ *
  * Internal to the terrain module; other modules should use
  * terrain_monitor.h.
  *
@@ -31,6 +43,7 @@
 #define TERRAIN_DETECT_H
 
 /* Public includes. */
+#include <stdbool.h>
 #include <stdint.h>
 #include "terrain_monitor.h"
 
@@ -53,6 +66,40 @@ typedef struct
     uint8_t level_samples; /**< Flat samples in a row to end a descent, 1 to
                                 TERRAIN_DETECT_COUNT_MAX. */
 } terrain_hump_limits_t;
+
+/* Largest check countdown and cooldown the collision word holds. */
+#define TERRAIN_DETECT_CHECK_MAX 15u
+#define TERRAIN_DETECT_COOLDOWN_MAX 63u
+
+/* Largest push the collision word and event value hold, 0.1 g. */
+#define TERRAIN_DETECT_PUSH_MAX_DG 127u
+
+/** @brief Limits of the collision state machine. */
+typedef struct
+{
+    float limit_g;            /**< Push at least this may be a collision:
+                                   check the speed. */
+    float sure_g;             /**< Push at least this is a collision at
+                                   once; at or above limit_g. */
+    float min_speed_mm_s;     /**< Below this speed there is nothing to
+                                   drop from: the push alone decides. */
+    uint8_t check_samples;    /**< Samples to wait for the speed to halve,
+                                   1 to TERRAIN_DETECT_CHECK_MAX. */
+    uint8_t cooldown_samples; /**< Samples after a collision before the
+                                   next one, 1 to
+                                   TERRAIN_DETECT_COOLDOWN_MAX. */
+} terrain_collision_limits_t;
+
+/** @brief One sample's input to the collision state machine. */
+typedef struct
+{
+    float push_g;              /**< Horizontal push, g: the size of the
+                                       forward/back and sideways parts of
+                                       the corrected acceleration. */
+    terrain_hump_state_t hump; /**< Hump state after this sample. */
+    bool b_speed_known;        /**< speed_mm_s is valid. */
+    int32_t speed_mm_s;        /**< Car speed, mm/s; either sign. */
+} terrain_collision_input_t;
 
 /* Public function declarations. */
 
@@ -87,5 +134,34 @@ terrain_detect_hump_step (uint32_t * p_word, float roll_deg,
  * @return The state.
  */
 terrain_hump_state_t terrain_detect_hump_state (uint32_t word);
+
+/**
+ * @brief Run the collision state machine on one sample.
+ * @param p_word Collision word; start from 0.
+ * @param p_in This sample's push, hump state and speed.
+ * @param p_limits Limits; sample counts of 0 count as 1, and counts over
+ *        the field limits are cut to them.
+ * @param p_value Receives the event value when COLLISION is returned:
+ *        the biggest push of the collision, 0.1 g, 0 to
+ *        TERRAIN_DETECT_PUSH_MAX_DG. Unchanged otherwise.
+ * @return COLLISION or NONE. NONE, with nothing changed, if a pointer is
+ *         NULL.
+ *
+ * Three states, read from the two countdowns:
+ * READY -> COLLISION at once (to COOLDOWN) for a push of at least sure_g,
+ * or at least limit_g when the speed is unknown or below min_speed_mm_s.
+ * READY -> CHECKING (no event) for a push of at least limit_g otherwise;
+ * the speed then is kept.
+ * CHECKING -> COLLISION (to COOLDOWN) once the speed is at most half the
+ * kept speed, the speed becomes unknown, or a push reaches sure_g, within
+ * check_samples samples; the biggest push so far is the value.
+ * CHECKING -> READY (no event) when check_samples pass first (a jolt: the
+ * car kept going), or the hump state leaves LEVEL.
+ * COOLDOWN -> READY after cooldown_samples samples: one hit, one event.
+ * Pushes count only in hump state LEVEL, so ramps never do.
+ */
+terrain_event_type_t terrain_detect_collision_step (
+    uint32_t * p_word, terrain_collision_input_t const * p_in,
+    terrain_collision_limits_t const * p_limits, uint32_t * p_value);
 
 #endif /* TERRAIN_DETECT_H */
