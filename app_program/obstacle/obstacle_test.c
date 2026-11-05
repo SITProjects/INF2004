@@ -184,6 +184,7 @@ static bool replan_measured_clearance_valid (void);
 static bool avoid_turn_backoff_valid (void);
 static bool avoid_probe_valid (void);
 static bool avoid_watch_valid (void);
+static bool avoid_home_valid (void);
 static void sim_watch (uint16_t echo_us);
 static void sim_blocked_corridor (void);
 static bool sim_held_critical (obstacle_avoid_leg_t leg);
@@ -282,6 +283,8 @@ obstacle_test (void)
                "plan: a clear end counts only if the car fits past it");
     TEST_CHECK("OBS-U67", avoid_watch_valid(),
                "avoid: watch the obstacle side and widen while driving");
+    TEST_CHECK("OBS-U69", avoid_home_valid(),
+               "avoid: turn back to the heading the car stopped on");
 
     TEST_CHECK("OBS-U10", packed_obstacle_fields_valid(),
                "packed obstacle fields clamp without changing neighbours");
@@ -1799,7 +1802,15 @@ sim_step (void)
         }
         else if (sim.ctx.state == OBSTACLE_AVOID_RUN_LEG)
         {
-            /* The return leg finds the line; every other leg its target. */
+            /* The return leg finds the line; every other leg its target.
+             * A finished turn moves the odometry heading (+ left). */
+            if (robot_motion_cmd_get_type(sim.ctx.cmd) == ROBOT_MOTION_CMD_TURN)
+            {
+                int32_t const angle =
+                    (int32_t)robot_motion_cmd_get_angle(sim.ctx.cmd);
+                sim.in.heading_deg +=
+                    robot_motion_cmd_get_reverse(sim.ctx.cmd) ? -angle : angle;
+            }
             sim.in.b_move_done = true;
             sim.in.motion_done = (sim.ctx.leg == OBSTACLE_AVOID_LEG_RETURN)
                                      ? ROBOT_MOTION_DONE_LINE
@@ -2107,7 +2118,9 @@ avoid_verify_valid (void)
     return ok && (sim.ctx.fault == OBSTACLE_AVOID_FAULT_BLOCKED);
 }
 
-/* OBS-U46: the done reason ends the return leg early or retries once. */
+/* OBS-U46: the done reason ends the return leg early: the axle goes onto
+ * the line and the car turns back 90 degrees left to the heading it
+ * stopped on. A missed line retries once, then line following searches. */
 static bool
 avoid_line_valid (void)
 {
@@ -2121,11 +2134,18 @@ avoid_line_valid (void)
     sim.in.b_move_done = true;
     sim.in.motion_done = ROBOT_MOTION_DONE_LINE;
     ok = ok && sim_step().b_send &&
-         (sim.act.cmd == robot_motion_cmd_follow()) &&
+         (sim.act.cmd == robot_motion_cmd_move(40u, false, false)) &&
          (sim.act.p_reason != NULL) &&
-         (sim.ctx.leg == OBSTACLE_AVOID_LEG_FOLLOW);
+         (sim.ctx.leg == OBSTACLE_AVOID_LEG_OVERSHOOT) &&
+         (sim.in.heading_deg == -90);
+    ok = ok &&
+         sim_until(OBSTACLE_AVOID_SEND, OBSTACLE_AVOID_LEG_TURN_HOME, 20u) &&
+         (sim.act.cmd == robot_motion_cmd_turn(90u, false, false));
+    ok = ok && sim_until(OBSTACLE_AVOID_IDLE, OBSTACLE_AVOID_LEG_FOLLOW, 20u) &&
+         (sim.last_cmd == robot_motion_cmd_follow()) &&
+         (sim.in.heading_deg == 0);
 
-    /* Missed line: one search move of 150 mm, then FAULT. */
+    /* Missed line: one search move of 150 mm, then line following. */
     ok = ok && sim_detect_path();
     ok =
         ok && sim_until(OBSTACLE_AVOID_RUN_LEG, OBSTACLE_AVOID_LEG_RETURN, 80u);
@@ -2139,15 +2159,12 @@ avoid_line_valid (void)
     (void)sim_step();
     sim.in.b_move_done = true;
     sim.in.motion_done = ROBOT_MOTION_DONE_DIST;
-    ok = ok && sim_step().b_set_inhibit && !sim.act.b_send &&
-         !sim.act.b_clear_inhibit && (sim.ctx.state == OBSTACLE_AVOID_FAULT) &&
-         (sim.ctx.fault == OBSTACLE_AVOID_FAULT_RETRY_USED);
-    for (uint32_t index = 0u; ok && (index < 100u); ++index)
-    {
-        ok = sim_step().b_set_inhibit && !sim.act.b_send &&
-             !sim.act.b_clear_inhibit;
-    }
-    return ok;
+    ok = ok && sim_step().b_send &&
+         (sim.act.cmd == robot_motion_cmd_follow()) &&
+         (sim.ctx.leg == OBSTACLE_AVOID_LEG_FOLLOW) &&
+         (sim.ctx.fault == OBSTACLE_AVOID_FAULT_NONE);
+    (void)sim_step();
+    return ok && (sim.ctx.state == OBSTACLE_AVOID_IDLE);
 }
 
 /* Run to the sidestep with its move just queued at odometry 0. */
@@ -2264,7 +2281,9 @@ avoid_obstacles_valid (void)
 /* OBS-U55: with a 30 degree minimum, the angle follows the room in front
  * (centre less the 60 mm margin), rounded up to 5 degrees. At 600 mm the
  * 235 mm offset fits 30 degrees: a 470 mm diagonal gains 407 mm, leaving
- * 593 of the 1000 mm pass; the return diagonal is (235 + 150) / sin 30. */
+ * 593 of the 1000 mm pass; the turn in looks for the line only on its
+ * second 15 degrees; the return diagonal is (235 + 150) / sin 30; on the
+ * line the axle moves 40 mm on and the car turns 30 degrees back left. */
 static bool
 avoid_angle_valid (void)
 {
@@ -2286,8 +2305,11 @@ avoid_angle_valid (void)
                                  robot_motion_cmd_move(470u, false, false),
                                  robot_motion_cmd_turn(30u, true, false),
                                  robot_motion_cmd_move(593u, false, false),
-                                 robot_motion_cmd_turn(30u, true, true),
+                                 robot_motion_cmd_turn(15u, true, false),
+                                 robot_motion_cmd_turn(15u, true, true),
                                  robot_motion_cmd_move(770u, false, true),
+                                 robot_motion_cmd_move(40u, false, false),
+                                 robot_motion_cmd_turn(30u, false, false),
                                  robot_motion_cmd_follow()};
     ok = ok && sim_detect_path();
     sim.config.geometry.angle_min_deg = 30u;
@@ -2763,26 +2785,43 @@ avoid_rejoin_valid (void)
             ok = ok &&
                  sim_until(OBSTACLE_AVOID_SEND, OBSTACLE_AVOID_LEG_PASS, 50u) &&
                  !robot_motion_cmd_get_stop_at_line(sim.act.cmd);
+            if (legs[index] == OBSTACLE_AVOID_LEG_TURN_IN)
+            {
+                /* The first half of the turn in does not look. */
+                ok = ok && sim_until(OBSTACLE_AVOID_SEND, legs[index], 100u) &&
+                     !robot_motion_cmd_get_stop_at_line(sim.act.cmd);
+            }
             ok = ok && sim_until(OBSTACLE_AVOID_SEND, legs[index], 100u) &&
                  robot_motion_cmd_get_stop_at_line(sim.act.cmd);
             (void)sim_step(); /* Acquisition command queued. */
             sim.in.b_move_done = true;
             sim.in.motion_done = ROBOT_MOTION_DONE_LINE;
             sim.b_send_busy = true;
-            ok = ok && sim_step().b_send &&
-                 (sim.act.cmd == robot_motion_cmd_follow()) &&
-                 (sim.ctx.leg == OBSTACLE_AVOID_LEG_FOLLOW);
+            uint32_t const overshoot = robot_motion_cmd_move(40u, false, false);
+            ok = ok && sim_step().b_send && (sim.act.cmd == overshoot) &&
+                 (sim.ctx.leg == OBSTACLE_AVOID_LEG_OVERSHOOT);
             for (uint32_t step = 0u; ok && (step < 3u); ++step)
             {
-                ok = sim_step().b_send &&
-                     (sim.act.cmd == robot_motion_cmd_follow()) &&
+                ok = sim_step().b_send && (sim.act.cmd == overshoot) &&
                      (sim.ctx.state == OBSTACLE_AVOID_SEND);
             }
             sim.b_send_busy = false;
             (void)sim_step(); /* Queued on this retry. */
-            (void)sim_step(); /* Accepted: resume sensing and alignment. */
-            ok = ok && (sim.ctx.state == OBSTACLE_AVOID_IDLE) &&
-                 sim.act.b_side_scans_on;
+            /* Back to the stop heading: 45 degrees after half a turn in,
+             * 90 after the whole turn and the return. */
+            uint32_t const home =
+                (legs[index] == OBSTACLE_AVOID_LEG_TURN_IN) ? 45u : 90u;
+            ok = ok &&
+                 sim_until(OBSTACLE_AVOID_SEND, OBSTACLE_AVOID_LEG_TURN_HOME,
+                           20u) &&
+                 (sim.act.cmd ==
+                  robot_motion_cmd_turn(home, right != 0u, false));
+            ok = ok &&
+                 sim_until(OBSTACLE_AVOID_IDLE, OBSTACLE_AVOID_LEG_FOLLOW,
+                           20u) &&
+                 sim.act.b_side_scans_on &&
+                 (sim.last_cmd == robot_motion_cmd_follow()) &&
+                 (sim.in.heading_deg == 0);
             if (!ok)
             {
                 return false;
@@ -2899,6 +2938,47 @@ replan_measured_clearance_valid (void)
         }
     }
     return true;
+}
+
+/* Run a left bypass to the line on the return leg, set the heading the
+ * odometry reports there, and step to the next command after the 40 mm
+ * axle move. */
+static bool
+sim_home_from (int32_t heading_deg, bool b_odometry_valid)
+{
+    bool ok = sim_detect_path() &&
+              sim_until(OBSTACLE_AVOID_RUN_LEG, OBSTACLE_AVOID_LEG_RETURN, 80u);
+    sim.in.heading_deg = heading_deg;
+    sim.in.b_odometry_valid = b_odometry_valid;
+    sim.in.b_move_done = true;
+    sim.in.motion_done = ROBOT_MOTION_DONE_LINE;
+    ok = ok && sim_step().b_send &&
+         (sim.act.cmd == robot_motion_cmd_move(40u, false, false));
+    (void)sim_step();
+    sim.in.b_move_done = true;
+    sim.in.motion_done = ROBOT_MOTION_DONE_DIST;
+    return ok && sim_step().b_send;
+}
+
+/* OBS-U69: the car stopped on heading 0. A pass that drifted 7 degrees
+ * right turns back 97 left, not the planned 90; 2 degrees off is within
+ * the 3 degree resume minimum and goes straight to following; 350 (a
+ * full turn too many) turns back 10 left, the shorter way; without
+ * odometry it follows without a home turn. */
+static bool
+avoid_home_valid (void)
+{
+    bool ok = sim_home_from(-97, true) &&
+              (sim.act.cmd == robot_motion_cmd_turn(97u, false, false)) &&
+              (sim.ctx.leg == OBSTACLE_AVOID_LEG_TURN_HOME);
+    ok = ok && sim_home_from(-2, true) &&
+         (sim.act.cmd == robot_motion_cmd_follow());
+    ok = ok && sim_home_from(350, true) &&
+         (sim.act.cmd == robot_motion_cmd_turn(10u, false, false));
+    ok = ok && sim_home_from(-90, false) &&
+         (sim.act.cmd == robot_motion_cmd_follow()) &&
+         (sim.ctx.fault == OBSTACLE_AVOID_FAULT_NONE);
+    return ok;
 }
 
 #endif /* APP_TEST */

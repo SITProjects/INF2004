@@ -97,6 +97,8 @@ static void interrupt_leg (obstacle_avoid_t * p_ctx,
                            obstacle_avoid_action_t * p_act,
                            obstacle_avoid_input_t const * p_in,
                            char const * p_reason);
+static uint32_t home_turn (obstacle_avoid_t * p_ctx,
+                           obstacle_avoid_input_t const * p_in);
 static void retry_or_fault (obstacle_avoid_t * p_ctx,
                             obstacle_avoid_action_t * p_act,
                             obstacle_avoid_input_t const * p_in,
@@ -440,6 +442,10 @@ obstacle_avoid_step (obstacle_avoid_t * p_ctx,
         case OBSTACLE_AVOID_STOPPING:
             if (b_inhibited)
             {
+                /* Stopped facing along the line: the bypass ends on this
+                 * heading again. */
+                p_ctx->b_origin_valid = p_in->b_odometry_valid;
+                p_ctx->origin_heading_deg = p_in->heading_deg;
                 enter(p_ctx, OBSTACLE_AVOID_WAIT_RESULT, now_ms);
                 act.p_reason = "motors inhibited";
             }
@@ -970,6 +976,9 @@ start_leg (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
                 case OBSTACLE_AVOID_LEG_OVERSHOOT:
                     p_ctx->remaining = p_geometry->overshoot_mm;
                     break;
+                case OBSTACLE_AVOID_LEG_TURN_HOME:
+                    p_ctx->remaining = home_turn(p_ctx, p_in);
+                    break;
                 default:
                     p_ctx->remaining = p_ctx->plan.angle_deg;
                     break;
@@ -1041,16 +1050,31 @@ send_part (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
     }
     else
     {
-        /* Toward the gap on the way out and home, away from it between. */
+        /* Toward the gap on the way out, away from it between; home by the
+         * heading measured at the stop. */
         bool const b_away = (leg == OBSTACLE_AVOID_LEG_TURN_BACK) ||
                             (leg == OBSTACLE_AVOID_LEG_TURN_IN);
+        bool const b_right = (leg == OBSTACLE_AVOID_LEG_TURN_HOME)
+                                 ? p_ctx->b_home_right
+                                 : (b_away != p_ctx->plan.b_gap_right);
         p_ctx->part = p_ctx->remaining;
-        /* Reacquisition starts after PASS: a line encountered while
-         * turning inward is just as usable as one found on the return. */
-        p_ctx->cmd = robot_motion_cmd_turn(
-            p_ctx->part, b_away != p_ctx->plan.b_gap_right,
-            (leg == OBSTACLE_AVOID_LEG_TURN_IN) ||
-                (leg == OBSTACLE_AVOID_LEG_TURN_HOME));
+        /* Reacquisition starts halfway through the turn in: a line found
+         * on the second half is as usable as one found on the return, but
+         * one seen sooner is a mark beside the obstacle, not the line. */
+        bool b_line = leg == OBSTACLE_AVOID_LEG_TURN_IN;
+        if (b_line)
+        {
+            uint32_t const angle = p_ctx->plan.angle_deg;
+            uint32_t const turned =
+                (p_ctx->remaining < angle) ? (angle - p_ctx->remaining) : 0u;
+            uint32_t const blind = angle / 2u;
+            if (turned < blind)
+            {
+                p_ctx->part = blind - turned;
+                b_line = false;
+            }
+        }
+        p_ctx->cmd = robot_motion_cmd_turn(p_ctx->part, b_right, b_line);
         expected_ms = (p_ctx->part * 1000u) / p_timing->turn_speed_deg_s;
     }
     p_ctx->leg_timeout_ms = (2u * expected_ms) + LEG_TIMEOUT_EXTRA_MS;
@@ -1100,16 +1124,16 @@ move_done (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
          (p_ctx->leg == OBSTACLE_AVOID_LEG_RETURN)) &&
         (p_in->motion_done == ROBOT_MOTION_DONE_LINE))
     {
-        /* Motion has braked on fresh, confirmed IR evidence. Let the line
-         * follower align with this line, even if it is not the old one.
-         * A fixed overshoot/home turn could drive away from the new line. */
+        /* Motion has braked on fresh, confirmed IR evidence. Put the axle
+         * on the line, then turn back to the heading the car stopped on,
+         * so it leaves along the line instead of across it. */
         p_ctx->remaining = 0u;
-        p_ctx->leg = OBSTACLE_AVOID_LEG_FOLLOW;
+        p_ctx->leg = OBSTACLE_AVOID_LEG_OVERSHOOT;
         p_ctx->b_leg_started = false;
         start_leg(p_ctx, p_act, p_in);
         if (p_ctx->state == OBSTACLE_AVOID_SEND)
         {
-            p_act->p_reason = "line found, aligning";
+            p_act->p_reason = "line found";
         }
         return;
     }
@@ -1163,12 +1187,52 @@ interrupt_leg (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
     hold(p_ctx, p_act, OBSTACLE_AVOID_BLOCKED_WAIT, p_in->now_ms, p_reason);
 }
 
-/* Stall, leg timeout or missed line: one retry per bypass, then FAULT. */
+/* Degrees to turn back to the heading the car stopped on, the shorter way
+ * round; sets b_home_right. Zero without odometry at both ends. */
+static uint32_t
+home_turn (obstacle_avoid_t * p_ctx, obstacle_avoid_input_t const * p_in)
+{
+    if (!p_ctx->b_origin_valid || !p_in->b_odometry_valid)
+    {
+        return 0u;
+    }
+    int32_t left_deg = (p_ctx->origin_heading_deg - p_in->heading_deg) % 360;
+    if (left_deg > 180)
+    {
+        left_deg -= 360;
+    }
+    else if (left_deg < -180)
+    {
+        left_deg += 360;
+    }
+    else
+    {
+        /* Already the shorter way. */
+    }
+    p_ctx->b_home_right = left_deg < 0;
+    return (left_deg < 0) ? (uint32_t)(-left_deg) : (uint32_t)left_deg;
+}
+
+/* Stall, leg timeout or missed line: one retry per bypass. A second miss
+ * hands over to line following; a second stall or timeout is a FAULT. */
 static void
 retry_or_fault (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
                 obstacle_avoid_input_t const * p_in, bool b_line_missed,
                 char const * p_reason)
 {
+    if (p_ctx->b_retry_used && b_line_missed)
+    {
+        /* Missed twice: the obstacle is passed, so let line following
+         * search for the line from here. */
+        p_ctx->leg = OBSTACLE_AVOID_LEG_FOLLOW;
+        p_ctx->b_leg_started = false;
+        start_leg(p_ctx, p_act, p_in);
+        if (p_ctx->state == OBSTACLE_AVOID_SEND)
+        {
+            p_act->p_reason = "line not found, searching";
+        }
+        return;
+    }
     if (p_ctx->b_retry_used)
     {
         latch_fault(p_ctx, p_act, OBSTACLE_AVOID_FAULT_RETRY_USED, p_in->now_ms,

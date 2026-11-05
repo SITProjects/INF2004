@@ -4,10 +4,12 @@
  *
  * The bypass turns by an angle toward the gap, drives diagonally out, turns
  * back parallel to the line, verifies the corridor ahead, passes the
- * obstacle, then looks for a line while turning inward and driving back.
- * A confirmed line ends the detour and hands alignment to the line follower;
- * it may be the original line behind the obstacle or another line. The
- * outward and pass legs do not acquire lines. The turn angle is as shallow
+ * obstacle, then looks for a line on the second half of the turn inward
+ * and while driving back. On a confirmed line it drives the axle onto it
+ * and turns back to the heading it stopped on, then hands over to the line
+ * follower; every turn only changes the heading, and every move is
+ * straight. The outward and pass legs, and the first half of the turn in,
+ * do not acquire lines. The turn angle is as shallow
  * as the room in front of the obstacle allows, never below angle_min_deg;
  * at 90 degrees the path is a box.
  *
@@ -225,10 +227,11 @@ typedef enum
     OBSTACLE_AVOID_LEG_TURN_BACK, /**< Turn back parallel to the line. */
     OBSTACLE_AVOID_LEG_VERIFY,    /**< Corridor sweep. */
     OBSTACLE_AVOID_LEG_PASS,      /**< Move past the obstacle. */
-    OBSTACLE_AVOID_LEG_TURN_IN,   /**< Past obstacle: turn, acquiring a line. */
+    OBSTACLE_AVOID_LEG_TURN_IN,   /**< Past obstacle: turn; second half
+                                       acquires a line. */
     OBSTACLE_AVOID_LEG_RETURN,    /**< Search back; acquire any line. */
     OBSTACLE_AVOID_LEG_OVERSHOOT, /**< Put the axle on the line. */
-    OBSTACLE_AVOID_LEG_TURN_HOME, /**< Original heading. */
+    OBSTACLE_AVOID_LEG_TURN_HOME, /**< Back to the heading at the stop. */
     OBSTACLE_AVOID_LEG_FOLLOW     /**< Resume line following. */
 } obstacle_avoid_leg_t;
 
@@ -275,6 +278,9 @@ typedef struct
     int32_t start_distance_mm; /* Odometry when the command was sent. */
     int32_t start_heading_deg;
     uint32_t leg_timeout_ms;
+    bool b_origin_valid;        /* origin_heading_deg was read. */
+    int32_t origin_heading_deg; /* Heading when the car stopped. */
+    bool b_home_right;          /* TURN_HOME turns right. */
 } obstacle_avoid_t;
 
 /* Public function declarations. */
@@ -375,8 +381,9 @@ void obstacle_avoid_init (obstacle_avoid_t * p_ctx,
  *
  * Never blocks. Any failed INHIBIT set or clear, failed event clear or send
  * error latches FAULT, as do encoder faults, rejected commands, missing
- * odometry, a late scanner and a second stall, timeout or missed line in
- * one bypass. FAULT keeps INHIBIT set and ignores every later input.
+ * odometry, a late scanner and a second stall or timeout in one bypass; a
+ * second missed line hands over to line following instead. FAULT keeps
+ * INHIBIT set and ignores every later input.
  * @param p_ctx Context from obstacle_avoid_init().
  * @param p_in Non-null inputs for this loop.
  * @return Actions to carry out now, in the order documented above.
