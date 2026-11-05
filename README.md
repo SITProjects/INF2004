@@ -13,7 +13,8 @@ priorities and peripherals are in **`TEAM.md`**):
 |---|---|---|---|
 | `obstacle/` | Obstacle detection: scans left and right when blocked | ultrasonic sensor GP2/GP3, servo GP12 | `obstacle_scan_task`, core 0 |
 | `motion/` | Motion: open-loop differential drive, held braked for now | motors GP8–GP11 | none yet |
-| `line_follow/` | Line following: IR readings → line commands, printed every 200 ms (motors off) | IR sensors GP26/GP27 (ADC) | `line_follow_task` |
+| `line_follow/` | Line following: digital IR edges → heading steps and searches for `tMotion` | IR sensor DO GP26/GP27 | `line_follow_task` |
+| `barcode/` | Code 39 barcodes beside the line, read in either direction | IR sensor DO GP28 (edge interrupt) | `tBarcode`, core 0 |
 | `terrain/` | Terrain: GY-511 accelerometer, calibration at power-up | I2C0 GP4/GP5 (Grove 3) | `terrain_task` |
 | `communication/` | Communication: Wi-Fi connection status | Pico W radio (kernel-owned) | `communication_task` |
 
@@ -189,8 +190,8 @@ subfolders, is compiled automatically.
   `drv_<name>.h` pair, e.g. `obstacle/drv_ultrasonic.c`. They are compiled
   automatically. Do not add drivers under `device/`: that folder holds the
   kernel's own serial, I2C and ADC drivers, and adding to it means editing
-  kernel and makefile files shared by the whole team. `line_follow` (ADC)
-  and `terrain` (I2C) use those kernel drivers through `tk_opn_dev()`.
+  kernel and makefile files shared by the whole team. `terrain` (I2C)
+  uses those kernel drivers through `tk_opn_dev()`.
 - Start new files from `templates/` (see `docs/coding_standard.md`).
 
 **Working as a team:** record owners, pins, priorities and the interfaces
