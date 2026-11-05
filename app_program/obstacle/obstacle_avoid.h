@@ -4,8 +4,10 @@
  *
  * The bypass turns by an angle toward the gap, drives diagonally out, turns
  * back parallel to the line, verifies the corridor ahead, passes the
- * obstacle, turns toward the line, drives back to it with stop-at-line,
- * turns to the original heading and follows. The turn angle is as shallow
+ * obstacle, then looks for a line while turning inward and driving back.
+ * A confirmed line ends the detour and hands alignment to the line follower;
+ * it may be the original line behind the obstacle or another line. The
+ * outward and pass legs do not acquire lines. The turn angle is as shallow
  * as the room in front of the obstacle allows, never below angle_min_deg;
  * at 90 degrees the path is a box.
  *
@@ -47,7 +49,6 @@ typedef struct
     uint16_t lateral_max_mm;   /**< Largest total offset from the line. */
     uint16_t pass_max_mm;      /**< Largest pass distance accepted. */
     uint16_t return_extra_mm;  /**< Drive past the offset to find the line. */
-    uint16_t overshoot_mm;     /**< IR row to axle; 0 skips that leg. */
     uint8_t angle_min_deg;     /**< Shallowest turn, 5..90 degrees. */
     uint16_t backoff_mm;       /**< Reverse when CRITICAL holds a move. */
     uint8_t max_backoffs;      /**< Back-offs per bypass; 0 never. */
@@ -211,20 +212,21 @@ typedef struct
     char const * p_reason;       /**< Static text when the state changed. */
 } obstacle_avoid_action_t;
 
-/** Bypass legs, in order; VERIFY is a step without a command. */
+/** Bypass legs, in order; finish PASS before reacquiring a line.
+ * VERIFY is a step without a command. A missed return gets one bounded
+ * search, then FAULT; no unconfirmed handoff to free line searching.
+ */
 typedef enum
 {
     OBSTACLE_AVOID_LEG_REVERSE,   /**< Back away to min_room_mm first. */
-    OBSTACLE_AVOID_LEG_TURN_OUT,  /**< Turn 90 degrees toward the gap. */
+    OBSTACLE_AVOID_LEG_TURN_OUT,  /**< Turn toward the gap. */
     OBSTACLE_AVOID_LEG_SIDESTEP,  /**< Move sideways off the line. */
     OBSTACLE_AVOID_LEG_TURN_BACK, /**< Turn back parallel to the line. */
     OBSTACLE_AVOID_LEG_VERIFY,    /**< Corridor sweep. */
     OBSTACLE_AVOID_LEG_PASS,      /**< Move past the obstacle. */
-    OBSTACLE_AVOID_LEG_TURN_IN,   /**< Turn toward the line. */
-    OBSTACLE_AVOID_LEG_RETURN,    /**< Move back, stopping at the line. */
-    OBSTACLE_AVOID_LEG_OVERSHOOT, /**< Put the axle on the line. */
-    OBSTACLE_AVOID_LEG_TURN_HOME, /**< Original heading. */
-    OBSTACLE_AVOID_LEG_FOLLOW     /**< Resume line following. */
+    OBSTACLE_AVOID_LEG_TURN_IN,   /**< Past obstacle: turn, acquiring a line. */
+    OBSTACLE_AVOID_LEG_RETURN,    /**< Search back; acquire any line. */
+    OBSTACLE_AVOID_LEG_FOLLOW     /**< Line found: line following aligns. */
 } obstacle_avoid_leg_t;
 
 /** State machine context; fields are private to obstacle_avoid.c. */

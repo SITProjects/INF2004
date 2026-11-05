@@ -81,7 +81,6 @@ static const obstacle_avoid_config_t avoid_config = {
                  .lateral_max_mm = OBSTACLE_AVOID_LATERAL_MAX_MM,
                  .pass_max_mm = OBSTACLE_AVOID_PASS_MAX_MM,
                  .return_extra_mm = OBSTACLE_AVOID_RETURN_EXTRA_MM,
-                 .overshoot_mm = OBSTACLE_AVOID_LINE_OVERSHOOT_MM,
                  .angle_min_deg = OBSTACLE_AVOID_ANGLE_MIN_DEG,
                  .backoff_mm = OBSTACLE_AVOID_BACKOFF_MM,
                  .max_backoffs = OBSTACLE_AVOID_MAX_BACKOFFS,
