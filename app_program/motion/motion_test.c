@@ -124,6 +124,14 @@ typedef struct
 /* 8 s: an 800 mm run with room for a slow open-loop wheel. */
 #define RECORD_MAX_SAMPLES 400
 
+/*
+ * Long traces pause every PRINT_BURST_LINES lines so the USB console task
+ * can send them: it runs below this task, and its 4 KB buffer drops what
+ * does not fit (about 90 trace lines).
+ */
+#define PRINT_BURST_LINES 20
+#define PRINT_PAUSE_MS 20
+
 /* One speed-loop update: what was asked, and what the wheels did. */
 typedef struct
 {
@@ -1506,6 +1514,10 @@ print_record (char const * p_id, char const * p_label,
                   (INT)p_sample->left_mm_s, (INT)p_sample->right_mm_s,
                   (INT)p_sample->command.left_duty_permille,
                   (INT)p_sample->command.right_duty_permille);
+        if (((i + 1) % PRINT_BURST_LINES) == 0)
+        {
+            (void)tk_dly_tsk((TMO)PRINT_PAUSE_MS);
+        }
         if (i >= half)
         {
             left_sum += (INT)p_sample->left_mm_s;
@@ -1684,6 +1696,10 @@ print_sync_trace (char const * p_id, sync_record_t const * p_record)
                   (INT)p_sample->sync.correction_deg_s,
                   (INT)p_sample->command.left_setpoint_mm_s,
                   (INT)p_sample->command.right_setpoint_mm_s);
+        if (((i + 1) % PRINT_BURST_LINES) == 0)
+        {
+            (void)tk_dly_tsk((TMO)PRINT_PAUSE_MS);
+        }
     }
 }
 #endif /* MOTION_SYNC_TESTS */
