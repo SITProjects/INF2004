@@ -5,10 +5,11 @@
  * The terrain task owns I2C0 (TEAM.md section 3). It sets up the GY-511,
  * retrying while the sensor is missing, then calls
  * terrain_monitor_update() every 10 ms and reports calibration and IMU
- * fault changes.
+ * fault changes. It is the one reader of the event queue: it prints every
+ * hump event as it happens (the LEVEL line carries the hump's height) and
+ * any events dropped from a full queue.
  * With TERRAIN_DEBUG_PRINT_MS set it also prints pitch, roll and the
- * hump state, or the calibration progress until calibrated; it never
- * takes events from the queue.
+ * hump state, or the calibration progress until calibrated.
  */
 
 #include "terrain.h"
@@ -22,12 +23,15 @@
 #define INIT_RETRY_MS 1000
 #define TENTHS_PER_UNIT 10
 #define US_PER_MS 1000u
+#define HUNDREDTHS_PER_UNIT 100
 
 /* Static data. */
 ID terrain_tid_monitor;
 
 /* Private function declarations. */
 static void monitor_task (INT stacd, void * p_exinf);
+static void print_events (void);
+static void print_event (terrain_event_t const * p_event);
 #if TERRAIN_DEBUG_PRINT_MS > 0
 static void print_status (void);
 static void print_calibrating (terrain_data_t const * p_data);
@@ -79,6 +83,7 @@ monitor_task (INT stacd, void * p_exinf)
 
     terrain_calib_state_t last_state = TERRAIN_CALIB_CALIBRATING;
     bool b_last_fault = false;
+    uint8_t last_dropped = 0u;
 #if TERRAIN_DEBUG_PRINT_MS > 0
     /* Real time, not loop passes: a pass can take longer than 10 ms. */
     uint64_t last_print_us = terrain_platform_time_us();
@@ -108,6 +113,15 @@ monitor_task (INT stacd, void * p_exinf)
             b_last_fault = b_fault;
         }
 
+        print_events();
+        uint8_t const dropped = terrain_monitor_events_dropped();
+        if (dropped != last_dropped)
+        {
+            tm_printf((UB *)"terrain: events dropped %d (queue full)\n",
+                      (INT)dropped);
+            last_dropped = dropped;
+        }
+
 #if TERRAIN_DEBUG_PRINT_MS > 0
         uint64_t const now_us = terrain_platform_time_us();
         if ((now_us - last_print_us) >=
@@ -119,6 +133,59 @@ monitor_task (INT stacd, void * p_exinf)
 #endif
         (void)tk_dly_tsk(UPDATE_PERIOD_MS);
     }
+}
+
+/* Print and remove every queued event; the queue is filled only by
+ * terrain_monitor_update() in this task, so it cannot grow meanwhile. */
+static void
+print_events (void)
+{
+    terrain_event_t event = {0u};
+    for (;;)
+    {
+        if (terrain_monitor_poll_event(&event) != TERRAIN_OK)
+        {
+            return;
+        }
+        if (terrain_monitor_event_type(&event) == TERRAIN_EVENT_NONE)
+        {
+            return;
+        }
+        print_event(&event);
+    }
+}
+
+/*
+ * One line per event, with its time since boot in seconds (comes round
+ * every 655.36 s). ASCENDING and DESCENDING carry the lean (size of roll)
+ * then, LEVEL the hump's height.
+ */
+static void
+print_event (terrain_event_t const * p_event)
+{
+    terrain_event_type_t const type = terrain_monitor_event_type(p_event);
+    INT const value = (INT)terrain_monitor_event_value(p_event);
+    INT const time_10ms = (INT)terrain_monitor_event_time_10ms(p_event);
+
+    tm_printf((UB *)"terrain: hump %s", terrain_monitor_event_text(type));
+    if (type == TERRAIN_EVENT_LEVEL)
+    {
+        tm_printf((UB *)" height %d mm", value);
+    }
+    else
+    {
+        INT tenths = value;
+        char const * p_sign = "";
+        if (tenths < 0)
+        {
+            p_sign = "-";
+            tenths = -tenths;
+        }
+        tm_printf((UB *)" lean %s%d.%d deg", p_sign, tenths / TENTHS_PER_UNIT,
+                  tenths % TENTHS_PER_UNIT);
+    }
+    tm_printf((UB *)" t %d.%02d s\n", time_10ms / HUNDREDTHS_PER_UNIT,
+              time_10ms % HUNDREDTHS_PER_UNIT);
 }
 
 #if TERRAIN_DEBUG_PRINT_MS > 0

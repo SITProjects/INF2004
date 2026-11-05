@@ -8,10 +8,11 @@
  * nose up, or turning from leaning sideways, so these hints decide when
  * tilt is held.
  *
- * No subsystem provides them yet: terrain_hint_read() reports everything
- * as unknown, and the terrain module never holds tilt. Once the motion
- * subsystem publishes its speed (an interface in TEAM.md section 5), only
- * terrain_hint.c changes.
+ * They come from the motion subsystem's odometry (motion_get_odometry(),
+ * TEAM.md IF-05). For now only the distance is given, and nothing uses
+ * it: the hump height comes from the lean alone (one wheel on a ramp).
+ * Speed and turn are unknown, so the terrain module never holds tilt.
+ * Adding them changes only terrain_hint.c.
  *
  * Internal to the terrain module; other modules should not call it.
  *
@@ -41,8 +42,8 @@ typedef struct
     bool b_turning;        /**< The car is turning; holds roll. */
     bool b_distance_known; /**< distance_mm is valid. */
     int32_t distance_mm;   /**< Distance driven since start, mm; + is
-                                forward (hump height). May wrap round:
-                                only differences are used. */
+                                forward. May wrap round: use only
+                                differences. Not used yet. */
 } terrain_hint_t;
 
 /* Public function declarations. */
@@ -51,6 +52,7 @@ typedef struct
  * @brief Copy the latest movement hints.
  * @param p_out Receives the hints; ignored if NULL.
  * Never waits, so it is safe to call from terrain_monitor_update().
+ * Call from the terrain task only: it keeps the stale-check state.
  */
 void terrain_hint_read (terrain_hint_t * p_out);
 
