@@ -167,8 +167,9 @@
  * TODO(calibrate): at least the follow speed / the tightest curve radius
  * (in rad/s), so the car can hold that curve (MOT-U31).
  */
-/* Bound the combined proportional and damping correction. */
-#define MOTION_FOLLOW_MAX_DEG_S 90.0f
+/* Bound the combined proportional and damping correction: the
+ * 2 * speed / track limit at 120 mm/s, for the tightest test curves. */
+#define MOTION_FOLLOW_MAX_DEG_S 128.0f
 
 /*
  * Following stops (state STOPPED) when the last line error is older than

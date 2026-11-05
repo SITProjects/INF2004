@@ -115,9 +115,9 @@
  * Candidate thresholds, pending stopping-distance tests. Edit only the
  * millimetre values; the echo equivalents are derived.
  *
- * Detection: 300 mm -> 1871 us. A nearer centre reading requests a stop.
+ * Detection: 150 mm -> 989 us. A nearer centre reading requests a stop.
  */
-#define OBSTACLE_DETECT_DISTANCE_MM 300u
+#define OBSTACLE_DETECT_DISTANCE_MM 150u
 #define OBSTACLE_DETECT_ECHO_US                                                \
     OBSTACLE_MM_TO_ECHO_US(OBSTACLE_DETECT_DISTANCE_MM)
 
@@ -148,8 +148,8 @@
  *
  * wait_ms = ceil(delta_deg * travel_ms_per_60_deg / 60) + margin_ms
  */
-#define OBSTACLE_SERVO_TRAVEL_MS_PER_60_DEG 0u
-#define OBSTACLE_SERVO_SETTLE_MARGIN_MS 1000u
+#define OBSTACLE_SERVO_TRAVEL_MS_PER_60_DEG 120u
+#define OBSTACLE_SERVO_SETTLE_MARGIN_MS 150u
 
 /*
  * Width geometry, provisional. Pivot offset is not measured yet (zero).
