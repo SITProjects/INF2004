@@ -2,9 +2,12 @@
  * @file obstacle_avoid.h
  * @brief Hardware-free bypass planning and corridor checks for obstacles.
  *
- * The bypass is a box: turn 90 degrees toward the gap, sidestep, turn back,
- * verify the corridor ahead, pass the obstacle, turn toward the line, drive
- * back to it with stop-at-line, turn to the original heading and follow.
+ * The bypass turns by an angle toward the gap, drives diagonally out, turns
+ * back parallel to the line, verifies the corridor ahead, passes the
+ * obstacle, turns toward the line, drives back to it with stop-at-line,
+ * turns to the original heading and follows. The turn angle is as shallow
+ * as the room in front of the obstacle allows, never below angle_min_deg;
+ * at 90 degrees the path is a box.
  *
  * Every function works only on its arguments: no hardware, kernel calls or
  * shared state, so they may run on either core and obstacle_test.c drives
@@ -45,16 +48,15 @@ typedef struct
     uint16_t pass_max_mm;      /**< Largest pass distance accepted. */
     uint16_t return_extra_mm;  /**< Drive past the offset to find the line. */
     uint16_t overshoot_mm;     /**< IR row to axle; 0 skips that leg. */
+    uint8_t angle_min_deg;     /**< Shallowest turn, 5..90 degrees. */
 } obstacle_avoid_geometry_t;
 
 /** Why obstacle_avoid_plan() accepted or refused a result. */
 typedef enum
 {
-    OBSTACLE_AVOID_PLAN_OK,          /**< A bypass is possible. */
-    OBSTACLE_AVOID_PLAN_NOT_PATH,    /**< Not PATH_FOUND toward 60 or 120. */
-    OBSTACLE_AVOID_PLAN_NO_GEOMETRY, /**< No centre distance published. */
-    OBSTACLE_AVOID_PLAN_TOO_WIDE,    /**< Needed sidestep > sidestep_max. */
-    OBSTACLE_AVOID_PLAN_TOO_FAR      /**< Pass distance > pass_max. */
+    OBSTACLE_AVOID_PLAN_OK,         /**< A bypass is possible. */
+    OBSTACLE_AVOID_PLAN_NOT_PATH,   /**< No side to try: see the plan. */
+    OBSTACLE_AVOID_PLAN_NO_GEOMETRY /**< No centre distance published. */
 } obstacle_avoid_plan_status_t;
 
 /** A planned bypass; the distances are valid only when status is OK. */
@@ -63,8 +65,10 @@ typedef struct
     obstacle_avoid_plan_status_t status;
     bool b_gap_right;     /**< Bypass on the right (DIR_RIGHT_120). */
     bool b_edge_unknown;  /**< Gap-side edge not found: sidestep is maximal. */
-    uint16_t sidestep_mm; /**< First sidestep. */
-    uint16_t pass_mm;     /**< Axle travel parallel to the line. */
+    bool b_limited;       /**< Sidestep or pass capped at its maximum. */
+    uint16_t sidestep_mm; /**< First sideways offset (not distance driven). */
+    uint16_t pass_mm;     /**< Axle travel along the line, from the stop. */
+    uint8_t angle_deg;    /**< Turn angle of every turn, 5..90 degrees. */
 } obstacle_avoid_plan_t;
 
 /** Result of checking a corridor sweep against the path ahead. */
@@ -198,7 +202,7 @@ typedef enum
     OBSTACLE_AVOID_LEG_TURN_BACK, /**< Turn back parallel to the line. */
     OBSTACLE_AVOID_LEG_VERIFY,    /**< Corridor sweep. */
     OBSTACLE_AVOID_LEG_PASS,      /**< Move past the obstacle. */
-    OBSTACLE_AVOID_LEG_TURN_IN,   /**< Turn 90 degrees toward the line. */
+    OBSTACLE_AVOID_LEG_TURN_IN,   /**< Turn toward the line. */
     OBSTACLE_AVOID_LEG_RETURN,    /**< Move back, stopping at the line. */
     OBSTACLE_AVOID_LEG_OVERSHOOT, /**< Put the axle on the line. */
     OBSTACLE_AVOID_LEG_TURN_HOME, /**< Original heading. */
@@ -223,7 +227,8 @@ typedef struct
     bool b_to_follow;     /* RELEASING ends with FOLLOW. */
     bool b_need_prepare;  /* Rearm before the next translate. */
     uint16_t sidestep_mm; /* Current sidestep target. */
-    uint32_t lateral_mm;  /* Total sidestep completed. */
+    uint32_t lateral_mm;  /* Total sideways offset completed. */
+    uint32_t forward_mm;  /* Progress along the line from diagonals. */
     uint8_t sidesteps;    /* Sidesteps completed. */
     bool b_retry_used;
     bool b_blocked; /* blocked_since_ms is running. */
@@ -240,17 +245,22 @@ typedef struct
 /* Public function declarations. */
 
 /**
- * @brief Plan a box bypass from a published side result.
+ * @brief Plan a bypass from a published side result, best effort.
  *
- * Gap on the left (the right mirrors it with -right_x_mm): with the left
- * edge found and the width available, the needed sidestep is
- * left_x + half_width + margin; it is raised to sidestep_min and refused
- * (TOO_WIDE) above sidestep_max, never clamped down. Without that edge the
- * sidestep is sidestep_max and b_edge_unknown is set: a corridor check must
- * then decide. The pass distance is centre + axle_to_pivot + depth + rear
- * + margin, never shortened; above pass_max it is refused (TOO_FAR).
+ * The line is assumed to continue behind the obstacle. PATH_FOUND and
+ * BLOCKED results are both used. Each side whose edge was found (with the
+ * width available) needs edge + half_width + margin sideways (-right_x on
+ * the right); a side without one needs sidestep_max. PATH_FOUND takes the
+ * scanner's measured-clearest direction even if its sidestep is longer or
+ * its edge is unknown (then at sidestep_max, b_edge_unknown). BLOCKED goes
+ * round the found edge needing the smaller sidestep; with no edge found it
+ * has nothing to try (NOT_PATH).
+ * The sidestep is raised to sidestep_min. A sidestep above sidestep_max or
+ * a pass above pass_max is capped there and b_limited set: the car tries
+ * anyway, guarded by CRITICAL. The pass distance is centre + axle_to_pivot
+ * + depth + rear + margin.
  *
- * @param result Published result; must be PATH_FOUND toward 60 or 120.
+ * @param result Published side result, PATH_FOUND or BLOCKED.
  * @param geometry Geometry published with result.
  * @param p_geometry Non-null car dimensions and limits.
  * @return The plan; check status before using the distances.

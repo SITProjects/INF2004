@@ -165,6 +165,7 @@ static bool avoid_line_valid (void);
 static bool sim_in_sidestep (void);
 static bool avoid_fault_valid (void);
 static bool avoid_obstacles_valid (void);
+static bool avoid_angle_valid (void);
 
 /* Public function definitions. */
 
@@ -208,11 +209,11 @@ obstacle_test (void)
     TEST_CHECK("OBS-U35", plan_left_valid(),
                "plan left: sidestep and pass from the formulas");
     TEST_CHECK("OBS-U36", plan_right_valid(),
-               "plan right: mirror of left using -right_x");
+               "plan: measured clearance wins over a shorter sidestep");
     TEST_CHECK("OBS-U37", plan_limits_valid(),
-               "plan limits: refuse, never clamp down; unknown edge is max");
+               "plan limits: capped best effort; unknown edge is max");
     TEST_CHECK("OBS-U38", plan_refusals_valid(),
-               "plan refusals: not PATH_FOUND to a side, or no geometry");
+               "plan: BLOCKED goes round a found edge; no edge, no plan");
     TEST_CHECK("OBS-U39", width_offsets_valid(),
                "width: centred box edges at +/-102 mm; unavailable is 0");
     TEST_CHECK("OBS-U40", range_valid(),
@@ -233,6 +234,8 @@ obstacle_test (void)
                "avoid: one retry from odometry; FAULT never releases");
     TEST_CHECK("OBS-U48", avoid_obstacles_valid(),
                "avoid: blocked moves resume; turns ignore stop; full box");
+    TEST_CHECK("OBS-U55", avoid_angle_valid(),
+               "avoid: angle from the room ahead; diagonals and pass sized");
 
     TEST_CHECK("OBS-U10", packed_obstacle_fields_valid(),
                "packed obstacle fields clamp without changing neighbours");
@@ -1401,7 +1404,8 @@ avoid_fixture (void)
                                           .lateral_max_mm = 500u,
                                           .pass_max_mm = 1500u,
                                           .return_extra_mm = 150u,
-                                          .overshoot_mm = 40u};
+                                          .overshoot_mm = 40u,
+                                          .angle_min_deg = 90u};
     return geometry;
 }
 
@@ -1449,8 +1453,8 @@ plan_left_valid (void)
     return plan_is(plan, false, false, 235u, 650u);
 }
 
-/* OBS-U36: edges at +40 and -120 need 175 mm on the left and 255 mm on
- * the right, so each side uses its own edge. */
+/* OBS-U36: range-ranked right stays right even with a shorter left detour.
+ * A clearer left side without an edge stays left, using the maximum. */
 static bool
 plan_right_valid (void)
 {
@@ -1458,14 +1462,15 @@ plan_right_valid (void)
     obstacle_scan_geometry_t geometry = geometry_at(250u, 40, -120);
     obstacle_avoid_plan_t right = obstacle_avoid_plan(
         path_result(ROBOT_OBSTACLE_DIR_RIGHT_120, true, true), geometry, &car);
-    obstacle_avoid_plan_t left = obstacle_avoid_plan(
-        path_result(ROBOT_OBSTACLE_DIR_LEFT_60, true, true), geometry, &car);
+    obstacle_avoid_plan_t only_right = obstacle_avoid_plan(
+        path_result(ROBOT_OBSTACLE_DIR_LEFT_60, false, true), geometry, &car);
     return plan_is(right, true, false, 255u, 650u) &&
-           plan_is(left, false, false, 175u, 650u);
+           plan_is(only_right, false, true, 400u, 650u);
 }
 
-/* OBS-U37: refuse rather than clamp, raise to the minimum, use the
- * maximum without the gap-side edge, and split long moves evenly. */
+/* OBS-U37: best effort caps at the limits instead of refusing, raises to
+ * the minimum, uses the maximum without any edge, and splits long moves
+ * evenly. */
 static bool
 plan_limits_valid (void)
 {
@@ -1477,11 +1482,11 @@ plan_limits_valid (void)
     robot_obstacle_result_t no_width = both;
     no_width.width_mm = ROBOT_OBSTACLE_WIDTH_UNAVAILABLE;
 
-    bool ok =
-        obstacle_avoid_plan(both, geometry_at(250u, 266, -100), &car).status ==
-        OBSTACLE_AVOID_PLAN_TOO_WIDE;
+    obstacle_avoid_plan_t wide =
+        obstacle_avoid_plan(both, geometry_at(250u, 266, -300), &car);
+    bool ok = plan_is(wide, false, false, 400u, 650u) && wide.b_limited;
     ok = ok &&
-         plan_is(obstacle_avoid_plan(both, geometry_at(250u, 265, -100), &car),
+         plan_is(obstacle_avoid_plan(both, geometry_at(250u, 265, -300), &car),
                  false, false, 400u, 650u);
     ok = ok &&
          plan_is(obstacle_avoid_plan(both, geometry_at(250u, -50, -200), &car),
@@ -1495,8 +1500,9 @@ plan_limits_valid (void)
     ok = ok &&
          plan_is(obstacle_avoid_plan(both, geometry_at(1100u, 100, -100), &car),
                  false, false, 235u, 1500u);
-    ok = ok && (obstacle_avoid_plan(both, geometry_at(1101u, 100, -100), &car)
-                    .status == OBSTACLE_AVOID_PLAN_TOO_FAR);
+    obstacle_avoid_plan_t far =
+        obstacle_avoid_plan(both, geometry_at(1101u, 100, -100), &car);
+    ok = ok && plan_is(far, false, false, 235u, 1500u) && far.b_limited;
     ok = ok && (obstacle_avoid_split_count(0u) == 0u) &&
          (obstacle_avoid_split_count(1u) == 1u) &&
          (obstacle_avoid_split_count(1023u) == 1u) &&
@@ -1510,15 +1516,16 @@ plan_limits_valid (void)
     return ok;
 }
 
-/* OBS-U38: only PATH_FOUND toward 60 or 120 degrees with a centre range. */
+/* OBS-U38: only PATH_FOUND or BLOCKED with a centre range are planned.
+ * BLOCKED goes round a found edge; with no edge found, BLOCKED and a
+ * PATH_FOUND without a side have nothing to try. */
 static bool
 plan_refusals_valid (void)
 {
     obstacle_avoid_geometry_t car = avoid_fixture();
     obstacle_scan_geometry_t geometry = geometry_at(250u, 100, -100);
     robot_obstacle_status_t const statuses[] = {
-        ROBOT_OBSTACLE_SCANNING, ROBOT_OBSTACLE_CLEAR, ROBOT_OBSTACLE_BLOCKED,
-        ROBOT_OBSTACLE_UNKNOWN};
+        ROBOT_OBSTACLE_SCANNING, ROBOT_OBSTACLE_CLEAR, ROBOT_OBSTACLE_UNKNOWN};
     bool ok = true;
     for (size_t index = 0u; index < ARRAY_COUNT(statuses); ++index)
     {
@@ -1529,12 +1536,20 @@ plan_refusals_valid (void)
         ok = ok && (obstacle_avoid_plan(result, geometry, &car).status ==
                     OBSTACLE_AVOID_PLAN_NOT_PATH);
     }
+    robot_obstacle_result_t blocked =
+        path_result(ROBOT_OBSTACLE_DIR_NONE, true, true);
+    blocked.flags = robot_obstacle_pack_flags(
+        ROBOT_OBSTACLE_BLOCKED, ROBOT_OBSTACLE_DIR_NONE, false, true);
+    robot_obstacle_result_t walled = blocked;
+    walled.flags = robot_obstacle_pack_flags(
+        ROBOT_OBSTACLE_BLOCKED, ROBOT_OBSTACLE_DIR_NONE, false, false);
     ok = ok &&
-         (obstacle_avoid_plan(path_result(ROBOT_OBSTACLE_DIR_NONE, true, true),
-                              geometry, &car)
-              .status == OBSTACLE_AVOID_PLAN_NOT_PATH) &&
+         plan_is(obstacle_avoid_plan(blocked, geometry, &car), true, false,
+                 235u, 650u) &&
+         (obstacle_avoid_plan(walled, geometry, &car).status ==
+          OBSTACLE_AVOID_PLAN_NOT_PATH) &&
          (obstacle_avoid_plan(
-              path_result(ROBOT_OBSTACLE_DIR_CENTRE_90, true, true), geometry,
+              path_result(ROBOT_OBSTACLE_DIR_CENTRE_90, false, false), geometry,
               &car)
               .status == OBSTACLE_AVOID_PLAN_NOT_PATH) &&
          (obstacle_avoid_plan(
@@ -2007,7 +2022,7 @@ avoid_line_valid (void)
     bool ok = sim_detect_path();
     sim.config.geometry.lateral_max_mm = 1000u;
     sim.config.geometry.sidestep_max_mm = 1000u;
-    sim.in.geometry = geometry_at(250u, 765, -100); /* 900 mm sidestep. */
+    sim.in.geometry = geometry_at(250u, 765, -1000); /* Left: 900 mm. */
     ok = ok && sim_until(OBSTACLE_AVOID_SEND, OBSTACLE_AVOID_LEG_RETURN, 80u) &&
          (sim.act.cmd == robot_motion_cmd_move(525u, false, true));
     (void)sim_step();
@@ -2145,6 +2160,60 @@ avoid_obstacles_valid (void)
          (sim.last_cmd == robot_motion_cmd_follow()) &&
          (sim.ctx.fault == OBSTACLE_AVOID_FAULT_NONE);
     return ok;
+}
+
+/* OBS-U55: with a 30 degree minimum, the angle follows the room in front
+ * (centre less the 60 mm margin), rounded up to 5 degrees. At 600 mm the
+ * 235 mm offset fits 30 degrees: a 470 mm diagonal gains 407 mm, leaving
+ * 593 of the 1000 mm pass; the return diagonal is (235 + 150) / sin 30. */
+static bool
+avoid_angle_valid (void)
+{
+    obstacle_avoid_geometry_t car = avoid_fixture();
+    car.angle_min_deg = 30u;
+    robot_obstacle_result_t const left =
+        path_result(ROBOT_OBSTACLE_DIR_LEFT_60, true, true);
+    bool ok = (obstacle_avoid_plan(left, geometry_at(250u, 100, -100), &car)
+                   .angle_deg == 55u) &&
+              (obstacle_avoid_plan(left, geometry_at(600u, 100, -100), &car)
+                   .angle_deg == 30u) &&
+              (obstacle_avoid_plan(left, geometry_at(50u, 100, -100), &car)
+                   .angle_deg == 90u) &&
+              (obstacle_avoid_plan(left, geometry_at(600u, 100, -100),
+                                   &sim.config.geometry)
+                   .angle_deg == 90u);
+
+    uint32_t const expected[] = {robot_motion_cmd_turn(30u, false, false),
+                                 robot_motion_cmd_move(470u, false, false),
+                                 robot_motion_cmd_turn(30u, true, false),
+                                 robot_motion_cmd_move(593u, false, false),
+                                 robot_motion_cmd_turn(30u, true, false),
+                                 robot_motion_cmd_move(770u, false, true),
+                                 robot_motion_cmd_move(40u, false, false),
+                                 robot_motion_cmd_turn(30u, false, false),
+                                 robot_motion_cmd_follow()};
+    ok = ok && sim_detect_path();
+    sim.config.geometry.angle_min_deg = 30u;
+    sim.in.geometry = geometry_at(600u, 100, -100);
+    uint32_t const first = sim.sends;
+    uint32_t seen = 0u;
+    sim.b_auto = true;
+    for (uint32_t index = 0u;
+         ok && (index < 300u) && (sim.ctx.state != OBSTACLE_AVOID_IDLE);
+         ++index)
+    {
+        uint32_t const before = sim.sends;
+        (void)sim_step();
+        if (sim.sends != before)
+        {
+            ok = (seen < ARRAY_COUNT(expected)) &&
+                 (sim.last_cmd == expected[seen]);
+            ++seen;
+        }
+    }
+    sim.b_auto = false;
+    return ok && (sim.ctx.state == OBSTACLE_AVOID_IDLE) &&
+           (seen == ARRAY_COUNT(expected)) && (sim.sends - first == seen);
 }
 
 #endif /* APP_TEST */
