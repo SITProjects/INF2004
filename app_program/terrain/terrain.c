@@ -6,8 +6,9 @@
  * retrying while the sensor is missing, then calls
  * terrain_monitor_update() every 10 ms and reports calibration and IMU
  * fault changes. It is the one reader of the event queue: it prints every
- * hump event as it happens (the LEVEL line carries the hump's height) and
- * any events dropped from a full queue.
+ * hump and collision event as it happens (the LEVEL line carries the
+ * hump's height, the COLLISION line the push) and any events dropped from
+ * a full queue.
  * With TERRAIN_DEBUG_PRINT_MS set it also prints pitch, roll and the
  * hump state, or the calibration progress until calibrated.
  */
@@ -158,7 +159,7 @@ print_events (void)
 /*
  * One line per event, with its time since boot in seconds (comes round
  * every 655.36 s). ASCENDING and DESCENDING carry the lean (size of roll)
- * then, LEVEL the hump's height.
+ * then, LEVEL the hump's height, COLLISION the push in tenths of a g.
  */
 static void
 print_event (terrain_event_t const * p_event)
@@ -167,13 +168,18 @@ print_event (terrain_event_t const * p_event)
     INT const value = (INT)terrain_monitor_event_value(p_event);
     INT const time_10ms = (INT)terrain_monitor_event_time_10ms(p_event);
 
-    tm_printf((UB *)"terrain: hump %s", terrain_monitor_event_text(type));
-    if (type == TERRAIN_EVENT_LEVEL)
+    if (type == TERRAIN_EVENT_COLLISION)
     {
-        tm_printf((UB *)" height %d mm", value);
+        tm_printf((UB *)"terrain: COLLISION push %d.%d g",
+                  value / TENTHS_PER_UNIT, value % TENTHS_PER_UNIT);
+    }
+    else if (type == TERRAIN_EVENT_LEVEL)
+    {
+        tm_printf((UB *)"terrain: hump LEVEL height %d mm", value);
     }
     else
     {
+        tm_printf((UB *)"terrain: hump %s", terrain_monitor_event_text(type));
         INT tenths = value;
         char const * p_sign = "";
         if (tenths < 0)

@@ -76,7 +76,7 @@ typedef enum
     TERRAIN_EVENT_ASCENDING,    /**< A climb started. */
     TERRAIN_EVENT_DESCENDING,   /**< A descent (or a dip) started. */
     TERRAIN_EVENT_LEVEL,        /**< Flat again after a descent. */
-    TERRAIN_EVENT_COLLISION,    /**< Reserved: collision detection. */
+    TERRAIN_EVENT_COLLISION,    /**< The car hit something. */
     TERRAIN_EVENT_STATIONARY,   /**< Reserved: speed state. */
     TERRAIN_EVENT_ACCELERATING, /**< Reserved: speed state. */
     TERRAIN_EVENT_CRUISING,     /**< Reserved: speed state. */
@@ -251,9 +251,19 @@ terrain_status_t terrain_monitor_recalibrate (void);
  * While roll is held (the car is turning), no hump events are found and
  * the height pauses: the held value is not a new reading.
  *
+ * - COLLISION: in hump state LEVEL only (never on a ramp), a horizontal
+ *   push (forward/back and sideways) of at least
+ *   TERRAIN_COLLISION_LIMIT_DG, after which motion's ground speed
+ *   dropped to half or less within TERRAIN_COLLISION_CHECK_SAMPLES. It
+ *   counts at once for a push of at least TERRAIN_COLLISION_SURE_DG, or
+ *   when the speed is unknown or below TERRAIN_COLLISION_MIN_SPEED_MM_S.
+ *   Then none for TERRAIN_COLLISION_COOLDOWN_SAMPLES. Value: the biggest
+ *   push of the hit, tenths of a g, 0 to 127 (stops at 12.7 g).
+ *
  * The queue holds TERRAIN_EVENT_QUEUE_LEN events; when it is full the
  * oldest is dropped and counted (terrain_monitor_events_dropped()). A
- * recalibration resets the hump state to LEVEL without an event and keeps
+ * recalibration resets the hump state to LEVEL and the collision check to
+ * ready without an event, and keeps
  * the events already queued. Only terrain_monitor_init() empties it.
  * Safe to call from other tasks while terrain_monitor_update() runs.
  */
