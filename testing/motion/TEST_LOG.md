@@ -72,6 +72,37 @@ first, and MOT-U11..U16 also a calibrated `MOTION_WHEEL_DIAMETER_MM`
 (MOT-U08). To measure a turn, see how far the tape line has moved sideways
 500 mm from the pivot: 5° is about 44 mm, 3° about 26 mm.
 
+## Test sessions
+
+The tests run in these sessions, in this order: each session may
+calibrate a value the later ones need, so build each image only when its
+session starts. A session's image and log share one name:
+`S<nn>_MOT-<tests>.uf2` and `YYYY-MM-DD_S<nn>_MOT-<tests>.txt`; the
+commit tested goes in the result row. *Motion only* means a local, uncommitted `app_main.c` that starts and
+tests motion alone, built with `WIFI=none`; *full* means the committed
+`app_main.c` with Wi-Fi.
+
+| Session | Tests | Build | Image | Log | Before it |
+|---|---|---|---|---|---|
+| S00 | host line acquisition | `sh testing/motion/host/run.sh` | — | `S00_MOT-host.txt` | — |
+| S01 | MOT-U01, U03, U07, U18, U22, U23, U27, U33, U34, U35, U38 | full, `make TEST=1` | `S01_MOT-auto.uf2` | `S01_MOT-auto.txt` | — |
+| S02 | MOT-U02 | full, `make` | `S02_MOT-U02.uf2` | `S02_MOT-U02.txt` | — |
+| S03 | MOT-U04..U06 | motion only, `MOTION_MANUAL_TESTS` 1; car lifted | `S03_MOT-U04-U06.uf2` | `S03_MOT-U04-U06.txt` | — |
+| S04 | MOT-U19..U21 | motion only, `MOTION_SPEED_TESTS` 1 | `S04_MOT-U19-U21.uf2` | `S04_MOT-U19-U21.txt` | S01 (MOT-U22), S03 |
+| S05 | MOT-U08..U10 | motion only, `MOTION_MOVE_TESTS` 1 | `S05_MOT-U08-U10.uf2` | `S05_MOT-U08-U10.txt` | S04 |
+| S06 | MOT-U11..U16 | motion only, `MOTION_TURN_TESTS` 1 | `S06_MOT-U11-U16.uf2` | `S06_MOT-U11-U16.txt` | S05 |
+| S07 | MOT-U17 | as S06 with `MOTION_LEFT_ENCODER_INVERTED` flipped; car lifted | `S07_MOT-U17_ENC-FLIPPED.uf2` | `S07_MOT-U17.txt` | S06 |
+| S08 | MOT-U24..U26 | motion only, `MOTION_SYNC_TESTS` 1 | `S08_MOT-U24-U26.uf2` | `S08_MOT-U24-U26.txt` | S04, S06 |
+| S09 | MOT-U28..U30 | motion only, `MOTION_FOLLOW_TESTS` 1 | `S09_MOT-U28-U30.uf2` | `S09_MOT-U28-U30.txt` | S04, S06 |
+| S10 | MOT-U36, U37 | motion only, `MOTION_TASK_TESTS` 1 | `S10_MOT-U36-U37.uf2` | `S10_MOT-U36-U37.txt` | — |
+| S11 | MOT-U39 | full, `make`, on a real line | `S11_MOT-U39.uf2` | `S11_MOT-U39.txt` | S09 |
+| S12 | as S01, on the commit to be merged or demonstrated | full, `make TEST=1` | `S12_MOT-auto-final.uf2` | `S12_MOT-auto-final.txt` | all |
+
+Every `make TEST=1` image also runs the automatic checks, so MOT-U01,
+U03, U07, U18, U22, U23 and U27 appear in every test session's log; record
+them from S01. If a session changes a calibration value, commit it and
+rerun that session before the next one.
+
 ## Results
 
 Add a new row for every run. Never edit or delete old rows.
@@ -101,6 +132,20 @@ confirm the stop-early distance, and MOT-U19/U20 are calibrated at
 | 2026-11-03 | MOT-U09 | `dac27e4` + local | Felicia Chua | FAIL | `logs/2026-11-03_MOT-U08-U10_calibration.txt` | calibration; 3 runs: ruler ≈105 mm each (limit 97–103), odometry −114, −108, −111. Both moves stop about 5 mm past the target (coast after braking), so `MOTION_MOVE_STOP_EARLY_MM` set to 5 |
 | 2026-11-03 | MOT-U10 | `dac27e4` + local | Felicia Chua | PASS | `logs/2026-11-03_MOT-U08-U10_calibration.txt` | calibration; 3 runs: stalled after 740, 580, 500 ms, braked, refused, cleared |
 | 2026-11-03 | MOT-U10 | `dac27e4` + local | Felicia Chua | PASS | `logs/2026-11-03_MOT-U08-U10.txt` | with `MOTION_MOVE_STOP_EARLY_MM` 5; 3 runs: stalled after 460, 540, 720 ms (above the 300 ms timeout: small wheel movement in the grip restarts it), braked, refused, cleared. U08/U09 odometry 1003, 1003, 1002 / −110, −110, −106; ruler check of U08/U09 pending |
+| 2026-11-05 | MOT-U01 | `0a0d6bd` + local | Felicia Chua | PASS | `logs/2026-11-05_S03_MOT-U04-U06.txt` | S03, `make TEST=1 WIFI=none`, motion-only `app_main.c`, `MOTION_MANUAL_TESTS` 1, 20 kHz |
+| 2026-11-05 | MOT-U03 | `0a0d6bd` + local | Felicia Chua | PASS | `logs/2026-11-05_S03_MOT-U04-U06.txt` | S03 |
+| 2026-11-05 | MOT-U07 | `0a0d6bd` + local | Felicia Chua | PASS | `logs/2026-11-05_S03_MOT-U04-U06.txt` | S03 |
+| 2026-11-05 | MOT-U18 | `0a0d6bd` + local | Felicia Chua | PASS | `logs/2026-11-05_S03_MOT-U04-U06.txt` | S03 |
+| 2026-11-05 | MOT-U22 | `0a0d6bd` + local | Felicia Chua | PASS | `logs/2026-11-05_S03_MOT-U04-U06.txt` | S03; 50 updates took 1000 ms |
+| 2026-11-05 | MOT-U23 | `0a0d6bd` + local | Felicia Chua | PASS | `logs/2026-11-05_S03_MOT-U04-U06.txt` | S03 |
+| 2026-11-05 | MOT-U27 | `0a0d6bd` + local | Felicia Chua | PASS | `logs/2026-11-05_S03_MOT-U04-U06.txt` | S03 |
+| 2026-11-05 | MOT-U06 | `0a0d6bd` + local | Felicia Chua | PASS | `logs/2026-11-05_S03_MOT-U04-U06.txt` | S03; encoder change: LEFT FORWARD +5891 / right 0, LEFT BACKWARD −5853 / 0, RIGHT FORWARD 0 / +6046, RIGHT BACKWARD 0 / −5820 |
+| 2026-11-05 | MOT-U04 | `0a0d6bd` + local | Felicia Chua | PASS | `logs/2026-11-05_S03_MOT-U04-U06.txt` | S03; 5 revolutions each way per wheel, counted between turning points. Left 2503–2584, mean 2539; right 2497–2555, mean 2525 (single-reading overshoots excluded: left 2621, right 2578 and 2579). `MOTION_ENCODER_TICKS_PER_REV` 2490 → 2532 (mean of both wheels); ≈0.08 mm per count. MOT-U08 must be repeated: the 64 mm wheel diameter was checked at 2490 |
+| 2026-11-05 | MOT-U05 | `0a0d6bd` + local | Felicia Chua | PASS | `logs/2026-11-05_S03_MOT-U04-U06.txt` | S03; each backward revolution lowers the count by about one revolution; after 5 forward/backward pairs the left ends at 6 (start −16) and the right at 6 (start −21) |
+| 2026-11-05 | MOT-U33 | `0a0d6bd` + local | Felicia Chua | PASS | `logs/2026-11-05_S03_MOT-U04-U06.txt` | S03 |
+| 2026-11-05 | MOT-U34 | `0a0d6bd` + local | Felicia Chua | PASS | `logs/2026-11-05_S03_MOT-U04-U06.txt` | S03, motion only: period 19993..20009 us, longest update 440 us. Not the full-load result the test asks for; that comes from S01 |
+| 2026-11-05 | MOT-U35 | `0a0d6bd` + local | Felicia Chua | PASS | `logs/2026-11-05_S03_MOT-U04-U06.txt` | S03; INHIBIT to brake 69 us |
+| 2026-11-05 | MOT-U38 | `0a0d6bd` + local | Felicia Chua | PASS | `logs/2026-11-05_S03_MOT-U04-U06.txt` | S03; 11 updates in 200 ms |
 
 ## Host regression: post-obstacle line acquisition
 

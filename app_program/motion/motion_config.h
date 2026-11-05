@@ -52,13 +52,16 @@
 /*
  * Encoder counts per wheel turn, counting all 4 edges per encoder cycle.
  * MOT-U04 (2026-11-03): about 2500 left and 2530 right, turned by hand.
+ * MOT-U04 (2026-11-05): 5 turns each way, about 2539 left and 2525 right.
  */
-#define MOTION_ENCODER_TICKS_PER_REV 2490u
+#define MOTION_ENCODER_TICKS_PER_REV 2532u
 
 /*
  * Wheel diameter in mm; odometry uses pi * diameter / ticks per rev.
- * Measured 64 mm. MOT-U08 (2026-11-03): odometry agrees with the ruler
- * within about 1 mm over 1 m.
+ * Measured 64 mm. MOT-U08 (2026-11-03): odometry agreed with the ruler
+ * within about 1 mm over 1 m at 2490 ticks per rev.
+ * TODO(calibrate): repeat MOT-U08 at 2532 ticks per rev; scale this by
+ * ruler / odometry if they differ.
  */
 #define MOTION_WHEEL_DIAMETER_MM 64.0f
 
