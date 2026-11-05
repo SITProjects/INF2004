@@ -2707,11 +2707,14 @@ avoid_probe_valid (void)
 }
 
 /* OBS-U67: the bypass watches the obstacle side while it drives. Left gap
- * (sensor at 60 degrees, right on the car), 235 mm sidestep, re-checks off. A point 200 mm
- * away (100 mm from the path, inside 135) lengthens the sidestep by 35 mm;
- * the same on the pass, 100 mm in, stops and sidesteps 35 mm more, then
- * passes the remaining 550 mm. No echo with the last point (174 mm
- * ahead) not yet passed by 50 mm keeps watching; then sensor ahead. */
+ * (sensor at 60 degrees, right on the car), 235 mm sidestep, re-checks
+ * off. It reacts only inside 105 mm (half the car plus half the margin)
+ * and restores 135 mm. A point 110 mm from the path is left alone; one
+ * 100 mm away lengthens the sidestep by 35 mm; the same on the pass, 100 mm
+ * in, stops and sidesteps 35 mm more, then passes the remaining 550 mm. A
+ * third widening (115 mm) would pass the 80 mm cap and is refused. No echo with the
+ * last point (174 mm ahead) not yet passed by 50 mm keeps watching; then
+ * sensor ahead. */
 static bool
 avoid_watch_valid (void)
 {
@@ -2722,6 +2725,9 @@ avoid_watch_valid (void)
          sim.ctx.b_watching && sim.in.watch.b_active &&
          (sim.watch_angle == (int16_t)OBSTACLE_WATCH_LEFT_DEG) &&
          (sim.ctx.sidestep_mm == 235u);
+    sim_watch(1283u); /* 220 mm away: 110 mm from the path. */
+    (void)sim_step();
+    ok = ok && (sim.ctx.sidestep_mm == 235u) && (sim.ctx.remaining == 235u);
     sim_watch(1170u);
     (void)sim_step();
     ok = ok && (sim.ctx.sidestep_mm == 270u) && (sim.ctx.remaining == 270u);
@@ -2738,10 +2744,20 @@ avoid_watch_valid (void)
     ok = ok && sim_step().b_set_inhibit &&
          (sim.ctx.state == OBSTACLE_AVOID_RETRY_WAIT) &&
          (sim.ctx.leg == OBSTACLE_AVOID_LEG_TURN_OUT) &&
-         (sim.ctx.sidestep_mm == 35u) && (sim.ctx.forward_mm == 100u);
+         (sim.ctx.sidestep_mm == 35u) && (sim.ctx.forward_mm == 100u) &&
+         (sim.ctx.watch_shift_mm == 70u);
+    ok = ok &&
+         sim_until(OBSTACLE_AVOID_RUN_LEG, OBSTACLE_AVOID_LEG_SIDESTEP, 30u);
+    sim_watch(233u);  /* 40 mm away, within this 35 mm leg: 115 mm more. */
+    (void)sim_step(); /* 70 + 115 would pass the 80 mm cap. */
+    ok = ok && (sim.ctx.sidestep_mm == 35u) && (sim.ctx.watch_shift_mm == 70u);
     ok = ok &&
          sim_until(OBSTACLE_AVOID_RUN_LEG, OBSTACLE_AVOID_LEG_PASS, 30u) &&
          (sim.ctx.remaining == 550u) && (sim.ctx.lateral_mm == 305u);
+    sim_watch(1170u); /* On the pass too, 70 + 35 passes the cap: no stop. */
+    ok = ok && !sim_step().b_set_inhibit &&
+         (sim.ctx.state == OBSTACLE_AVOID_RUN_LEG) &&
+         (sim.ctx.watch_shift_mm == 70u);
     /* A dropout with the last point still ahead keeps watching. */
     sim_watch(0u);
     ok = ok && !sim_step().b_watch && sim.ctx.b_watching;

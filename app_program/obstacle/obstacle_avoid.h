@@ -264,7 +264,8 @@ typedef struct
     bool b_watching;         /* Sensor held toward the obstacle side. */
     bool b_watch_seen;       /* The watch has seen something in range. */
     bool b_watch_done;       /* Watch ended this bypass; do not restart it. */
-    bool b_watch_widened;    /* This command's diagonal was lengthened. */
+    bool b_watch_widened;    /* This leg was widened already. */
+    uint16_t watch_shift_mm; /* Widening added by the watch this bypass. */
     bool b_shift;            /* RETRY_WAIT holds for a watch shift, no retry. */
     uint8_t watch_sequence;  /* Last watch reading used. */
     int32_t watch_seen_mm;   /* Odometry distance at the last sighting. */

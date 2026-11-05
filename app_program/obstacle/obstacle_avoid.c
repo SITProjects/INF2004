@@ -27,6 +27,9 @@
 /* Smallest widening for a watch reading too close to the path. */
 #define WATCH_SHIFT_MIN_MM 30.0f
 
+/* Most widening the watch may add in one bypass. */
+#define WATCH_SHIFT_MAX_MM 80u
+
 /* Drive this far past the last point seen before facing ahead again: a
  * flat side at a glancing angle often gives no echo while still there. */
 #define WATCH_CLEAR_EXTRA_MM 50u
@@ -890,6 +893,7 @@ try_plan (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
     p_ctx->b_watch_seen = false;
     p_ctx->b_watch_done = false;
     p_ctx->b_watch_widened = false;
+    p_ctx->watch_shift_mm = 0u;
     p_ctx->b_shift = false;
     /* Without re-checks, keep the sensor ahead for the whole bypass. */
     p_act->b_side_scans_off = !p_ctx->p_config->timing.b_recheck;
@@ -956,6 +960,7 @@ start_leg (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
         if (!p_ctx->b_leg_started)
         {
             p_ctx->b_leg_started = true;
+            p_ctx->b_watch_widened = false; /* One widening per leg. */
             switch (leg)
             {
                 case OBSTACLE_AVOID_LEG_REVERSE:
@@ -1024,7 +1029,6 @@ send_part (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
     uint32_t expected_ms;
     if (leg_is_move(leg))
     {
-        p_ctx->b_watch_widened = false;
         if (((leg == OBSTACLE_AVOID_LEG_SIDESTEP) ||
              (leg == OBSTACLE_AVOID_LEG_PASS)) &&
             !p_ctx->b_watching && !p_ctx->b_watch_done)
@@ -1370,8 +1374,10 @@ step_run_leg (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
  * (90 - OBSTACLE_WATCH_LEFT_DEG) degrees toward the obstacle side of the
  * heading, so a point at range r lies r sin of that from the path and
  * r cos of it ahead. A point ahead within this leg and closer to the path
- * than half the car plus the margin widens the offset: on the diagonal by
- * driving it farther, on the pass by stopping to sidestep out. Once the
+ * than half the car plus half the margin widens the offset back to the
+ * full margin: on the diagonal by driving it farther, on the pass by
+ * stopping to sidestep out; once per leg and at most WATCH_SHIFT_MAX_MM per
+ * bypass. Once the
  * car has driven past the last point seen (plus WATCH_CLEAR_EXTRA_MM)
  * without seeing it again, the sensor faces ahead again.
  * Returns true only when it stopped the car.
@@ -1423,9 +1429,14 @@ watch_step (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
     uint32_t const driven = (moved < 0) ? (uint32_t)(-moved) : (uint32_t)moved;
     float const left_mm =
         (p_ctx->remaining > driven) ? (float)(p_ctx->remaining - driven) : 0.0f;
+    /* The beam is a cone, not the 30 degree line: a point heard off its
+     * edge reads nearer the path than it is. React only to a point inside
+     * half the margin, then restore the full margin. */
     float const need_mm = (float)p_config->geometry.half_width_mm +
                           (float)p_config->geometry.margin_mm;
-    if (p_ctx->b_watch_widened || !(lateral_mm < need_mm) ||
+    float const trigger_mm = (float)p_config->geometry.half_width_mm +
+                             ((float)p_config->geometry.margin_mm / 2.0f);
+    if (p_ctx->b_watch_widened || !(lateral_mm < trigger_mm) ||
         (ahead_mm > left_mm))
     {
         return false;
@@ -1440,11 +1451,13 @@ watch_step (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
         p_ctx->lateral_mm + ((leg == OBSTACLE_AVOID_LEG_SIDESTEP)
                                  ? (uint32_t)p_ctx->sidestep_mm
                                  : 0u);
-    if ((offset_mm + shift) > p_config->geometry.lateral_max_mm)
+    if (((offset_mm + shift) > p_config->geometry.lateral_max_mm) ||
+        ((p_ctx->watch_shift_mm + shift) > WATCH_SHIFT_MAX_MM))
     {
         return false; /* No more room; CRITICAL still guards. */
     }
     p_ctx->b_watch_widened = true;
+    p_ctx->watch_shift_mm = (uint16_t)(p_ctx->watch_shift_mm + shift);
     if (leg == OBSTACLE_AVOID_LEG_SIDESTEP)
     {
         /* Drive the diagonal farther once this command ends. */
