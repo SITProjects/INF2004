@@ -133,16 +133,6 @@ typedef struct
 /* 8 s: an 800 mm run with room for a slow open-loop wheel. */
 #define RECORD_MAX_SAMPLES 400
 
-/*
- * Long traces wait every PRINT_BURST_LINES lines until the USB console task
- * has sent them: it runs below this task, and its 4 KB buffer drops what
- * does not fit (about 90 trace lines). The wait is bounded, so a host that
- * has stopped reading cannot hang the test run.
- */
-#define PRINT_BURST_LINES 20
-#define PRINT_PAUSE_MS 20
-#define PRINT_DRAIN_MAX_MS 500
-
 /* One speed-loop update: what was asked, and what the wheels did. */
 typedef struct
 {
@@ -158,6 +148,18 @@ typedef struct
     INT count;
 } speed_record_t;
 #endif /* MOTION_SPEED_TESTS */
+
+#if MOTION_SPEED_TESTS || MOTION_SYNC_TESTS
+/*
+ * Long traces wait every PRINT_BURST_LINES lines until the USB console task
+ * has sent them: it runs below this task, and its 4 KB buffer drops what
+ * does not fit (about 90 trace lines). The wait is bounded, so a host that
+ * has stopped reading cannot hang the test run.
+ */
+#define PRINT_BURST_LINES 20
+#define PRINT_PAUSE_MS 20
+#define PRINT_DRAIN_MAX_MS 500
+#endif /* MOTION_SPEED_TESTS || MOTION_SYNC_TESTS */
 
 #if MOTION_SYNC_TESTS
 /* MOT-U24: lifted sign check; MOT-U25: floor drift; MOT-U26: nudge. */
