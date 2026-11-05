@@ -398,6 +398,8 @@ motion_test (void)
     run_turns("MOT-U14", TURN_U, U_TURN_DEG, TURN_TRIALS, TURN_MEASURE_MS);
     TEST_CHECK("MOT-U15", preempt_and_stop(),
                "a turn replaces a move, and stop ends a turn at once");
+    /* A failed MOT-U15 can leave a turn timed out, refusing later turns. */
+    (void)motion_move_stop();
     TEST_CHECK("MOT-U16", hold_wheel_until_stall("MOT-U16", true),
                "held wheel stalls a turn, brakes, refuses until stopped");
     run_until_timeout();
