@@ -1,0 +1,47 @@
+=~=~=~=~=~=~=~=~=~=~=~= PuTTY log 2026.11.05 22:10:01 =~=~=~=~=~=~=~=~=~=~=~=
+
+
+microT-Kernel Version 3.00
+
+
+=== micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+dual-core (SMP) build, usermain on core 0
+motion: motors initialized and braked
+motion: encoders counting on PIO0
+motion: line adapter dry run; no motor API calls
+MOTION ONLY (local app_main.c)
+
+[TEST] === test run start ===
+[TEST] MOT-U01 PASS  both motors run 20 kHz PWM and are braked
+[TEST] MOT-U03 PASS  both encoders count on PIO0 and hold still at rest
+[TEST] MOT-U07 PASS  moves start stopped, odometry holds at rest, 0 refused
+[TEST] MOT-U18 PASS  PID P, I, D terms, limits, anti-windup and reset
+[TEST] MOT-U22 50 updates took 1000 ms (1000 expected)
+[TEST] MOT-U22 PASS  test-loop updates run at MOTION_UPDATE_PERIOD_MS
+[TEST] MOT-U23 PASS  straight-line loop idle at rest, switches on and off
+[TEST] MOT-U27 PASS  follow and line input refuse bad values, line debounced
+[TEST] MOT-U28 keep the car lifted: it follows at 120 mm/s with line errors 0, 300, 0, -300, 1 s each, in 10 s
+[TEST] MOT-U28 error 0 turn 0 deg/s set L 120 R 120 speed L 120 R 121 mm/s state 5
+[TEST] MOT-U28 error 300 turn 90 deg/s set L 33 R 206 speed L 33 R 207 mm/s state 5
+[TEST] MOT-U28 error 0 turn 0 deg/s set L 120 R 120 speed L 120 R 120 mm/s state 5
+[TEST] MOT-U28 error -300 turn -90 deg/s set L 206 R 33 speed L 207 R 33 mm/s state 5
+[TEST] MOT-U28 steered 1; stopped 100 ms after the last error (limit 100)
+[TEST] MOT-U28 PASS  follow steers towards the error, stops on stale input
+[TEST] MOT-U29 keep the car lifted: four short moves and turns with a pretend line, in 10 s
+[TEST] MOT-U29 (a) 1 after 2 updates, (b) 1 after 2, (c) 1, (d) 1; state 0
+[TEST] MOT-U29 PASS  moves and turns end when the line comes into view
+[TEST] MOT-U30 car on the floor, 1 m clear all round: it arcs LEFT, runs straight, then arcs RIGHT, 1 s each, in 10 s
+[TEST] MOT-U30 error 300: heading 127 deg (asked 135), distance 179 mm, state 5
+[TEST] MOT-U30 error 0: heading 2 deg (asked 0), distance 180 mm, state 5
+[TEST] MOT-U30 error -300: heading -131 deg (asked -135), distance 185 mm, state 5
+[TEST] MOT-U33 PASS  motion commands pack, saturate and decode
+motion: STOP edge_error=0 seen=0 valid=0 (dry run)
+[TEST] MOT-U34 52 updates, period 19981..20015 us (20000 expected), longest update 426 us
+[TEST] MOT-U34 PASS  tMotion updates every period within 1 ms (NFR1)
+[TEST] MOT-U35 INHIBIT to brake 64 us (limit 20000)
+[TEST] MOT-U35 refused 1 stop 1 inhibited 1 cleared 1
+[TEST] MOT-U35 PASS  tMotion refuses bad commands, INHIBIT brakes and flushes
+[TEST] MOT-U38 11 updates in 200 ms (10 expected), distance 1822 mm, heading 84 deg
+[TEST] MOT-U38 PASS  shared odometry rises every update and holds at rest
+[TEST] motion SUMMARY 13 passed, 0 failed
+[TEST] === test run end ===
