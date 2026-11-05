@@ -121,6 +121,15 @@ typedef struct
 #define FLOOR_START_DELAY_MS 15000
 #define FLOOR_PAUSE_MS 10000
 #define PLUG_WAIT_MS 30000
+/*
+ * MOT-U21 prints its records once a terminal has had the USB console open
+ * this long, so a link dropped by the motors does not lose them; it gives
+ * up after TERMINAL_WAIT_MAX_MS. 3 is tm_usb_state()'s "host asserted DTR".
+ */
+#define TERMINAL_POLL_MS 100
+#define TERMINAL_STEADY_MS 2000
+#define TERMINAL_WAIT_MAX_MS 300000
+#define USB_STATE_TERMINAL_OPEN 3u
 /* 8 s: an 800 mm run with room for a slow open-loop wheel. */
 #define RECORD_MAX_SAMPLES 400
 
@@ -268,6 +277,11 @@ static void run_until_timeout (void);
 static void sweep_feed_forward (void);
 static void step_speed_lifted (void);
 static void run_floor_unplugged (void);
+static void wait_for_terminal (void);
+#if TM_CONSOLE_USB_CDC
+/* USB console link state (lib/libtm usb_console.c; no public header). */
+extern UW tm_usb_state (void);
+#endif
 static void record_for (speed_record_t * p_record, INT duration_ms);
 static void record_while_moving (speed_record_t * p_record);
 static void print_record (char const * p_id, char const * p_label,
@@ -1442,11 +1456,41 @@ run_floor_unplugged (void)
     }
     (void)motion_move_stop();
 
-    tm_printf((UB *)"[TEST] MOT-U21 plug USB back in; results in %d s\n",
-              PLUG_WAIT_MS / 1000);
-    update_for(PLUG_WAIT_MS);
+    tm_printf((UB *)"[TEST] MOT-U21 done; results print once a terminal is "
+                    "open (plug USB back in or restart the terminal)\n");
+    wait_for_terminal();
     print_record("MOT-U21", "open loop", &open_loop);
     print_record("MOT-U21", "speed loop", &closed_loop);
+}
+
+/*
+ * Wait until a terminal has had the USB console open for
+ * TERMINAL_STEADY_MS, or TERMINAL_WAIT_MAX_MS at most; with another
+ * console, wait PLUG_WAIT_MS.
+ */
+static void
+wait_for_terminal (void)
+{
+#if TM_CONSOLE_USB_CDC
+    INT open_ms = 0;
+
+    for (INT waited_ms = 0;
+         (open_ms < TERMINAL_STEADY_MS) && (waited_ms < TERMINAL_WAIT_MAX_MS);
+         waited_ms += TERMINAL_POLL_MS)
+    {
+        update_for(TERMINAL_POLL_MS);
+        if (tm_usb_state() == USB_STATE_TERMINAL_OPEN)
+        {
+            open_ms += TERMINAL_POLL_MS;
+        }
+        else
+        {
+            open_ms = 0;
+        }
+    }
+#else
+    update_for(PLUG_WAIT_MS);
+#endif
 }
 
 /* Update every period for @p duration_ms, recording each update. */
