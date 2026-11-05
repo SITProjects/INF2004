@@ -104,6 +104,18 @@ obstacle_side_decision_t obstacle_decision_sides (ultrasonic_result_t left,
                                                   uint16_t centre_echo_us);
 
 /**
+ * @brief Tell whether one completed side position counts as clear.
+ * @param measurement Position result.
+ * @param echo_us Median echo in microseconds.
+ * @param centre_echo_us Centre reference for the sweep.
+ * @return true for NO_ECHO, or a VALID echo at or beyond both
+ *         OBSTACLE_DETECT_ECHO_US and centre_echo_us + OBSTACLE_EDGE_JUMP_US:
+ *         the same rule obstacle_decision_sides() uses.
+ */
+bool obstacle_decision_side_clear (ultrasonic_result_t measurement,
+                                   uint16_t echo_us, uint16_t centre_echo_us);
+
+/**
  * @brief Determine if a measurement is critical.
  * @param measurement Ping result.
  * @param echo_us Raw echo in microseconds.

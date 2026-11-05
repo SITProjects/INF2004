@@ -30,9 +30,13 @@ typedef struct
  */
 typedef struct
 {
-    uint16_t centre_mm; /**< Servo pivot to obstacle face, 0 if none. */
-    int16_t left_x_mm;  /**< Left boundary, lateral mm from pivot. */
-    int16_t right_x_mm; /**< Right boundary, lateral mm from pivot. */
+    uint16_t centre_mm;    /**< Servo pivot to obstacle face, 0 if none. */
+    int16_t left_x_mm;     /**< Left boundary, lateral mm from pivot. */
+    int16_t right_x_mm;    /**< Right boundary, lateral mm from pivot. */
+    bool b_left_clear;     /**< The 60 degree end was clear (free space). */
+    bool b_right_clear;    /**< The 120 degree end was clear (free space). */
+    uint16_t left_end_mm;  /**< Range at the 60 degree end, 0 if no echo. */
+    uint16_t right_end_mm; /**< Range at the 120 degree end, 0 if none. */
 } obstacle_scan_geometry_t;
 
 /**

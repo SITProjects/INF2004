@@ -27,6 +27,8 @@
 /* Private function declarations. */
 
 static bool plan_usable (robot_obstacle_result_t result, bool * p_gap_right);
+static bool end_fits (uint16_t end_mm, int32_t need_mm, uint32_t pass_mm,
+                      obstacle_avoid_geometry_t const * p_geometry);
 static uint8_t plan_angle (uint16_t sidestep_mm, uint16_t centre_mm,
                            obstacle_avoid_geometry_t const * p_geometry);
 static uint32_t along_diagonal (uint32_t lateral_mm, uint8_t angle_deg);
@@ -92,7 +94,8 @@ obstacle_avoid_plan (robot_obstacle_result_t result,
                                   .b_limited = false,
                                   .sidestep_mm = 0u,
                                   .pass_mm = 0u,
-                                  .angle_deg = ANGLE_MAX_DEG};
+                                  .angle_deg = ANGLE_MAX_DEG,
+                                  .b_no_fit = false};
     robot_obstacle_status_t const status =
         robot_obstacle_get_status(result.flags);
     if ((p_geometry == NULL) || ((status != ROBOT_OBSTACLE_PATH_FOUND) &&
@@ -129,8 +132,47 @@ obstacle_avoid_plan (robot_obstacle_result_t result,
         pass_mm = p_geometry->pass_max_mm;
     }
 
+    /* A clear end counts only if the car, shifted aside, passes what that
+     * end measured. */
+    bool b_left_clear =
+        geometry.b_left_clear &&
+        end_fits(geometry.left_end_mm,
+                 b_left ? need_left_mm : (int32_t)p_geometry->sidestep_max_mm,
+                 pass_mm, p_geometry);
+    bool b_right_clear =
+        geometry.b_right_clear &&
+        end_fits(geometry.right_end_mm,
+                 b_right ? need_right_mm : (int32_t)p_geometry->sidestep_max_mm,
+                 pass_mm, p_geometry);
+    plan.b_no_fit = (geometry.b_left_clear || geometry.b_right_clear) &&
+                    !b_left_clear && !b_right_clear;
+    if (plan.b_no_fit)
+    {
+        /* Free space, but tight: best effort on the roomier free end (no
+         * echo is roomiest; a tie keeps the scanner's side). */
+        uint32_t const left_room = !geometry.b_left_clear ? 0u
+                                   : (geometry.left_end_mm == 0u)
+                                       ? UINT32_MAX
+                                       : geometry.left_end_mm;
+        uint32_t const right_room = !geometry.b_right_clear ? 0u
+                                    : (geometry.right_end_mm == 0u)
+                                        ? UINT32_MAX
+                                        : geometry.right_end_mm;
+        if (left_room == right_room)
+        {
+            b_left_clear = !b_scanner_right;
+            b_right_clear = b_scanner_right;
+        }
+        else
+        {
+            b_left_clear = left_room > right_room;
+            b_right_clear = !b_left_clear;
+        }
+    }
+
     int32_t need_mm;
-    if (b_scanner_side)
+    if (b_scanner_side && ((!b_left_clear && !b_right_clear) ||
+                           (b_scanner_right ? b_right_clear : b_left_clear)))
     {
         /* The scanner ranks measured clearance, not detour length. Keep
          * its choice even when the other edge needs a shorter sidestep. */
@@ -139,6 +181,26 @@ obstacle_avoid_plan (robot_obstacle_result_t result,
         plan.b_edge_unknown = !b_edge;
         need_mm = b_edge ? (plan.b_gap_right ? need_right_mm : need_left_mm)
                          : (int32_t)p_geometry->sidestep_max_mm;
+    }
+    else if (b_left_clear || b_right_clear)
+    {
+        /* Without a usable measured preference, exclude blocked ends
+         * and fall back to the edge geometry among the clear ends. */
+        int32_t const left_mm =
+            b_left ? need_left_mm : (int32_t)p_geometry->sidestep_max_mm;
+        int32_t const right_mm =
+            b_right ? need_right_mm : (int32_t)p_geometry->sidestep_max_mm;
+        if (b_left_clear && b_right_clear)
+        {
+            plan.b_gap_right =
+                (right_mm == left_mm) ? b_scanner_right : (right_mm < left_mm);
+        }
+        else
+        {
+            plan.b_gap_right = b_right_clear;
+        }
+        plan.b_edge_unknown = plan.b_gap_right ? !b_right : !b_left;
+        need_mm = plan.b_gap_right ? right_mm : left_mm;
     }
     else if (b_left && b_right)
     {
@@ -151,6 +213,12 @@ obstacle_avoid_plan (robot_obstacle_result_t result,
     {
         plan.b_gap_right = b_right;
         need_mm = b_right ? need_right_mm : need_left_mm;
+    }
+    else if (b_scanner_side)
+    {
+        plan.b_gap_right = b_scanner_right;
+        plan.b_edge_unknown = true;
+        need_mm = (int32_t)p_geometry->sidestep_max_mm;
     }
     else
     {
@@ -667,7 +735,8 @@ try_plan (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
     p_ctx->b_blocked = false;
     p_ctx->b_need_prepare = false;
     release(p_ctx, p_act, false, p_in->now_ms,
-            p_ctx->plan.b_limited
+            p_ctx->plan.b_no_fit ? "path found, tight"
+            : p_ctx->plan.b_limited
                 ? "path found, best effort"
                 : (p_ctx->plan.b_edge_unknown ? "path found, gap edge unknown"
                                               : "path found"));
@@ -1059,6 +1128,39 @@ step_verify (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
     {
         /* Sweep running. */
     }
+}
+
+/*
+ * Whether the car fits past an end reading (end_mm from the pivot, at the
+ * sweep's first angle off the centre line; 0 = no echo): the point lies
+ * beyond the pass, or at least the sidestep plus half the car and the
+ * margin out to the side. The sidestep is clamped as the plan clamps it.
+ */
+static bool
+end_fits (uint16_t end_mm, int32_t need_mm, uint32_t pass_mm,
+          obstacle_avoid_geometry_t const * p_geometry)
+{
+    if (end_mm == 0u)
+    {
+        return true;
+    }
+    if (need_mm > (int32_t)p_geometry->sidestep_max_mm)
+    {
+        need_mm = (int32_t)p_geometry->sidestep_max_mm;
+    }
+    if (need_mm < (int32_t)p_geometry->sidestep_min_mm)
+    {
+        need_mm = (int32_t)p_geometry->sidestep_min_mm;
+    }
+    float const angle_rad = (float)OBSTACLE_SWEEP_FIRST_DEG * DEG_TO_RAD;
+    float const y_mm = (float)end_mm * sinf(angle_rad);
+    if (!(y_mm < (float)pass_mm))
+    {
+        return true; /* Beyond the end of the pass. */
+    }
+    float const x_mm = fabsf((float)end_mm * cosf(angle_rad));
+    return x_mm >= ((float)need_mm + (float)p_geometry->half_width_mm +
+                    (float)p_geometry->margin_mm);
 }
 
 /*

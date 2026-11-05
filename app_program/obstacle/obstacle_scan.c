@@ -92,6 +92,10 @@ static uint8_t edge_indices; /* Probe, then hit, index per side. */
 static uint16_t left_edge_echo_us;
 static uint16_t right_edge_echo_us;
 static uint8_t pending_flags; /* Coarse status and direction. */
+static bool b_left_clear;     /* Ends with free space, for the geometry. */
+static bool b_right_clear;
+static uint16_t left_end_echo_us; /* End echoes for the geometry, 0 none. */
+static uint16_t right_end_echo_us;
 
 /* Written only by publish_result(), so it always matches result. */
 static obstacle_scan_geometry_t published_geometry;
@@ -151,6 +155,7 @@ static bool state_has (uint16_t mask);
 static void state_flag (uint16_t mask, bool enabled);
 static void reset_position (void);
 static void reset_sweep (void);
+static uint16_t pivot_mm (uint16_t echo_us);
 static void read_centre (ultrasonic_result_t measurement, uint16_t echo_us);
 static void request_stop (void);
 static void scan_centre (obstacle_centre_action_t action);
@@ -219,7 +224,7 @@ obstacle_scan_init (int trig_pin, int echo_pin, int servo_pin,
                                            ROBOT_OBSTACLE_EDGE_NONE),
         .width_mm = ROBOT_OBSTACLE_WIDTH_UNAVAILABLE,
         .sequence = 0u};
-    published_geometry = (obstacle_scan_geometry_t){0u, 0, 0};
+    published_geometry = (obstacle_scan_geometry_t){0};
     corridor = (obstacle_scan_corridor_t){0};
     corridor_work = corridor;
     corridor_index = 0u;
@@ -602,6 +607,10 @@ reset_sweep (void)
                                              ROBOT_OBSTACLE_EDGE_NONE);
     left_edge_echo_us = 0u;
     right_edge_echo_us = 0u;
+    b_left_clear = false;
+    b_right_clear = false;
+    left_end_echo_us = 0u;
+    right_end_echo_us = 0u;
     pending_flags = robot_obstacle_pack_flags(
         ROBOT_OBSTACLE_SCANNING, ROBOT_OBSTACLE_DIR_NONE, false, false);
 }
@@ -825,6 +834,19 @@ scan_sides (ultrasonic_result_t measurement, uint16_t echo_us)
         SCAN_LEFT_RESULT_MASK, SCAN_LEFT_RESULT_SHIFT);
     obstacle_side_decision_t decision = obstacle_decision_sides(
         left, left_echo_us, measurement, echo_us, centre_echo_us);
+    b_left_clear =
+        obstacle_decision_side_clear(left, left_echo_us, centre_echo_us);
+    b_right_clear =
+        obstacle_decision_side_clear(measurement, echo_us, centre_echo_us);
+    left_end_echo_us = (left == ULTRASONIC_VALID) ? left_echo_us : 0u;
+    right_end_echo_us = (measurement == ULTRASONIC_VALID) ? echo_us : 0u;
+    tm_printf((UB *)"[%lu ms]obstacle: ends L %s %u us %s, R %s %u us %s "
+                    "(centre %u us)\n",
+              (unsigned long)now_ms(), measurement_name(left),
+              (unsigned int)left_echo_us, b_left_clear ? "clear" : "blocked",
+              measurement_name(measurement), (unsigned int)echo_us,
+              b_right_clear ? "clear" : "blocked",
+              (unsigned int)centre_echo_us);
     pending_flags = robot_obstacle_pack_flags(decision.status,
                                               decision.direction, false, false);
     if ((obstacle_width_classify(left, left_echo_us, centre_echo_us) ==
@@ -1062,18 +1084,37 @@ publish_result (robot_obstacle_status_t status,
         .edges = width.edges,
         .width_mm = width.width_mm,
         .sequence = (uint8_t)(result.sequence + 1u)};
-    published_geometry = (p_geometry != NULL)
-                             ? *p_geometry
-                             : (obstacle_scan_geometry_t){0u, 0, 0};
+    published_geometry =
+        (p_geometry != NULL) ? *p_geometry : (obstacle_scan_geometry_t){0};
+}
+
+/* Range from the pivot, rounded and saturated; 0 if none or unusable. */
+static uint16_t
+pivot_mm (uint16_t echo_us)
+{
+    float range_mm;
+    if ((echo_us == 0u) ||
+        !obstacle_width_range_mm(echo_us, &width_config, &range_mm))
+    {
+        return 0u;
+    }
+    return (range_mm >= ((float)UINT16_MAX - 0.5f))
+               ? UINT16_MAX
+               : (uint16_t)(range_mm + 0.5f);
 }
 
 /* Centre range from the pivot, rounded and saturated; 0 if unusable. */
 static obstacle_scan_geometry_t
 sweep_geometry (obstacle_width_result_t const * p_width)
 {
-    obstacle_scan_geometry_t geometry = {.centre_mm = 0u,
-                                         .left_x_mm = p_width->left_x_mm,
-                                         .right_x_mm = p_width->right_x_mm};
+    obstacle_scan_geometry_t geometry = {
+        .centre_mm = 0u,
+        .left_x_mm = p_width->left_x_mm,
+        .right_x_mm = p_width->right_x_mm,
+        .b_left_clear = b_left_clear,
+        .b_right_clear = b_right_clear,
+        .left_end_mm = pivot_mm(left_end_echo_us),
+        .right_end_mm = pivot_mm(right_end_echo_us)};
     float range_mm;
     if (obstacle_width_range_mm(centre_echo_us, &width_config, &range_mm))
     {
