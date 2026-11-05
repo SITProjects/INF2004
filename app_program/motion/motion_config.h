@@ -60,8 +60,8 @@
  * Wheel diameter in mm; odometry uses pi * diameter / ticks per rev.
  * Measured 64 mm. MOT-U08 (2026-11-03): odometry agreed with the ruler
  * within about 1 mm over 1 m at 2490 ticks per rev.
- * TODO(calibrate): repeat MOT-U08 at 2532 ticks per rev; scale this by
- * ruler / odometry if they differ.
+ * MOT-U08 (2026-11-05): at 2532 ticks per rev, ruler about 1000 mm and
+ * odometry 1003-1004 mm over 1 m, so 64 mm kept.
  */
 #define MOTION_WHEEL_DIAMETER_MM 64.0f
 

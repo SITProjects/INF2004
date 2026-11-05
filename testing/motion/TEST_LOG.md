@@ -175,6 +175,11 @@ confirm the stop-early distance, and MOT-U19/U20 are calibrated at
 | 2026-11-05 | MOT-U34 | `cd0d88b` + local | Felicia Chua | PASS | `logs/2026-11-05_S04_MOT-U19-U21.txt` | S04, motion only: period 19991..20011 us, longest update 417 us |
 | 2026-11-05 | MOT-U35 | `cd0d88b` + local | Felicia Chua | PASS | `logs/2026-11-05_S04_MOT-U19-U21.txt` | S04; INHIBIT to brake 62 us |
 | 2026-11-05 | MOT-U38 | `cd0d88b` + local | Felicia Chua | PASS | `logs/2026-11-05_S04_MOT-U19-U21.txt` | S04; 11 updates in 200 ms |
+| 2026-11-05 | MOT-U08 | `5336d44` + local | Felicia Chua | FAIL | `logs/2026-11-05_S05_MOT-U08-U10.txt` | S05 session 18:13, `make TEST=1 WIFI=none`, motion-only `app_main.c`, `MOTION_MOVE_TESTS` 1: `state 2 after 300 ms`, odometry 21 mm, car turned about 23° right. The right wheel did not turn on the floor (it did lifted, U06 check): a loose right motor pin; reseated |
+| 2026-11-05 | MOT-U09 | `5336d44` + local | Felicia Chua | FAIL | `logs/2026-11-05_S05_MOT-U08-U10.txt` | S05 session 18:13: `state 2 after 300 ms`, odometry −21 mm; same loose pin as U08 |
+| 2026-11-05 | MOT-U08 | `5336d44` + local | Felicia Chua | PASS | `logs/2026-11-05_S05_MOT-U08-U10.txt` | S05, pin reseated; 3 runs: ruler about 1000 mm each, odometry 1003, 1004, 1004; `state 0`. Ruler and odometry agree, so `MOTION_WHEEL_DIAMETER_MM` 64 kept at 2532 counts per rev |
+| 2026-11-05 | MOT-U09 | `5336d44` + local | Felicia Chua | FAIL | `logs/2026-11-05_S05_MOT-U08-U10.txt` | S05; 3 runs: ruler 75, 80, 85 mm (limit 97–103), odometry −104 each, `state 0`. Castor flip, confirmed by watching both wheels: after the forward move the castor must swing 180°, and the car twists instead of moving straight back. The gentler start (duty 252 instead of 440) flips it more slowly; on 2026-11-03 at 440 the ruler read about 105 mm. Short reverses in the obstacle bypass are affected the same way |
+| 2026-11-05 | MOT-U10 | `5336d44` + local | Felicia Chua | PASS | `logs/2026-11-05_S05_MOT-U08-U10.txt` | S05; 3 runs: stalled after 500, 720, 940 ms (above 300 ms: small wheel movement in the grip restarts the timer, as on 2026-11-03), braked, refused, cleared |
 
 ## Host regression: post-obstacle line acquisition
 
