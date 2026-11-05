@@ -160,6 +160,21 @@ confirm the stop-early distance, and MOT-U19/U20 are calibrated at
 | 2026-11-05 | MOT-U19 | `d5479f8` + local | Felicia Chua | PASS | `logs/2026-11-05_S04_MOT-U19-U21_calibration.txt` | S04 calibration, `make TEST=1 WIFI=none`, motion-only `app_main.c`, `MOTION_SPEED_TESTS` 1, lifted. Speed rises steadily with duty on both wheels: 250 → 194/204, 1000 → 728/749 mm/s. Fit over duty 200–600, both wheels: `MOTION_FF_OFFSET` 0.009, `MOTION_FF_GAIN` 0.00122 (worst miss 15 permille; 253 for 200 mm/s); `MOTION_MAX_SPEED_MM_S` 620 (15 % below the slower wheel's 728) |
 | 2026-11-05 | MOT-U20 | `d5479f8` + local | Felicia Chua | FAIL | `logs/2026-11-05_S04_MOT-U19-U21_calibration.txt` | S04 calibration, before the U19 fit was applied (feed-forward 0.20 + 0.0012 × speed). First 200 mm/s step starts at duty 440 (253 needed): overshoot to 301/309 mm/s (+53 %), still 212/212 at 1500 ms. The 100 mm/s step and the second 200 mm/s step are within ±5 % after about 0.25 s. The `settled` line averages both setpoints and is not a pass measure |
 | 2026-11-05 | MOT-U21 | `d5479f8` + local | Felicia Chua | PASS | `logs/2026-11-05_S04_MOT-U19-U21_calibration.txt` | S04 calibration, old feed-forward as for U20; floor, battery voltage not recorded. Open loop settled 304/308 mm/s (52 % fast); speed loop overshoot to 272 mm/s for about 0.3 s, then settled 202/201 mm/s (within ±5 %), at duty about 300–310 on the floor. Repeat after the U19 fit is applied; low-battery case not run |
+| 2026-11-05 | MOT-U01 | `cd0d88b` + local | Felicia Chua | PASS | `logs/2026-11-05_S04_MOT-U19-U21.txt` | S04, `make TEST=1 WIFI=none`, motion-only `app_main.c`, `MOTION_SPEED_TESTS` 1 |
+| 2026-11-05 | MOT-U03 | `cd0d88b` + local | Felicia Chua | PASS | `logs/2026-11-05_S04_MOT-U19-U21.txt` | S04 |
+| 2026-11-05 | MOT-U07 | `cd0d88b` + local | Felicia Chua | PASS | `logs/2026-11-05_S04_MOT-U19-U21.txt` | S04 |
+| 2026-11-05 | MOT-U18 | `cd0d88b` + local | Felicia Chua | PASS | `logs/2026-11-05_S04_MOT-U19-U21.txt` | S04 |
+| 2026-11-05 | MOT-U22 | `cd0d88b` + local | Felicia Chua | PASS | `logs/2026-11-05_S04_MOT-U19-U21.txt` | S04; 50 updates took 1000 ms |
+| 2026-11-05 | MOT-U23 | `cd0d88b` + local | Felicia Chua | PASS | `logs/2026-11-05_S04_MOT-U19-U21.txt` | S04 |
+| 2026-11-05 | MOT-U27 | `cd0d88b` + local | Felicia Chua | PASS | `logs/2026-11-05_S04_MOT-U19-U21.txt` | S04 |
+| 2026-11-05 | MOT-U19 | `cd0d88b` + local | Felicia Chua | PASS | `logs/2026-11-05_S04_MOT-U19-U21.txt` | S04, lifted; repeat of the calibration sweep: duty 250 → 197/205, 1000 → 723/750 mm/s |
+| 2026-11-05 | MOT-U20 | `cd0d88b` + local | Felicia Chua | PASS | `logs/2026-11-05_S04_MOT-U19-U21.txt` | S04, lifted, feed-forward 0.009 + 0.00122 × speed (starts at duty 252). 0 → 200 mm/s: peak 215/223 (+8/+12 %), within ±5 % from 300 ms; 100 → 200: peak 227/230, within ±5 % from 240 ms; 200 → 100: undershoot to 72/69, right wheel within ±5 % only from about 620 ms (dips to 92–94). No sustained oscillation. The `settled` line averages both setpoints |
+| 2026-11-05 | MOT-U21 | `cd0d88b` + local | Felicia Chua | PASS | `logs/2026-11-05_S04_MOT-U19-U21.txt` | S04, floor, USB left connected, battery voltage not recorded. Open loop settled 163/162 mm/s (19 % slow on the floor); speed loop settled 199/199 mm/s, within ±5 % from 240 ms and 189–205 after, at duty about 295–310 |
+| 2026-11-05 | MOT-U21 | `cd0d88b` + local | Felicia Chua | NOT RUN | — | Low-battery case |
+| 2026-11-05 | MOT-U33 | `cd0d88b` + local | Felicia Chua | PASS | `logs/2026-11-05_S04_MOT-U19-U21.txt` | S04 |
+| 2026-11-05 | MOT-U34 | `cd0d88b` + local | Felicia Chua | PASS | `logs/2026-11-05_S04_MOT-U19-U21.txt` | S04, motion only: period 19991..20011 us, longest update 417 us |
+| 2026-11-05 | MOT-U35 | `cd0d88b` + local | Felicia Chua | PASS | `logs/2026-11-05_S04_MOT-U19-U21.txt` | S04; INHIBIT to brake 62 us |
+| 2026-11-05 | MOT-U38 | `cd0d88b` + local | Felicia Chua | PASS | `logs/2026-11-05_S04_MOT-U19-U21.txt` | S04; 11 updates in 200 ms |
 
 ## Host regression: post-obstacle line acquisition
 
