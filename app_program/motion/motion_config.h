@@ -213,7 +213,7 @@
  * TODO(calibrate): confirm by ruler with MOT-U08/U09 that both moves now
  * end within 3 percent.
  */
-#define MOTION_MOVE_STOP_EARLY_MM 5.0f
+#define MOTION_MOVE_STOP_EARLY_MM 9.0f
 
 /*
  * Turn rate of turns in place, in degrees per second; each wheel moves at
