@@ -196,7 +196,7 @@ are still TODOs.
 
 | ID | From → To | Mechanism | Object ID name | Data / meaning | Agreed by |
 |---|---|---|---|---|---|
-| IF-01 | tMission → motion | Message buffer | `motion_mbf_cmd` (MBF_MOTION_CMD) | one `uint32_t` command word, packed with the `robot_motion_cmd_` helpers in `robot_types.h` (22-bit layout, Tribunal 1) | proposed by motion; tMission owner to agree |
+| IF-01 | tMission → motion | Message buffer | `motion_mbf_cmd` (MBF_MOTION_CMD) | one `uint32_t` command word, packed with the `robot_motion_cmd_` helpers in `robot_types.h` (22-bit layout, Tribunal 1; stop-at-line acquires fresh current visibility) | proposed by motion; tMission owner to agree |
 | IF-02 | tSafety → motion | Event flag | `motion_flg_ctrl` (FLG_MOTION), bit `MOTION_FLG_INHIBIT` | set: brake at once and discard commands; clear: back to STOPPED | proposed by motion; tSafety owner to agree |
 | IF-03 | motion → tMission | Event flag + status word | `motion_flg_event` (`MOTION_EVT_` bits), `motion_get_status()` | MOVE_DONE (reason in status), STALL, ENC_FAULT, REJECTED, FOLLOW_ENDED; mode 3 bits. The status is published before any event bit is set, so a reader that sees an event and then reads the status gets that command's done reason | interim until FLG_MISSION exists |
 | IF-04 | line_follow → motion | Function (one 32-bit store) | `motion_set_line_input()` | signed line error −1000..+1000 and line-seen, every reading | interim until `line_state_t` under MTX_LINE; kaiwenteoo to agree |

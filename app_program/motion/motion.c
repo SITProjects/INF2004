@@ -490,11 +490,12 @@ run_command (uint32_t cmd)
         b_line_control = false;
     }
 
-    /* Stop at line applies to moves and turns; ignored on STOP / FOLLOW. */
+    /* Queued acquisition accepts a fresh line already under the sensors,
+     * including one seen before the post-obstacle return was armed. */
     if ((MOTION_OK == result) && robot_motion_cmd_get_stop_at_line(cmd) &&
         ((ROBOT_MOTION_CMD_MOVE == type) || (ROBOT_MOTION_CMD_TURN == type)))
     {
-        result = motion_move_stop_at_line();
+        result = motion_move_acquire_line();
     }
     if (result != MOTION_OK)
     {

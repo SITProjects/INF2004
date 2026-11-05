@@ -20,6 +20,8 @@
  * With the line adapter enabled, FOLLOW resumes automatic line decisions;
  * STOP/MOVE/TURN suspend them until a new FOLLOW. INHIBIT also suspends
  * them, so clearing it alone cannot replay a cached line command.
+ * Queued MOVE/TURN with stop-at-line acquires any fresh, confirmed visible
+ * line, including one already under the sensors when the command starts.
  *
  * To stop the car (tSafety): tk_set_flg(motion_flg_ctrl,
  * MOTION_FLG_INHIBIT). tMotion wakes and brakes at once (NFR6), discards
