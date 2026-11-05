@@ -1,0 +1,283 @@
+=~=~=~=~=~=~=~=~=~=~=~= PuTTY log 2026.11.05 16:00:25 =~=~=~=~=~=~=~=~=~=~=~=
+
+
+microT-Kernel Version 3.00
+
+
+=== micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+dual-core (SMP) build, usermain on core 0
+motion: motors initialized and braked
+motion: encoders counting on PIO0
+motion: line adapter dry run; no motor API calls
+MOTION ONLY (local app_main.c)
+
+[TEST] === test run start ===
+[TEST] MOT-U01 PASS  both motors run 20 kHz PWM and are braked
+[TEST] MOT-U03 PASS  both encoders count on PIO0 and hold still at rest
+[TEST] MOT-U07 PASS  moves start stopped, odometry holds at rest, 0 refused
+[TEST] MOT-U18 PASS  PID P, I, D terms, limits, anti-windup and reset
+[TEST] MOT-U22 50 updates took 1000 ms (1000 expected)
+[TEST] MOT-U22 PASS  test-loop updates run at MOTION_UPDATE_PERIOD_MS
+[TEST] MOT-U23 PASS  straight-line loop idle at rest, switches on and off
+[TEST] MOT-U27 PASS  follow and line input refuse bad values, line debounced
+[TEST] MOT-U06 keep the car lifted: each wheel spins alone in 3 s
+[TEST] MOT-U06 LEFT wheel FORWARD
+[TEST] MOT-U06   encoder change left 5891 right 0
+[TEST] MOT-U06 LEFT wheel BACKWARD
+[TEST] MOT-U06   encoder change left -5853 right 0
+[TEST] MOT-U06 RIGHT wheel FORWARD
+[TEST] MOT-U06   encoder change left 0 right 6046
+[TEST] MOT-U06 RIGHT wheel BACKWARD
+[TEST] MOT-U06   encoder change left 0 right -5820
+[TEST] MOT-U04/U05 turn each wheel one revolution forward, then back, within 120 s (expect 2490 per rev)
+[TEST] MOT-U04/U05 left 37 right 236  pins L11 R11  pc 19 20
+[TEST] MOT-U04/U05 left 37 right 236  pins L11 R11  pc 15 15
+[TEST] MOT-U04/U05 left 37 right 140  pins L11 R11  pc 17 19
+[TEST] MOT-U04/U05 left 37 right -21  pins L11 R01  pc 20 17
+[TEST] MOT-U04/U05 left 37 right -20  pins L11 R11  pc 20 16
+[TEST] MOT-U04/U05 left 37 right -20  pins L11 R11  pc 18 16
+[TEST] MOT-U04/U05 left 37 right 688  pins L11 R11  pc 16 19
+[TEST] MOT-U04/U05 left 37 right 1079  pins L11 R01  pc 16 18
+[TEST] MOT-U04/U05 left 37 right 1321  pins L11 R10  pc 16 20
+[TEST] MOT-U04/U05 left 37 right 1765  pins L11 R10  pc 20 15
+[TEST] MOT-U04/U05 left 37 right 2206  pins L11 R00  pc 16 19
+[TEST] MOT-U04/U05 left 37 right 2480  pins L11 R11  pc 19 15
+[TEST] MOT-U04/U05 left 37 right 2519  pins L11 R01  pc 16 18
+[TEST] MOT-U04/U05 left 37 right 2334  pins L11 R00  pc 18 16
+[TEST] MOT-U04/U05 left 37 right 1952  pins L11 R11  pc 16 19
+[TEST] MOT-U04/U05 left 37 right 1496  pins L11 R11  pc 16 15
+[TEST] MOT-U04/U05 left 37 right 1071  pins L11 R01  pc 16 16
+[TEST] MOT-U04/U05 left 37 right 706  pins L11 R00  pc 18 16
+[TEST] MOT-U04/U05 left 37 right 293  pins L11 R10  pc 18 19
+[TEST] MOT-U04/U05 left 37 right 57  pins L11 R10  pc 18 16
+[TEST] MOT-U04/U05 left 37 right 22  pins L11 R00  pc 16 17
+[TEST] MOT-U04/U05 left 37 right 22  pins L11 R00  pc 15 0
+[TEST] MOT-U04/U05 left 37 right 22  pins L11 R00  pc 18 19
+[TEST] MOT-U04/U05 left 37 right 522  pins L11 R00  pc 18 16
+[TEST] MOT-U04/U05 left 37 right 1141  pins L11 R10  pc 20 5
+[TEST] MOT-U04/U05 left 37 right 1716  pins L11 R11  pc 16 15
+[TEST] MOT-U04/U05 left 37 right 2104  pins L11 R11  pc 18 16
+[TEST] MOT-U04/U05 left 37 right 2207  pins L11 R01  pc 16 16
+[TEST] MOT-U04/U05 left 37 right 2433  pins L11 R10  pc 20 15
+[TEST] MOT-U04/U05 left 37 right 2512  pins L11 R11  pc 17 20
+[TEST] MOT-U04/U05 left 37 right 2537  pins L11 R10  pc 18 16
+[TEST] MOT-U04/U05 left 37 right 2034  pins L11 R00  pc 17 17
+[TEST] MOT-U04/U05 left 37 right 1560  pins L11 R11  pc 18 15
+[TEST] MOT-U04/U05 left 37 right 1086  pins L11 R00  pc 16 20
+[TEST] MOT-U04/U05 left 37 right 763  pins L11 R01  pc 20 15
+[TEST] MOT-U04/U05 left 37 right 359  pins L11 R01  pc 18 10
+[TEST] MOT-U04/U05 left 37 right 21  pins L11 R10  pc 16 5
+[TEST] MOT-U04/U05 left 37 right 14  pins L11 R00  pc 18 17
+[TEST] MOT-U04/U05 left 37 right 109  pins L11 R10  pc 18 17
+[TEST] MOT-U04/U05 left 37 right 780  pins L11 R11  pc 16 16
+[TEST] MOT-U04/U05 left 37 right 1322  pins L11 R00  pc 20 18
+[TEST] MOT-U04/U05 left 37 right 1745  pins L11 R10  pc 16 5
+[TEST] MOT-U04/U05 left 37 right 1921  pins L11 R10  pc 16 15
+[TEST] MOT-U04/U05 left 37 right 2109  pins L11 R10  pc 17 18
+[TEST] MOT-U04/U05 left 37 right 2398  pins L11 R00  pc 20 20
+[TEST] MOT-U04/U05 left 37 right 2513  pins L11 R10  pc 17 5
+[TEST] MOT-U04/U05 left 37 right 2547  pins L11 R01  pc 16 10
+[TEST] MOT-U04/U05 left 37 right 2545  pins L11 R10  pc 16 18
+[TEST] MOT-U04/U05 left 37 right 2471  pins L11 R01  pc 20 15
+[TEST] MOT-U04/U05 left 37 right 1741  pins L11 R10  pc 18 20
+[TEST] MOT-U04/U05 left 37 right 1496  pins L11 R11  pc 20 18
+[TEST] MOT-U04/U05 left 37 right 848  pins L11 R11  pc 16 17
+[TEST] MOT-U04/U05 left 37 right 349  pins L11 R10  pc 18 19
+[TEST] MOT-U04/U05 left 37 right 257  pins L11 R10  pc 15 15
+[TEST] MOT-U04/U05 left 37 right 62  pins L11 R00  pc 20 15
+[TEST] MOT-U04/U05 left 37 right 27  pins L11 R01  pc 19 15
+[TEST] MOT-U04/U05 left 37 right 27  pins L11 R01  pc 16 10
+[TEST] MOT-U04/U05 left 37 right 376  pins L11 R11  pc 16 19
+[TEST] MOT-U04/U05 left 37 right 1194  pins L11 R00  pc 20 0
+[TEST] MOT-U04/U05 left 37 right 1710  pins L11 R00  pc 16 17
+[TEST] MOT-U04/U05 left 37 right 2228  pins L11 R11  pc 19 18
+[TEST] MOT-U04/U05 left 37 right 2315  pins L11 R01  pc 16 15
+[TEST] MOT-U04/U05 left 37 right 2433  pins L11 R10  pc 20 19
+[TEST] MOT-U04/U05 left 37 right 2554  pins L11 R00  pc 16 18
+[TEST] MOT-U04/U05 left 37 right 2554  pins L11 R00  pc 20 19
+[TEST] MOT-U04/U05 left 37 right 2097  pins L11 R10  pc 20 17
+[TEST] MOT-U04/U05 left 37 right 1252  pins L11 R11  pc 18 20
+[TEST] MOT-U04/U05 left 37 right 1051  pins L11 R01  pc 20 15
+[TEST] MOT-U04/U05 left 37 right 751  pins L11 R01  pc 20 20
+[TEST] MOT-U04/U05 left 37 right 244  pins L11 R11  pc 20 15
+[TEST] MOT-U04/U05 left 37 right 64  pins L11 R11  pc 20 19
+[TEST] MOT-U04/U05 left 37 right 31  pins L11 R01  pc 16 10
+[TEST] MOT-U04/U05 left 37 right 31  pins L11 R01  pc 20 16
+[TEST] MOT-U04/U05 left 37 right 31  pins L11 R01  pc 18 10
+[TEST] MOT-U04/U05 left 37 right 31  pins L11 R01  pc 16 19
+[TEST] MOT-U04/U05 left 37 right 31  pins L11 R01  pc 16 16
+[TEST] MOT-U04/U05 left 37 right 31  pins L11 R01  pc 16 16
+[TEST] MOT-U04/U05 left 37 right 31  pins L11 R01  pc 18 15
+[TEST] MOT-U04/U05 left 37 right 31  pins L11 R01  pc 18 19
+[TEST] MOT-U04/U05 left 37 right 31  pins L11 R01  pc 16 17
+[TEST] MOT-U04/U05 left 37 right 31  pins L11 R01  pc 16 19
+[TEST] MOT-U04/U05 left 37 right 31  pins L11 R01  pc 17 15
+[TEST] MOT-U04/U05 left 1 right 31  pins L11 R01  pc 20 20
+[TEST] MOT-U04/U05 left -16 right 31  pins L10 R01  pc 20 10
+[TEST] MOT-U04/U05 left -15 right 31  pins L11 R01  pc 17 10
+[TEST] MOT-U04/U05 left 329 right 31  pins L11 R01  pc 17 10
+[TEST] MOT-U04/U05 left 930 right 31  pins L01 R01  pc 17 20
+[TEST] MOT-U04/U05 left 1513 right 31  pins L11 R01  pc 15 17
+[TEST] MOT-U04/U05 left 1852 right 31  pins L10 R01  pc 5 18
+[TEST] MOT-U04/U05 left 2416 right 31  pins L10 R01  pc 16 18
+[TEST] MOT-U04/U05 left 2496 right 31  pins L10 R01  pc 5 19
+[TEST] MOT-U04/U05 left 2266 right 31  pins L01 R01  pc 18 18
+[TEST] MOT-U04/U05 left 1155 right 31  pins L00 R01  pc 18 19
+[TEST] MOT-U04/U05 left 591 right 31  pins L00 R01  pc 0 15
+[TEST] MOT-U04/U05 left 566 right 31  pins L01 R01  pc 20 15
+[TEST] MOT-U04/U05 left 220 right 31  pins L10 R01  pc 15 17
+[TEST] MOT-U04/U05 left 16 right 32  pins L10 R11  pc 15 20
+[TEST] MOT-U04/U05 left -15 right 32  pins L11 R11  pc 19 15
+[TEST] MOT-U04/U05 left 221 right 32  pins L11 R11  pc 18 20
+[TEST] MOT-U04/U05 left 1205 right 32  pins L11 R11  pc 16 20
+[TEST] MOT-U04/U05 left 1603 right 32  pins L00 R11  pc 20 18
+[TEST] MOT-U04/U05 left 2033 right 32  pins L11 R11  pc 15 16
+[TEST] MOT-U04/U05 left 2449 right 32  pins L11 R11  pc 15 18
+[TEST] MOT-U04/U05 left 2569 right 32  pins L11 R11  pc 19 18
+[TEST] MOT-U04/U05 left 2568 right 32  pins L10 R11  pc 16 20
+[TEST] MOT-U04/U05 left 2489 right 32  pins L11 R11  pc 19 16
+[TEST] MOT-U04/U05 left 1399 right 32  pins L00 R11  pc 18 16
+[TEST] MOT-U04/U05 left 1063 right 32  pins L00 R11  pc 0 16
+[TEST] MOT-U04/U05 left 697 right 32  pins L11 R11  pc 15 20
+[TEST] MOT-U04/U05 left 325 right 32  pins L11 R11  pc 19 18
+[TEST] MOT-U04/U05 left 56 right 32  pins L10 R11  pc 17 18
+[TEST] MOT-U04/U05 left -52 right 32  pins L10 R11  pc 5 16
+[TEST] MOT-U04/U05 left 217 right 32  pins L11 R11  pc 19 18
+[TEST] MOT-U04/U05 left 1156 right 32  pins L10 R11  pc 16 20
+[TEST] MOT-U04/U05 left 1523 right 32  pins L00 R11  pc 20 18
+[TEST] MOT-U04/U05 left 2109 right 32  pins L11 R11  pc 15 16
+[TEST] MOT-U04/U05 left 2372 right 32  pins L10 R11  pc 17 16
+[TEST] MOT-U04/U05 left 2510 right 32  pins L01 R11  pc 17 18
+[TEST] MOT-U04/U05 left 2510 right 32  pins L01 R11  pc 10 17
+[TEST] MOT-U04/U05 left 2029 right 32  pins L11 R11  pc 18 20
+[TEST] MOT-U04/U05 left 897 right 32  pins L11 R11  pc 20 20
+[TEST] MOT-U04/U05 left 540 right 32  pins L10 R11  pc 17 18
+[TEST] MOT-U04/U05 left 496 right 32  pins L10 R11  pc 16 16
+[TEST] MOT-U04/U05 left 104 right 32  pins L10 R11  pc 19 20
+[TEST] MOT-U04/U05 left -8 right 32  pins L10 R11  pc 19 16
+[TEST] MOT-U04/U05 left -8 right 32  pins L10 R11  pc 5 18
+[TEST] MOT-U04/U05 left 460 right 32  pins L10 R11  pc 20 18
+[TEST] MOT-U04/U05 left 1448 right 32  pins L10 R11  pc 17 16
+[TEST] MOT-U04/U05 left 1477 right 32  pins L11 R11  pc 15 16
+[TEST] MOT-U04/U05 left 2166 right 32  pins L01 R11  pc 16 16
+[TEST] MOT-U04/U05 left 2528 right 32  pins L10 R11  pc 17 18
+[TEST] MOT-U04/U05 left 2528 right 32  pins L10 R11  pc 15 18
+[TEST] MOT-U04/U05 left 2528 right 32  pins L10 R11  pc 20 20
+[TEST] MOT-U04/U05 left 1955 right 32  pins L00 R11  pc 17 20
+[TEST] MOT-U04/U05 left 805 right 32  pins L11 R11  pc 18 18
+[TEST] MOT-U04/U05 left 754 right 32  pins L01 R11  pc 17 20
+[TEST] MOT-U04/U05 left 210 right 32  pins L01 R11  pc 19 18
+[TEST] MOT-U04/U05 left 55 right 32  pins L00 R11  pc 0 20
+[TEST] MOT-U04/U05 left -41 right 32  pins L00 R11  pc 17 16
+[TEST] MOT-U04/U05 left -41 right 32  pins L00 R11  pc 0 18
+[TEST] MOT-U04/U05 left 50 right 32  pins L01 R11  pc 17 16
+[TEST] MOT-U04/U05 left 559 right 32  pins L00 R11  pc 17 18
+[TEST] MOT-U04/U05 left 716 right 32  pins L10 R11  pc 5 16
+[TEST] MOT-U04/U05 left 1072 right 32  pins L10 R11  pc 16 20
+[TEST] MOT-U04/U05 left 1469 right 32  pins L11 R11  pc 16 20
+[TEST] MOT-U04/U05 left 1504 right 32  pins L10 R11  pc 19 17
+[TEST] MOT-U04/U05 left 1880 right 32  pins L10 R11  pc 20 20
+[TEST] MOT-U04/U05 left 2100 right 32  pins L10 R11  pc 15 18
+[TEST] MOT-U04/U05 left 2283 right 32  pins L00 R11  pc 19 20
+[TEST] MOT-U04/U05 left 2476 right 32  pins L10 R11  pc 5 20
+[TEST] MOT-U04/U05 left 2509 right 32  pins L11 R11  pc 17 16
+[TEST] MOT-U04/U05 left 2499 right 32  pins L00 R11  pc 0 20
+[TEST] MOT-U04/U05 left 2072 right 32  pins L10 R11  pc 15 16
+[TEST] MOT-U04/U05 left 1557 right 32  pins L11 R11  pc 16 19
+[TEST] MOT-U04/U05 left 1041 right 32  pins L11 R11  pc 18 18
+[TEST] MOT-U04/U05 left 937 right 32  pins L11 R11  pc 20 16
+[TEST] MOT-U04/U05 left 775 right 32  pins L00 R11  pc 20 20
+[TEST] MOT-U04/U05 left 386 right 32  pins L01 R11  pc 15 16
+[TEST] MOT-U04/U05 left 227 right 32  pins L00 R11  pc 20 16
+[TEST] MOT-U04/U05 left 56 right 32  pins L10 R11  pc 18 16
+[TEST] MOT-U04/U05 left 6 right 32  pins L01 R11  pc 17 16
+[TEST] MOT-U04/U05 left 6 right 32  pins L01 R11  pc 19 18
+[TEST] MOT-U04/U05 left 6 right 32  pins L01 R11  pc 17 18
+[TEST] MOT-U04/U05 left 6 right 32  pins L01 R11  pc 20 16
+[TEST] MOT-U04/U05 left 6 right 32  pins L01 R11  pc 20 20
+[TEST] MOT-U04/U05 left 6 right 32  pins L01 R11  pc 16 20
+[TEST] MOT-U04/U05 left 6 right 32  pins L01 R11  pc 20 18
+[TEST] MOT-U04/U05 left 6 right 32  pins L01 R11  pc 18 18
+[TEST] MOT-U04/U05 left 6 right 32  pins L01 R11  pc 19 20
+[TEST] MOT-U04/U05 left 6 right 32  pins L01 R11  pc 15 16
+[TEST] MOT-U04/U05 left 6 right -24  pins L01 R11  pc 16 18
+[TEST] MOT-U04/U05 left 6 right 542  pins L01 R00  pc 10 18
+[TEST] MOT-U04/U05 left 6 right 955  pins L01 R01  pc 17 15
+[TEST] MOT-U04/U05 left 6 right 1051  pins L01 R01  pc 15 15
+[TEST] MOT-U04/U05 left 6 right 1147  pins L01 R01  pc 19 17
+[TEST] MOT-U04/U05 left 6 right 1598  pins L01 R00  pc 20 18
+[TEST] MOT-U04/U05 left 6 right 1960  pins L01 R11  pc 20 19
+[TEST] MOT-U04/U05 left 6 right 1960  pins L01 R11  pc 15 15
+[TEST] MOT-U04/U05 left 6 right 1960  pins L01 R11  pc 17 17
+[TEST] MOT-U04/U05 left 6 right 1965  pins L01 R10  pc 19 17
+[TEST] MOT-U04/U05 left 6 right 2297  pins L01 R10  pc 16 16
+[TEST] MOT-U04/U05 left 6 right 2438  pins L01 R00  pc 20 19
+[TEST] MOT-U04/U05 left 6 right 2520  pins L01 R11  pc 15 15
+[TEST] MOT-U04/U05 left 6 right 2555  pins L01 R01  pc 17 18
+[TEST] MOT-U04/U05 left 6 right 2553  pins L01 R10  pc 19 16
+[TEST] MOT-U04/U05 left 6 right 2076  pins L01 R11  pc 15 17
+[TEST] MOT-U04/U05 left 6 right 1453  pins L01 R10  pc 10 5
+[TEST] MOT-U04/U05 left 6 right 1266  pins L01 R00  pc 15 0
+[TEST] MOT-U04/U05 left 6 right 1002  pins L01 R00  pc 16 0
+[TEST] MOT-U04/U05 left 6 right 539  pins L01 R01  pc 20 16
+[TEST] MOT-U04/U05 left 6 right 473  pins L01 R10  pc 17 19
+[TEST] MOT-U04/U05 left 6 right 137  pins L01 R10  pc 16 16
+[TEST] MOT-U04/U05 left 6 right 30  pins L01 R00  pc 19 15
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 20 20
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 18 16
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 10 20
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 16 0
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 17 16
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 15 20
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 16 16
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 15 20
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 16 16
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 19 17
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 16 0
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 15 20
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 19 19
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 19 17
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 20 20
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 19 17
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 18 17
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 18 16
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 16 16
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 16 0
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 10 0
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 10 19
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 18 17
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 20 18
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 20 19
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 17 15
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 10 20
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 10 19
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 19 19
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 15 20
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 10 0
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 20 18
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 15 0
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 20 18
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 18 18
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 17 15
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 20 20
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 19 17
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 16 15
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 20 18
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 10 0
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 16 0
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 17 17
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 17 15
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 16 16
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 15 20
+[TEST] MOT-U04/U05 left 6 right 6  pins L01 R00  pc 15 0
+[TEST] MOT-U33 PASS  motion commands pack, saturate and decode
+motion: STOP edge_error=0 seen=0 valid=0 (dry run)
+[TEST] MOT-U34 52 updates, period 19993..20009 us (20000 expected), longest update 440 us
+[TEST] MOT-U34 PASS  tMotion updates every period within 1 ms (NFR1)
+[TEST] MOT-U35 INHIBIT to brake 69 us (limit 20000)
+[TEST] MOT-U35 refused 1 stop 1 inhibited 1 cleared 1
+[TEST] MOT-U35 PASS  tMotion refuses bad commands, INHIBIT brakes and flushes
+[TEST] MOT-U38 11 updates in 200 ms (10 expected), distance 0 mm, heading 0 deg
+[TEST] MOT-U38 PASS  shared odometry rises every update and holds at rest
+[TEST] motion SUMMARY 11 passed, 0 failed
+[TEST] === test run end ===

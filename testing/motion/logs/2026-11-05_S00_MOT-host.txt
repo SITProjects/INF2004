@@ -1,0 +1,13 @@
+PASS uninitialized acquisition refused
+PASS motion initializes
+PASS idle acquisition refused
+PASS return stops on line already visible before arming
+PASS inward turn stops on already-visible line
+PASS unconfirmed single detection does not stop
+PASS fresh confirmed detection brakes
+PASS stale visible line does not stop the return
+PASS fresh refresh of visible line brakes
+PASS edge-only API still turns off the starting line
+PASS edge-only API stops when the line reappears
+PASS new ordinary command clears acquisition mode
+0 failures

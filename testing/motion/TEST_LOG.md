@@ -30,7 +30,7 @@ Define a test here before running it. Test IDs never change.
 | MOT-U18 | the PID controller's P, I and D terms, output limits, anti-windup and reset give hand-worked values | step 5, report 8.1 | auto | `motion_test.c`; no motors or encoders needed | `[TEST] MOT-U18 PASS` |
 | MOT-U19 | feed-forward duty against wheel speed, open loop; top speed | step 5 | manual | 1. Set `MOTION_SPEED_TESTS` to 1 in `motion_config.h` and flash `make TEST=1` with the car lifted. 2. When `MOT-U19 keep the car lifted` appears, keep clear: both wheels step from duty 100 to 1000 permille, 1.5 s each. 3. Save the `duty … left … right` lines. | speed rises steadily with duty on both wheels. Calibrate `MOTION_FF_OFFSET` and `MOTION_FF_GAIN` from a straight line through the lines above the start-up duty, and set `MOTION_MAX_SPEED_MM_S` 10–15 % below the slower wheel's speed at 1000 |
 | MOT-U20 | the speed loop follows 200 → 100 → 200 mm/s steps | step 5, report 8.1 | manual | Same run, still lifted: when `MOT-U20` appears the wheels step speed for 4.5 s; the per-update lines (`ms setL setR speedL speedR dutyL dutyR`) print afterwards. Plot them for the PID tuning report. | each wheel settles within ±5 % of each setpoint within about 0.5 s, without sustained oscillation. Tune `MOTION_SPEED_KP` (KI 0 first: raise until it overshoots, then halve), then `MOTION_SPEED_KI`, then `MOTION_SPEED_WINDOW_UPDATES` |
-| MOT-U21 | 200 mm/s holds on the floor on battery alone, open loop against speed loop | step 5, A4 | manual | Same run: when `MOT-U21` appears, unplug USB and put the car on the floor, 2 m clear ahead (15 s). It drives 800 mm open loop; reposition it in the 10 s pause; it drives 800 mm with the speed loop. Plug USB back in and open the terminal within 30 s to get both runs' lines. Run once on a full battery and once on a low one, and note the battery voltage of each. | speed-loop `settled` speeds within ±5 % of 200 on both batteries; the open-loop run shows the difference the loop makes (report graph) |
+| MOT-U21 | 200 mm/s holds on the floor on battery alone, open loop against speed loop | step 5, A4 | manual | Same run: when `MOT-U21` appears, unplug USB and put the car on the floor, 2 m clear ahead (15 s). It drives 800 mm open loop; reposition it in the 10 s pause; it drives 800 mm with the speed loop. Plug USB back in and reopen the terminal (or restart it if it lost the port): both runs' lines print once it has been open for 2 s, within 5 min. If the boot banner appears instead, the Pico reset and the run is lost. Run once on a full battery and once on a low one, and note the battery voltage of each. | speed-loop `settled` speeds within ±5 % of 200 on both batteries; the open-loop run shows the difference the loop makes (report graph) |
 | MOT-U22 | the test loops' updates come every `MOTION_UPDATE_PERIOD_MS`, which the speed and PI calculations assume | step 5 | auto | `motion_test.c`; times 50 updates (delay, then `motion_move_update()`) with the system timer; no motors | `[TEST] MOT-U22 PASS` and the `took … ms` line within 5 % of 1000 ms. If it fails, measured speeds are off by the same ratio; fix the loop timing before tuning with MOT-U19..U21 |
 | MOT-U23 | when stopped, the straight-line loop has no error or correction, and it switches off and on without driving the motors | step 6 | auto | `motion_test.c`; car lifted, wheels untouched | `[TEST] MOT-U23 PASS` |
 | MOT-U24 | the straight-line loop steers against the error, forward and backward | step 6 | manual | 1. Set `MOTION_SYNC_TESTS` to 1 in `motion_config.h` and flash `make TEST=1` with the car lifted. 2. When `MOT-U24 keep the car lifted` appears, wait for the wheels to turn, then lightly slow the LEFT wheel with a finger for about a second; do not stop it, or the move stalls. The car drives forward 1 m, then backward 1 m. 3. Save the `ms errTicks corrDegS setL setR` lines. | while the left wheel is slowed: forward, `errTicks` grows positive, `corrDegS` goes negative and `setL` rises above `setR`; backward, `errTicks` grows negative, `corrDegS` goes positive and `setL` becomes more negative than `setR`. In both, the slowed wheel is driven harder and `errTicks` returns towards 0 after you let go. If `corrDegS` has the same sign as `errTicks`, the loop is reversed: fix this before the floor tests |
@@ -72,6 +72,37 @@ first, and MOT-U11..U16 also a calibrated `MOTION_WHEEL_DIAMETER_MM`
 (MOT-U08). To measure a turn, see how far the tape line has moved sideways
 500 mm from the pivot: 5° is about 44 mm, 3° about 26 mm.
 
+## Test sessions
+
+The tests run in these sessions, in this order: each session may
+calibrate a value the later ones need, so build each image only when its
+session starts. A session's image and log share one name:
+`S<nn>_MOT-<tests>.uf2` and `YYYY-MM-DD_S<nn>_MOT-<tests>.txt`; the
+commit tested goes in the result row. *Motion only* means a local, uncommitted `app_main.c` that starts and
+tests motion alone, built with `WIFI=none`; *full* means the committed
+`app_main.c` with Wi-Fi.
+
+| Session | Tests | Build | Image | Log | Before it |
+|---|---|---|---|---|---|
+| S00 | host line acquisition | `sh testing/motion/host/run.sh` | — | `S00_MOT-host.txt` | — |
+| S01 | MOT-U01, U03, U07, U18, U22, U23, U27, U33, U34, U35, U38 | full, `make TEST=1` | `S01_MOT-auto.uf2` | `S01_MOT-auto.txt` | — |
+| S02 | MOT-U02 | full, `make` | `S02_MOT-U02.uf2` | `S02_MOT-U02.txt` | — |
+| S03 | MOT-U04..U06 | motion only, `MOTION_MANUAL_TESTS` 1; car lifted | `S03_MOT-U04-U06.uf2` | `S03_MOT-U04-U06.txt` | — |
+| S04 | MOT-U19..U21 | motion only, `MOTION_SPEED_TESTS` 1 | `S04_MOT-U19-U21.uf2` | `S04_MOT-U19-U21.txt` | S01 (MOT-U22), S03 |
+| S05 | MOT-U08..U10 | motion only, `MOTION_MOVE_TESTS` 1 | `S05_MOT-U08-U10.uf2` | `S05_MOT-U08-U10.txt` | S04 |
+| S06 | MOT-U11..U16 | motion only, `MOTION_TURN_TESTS` 1 | `S06_MOT-U11-U16.uf2` | `S06_MOT-U11-U16.txt` | S05 |
+| S07 | MOT-U17 | as S06 with `MOTION_LEFT_ENCODER_INVERTED` flipped; car lifted | `S07_MOT-U17_ENC-FLIPPED.uf2` | `S07_MOT-U17.txt` | S06 |
+| S08 | MOT-U24..U26 | motion only, `MOTION_SYNC_TESTS` 1 | `S08_MOT-U24-U26.uf2` | `S08_MOT-U24-U26.txt` | S04, S06 |
+| S09 | MOT-U28..U30 | motion only, `MOTION_FOLLOW_TESTS` 1 | `S09_MOT-U28-U30.uf2` | `S09_MOT-U28-U30.txt` | S04, S06 |
+| S10 | MOT-U36, U37 | motion only, `MOTION_TASK_TESTS` 1 | `S10_MOT-U36-U37.uf2` | `S10_MOT-U36-U37.txt` | — |
+| S11 | MOT-U39 | full, `make`, on a real line | `S11_MOT-U39.uf2` | `S11_MOT-U39.txt` | S09 |
+| S12 | as S01, on the commit to be merged or demonstrated | full, `make TEST=1` | `S12_MOT-auto-final.uf2` | `S12_MOT-auto-final.txt` | all |
+
+Every `make TEST=1` image also runs the automatic checks, so MOT-U01,
+U03, U07, U18, U22, U23 and U27 appear in every test session's log; record
+them from S01. If a session changes a calibration value, commit it and
+rerun that session before the next one.
+
 ## Results
 
 Add a new row for every run. Never edit or delete old rows.
@@ -101,6 +132,64 @@ confirm the stop-early distance, and MOT-U19/U20 are calibrated at
 | 2026-11-03 | MOT-U09 | `dac27e4` + local | Felicia Chua | FAIL | `logs/2026-11-03_MOT-U08-U10_calibration.txt` | calibration; 3 runs: ruler ≈105 mm each (limit 97–103), odometry −114, −108, −111. Both moves stop about 5 mm past the target (coast after braking), so `MOTION_MOVE_STOP_EARLY_MM` set to 5 |
 | 2026-11-03 | MOT-U10 | `dac27e4` + local | Felicia Chua | PASS | `logs/2026-11-03_MOT-U08-U10_calibration.txt` | calibration; 3 runs: stalled after 740, 580, 500 ms, braked, refused, cleared |
 | 2026-11-03 | MOT-U10 | `dac27e4` + local | Felicia Chua | PASS | `logs/2026-11-03_MOT-U08-U10.txt` | with `MOTION_MOVE_STOP_EARLY_MM` 5; 3 runs: stalled after 460, 540, 720 ms (above the 300 ms timeout: small wheel movement in the grip restarts it), braked, refused, cleared. U08/U09 odometry 1003, 1003, 1002 / −110, −110, −106; ruler check of U08/U09 pending |
+| 2026-11-05 | MOT-U01 | `0a0d6bd` + local | Felicia Chua | PASS | `logs/2026-11-05_S03_MOT-U04-U06.txt` | S03, `make TEST=1 WIFI=none`, motion-only `app_main.c`, `MOTION_MANUAL_TESTS` 1, 20 kHz |
+| 2026-11-05 | MOT-U03 | `0a0d6bd` + local | Felicia Chua | PASS | `logs/2026-11-05_S03_MOT-U04-U06.txt` | S03 |
+| 2026-11-05 | MOT-U07 | `0a0d6bd` + local | Felicia Chua | PASS | `logs/2026-11-05_S03_MOT-U04-U06.txt` | S03 |
+| 2026-11-05 | MOT-U18 | `0a0d6bd` + local | Felicia Chua | PASS | `logs/2026-11-05_S03_MOT-U04-U06.txt` | S03 |
+| 2026-11-05 | MOT-U22 | `0a0d6bd` + local | Felicia Chua | PASS | `logs/2026-11-05_S03_MOT-U04-U06.txt` | S03; 50 updates took 1000 ms |
+| 2026-11-05 | MOT-U23 | `0a0d6bd` + local | Felicia Chua | PASS | `logs/2026-11-05_S03_MOT-U04-U06.txt` | S03 |
+| 2026-11-05 | MOT-U27 | `0a0d6bd` + local | Felicia Chua | PASS | `logs/2026-11-05_S03_MOT-U04-U06.txt` | S03 |
+| 2026-11-05 | MOT-U06 | `0a0d6bd` + local | Felicia Chua | PASS | `logs/2026-11-05_S03_MOT-U04-U06.txt` | S03; encoder change: LEFT FORWARD +5891 / right 0, LEFT BACKWARD −5853 / 0, RIGHT FORWARD 0 / +6046, RIGHT BACKWARD 0 / −5820 |
+| 2026-11-05 | MOT-U04 | `0a0d6bd` + local | Felicia Chua | PASS | `logs/2026-11-05_S03_MOT-U04-U06.txt` | S03; 5 revolutions each way per wheel, counted between turning points. Left 2503–2584, mean 2539; right 2497–2555, mean 2525 (single-reading overshoots excluded: left 2621, right 2578 and 2579). `MOTION_ENCODER_TICKS_PER_REV` 2490 → 2532 (mean of both wheels); ≈0.08 mm per count. MOT-U08 must be repeated: the 64 mm wheel diameter was checked at 2490 |
+| 2026-11-05 | MOT-U05 | `0a0d6bd` + local | Felicia Chua | PASS | `logs/2026-11-05_S03_MOT-U04-U06.txt` | S03; each backward revolution lowers the count by about one revolution; after 5 forward/backward pairs the left ends at 6 (start −16) and the right at 6 (start −21) |
+| 2026-11-05 | MOT-U33 | `0a0d6bd` + local | Felicia Chua | PASS | `logs/2026-11-05_S03_MOT-U04-U06.txt` | S03 |
+| 2026-11-05 | MOT-U34 | `0a0d6bd` + local | Felicia Chua | PASS | `logs/2026-11-05_S03_MOT-U04-U06.txt` | S03, motion only: period 19993..20009 us, longest update 440 us. Not the full-load result the test asks for; that comes from S01 |
+| 2026-11-05 | MOT-U35 | `0a0d6bd` + local | Felicia Chua | PASS | `logs/2026-11-05_S03_MOT-U04-U06.txt` | S03; INHIBIT to brake 69 us |
+| 2026-11-05 | MOT-U38 | `0a0d6bd` + local | Felicia Chua | PASS | `logs/2026-11-05_S03_MOT-U04-U06.txt` | S03; 11 updates in 200 ms |
+| 2026-11-05 | MOT-U01 | `96a2911` + local | Felicia Chua | PASS | `logs/2026-11-05_S01_MOT-auto.txt` | S01, `make TEST=1` with Wi-Fi; local `app_main.c` starts every subsystem's task but runs only `motion_test()`; car lifted |
+| 2026-11-05 | MOT-U03 | `96a2911` + local | Felicia Chua | PASS | `logs/2026-11-05_S01_MOT-auto.txt` | S01 |
+| 2026-11-05 | MOT-U07 | `96a2911` + local | Felicia Chua | PASS | `logs/2026-11-05_S01_MOT-auto.txt` | S01 |
+| 2026-11-05 | MOT-U18 | `96a2911` + local | Felicia Chua | PASS | `logs/2026-11-05_S01_MOT-auto.txt` | S01 |
+| 2026-11-05 | MOT-U22 | `96a2911` + local | Felicia Chua | PASS | `logs/2026-11-05_S01_MOT-auto.txt` | S01; 50 updates took 1000 ms with every task running |
+| 2026-11-05 | MOT-U23 | `96a2911` + local | Felicia Chua | PASS | `logs/2026-11-05_S01_MOT-auto.txt` | S01 |
+| 2026-11-05 | MOT-U27 | `96a2911` + local | Felicia Chua | PASS | `logs/2026-11-05_S01_MOT-auto.txt` | S01 |
+| 2026-11-05 | MOT-U33 | `96a2911` + local | Felicia Chua | PASS | `logs/2026-11-05_S01_MOT-auto.txt` | S01 |
+| 2026-11-05 | MOT-U34 | `96a2911` + local | Felicia Chua | PASS | `logs/2026-11-05_S01_MOT-auto.txt` | S01, full load: obstacle, line_follow, terrain and communication tasks running. 52 updates, period 19925..20050 us (limit 19000..21000), longest update 343 us. Wi-Fi radio up but not joined (placeholder SSID, retrying); terrain IMU not connected (setup retrying) |
+| 2026-11-05 | MOT-U35 | `96a2911` + local | Felicia Chua | PASS | `logs/2026-11-05_S01_MOT-auto.txt` | S01; INHIBIT to brake 200 us (limit 20000) |
+| 2026-11-05 | MOT-U38 | `96a2911` + local | Felicia Chua | PASS | `logs/2026-11-05_S01_MOT-auto.txt` | S01; 11 updates in 200 ms, distance 0 mm, heading 0 deg |
+| 2026-11-05 | MOT-U19 | `d5479f8` + local | Felicia Chua | PASS | `logs/2026-11-05_S04_MOT-U19-U21_calibration.txt` | S04 calibration, `make TEST=1 WIFI=none`, motion-only `app_main.c`, `MOTION_SPEED_TESTS` 1, lifted. Speed rises steadily with duty on both wheels: 250 → 194/204, 1000 → 728/749 mm/s. Fit over duty 200–600, both wheels: `MOTION_FF_OFFSET` 0.009, `MOTION_FF_GAIN` 0.00122 (worst miss 15 permille; 253 for 200 mm/s); `MOTION_MAX_SPEED_MM_S` 620 (15 % below the slower wheel's 728) |
+| 2026-11-05 | MOT-U20 | `d5479f8` + local | Felicia Chua | FAIL | `logs/2026-11-05_S04_MOT-U19-U21_calibration.txt` | S04 calibration, before the U19 fit was applied (feed-forward 0.20 + 0.0012 × speed). First 200 mm/s step starts at duty 440 (253 needed): overshoot to 301/309 mm/s (+53 %), still 212/212 at 1500 ms. The 100 mm/s step and the second 200 mm/s step are within ±5 % after about 0.25 s. The `settled` line averages both setpoints and is not a pass measure |
+| 2026-11-05 | MOT-U21 | `d5479f8` + local | Felicia Chua | PASS | `logs/2026-11-05_S04_MOT-U19-U21_calibration.txt` | S04 calibration, old feed-forward as for U20; floor, battery voltage not recorded. Open loop settled 304/308 mm/s (52 % fast); speed loop overshoot to 272 mm/s for about 0.3 s, then settled 202/201 mm/s (within ±5 %), at duty about 300–310 on the floor. Repeat after the U19 fit is applied; low-battery case not run |
+| 2026-11-05 | MOT-U01 | `cd0d88b` + local | Felicia Chua | PASS | `logs/2026-11-05_S04_MOT-U19-U21.txt` | S04, `make TEST=1 WIFI=none`, motion-only `app_main.c`, `MOTION_SPEED_TESTS` 1 |
+| 2026-11-05 | MOT-U03 | `cd0d88b` + local | Felicia Chua | PASS | `logs/2026-11-05_S04_MOT-U19-U21.txt` | S04 |
+| 2026-11-05 | MOT-U07 | `cd0d88b` + local | Felicia Chua | PASS | `logs/2026-11-05_S04_MOT-U19-U21.txt` | S04 |
+| 2026-11-05 | MOT-U18 | `cd0d88b` + local | Felicia Chua | PASS | `logs/2026-11-05_S04_MOT-U19-U21.txt` | S04 |
+| 2026-11-05 | MOT-U22 | `cd0d88b` + local | Felicia Chua | PASS | `logs/2026-11-05_S04_MOT-U19-U21.txt` | S04; 50 updates took 1000 ms |
+| 2026-11-05 | MOT-U23 | `cd0d88b` + local | Felicia Chua | PASS | `logs/2026-11-05_S04_MOT-U19-U21.txt` | S04 |
+| 2026-11-05 | MOT-U27 | `cd0d88b` + local | Felicia Chua | PASS | `logs/2026-11-05_S04_MOT-U19-U21.txt` | S04 |
+| 2026-11-05 | MOT-U19 | `cd0d88b` + local | Felicia Chua | PASS | `logs/2026-11-05_S04_MOT-U19-U21.txt` | S04, lifted; repeat of the calibration sweep: duty 250 → 197/205, 1000 → 723/750 mm/s |
+| 2026-11-05 | MOT-U20 | `cd0d88b` + local | Felicia Chua | PASS | `logs/2026-11-05_S04_MOT-U19-U21.txt` | S04, lifted, feed-forward 0.009 + 0.00122 × speed (starts at duty 252). 0 → 200 mm/s: peak 215/223 (+8/+12 %), within ±5 % from 300 ms; 100 → 200: peak 227/230, within ±5 % from 240 ms; 200 → 100: undershoot to 72/69, right wheel within ±5 % only from about 620 ms (dips to 92–94). No sustained oscillation. The `settled` line averages both setpoints |
+| 2026-11-05 | MOT-U21 | `cd0d88b` + local | Felicia Chua | PASS | `logs/2026-11-05_S04_MOT-U19-U21.txt` | S04, floor, USB left connected, battery voltage not recorded. Open loop settled 163/162 mm/s (19 % slow on the floor); speed loop settled 199/199 mm/s, within ±5 % from 240 ms and 189–205 after, at duty about 295–310 |
+| 2026-11-05 | MOT-U21 | `cd0d88b` + local | Felicia Chua | NOT RUN | — | Low-battery case |
+| 2026-11-05 | MOT-U33 | `cd0d88b` + local | Felicia Chua | PASS | `logs/2026-11-05_S04_MOT-U19-U21.txt` | S04 |
+| 2026-11-05 | MOT-U34 | `cd0d88b` + local | Felicia Chua | PASS | `logs/2026-11-05_S04_MOT-U19-U21.txt` | S04, motion only: period 19991..20011 us, longest update 417 us |
+| 2026-11-05 | MOT-U35 | `cd0d88b` + local | Felicia Chua | PASS | `logs/2026-11-05_S04_MOT-U19-U21.txt` | S04; INHIBIT to brake 62 us |
+| 2026-11-05 | MOT-U38 | `cd0d88b` + local | Felicia Chua | PASS | `logs/2026-11-05_S04_MOT-U19-U21.txt` | S04; 11 updates in 200 ms |
+| 2026-11-05 | MOT-U08 | `5336d44` + local | Felicia Chua | FAIL | `logs/2026-11-05_S05_MOT-U08-U10.txt` | S05 session 18:13, `make TEST=1 WIFI=none`, motion-only `app_main.c`, `MOTION_MOVE_TESTS` 1: `state 2 after 300 ms`, odometry 21 mm, car turned about 23° right. The right wheel did not turn on the floor (it did lifted, U06 check): a loose right motor pin; reseated |
+| 2026-11-05 | MOT-U09 | `5336d44` + local | Felicia Chua | FAIL | `logs/2026-11-05_S05_MOT-U08-U10.txt` | S05 session 18:13: `state 2 after 300 ms`, odometry −21 mm; same loose pin as U08 |
+| 2026-11-05 | MOT-U08 | `5336d44` + local | Felicia Chua | PASS | `logs/2026-11-05_S05_MOT-U08-U10.txt` | S05, pin reseated; 3 runs: ruler about 1000 mm each, odometry 1003, 1004, 1004; `state 0`. Ruler and odometry agree, so `MOTION_WHEEL_DIAMETER_MM` 64 kept at 2532 counts per rev |
+| 2026-11-05 | MOT-U09 | `5336d44` + local | Felicia Chua | FAIL | `logs/2026-11-05_S05_MOT-U08-U10.txt` | S05; 3 runs: ruler 75, 80, 85 mm (limit 97–103), odometry −104 each, `state 0`. Castor flip, confirmed by watching both wheels: after the forward move the castor must swing 180°, and the car twists instead of moving straight back. The gentler start (duty 252 instead of 440) flips it more slowly; on 2026-11-03 at 440 the ruler read about 105 mm. Short reverses in the obstacle bypass are affected the same way |
+| 2026-11-05 | MOT-U10 | `5336d44` + local | Felicia Chua | PASS | `logs/2026-11-05_S05_MOT-U08-U10.txt` | S05; 3 runs: stalled after 500, 720, 940 ms (above 300 ms: small wheel movement in the grip restarts the timer, as on 2026-11-03), braked, refused, cleared |
+| 2026-11-05 | MOT-U08 | `32dd01f` + local | Felicia Chua | PASS | `logs/2026-11-05_S05_MOT-U08-U10_run2.txt` | S05 after `MOTION_FF_OFFSET` 0.05 (castor flip) and `MOTION_MOVE_STOP_EARLY_MM` 9 (coast with the stronger start); 3 runs: odometry 998, 996, 997 mm, `state 0`. Ruler agreed with odometry within a few mm on each run (tester's reading; individual ruler values not recorded) |
+| 2026-11-05 | MOT-U09 | `32dd01f` + local | Felicia Chua | PASS | `logs/2026-11-05_S05_MOT-U08-U10_run2.txt` | S05, same settings; 3 runs: odometry −99, −102, −101 mm, `state 0`; ruler agreed with odometry within a few mm (tester's reading; individual ruler values not recorded). Castor flip no longer shortens the reverse: an earlier single run at offset 0.05 and stop-early 5 measured 105 mm by ruler against −104 by odometry |
+| 2026-11-05 | MOT-U10 | `32dd01f` + local | Felicia Chua | PASS | `logs/2026-11-05_S05_MOT-U08-U10_run2.txt` | S05; 3 runs: stalled after 1440, 960, 720 ms (grip movement restarts the 300 ms timer), braked, refused, cleared |
+| 2026-11-05 | MOT-U19 | `897215d` + local | Felicia Chua | PASS | `logs/2026-11-05_S04_MOT-U19-U21_rerun.txt` | S04 rerun with the final settings (`MOTION_FF_OFFSET` 0.05, `MOTION_SPEED_KI` 0.006, stop-early 9), lifted: duty 250 → 190/201, 1000 → 735/749 mm/s |
+| 2026-11-05 | MOT-U20 | `897215d` + local | Felicia Chua | PASS | `logs/2026-11-05_S04_MOT-U19-U21_rerun.txt` | S04 rerun, lifted, starts at duty 294. 0 → 200 mm/s: peak 235/242 (+17/+21 %, the floor-tuned offset overshoots lifted), within ±5 % from 340/360 ms (right briefly 211–212 until 520 ms); 200 → 100: undershoot 65/61, within ±5 % by about 500 ms; 100 → 200: peak 235/238, within ±5 % from 260 ms. No sustained oscillation. Two earlier reruns that day, logs not kept: at KI 0.003 the 0 → 200 step settled in about 0.8 s (FAIL), and at KI 0.006 the right wheel slowed once per revolution (204 → 172 mm/s with duty rising) until the tight spot was freed |
+| 2026-11-05 | MOT-U21 | `897215d` + local | Felicia Chua | PASS | `logs/2026-11-05_S04_MOT-U19-U21_rerun.txt` | S04 rerun, floor, battery voltage not recorded. Open loop settled 190/189 mm/s; speed loop within ±5 % from 220 ms, settled 198/196. In the last 0.5 s of the speed-loop run the right wheel's duty climbed to 409 while it slowed to 182–186 (left about 285): watch for floor or wheel friction |
+| 2026-11-05 | MOT-U21 | `897215d` + local | Felicia Chua | NOT RUN | — | Low-battery case, final settings |
+| 2026-11-05 | MOT-U08 | `897215d` + local | Felicia Chua | PASS | `logs/2026-11-05_S05_MOT-U08-U10_rerun.txt` | S05 confirmation run for `MOTION_SPEED_KI` 0.006 (single run): odometry 998 mm, `state 0`; ruler agreed with odometry within a few mm (tester's reading; ruler value not recorded) |
+| 2026-11-05 | MOT-U09 | `897215d` + local | Felicia Chua | PASS | `logs/2026-11-05_S05_MOT-U08-U10_rerun.txt` | S05 confirmation run (single run): odometry −101 mm, `state 0`; ruler agreed with odometry within a few mm (tester's reading; ruler value not recorded) |
+| 2026-11-05 | MOT-U10 | `897215d` + local | Felicia Chua | PASS | `logs/2026-11-05_S05_MOT-U08-U10_rerun.txt` | S05 confirmation run: stalled after 500 ms (grip movement restarts the 300 ms timer), braked, refused, cleared |
 
 ## Host regression: post-obstacle line acquisition
 

@@ -121,8 +121,27 @@ typedef struct
 #define FLOOR_START_DELAY_MS 15000
 #define FLOOR_PAUSE_MS 10000
 #define PLUG_WAIT_MS 30000
+/*
+ * MOT-U21 prints its records once a terminal has had the USB console open
+ * this long, so a link dropped by the motors does not lose them; it gives
+ * up after TERMINAL_WAIT_MAX_MS. 3 is tm_usb_state()'s "host asserted DTR".
+ */
+#define TERMINAL_POLL_MS 100
+#define TERMINAL_STEADY_MS 2000
+#define TERMINAL_WAIT_MAX_MS 300000
+#define USB_STATE_TERMINAL_OPEN 3u
 /* 8 s: an 800 mm run with room for a slow open-loop wheel. */
 #define RECORD_MAX_SAMPLES 400
+
+/*
+ * Long traces wait every PRINT_BURST_LINES lines until the USB console task
+ * has sent them: it runs below this task, and its 4 KB buffer drops what
+ * does not fit (about 90 trace lines). The wait is bounded, so a host that
+ * has stopped reading cannot hang the test run.
+ */
+#define PRINT_BURST_LINES 20
+#define PRINT_PAUSE_MS 20
+#define PRINT_DRAIN_MAX_MS 500
 
 /* One speed-loop update: what was asked, and what the wheels did. */
 typedef struct
@@ -260,6 +279,11 @@ static void run_until_timeout (void);
 static void sweep_feed_forward (void);
 static void step_speed_lifted (void);
 static void run_floor_unplugged (void);
+static void wait_for_terminal (void);
+#if TM_CONSOLE_USB_CDC
+/* USB console link state (lib/libtm usb_console.c; no public header). */
+extern UW tm_usb_state (void);
+#endif
 static void record_for (speed_record_t * p_record, INT duration_ms);
 static void record_while_moving (speed_record_t * p_record);
 static void print_record (char const * p_id, char const * p_label,
@@ -274,6 +298,13 @@ static void run_sync_move (char const * p_id, char const * p_label,
                            sync_record_t * p_record);
 static void print_sync_trace (char const * p_id,
                               sync_record_t const * p_record);
+#endif
+#if MOTION_SPEED_TESTS || MOTION_SYNC_TESTS
+static void wait_console_drained (void);
+#if TM_CONSOLE_USB_CDC
+/* Bytes queued for the host (lib/libtm usb_console.c; no public header). */
+extern UW tm_usb_pending (void);
+#endif
 #endif
 #if MOTION_FOLLOW_TESTS
 static BOOL check_follow_lifted (void);
@@ -1434,11 +1465,41 @@ run_floor_unplugged (void)
     }
     (void)motion_move_stop();
 
-    tm_printf((UB *)"[TEST] MOT-U21 plug USB back in; results in %d s\n",
-              PLUG_WAIT_MS / 1000);
-    update_for(PLUG_WAIT_MS);
+    tm_printf((UB *)"[TEST] MOT-U21 done; results print once a terminal is "
+                    "open (plug USB back in or restart the terminal)\n");
+    wait_for_terminal();
     print_record("MOT-U21", "open loop", &open_loop);
     print_record("MOT-U21", "speed loop", &closed_loop);
+}
+
+/*
+ * Wait until a terminal has had the USB console open for
+ * TERMINAL_STEADY_MS, or TERMINAL_WAIT_MAX_MS at most; with another
+ * console, wait PLUG_WAIT_MS.
+ */
+static void
+wait_for_terminal (void)
+{
+#if TM_CONSOLE_USB_CDC
+    INT open_ms = 0;
+
+    for (INT waited_ms = 0;
+         (open_ms < TERMINAL_STEADY_MS) && (waited_ms < TERMINAL_WAIT_MAX_MS);
+         waited_ms += TERMINAL_POLL_MS)
+    {
+        update_for(TERMINAL_POLL_MS);
+        if (tm_usb_state() == USB_STATE_TERMINAL_OPEN)
+        {
+            open_ms += TERMINAL_POLL_MS;
+        }
+        else
+        {
+            open_ms = 0;
+        }
+    }
+#else
+    update_for(PLUG_WAIT_MS);
+#endif
 }
 
 /* Update every period for @p duration_ms, recording each update. */
@@ -1506,6 +1567,10 @@ print_record (char const * p_id, char const * p_label,
                   (INT)p_sample->left_mm_s, (INT)p_sample->right_mm_s,
                   (INT)p_sample->command.left_duty_permille,
                   (INT)p_sample->command.right_duty_permille);
+        if (((i + 1) % PRINT_BURST_LINES) == 0)
+        {
+            wait_console_drained();
+        }
         if (i >= half)
         {
             left_sum += (INT)p_sample->left_mm_s;
@@ -1684,9 +1749,34 @@ print_sync_trace (char const * p_id, sync_record_t const * p_record)
                   (INT)p_sample->sync.correction_deg_s,
                   (INT)p_sample->command.left_setpoint_mm_s,
                   (INT)p_sample->command.right_setpoint_mm_s);
+        if (((i + 1) % PRINT_BURST_LINES) == 0)
+        {
+            wait_console_drained();
+        }
     }
 }
 #endif /* MOTION_SYNC_TESTS */
+
+#if MOTION_SPEED_TESTS || MOTION_SYNC_TESTS
+/*
+ * Wait until the USB console has sent everything queued, for at most
+ * PRINT_DRAIN_MAX_MS; with another console, just pause.
+ */
+static void
+wait_console_drained (void)
+{
+#if TM_CONSOLE_USB_CDC
+    for (INT waited_ms = 0;
+         (tm_usb_pending() > 0u) && (waited_ms < PRINT_DRAIN_MAX_MS);
+         waited_ms += PRINT_PAUSE_MS)
+    {
+        (void)tk_dly_tsk((TMO)PRINT_PAUSE_MS);
+    }
+#else
+    (void)tk_dly_tsk((TMO)PRINT_PAUSE_MS);
+#endif
+}
+#endif
 
 #if MOTION_FOLLOW_TESTS
 /*
