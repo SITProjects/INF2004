@@ -27,7 +27,7 @@ Define a test here before running it. Test IDs never change.
 | INT-13 | critical during a move | IF-06 | manual | Hand within 80 mm during the pass | INHIBIT, BLOCKED_WAIT; hand away resumes the pass |
 | INT-14 | line missed | IF-06 | manual | `OBSTACLE_AVOID_RETURN_EXTRA_MM` set too short (temporary) | One search move; if still missed, FAULT |
 | INT-15 | obstacle state for other tasks | IF-07 | manual | A task polls `obstacle_get_state()` and waits on `obstacle_flg_event` while a board comes and goes | STOP and CRITICAL follow the scanner; RESULT on each new sequence; the copy is never torn |
-| INT-17 | clearest side selection | obstacle scanner → planner | manual | Arrange two clear side paths with unequal measured ranges but a shorter sidestep on the nearer side; repeat mirrored | Actual turn follows the farther clear side, independent of sidestep size. Capture raw ends data and chosen turn; physical result NOT RUN |
+| INT-17 | clearest side selection | obstacle scanner → planner | manual | Arrange two clear side paths with unequal measured ranges but a shorter sidestep on the nearer side; repeat mirrored, then replan after a reverse | Actual turn follows the farther clear side, independent of sidestep size; corridor replans use the side with greater closest-sector range. Capture raw ends/corridor data and chosen turn; physical result NOT RUN |
 
 *Method:* **auto** = `TEST_CHECK` in code, result printed on the console;
 **manual** = a person observes the result (LED, scope, meter, phone app…).
