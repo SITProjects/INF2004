@@ -198,6 +198,12 @@ confirm the stop-early distance, and MOT-U19/U20 are calibrated at
 | 2026-11-05 | MOT-U14 | `9fab33c` + local | Felicia Chua | PASS | `logs/2026-11-05_S06_MOT-U11-U16_calibration.txt` | S06 calibration; about 5° off by eye, at the ±5° limit, each turn not measured; encoder 181–183°, coast 1–2°. Repeat after the track width change |
 | 2026-11-05 | MOT-U15 | `9fab33c` + local | Felicia Chua | PASS | `logs/2026-11-05_S06_MOT-U11-U16_calibration.txt` | S06 calibration; moving 1, replaced 1, turn done 1, move replaced turn 1, stopped 1; encoder turn heading 92° (target 90°) |
 | 2026-11-05 | MOT-U16 | `9fab33c` + local | Felicia Chua | FAIL | `logs/2026-11-05_S06_MOT-U11-U16_calibration.txt` | S06 calibration; test not performed as written: the tester forgot to hold the left wheel, so the turn finished normally (`stalled 0 after 1080 ms`). Says nothing about stall detection. Repeat with the wheel held |
+| 2026-11-05 | MOT-U11 | `3abd3cc` + local | Felicia Chua | PASS | `logs/2026-11-05_S06_MOT-U11-U16.txt` | S06 rerun, motion-only `app_main.c`, `MOTION_TURN_TESTS` 1, track width 110.6 mm. Tester reports the 360° turns are no longer off; no angle recorded. Encoder total 1087°, `state 0` each run |
+| 2026-11-05 | MOT-U12 | `3abd3cc` + local | Felicia Chua | PASS | `logs/2026-11-05_S06_MOT-U11-U16.txt` | S06 rerun; tester reports the 360° turns are no longer off; no angle recorded. Encoder total −1088°, `state 0` each run |
+| 2026-11-05 | MOT-U13 | `3abd3cc` + local | Felicia Chua | PASS | `logs/2026-11-05_S06_MOT-U11-U16.txt` | S06 rerun; 5 left and 5 right; tester reports the turns correct; no angle recorded. Encoder left 92–93°, right 92–94°, coast 1–2° |
+| 2026-11-05 | MOT-U14 | `3abd3cc` + local | Felicia Chua | PASS | `logs/2026-11-05_S06_MOT-U11-U16.txt` | S06 rerun; 5 U-turns; tester reports the turns correct; no angle recorded. Encoder 182–183°, coast 1–2° |
+| 2026-11-05 | MOT-U15 | `3abd3cc` + local | Felicia Chua | PASS | `logs/2026-11-05_S06_MOT-U11-U16.txt` | S06 rerun; moving 1, replaced 1, turn done 1, move replaced turn 1, stopped 1; encoder turn heading 92° (target 90°) |
+| 2026-11-05 | MOT-U16 | `3abd3cc` + local | Felicia Chua | PASS | `logs/2026-11-05_S06_MOT-U11-U16.txt` | S06 rerun, left wheel held; stalled after 420 ms (expect about 300), braked, refused, cleared |
 
 ## Host regression: post-obstacle line acquisition
 
