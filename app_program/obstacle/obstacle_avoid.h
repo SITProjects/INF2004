@@ -49,6 +49,9 @@ typedef struct
     uint16_t return_extra_mm;  /**< Drive past the offset to find the line. */
     uint16_t overshoot_mm;     /**< IR row to axle; 0 skips that leg. */
     uint8_t angle_min_deg;     /**< Shallowest turn, 5..90 degrees. */
+    uint16_t backoff_mm;       /**< Reverse when CRITICAL holds a move. */
+    uint8_t max_backoffs;      /**< Back-offs per bypass; 0 never. */
+    uint16_t min_room_mm;      /**< Reverse to this centre distance first. */
 } obstacle_avoid_geometry_t;
 
 /** Why obstacle_avoid_plan() accepted or refused a result. */
@@ -69,6 +72,7 @@ typedef struct
     uint16_t sidestep_mm; /**< First sideways offset (not distance driven). */
     uint16_t pass_mm;     /**< Axle travel along the line, from the stop. */
     uint8_t angle_deg;    /**< Turn angle of every turn, 5..90 degrees. */
+    uint16_t reverse_mm;  /**< Reverse first to reach min_room_mm. */
     bool b_no_fit;        /**< Ends had space, none fits: roomier end taken. */
 } obstacle_avoid_plan_t;
 
@@ -90,11 +94,17 @@ typedef struct
     uint32_t verify_ms;        /**< Corridor request to its result. */
     uint32_t block_wait_ms;    /**< Off the line, held, before FAULT. */
     uint32_t retry_delay_ms;   /**< Held before the one retry. */
+    uint32_t backoff_delay_ms; /**< CRITICAL hold before backing off. */
+    uint32_t resweep_ms; /**< Without re-checks: held this long, re-sweep. */
     uint16_t move_speed_mm_s;  /**< MOTION_MOVE_SPEED_MM_S, nonzero. */
     uint16_t turn_speed_deg_s; /**< MOTION_TURN_SPEED_DEG_S, nonzero. */
     uint16_t resume_min_mm;    /**< Smaller remainders count as done. */
     uint8_t resume_min_deg;    /**< Smaller turn remainders count as done. */
     uint8_t max_sidesteps;     /**< First sidestep plus extra ones, >= 1. */
+    /** true: rearm before each move and verify the corridor. false: drive
+     *  the planned path from the first sweep; only CRITICAL holds the car,
+     *  and it resumes once CRITICAL clears, without re-measuring. */
+    bool b_recheck;
 } obstacle_avoid_timing_t;
 
 /** Everything the state machine needs that does not change. */
@@ -119,6 +129,7 @@ typedef enum
     OBSTACLE_AVOID_VERIFY,       /**< Corridor sweep after a sidestep. */
     OBSTACLE_AVOID_BLOCKED_WAIT, /**< Off the line, held; path blocked. */
     OBSTACLE_AVOID_RETRY_WAIT,   /**< Off the line, held; before the retry. */
+    OBSTACLE_AVOID_REPLAN,       /**< Re-sweeping after back-offs failed. */
     OBSTACLE_AVOID_FAULT         /**< Latched until reboot; INHIBIT kept. */
 } obstacle_avoid_state_t;
 
@@ -175,12 +186,13 @@ typedef struct
     bool b_rearmed;             /**< Last loop called rearm. */
     uint8_t rearm_sequence;     /**< Its return value. */
     obstacle_avoid_corridor_req_t corridor_request; /**< Last request. */
+    obstacle_scan_watch_t watch; /**< obstacle_scan_watch(). */
 } obstacle_avoid_input_t;
 
 /**
  * Actions for one loop, carried out in this order: set INHIBIT, clear
- * INHIBIT, rearm the scanner, request a corridor sweep, then clear every
- * MOTION_EVT_ bit and, only if that worked, send the command.
+ * INHIBIT, rearm the scanner, request a corridor sweep, set the watch, then
+ * clear every MOTION_EVT_ bit and, only if that worked, send the command.
  */
 typedef struct
 {
@@ -188,8 +200,12 @@ typedef struct
     bool b_clear_inhibit;
     bool b_rearm;
     bool b_corridor;
-    bool b_send;                 /**< Clear the motion events, then send cmd. */
-    uint32_t cmd;                /**< MBF_MOTION_CMD word when b_send. */
+    bool b_side_scans_off; /**< obstacle_scan_set_side_scans(false). */
+    bool b_side_scans_on;  /**< obstacle_scan_set_side_scans(true). */
+    bool b_watch;          /**< obstacle_scan_set_watch(watch_angle). */
+    int16_t watch_angle;   /**< Servo angle, or OBSTACLE_SCAN_WATCH_OFF. */
+    bool b_send;           /**< Clear the motion events, then send cmd. */
+    uint32_t cmd;          /**< MBF_MOTION_CMD word when b_send. */
     obstacle_avoid_state_t from; /**< State before this step. */
     obstacle_avoid_state_t to;   /**< State after this step. */
     char const * p_reason;       /**< Static text when the state changed. */
@@ -198,6 +214,7 @@ typedef struct
 /** Bypass legs, in order; VERIFY is a step without a command. */
 typedef enum
 {
+    OBSTACLE_AVOID_LEG_REVERSE,   /**< Back away to min_room_mm first. */
     OBSTACLE_AVOID_LEG_TURN_OUT,  /**< Turn 90 degrees toward the gap. */
     OBSTACLE_AVOID_LEG_SIDESTEP,  /**< Move sideways off the line. */
     OBSTACLE_AVOID_LEG_TURN_BACK, /**< Turn back parallel to the line. */
@@ -232,7 +249,19 @@ typedef struct
     uint32_t forward_mm;  /* Progress along the line from diagonals. */
     uint8_t sidesteps;    /* Sidesteps completed. */
     bool b_retry_used;
-    bool b_blocked; /* blocked_since_ms is running. */
+    bool b_backoff;          /* The command in flight is a back-off. */
+    uint8_t backoffs;        /* Back-offs this bypass. */
+    bool b_replan_pending;   /* Re-sweep once the turn back is done. */
+    uint16_t escaped_mm;     /* Reversed so far to look again. */
+    bool b_watching;         /* Sensor held toward the obstacle side. */
+    bool b_watch_seen;       /* The watch has seen something in range. */
+    bool b_watch_done;       /* Watch ended this bypass; do not restart it. */
+    bool b_watch_widened;    /* This command's diagonal was lengthened. */
+    bool b_shift;            /* RETRY_WAIT holds for a watch shift, no retry. */
+    uint8_t watch_sequence;  /* Last watch reading used. */
+    int32_t watch_seen_mm;   /* Odometry distance at the last sighting. */
+    uint16_t watch_ahead_mm; /* How far ahead of the pivot it was. */
+    bool b_blocked;          /* blocked_since_ms is running. */
     uint32_t blocked_since_ms;
     bool b_rearm_known;
     uint8_t rearm_sequence;
@@ -265,7 +294,7 @@ typedef struct
  * The sidestep is raised to sidestep_min. A sidestep above sidestep_max or
  * a pass above pass_max is capped there and b_limited set: the car tries
  * anyway, guarded by CRITICAL. The pass distance is centre + axle_to_pivot
- * + depth + rear + margin.
+ * + depth + rear + margin, from at least min_room_mm (reverse_mm first).
  *
  * @param result Published side result, PATH_FOUND or BLOCKED.
  * @param geometry Geometry published with result.

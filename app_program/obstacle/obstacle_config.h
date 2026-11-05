@@ -259,6 +259,22 @@
  * motion commands.
  */
 #define OBSTACLE_AVOID_ENABLED 1
+/* The car's own body shows in the sensor's view at about 5 cm, at the
+ * 60-70 degree end of the sweep. Side and watch readings nearer than this
+ * distance, at or below this angle, count as no echo; every other reading
+ * is used as measured. Centre readings are not affected. */
+#define OBSTACLE_SIDE_SELF_DISTANCE_MM 60u
+#define OBSTACLE_SIDE_SELF_MAX_DEG 70
+#define OBSTACLE_SIDE_SELF_ECHO_US                                             \
+    OBSTACLE_MM_TO_ECHO_US(OBSTACLE_SIDE_SELF_DISTANCE_MM)
+/* Reverse this far when CRITICAL holds a forward bypass move, at most
+ * OBSTACLE_AVOID_MAX_BACKOFFS times per bypass, after the hold settles. */
+#define OBSTACLE_AVOID_BACKOFF_MM 50u
+/* A bypass that starts nearer than this (pivot to obstacle face) reverses
+ * to it first, so the first turn does not swing into the obstacle. */
+#define OBSTACLE_AVOID_MIN_ROOM_MM 200u
+#define OBSTACLE_AVOID_MAX_BACKOFFS 2u
+#define OBSTACLE_AVOID_BACKOFF_DELAY_MS 300u
 #define OBSTACLE_CAR_WIDTH_MM 127u           /* W, 12.7 cm, ruler. */
 #define OBSTACLE_CAR_AXLE_TO_PIVOT_MM 20u    /* Axle midpoint to servo pivot. */
 #define OBSTACLE_CAR_REAR_MM 162u            /* Axle midpoint to rear bumper. */
@@ -273,6 +289,10 @@
 #define OBSTACLE_AVOID_MAX_SIDESTEPS 3u /* First plus two extra. */
 #define OBSTACLE_AVOID_RESUME_MIN_MM 10u
 #define OBSTACLE_AVOID_RESUME_MIN_DEG 3u
+/* 0: one sweep at the stop, then drive the whole path without the corridor
+ * sweep or forward re-checks; only CRITICAL holds the car on the way. 1:
+ * re-check before each move and verify the corridor (slower). */
+#define OBSTACLE_AVOID_RECHECK 0
 /* Shallowest turn toward or away from the gap; steeper when the obstacle
  * leaves less room in front. 90 gives the box path. */
 #define OBSTACLE_AVOID_ANGLE_MIN_DEG 30u
@@ -288,6 +308,9 @@
      OBSTACLE_SETTLE_MS(OBSTACLE_SWEEP_LAST_DEG - OBSTACLE_SWEEP_FIRST_DEG))
 #define OBSTACLE_AVOID_VERIFY_TIMEOUT_MS (OBSTACLE_CORRIDOR_TIMEOUT_MS + 1000u)
 #define OBSTACLE_AVOID_BLOCK_WAIT_MS 30000u
+/* Without re-checks a held bypass never faults: it re-sweeps this often
+ * until a way round, or a clear path, appears. */
+#define OBSTACLE_AVOID_RESWEEP_MS 3000u
 #define OBSTACLE_AVOID_RETRY_DELAY_MS 1000u
 
 /*

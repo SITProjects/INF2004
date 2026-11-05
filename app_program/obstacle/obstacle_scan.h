@@ -52,6 +52,17 @@ typedef struct
     uint16_t echo_us[ROBOT_OBSTACLE_SWEEP_POINTS]; /**< Median, 0 = none. */
 } obstacle_scan_corridor_t;
 
+/** No watch: obstacle_scan_set_watch() argument that centres the sensor. */
+#define OBSTACLE_SCAN_WATCH_OFF (-1)
+
+/** Latest reading while the sensor is held at a watch angle. */
+typedef struct
+{
+    uint8_t sequence; /**< Advances once per reading taken while watching. */
+    uint16_t echo_us; /**< Echo of that reading; 0 = none or unusable. */
+    bool b_active;    /**< The sensor is held at a watch angle. */
+} obstacle_scan_watch_t;
+
 /* Public function declarations. */
 
 /**
@@ -156,6 +167,40 @@ obstacle_scan_geometry_t obstacle_scan_geometry (void);
  * Call only from the scan task.
  */
 uint8_t obstacle_scan_rearm (void);
+
+/**
+ * @brief Allow or stop automatic side scans after a near centre group.
+ *
+ * While stopped, a confirmed near centre group keeps the stop request
+ * latched and starts another centre group instead of moving the servo, so
+ * the sensor keeps watching straight ahead (and CRITICAL keeps updating)
+ * while the car drives a bypass. A clear group still releases the stop.
+ * Corridor sweeps are not affected. Allowed after initialization.
+ * @param b_enabled true to allow side scans.
+ * Call only from the scan task.
+ */
+void obstacle_scan_set_side_scans (bool b_enabled);
+
+/**
+ * @brief Hold the sensor at one angle and keep reading, or centre it.
+ *
+ * While watching, every reading is published through obstacle_scan_watch()
+ * instead of the centre groups; it also sets or clears CRITICAL. The stop
+ * request and published result are kept as they were. A side scan,
+ * corridor sweep or rearm ends the watch. Readings of the car's own body
+ * (OBSTACLE_SIDE_SELF_*) count as no echo.
+ * @param angle Servo angle, OBSTACLE_SWEEP_FIRST_DEG..LAST_DEG, or
+ *        OBSTACLE_SCAN_WATCH_OFF to centre and resume centre groups.
+ * Call only from the scan task.
+ */
+void obstacle_scan_set_watch (int angle);
+
+/**
+ * @brief Read the latest watch reading.
+ * @return Watch state; sequence advances once per reading.
+ * Call only from the scan task.
+ */
+obstacle_scan_watch_t obstacle_scan_watch (void);
 
 /**
  * @brief Start a corridor sweep for bypass verification.

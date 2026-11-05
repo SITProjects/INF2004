@@ -82,7 +82,10 @@ static const obstacle_avoid_config_t avoid_config = {
                  .pass_max_mm = OBSTACLE_AVOID_PASS_MAX_MM,
                  .return_extra_mm = OBSTACLE_AVOID_RETURN_EXTRA_MM,
                  .overshoot_mm = OBSTACLE_AVOID_LINE_OVERSHOOT_MM,
-                 .angle_min_deg = OBSTACLE_AVOID_ANGLE_MIN_DEG},
+                 .angle_min_deg = OBSTACLE_AVOID_ANGLE_MIN_DEG,
+                 .backoff_mm = OBSTACLE_AVOID_BACKOFF_MM,
+                 .max_backoffs = OBSTACLE_AVOID_MAX_BACKOFFS,
+                 .min_room_mm = OBSTACLE_AVOID_MIN_ROOM_MM},
     .timing = {.stop_ack_ms = OBSTACLE_STOP_ACK_TIMEOUT_MS,
                .result_ms = OBSTACLE_SCAN_TIMEOUT_MS,
                .prepare_ms = OBSTACLE_AVOID_PREPARE_TIMEOUT_MS,
@@ -90,11 +93,14 @@ static const obstacle_avoid_config_t avoid_config = {
                .verify_ms = OBSTACLE_AVOID_VERIFY_TIMEOUT_MS,
                .block_wait_ms = OBSTACLE_AVOID_BLOCK_WAIT_MS,
                .retry_delay_ms = OBSTACLE_AVOID_RETRY_DELAY_MS,
+               .backoff_delay_ms = OBSTACLE_AVOID_BACKOFF_DELAY_MS,
+               .resweep_ms = OBSTACLE_AVOID_RESWEEP_MS,
                .move_speed_mm_s = MOTION_MOVE_SPEED_MM_S,
                .turn_speed_deg_s = MOTION_TURN_SPEED_DEG_S,
                .resume_min_mm = OBSTACLE_AVOID_RESUME_MIN_MM,
                .resume_min_deg = OBSTACLE_AVOID_RESUME_MIN_DEG,
-               .max_sidesteps = OBSTACLE_AVOID_MAX_SIDESTEPS},
+               .max_sidesteps = OBSTACLE_AVOID_MAX_SIDESTEPS,
+               .b_recheck = (OBSTACLE_AVOID_RECHECK != 0)},
     .width = {.scale_mm_per_10k = OBSTACLE_SOUND_MM_PER_10K_US,
               .echo_offset_mm = OBSTACLE_ECHO_OFFSET_MM,
               .radial_offset_mm = OBSTACLE_SENSOR_RADIAL_OFFSET_MM,
@@ -437,6 +443,7 @@ avoid_loop (robot_obstacle_result_t scan, bool b_stop)
     avoid_in.b_stop_requested = b_stop;
     avoid_in.geometry = obstacle_scan_geometry();
     avoid_in.corridor = obstacle_scan_corridor();
+    avoid_in.watch = obstacle_scan_watch();
     avoid_in.motion_mode = status.mode;
     avoid_in.motion_done = status.done;
     avoid_in.b_move_done = (events.flgptn & MOTION_EVT_MOVE_DONE) != 0u;
@@ -471,6 +478,14 @@ apply_actions (obstacle_avoid_action_t const * p_act)
         app_check(er, "obstacle inhibit clear");
         avoid_in.b_inhibit_failed = avoid_in.b_inhibit_failed || (er < E_OK);
     }
+    if (p_act->b_side_scans_off)
+    {
+        obstacle_scan_set_side_scans(false);
+    }
+    if (p_act->b_side_scans_on)
+    {
+        obstacle_scan_set_side_scans(true);
+    }
     if (p_act->b_rearm)
     {
         avoid_in.rearm_sequence = obstacle_scan_rearm();
@@ -481,6 +496,10 @@ apply_actions (obstacle_avoid_action_t const * p_act)
         avoid_in.corridor_request = obstacle_scan_request_corridor()
                                         ? OBSTACLE_AVOID_CORRIDOR_REQ_STARTED
                                         : OBSTACLE_AVOID_CORRIDOR_REQ_REFUSED;
+    }
+    if (p_act->b_watch)
+    {
+        obstacle_scan_set_watch((int)p_act->watch_angle);
     }
     if (p_act->b_send)
     {

@@ -16,6 +16,21 @@
 #define ANGLE_STEP_DEG 5u
 #define ANGLE_MAX_DEG 90u
 
+/* Looked both ways in vain: reverse this much to look again, up to the
+ * total, then stay and re-sweep until the way clears. */
+#define ESCAPE_STEP_MM 100u
+#define ESCAPE_MAX_MM 300u
+
+/* Watch readings farther than this (from the pivot) are not the obstacle. */
+#define WATCH_RANGE_MM 400.0f
+
+/* Smallest widening for a watch reading too close to the path. */
+#define WATCH_SHIFT_MIN_MM 30.0f
+
+/* Drive this far past the last point seen before facing ahead again: a
+ * flat side at a glancing angle often gives no echo while still there. */
+#define WATCH_CLEAR_EXTRA_MM 50u
+
 /* Leg timeout: twice the expected time plus this. */
 #define LEG_TIMEOUT_EXTRA_MS 1000u
 
@@ -27,6 +42,8 @@
 /* Private function declarations. */
 
 static bool plan_usable (robot_obstacle_result_t result, bool * p_gap_right);
+static uint32_t corridor_clearance (obstacle_scan_corridor_t const * p_corridor,
+                                    bool b_right);
 static bool end_fits (uint16_t end_mm, int32_t need_mm, uint32_t pass_mm,
                       obstacle_avoid_geometry_t const * p_geometry);
 static uint8_t plan_angle (uint16_t sidestep_mm, uint16_t centre_mm,
@@ -58,6 +75,19 @@ static void send_part (obstacle_avoid_t * p_ctx,
                        obstacle_avoid_action_t * p_act,
                        obstacle_avoid_input_t const * p_in);
 static void next_leg (obstacle_avoid_t * p_ctx);
+static void start_replan (obstacle_avoid_t * p_ctx,
+                          obstacle_avoid_action_t * p_act,
+                          obstacle_avoid_input_t const * p_in);
+static void step_replan (obstacle_avoid_t * p_ctx,
+                         obstacle_avoid_action_t * p_act,
+                         obstacle_avoid_input_t const * p_in, bool b_inhibited);
+static void resume_after_replan (obstacle_avoid_t * p_ctx,
+                                 obstacle_avoid_action_t * p_act,
+                                 obstacle_avoid_input_t const * p_in,
+                                 bool b_inhibited, char const * p_reason);
+static void send_backoff (obstacle_avoid_t * p_ctx,
+                          obstacle_avoid_action_t * p_act,
+                          obstacle_avoid_input_t const * p_in);
 static void move_done (obstacle_avoid_t * p_ctx,
                        obstacle_avoid_action_t * p_act,
                        obstacle_avoid_input_t const * p_in);
@@ -74,6 +104,11 @@ static void retry_or_fault (obstacle_avoid_t * p_ctx,
 static void step_verify (obstacle_avoid_t * p_ctx,
                          obstacle_avoid_action_t * p_act,
                          obstacle_avoid_input_t const * p_in, bool b_critical);
+static bool watch_step (obstacle_avoid_t * p_ctx,
+                        obstacle_avoid_action_t * p_act,
+                        obstacle_avoid_input_t const * p_in);
+static void watch_off (obstacle_avoid_t * p_ctx,
+                       obstacle_avoid_action_t * p_act);
 static void step_run_leg (obstacle_avoid_t * p_ctx,
                           obstacle_avoid_action_t * p_act,
                           obstacle_avoid_input_t const * p_in, bool b_critical);
@@ -95,6 +130,7 @@ obstacle_avoid_plan (robot_obstacle_result_t result,
                                   .sidestep_mm = 0u,
                                   .pass_mm = 0u,
                                   .angle_deg = ANGLE_MAX_DEG,
+                                  .reverse_mm = 0u,
                                   .b_no_fit = false};
     robot_obstacle_status_t const status =
         robot_obstacle_get_status(result.flags);
@@ -123,9 +159,16 @@ obstacle_avoid_plan (robot_obstacle_result_t result,
     bool const b_scanner_side = (status == ROBOT_OBSTACLE_PATH_FOUND) &&
                                 plan_usable(result, &b_scanner_right);
 
-    uint32_t pass_mm = (uint32_t)geometry.centre_mm +
-                       p_geometry->axle_to_pivot_mm + p_geometry->depth_mm +
-                       p_geometry->rear_mm + p_geometry->margin_mm;
+    /* Too close to turn: reverse first, and plan from the new distance. */
+    uint16_t room_mm = geometry.centre_mm;
+    if (room_mm < p_geometry->min_room_mm)
+    {
+        plan.reverse_mm = (uint16_t)(p_geometry->min_room_mm - room_mm);
+        room_mm = p_geometry->min_room_mm;
+    }
+    uint32_t pass_mm = (uint32_t)room_mm + p_geometry->axle_to_pivot_mm +
+                       p_geometry->depth_mm + p_geometry->rear_mm +
+                       p_geometry->margin_mm;
     if (pass_mm > p_geometry->pass_max_mm)
     {
         plan.b_limited = true;
@@ -149,7 +192,8 @@ obstacle_avoid_plan (robot_obstacle_result_t result,
     if (plan.b_no_fit)
     {
         /* Free space, but tight: best effort on the roomier free end (no
-         * echo is roomiest; a tie keeps the scanner's side). */
+         * echo is roomiest; a tie keeps the scanner's side). The watch
+         * widens the path on the way. */
         uint32_t const left_room = !geometry.b_left_clear ? 0u
                                    : (geometry.left_end_mm == 0u)
                                        ? UINT32_MAX
@@ -233,8 +277,7 @@ obstacle_avoid_plan (robot_obstacle_result_t result,
                            ? p_geometry->sidestep_min_mm
                            : (uint16_t)need_mm;
     plan.pass_mm = (uint16_t)pass_mm;
-    plan.angle_deg =
-        plan_angle(plan.sidestep_mm, geometry.centre_mm, p_geometry);
+    plan.angle_deg = plan_angle(plan.sidestep_mm, room_mm, p_geometry);
     plan.status = OBSTACLE_AVOID_PLAN_OK;
     return plan;
 }
@@ -449,7 +492,14 @@ obstacle_avoid_step (obstacle_avoid_t * p_ctx,
                 {
                     p_ctx->leg = OBSTACLE_AVOID_LEG_FOLLOW;
                 }
-                start_leg(p_ctx, &act, p_in);
+                if (p_ctx->b_backoff)
+                {
+                    send_backoff(p_ctx, &act, p_in);
+                }
+                else
+                {
+                    start_leg(p_ctx, &act, p_in);
+                }
             }
             else if (elapsed(now_ms, p_ctx->entered_ms, p_timing->stop_ack_ms))
             {
@@ -470,6 +520,7 @@ obstacle_avoid_step (obstacle_avoid_t * p_ctx,
                 if (p_ctx->leg == OBSTACLE_AVOID_LEG_FOLLOW)
                 {
                     enter(p_ctx, OBSTACLE_AVOID_IDLE, now_ms);
+                    act.b_side_scans_on = true;
                     act.p_reason = "following";
                 }
                 else
@@ -496,29 +547,84 @@ obstacle_avoid_step (obstacle_avoid_t * p_ctx,
             step_verify(p_ctx, &act, p_in, b_critical);
             break;
         case OBSTACLE_AVOID_BLOCKED_WAIT:
-            if (elapsed(now_ms, p_ctx->blocked_since_ms,
-                        p_timing->block_wait_ms))
+            if (p_timing->b_recheck && elapsed(now_ms, p_ctx->blocked_since_ms,
+                                               p_timing->block_wait_ms))
             {
                 latch_fault(p_ctx, &act, OBSTACLE_AVOID_FAULT_BLOCKED, now_ms,
                             "still blocked");
             }
-            else if (b_inhibited && b_clear)
+            else if (b_inhibited &&
+                     (p_timing->b_recheck ? b_clear : !b_critical))
             {
+                act.b_side_scans_off = !p_timing->b_recheck;
                 release(p_ctx, &act, false, now_ms, "path clear again");
+            }
+            else if (b_inhibited && b_critical && !p_timing->b_recheck &&
+                     (p_ctx->backoffs <
+                      p_ctx->p_config->geometry.max_backoffs) &&
+                     elapsed(now_ms, p_ctx->entered_ms,
+                             p_timing->backoff_delay_ms))
+            {
+                ++p_ctx->backoffs;
+                p_ctx->b_backoff = true;
+                release(p_ctx, &act, false, now_ms, "backing off");
+            }
+            else if (b_inhibited && b_critical && !p_timing->b_recheck &&
+                     (p_ctx->leg == OBSTACLE_AVOID_LEG_PASS) &&
+                     elapsed(now_ms, p_ctx->entered_ms,
+                             p_timing->backoff_delay_ms))
+            {
+                /* Parallel to the line: look again from here. */
+                start_replan(p_ctx, &act, p_in);
+            }
+            else if (b_inhibited && b_critical && !p_timing->b_recheck &&
+                     (p_ctx->leg == OBSTACLE_AVOID_LEG_SIDESTEP) &&
+                     elapsed(now_ms, p_ctx->entered_ms,
+                             p_timing->backoff_delay_ms))
+            {
+                /* Keep what the diagonal achieved, turn back parallel,
+                 * then look again. */
+                uint32_t const target =
+                    along_diagonal(p_ctx->sidestep_mm, p_ctx->plan.angle_deg);
+                uint32_t const done = (target > p_ctx->remaining)
+                                          ? (target - p_ctx->remaining)
+                                          : 0u;
+                float const angle_rad =
+                    (float)p_ctx->plan.angle_deg * DEG_TO_RAD;
+                p_ctx->lateral_mm += (uint32_t)((float)done * sinf(angle_rad));
+                p_ctx->forward_mm += (uint32_t)((float)done * cosf(angle_rad));
+                p_ctx->leg = OBSTACLE_AVOID_LEG_TURN_BACK;
+                p_ctx->b_leg_started = false;
+                p_ctx->b_replan_pending = true;
+                release(p_ctx, &act, false, now_ms, "turn back to re-sweep");
+            }
+            else if (b_inhibited && !p_timing->b_recheck &&
+                     elapsed(now_ms, p_ctx->entered_ms, p_timing->resweep_ms))
+            {
+                /* Best effort: keep looking until the way clears. */
+                start_replan(p_ctx, &act, p_in);
             }
             else
             {
                 /* Held until the path clears. */
             }
             break;
+        case OBSTACLE_AVOID_REPLAN:
+            step_replan(p_ctx, &act, p_in, b_inhibited);
+            break;
         case OBSTACLE_AVOID_RETRY_WAIT:
-            if (b_inhibited &&
-                elapsed(now_ms, p_ctx->entered_ms, p_timing->retry_delay_ms))
+        {
+            uint32_t const delay_ms = p_ctx->b_shift
+                                          ? p_timing->backoff_delay_ms
+                                          : p_timing->retry_delay_ms;
+            if (b_inhibited && elapsed(now_ms, p_ctx->entered_ms, delay_ms))
             {
-                release(p_ctx, &act, false, now_ms, "retrying");
+                release(p_ctx, &act, false, now_ms,
+                        p_ctx->b_shift ? "shifting out" : "retrying");
+                p_ctx->b_shift = false;
             }
             else if (elapsed(now_ms, p_ctx->entered_ms,
-                             p_timing->retry_delay_ms + p_timing->stop_ack_ms))
+                             delay_ms + p_timing->stop_ack_ms))
             {
                 latch_fault(p_ctx, &act, OBSTACLE_AVOID_FAULT_STOP_ACK, now_ms,
                             "stop not acknowledged");
@@ -528,6 +634,7 @@ obstacle_avoid_step (obstacle_avoid_t * p_ctx,
                 /* Held for the retry delay. */
             }
             break;
+        }
         case OBSTACLE_AVOID_FAULT:
         default:
             latch_fault(p_ctx, &act, OBSTACLE_AVOID_FAULT_KERNEL, now_ms,
@@ -565,6 +672,8 @@ obstacle_avoid_state_name (obstacle_avoid_state_t state)
             return "BLOCKED_WAIT";
         case OBSTACLE_AVOID_RETRY_WAIT:
             return "RETRY_WAIT";
+        case OBSTACLE_AVOID_REPLAN:
+            return "REPLAN";
         case OBSTACLE_AVOID_FAULT:
             return "FAULT";
         default:
@@ -614,7 +723,8 @@ sequence_newer (uint8_t sequence, uint8_t reference)
 static bool
 leg_is_move (obstacle_avoid_leg_t leg)
 {
-    return (leg == OBSTACLE_AVOID_LEG_SIDESTEP) ||
+    return (leg == OBSTACLE_AVOID_LEG_REVERSE) ||
+           (leg == OBSTACLE_AVOID_LEG_SIDESTEP) ||
            (leg == OBSTACLE_AVOID_LEG_PASS) ||
            (leg == OBSTACLE_AVOID_LEG_RETURN) ||
            (leg == OBSTACLE_AVOID_LEG_OVERSHOOT);
@@ -625,6 +735,8 @@ leg_reason (obstacle_avoid_leg_t leg)
 {
     switch (leg)
     {
+        case OBSTACLE_AVOID_LEG_REVERSE:
+            return "reverse for room";
         case OBSTACLE_AVOID_LEG_TURN_OUT:
             return "turn toward the gap";
         case OBSTACLE_AVOID_LEG_SIDESTEP:
@@ -663,11 +775,13 @@ latch_fault (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
 {
     p_ctx->fault = fault;
     p_act->b_set_inhibit = true;
+    p_act->b_side_scans_on = true;
     p_act->b_clear_inhibit = false;
     p_act->b_send = false;
     p_act->b_rearm = false;
     p_act->b_corridor = false;
     p_act->p_reason = p_reason;
+    watch_off(p_ctx, p_act);
     enter(p_ctx, OBSTACLE_AVOID_FAULT, now_ms);
 }
 
@@ -714,6 +828,19 @@ try_plan (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
     p_ctx->plan_sequence = p_in->scan.sequence;
     p_ctx->plan = obstacle_avoid_plan(p_in->scan, p_in->geometry,
                                       &p_ctx->p_config->geometry);
+    bool const b_blocked = status == ROBOT_OBSTACLE_BLOCKED;
+    if (b_blocked && (p_ctx->plan.status == OBSTACLE_AVOID_PLAN_NOT_PATH))
+    {
+        /* No edge either side: plan left at the maximum; the corridor
+         * sweep after reversing chooses the side. */
+        robot_obstacle_result_t fallback = p_in->scan;
+        fallback.flags =
+            robot_obstacle_pack_flags(ROBOT_OBSTACLE_PATH_FOUND,
+                                      ROBOT_OBSTACLE_DIR_LEFT_60, false, false);
+        fallback.width_mm = ROBOT_OBSTACLE_WIDTH_UNAVAILABLE;
+        p_ctx->plan = obstacle_avoid_plan(fallback, p_in->geometry,
+                                          &p_ctx->p_config->geometry);
+    }
     if (p_ctx->plan.status != OBSTACLE_AVOID_PLAN_OK)
     {
         static char const * const reasons[] = {"plan ok", "no side to try",
@@ -725,17 +852,48 @@ try_plan (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
                               : "no bypass";
         return true;
     }
-    p_ctx->leg = OBSTACLE_AVOID_LEG_TURN_OUT;
+    p_ctx->leg = (p_ctx->plan.reverse_mm > 0u) ? OBSTACLE_AVOID_LEG_REVERSE
+                                               : OBSTACLE_AVOID_LEG_TURN_OUT;
     p_ctx->b_leg_started = false;
     p_ctx->sidestep_mm = p_ctx->plan.sidestep_mm;
     p_ctx->lateral_mm = 0u;
     p_ctx->forward_mm = 0u;
+    p_ctx->b_backoff = false;
+    p_ctx->backoffs = 0u;
+    p_ctx->escaped_mm = 0u;
+    if (b_blocked)
+    {
+        /* No free space either side: reverse, then sweep again. */
+        if (p_ctx->plan.reverse_mm < ESCAPE_STEP_MM)
+        {
+            uint32_t const pass_mm = (uint32_t)p_ctx->plan.pass_mm +
+                                     ESCAPE_STEP_MM - p_ctx->plan.reverse_mm;
+            p_ctx->plan.pass_mm =
+                (pass_mm > p_ctx->p_config->geometry.pass_max_mm)
+                    ? p_ctx->p_config->geometry.pass_max_mm
+                    : (uint16_t)pass_mm;
+            p_ctx->plan.reverse_mm = ESCAPE_STEP_MM;
+        }
+        p_ctx->escaped_mm = ESCAPE_STEP_MM;
+        p_ctx->leg = OBSTACLE_AVOID_LEG_REVERSE;
+    }
+    /* A sweep taken very close is unreliable: after reversing for room,
+     * sweep again before turning. */
+    p_ctx->b_replan_pending = p_ctx->plan.reverse_mm > 0u;
+    p_ctx->b_watching = false;
+    p_ctx->b_watch_seen = false;
+    p_ctx->b_watch_done = false;
+    p_ctx->b_watch_widened = false;
+    p_ctx->b_shift = false;
+    /* Without re-checks, keep the sensor ahead for the whole bypass. */
+    p_act->b_side_scans_off = !p_ctx->p_config->timing.b_recheck;
     p_ctx->sidesteps = 0u;
     p_ctx->b_retry_used = false;
     p_ctx->b_blocked = false;
     p_ctx->b_need_prepare = false;
     release(p_ctx, p_act, false, p_in->now_ms,
-            p_ctx->plan.b_no_fit ? "path found, tight"
+            b_blocked              ? "no free side, reverse and look again"
+            : p_ctx->plan.b_no_fit ? "path found, tight"
             : p_ctx->plan.b_limited
                 ? "path found, best effort"
                 : (p_ctx->plan.b_edge_unknown ? "path found, gap edge unknown"
@@ -754,6 +912,22 @@ start_leg (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
     for (;;)
     {
         obstacle_avoid_leg_t const leg = p_ctx->leg;
+        if (leg > OBSTACLE_AVOID_LEG_PASS)
+        {
+            watch_off(p_ctx, p_act); /* Past the obstacle: look ahead. */
+        }
+        if (((leg == OBSTACLE_AVOID_LEG_VERIFY) ||
+             (leg == OBSTACLE_AVOID_LEG_TURN_OUT)) &&
+            p_ctx->b_replan_pending)
+        {
+            start_replan(p_ctx, p_act, p_in);
+            return;
+        }
+        if ((leg == OBSTACLE_AVOID_LEG_VERIFY) && !p_timing->b_recheck)
+        {
+            next_leg(p_ctx); /* Trust the first sweep's edges. */
+            continue;
+        }
         if (leg == OBSTACLE_AVOID_LEG_VERIFY)
         {
             p_act->b_corridor = true;
@@ -778,6 +952,9 @@ start_leg (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
             p_ctx->b_leg_started = true;
             switch (leg)
             {
+                case OBSTACLE_AVOID_LEG_REVERSE:
+                    p_ctx->remaining = p_ctx->plan.reverse_mm;
+                    break;
                 case OBSTACLE_AVOID_LEG_SIDESTEP:
                     p_ctx->remaining = along_diagonal(p_ctx->sidestep_mm,
                                                       p_ctx->plan.angle_deg);
@@ -798,8 +975,9 @@ start_leg (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
                     break;
             }
             /* A move after a turn or a sweep needs fresh readings. */
-            p_ctx->b_need_prepare =
-                (leg != OBSTACLE_AVOID_LEG_OVERSHOOT) && leg_is_move(leg);
+            p_ctx->b_need_prepare = (leg != OBSTACLE_AVOID_LEG_OVERSHOOT) &&
+                                    (leg != OBSTACLE_AVOID_LEG_REVERSE) &&
+                                    leg_is_move(leg);
         }
         uint32_t const resume_min = leg_is_move(leg) ? p_timing->resume_min_mm
                                                      : p_timing->resume_min_deg;
@@ -814,7 +992,7 @@ start_leg (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
             next_leg(p_ctx);
             continue;
         }
-        if (leg_is_move(leg) && p_ctx->b_need_prepare)
+        if (leg_is_move(leg) && p_ctx->b_need_prepare && p_timing->b_recheck)
         {
             p_act->b_rearm = true;
             p_act->p_reason = leg_reason(leg);
@@ -837,8 +1015,25 @@ send_part (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
     uint32_t expected_ms;
     if (leg_is_move(leg))
     {
+        p_ctx->b_watch_widened = false;
+        if (((leg == OBSTACLE_AVOID_LEG_SIDESTEP) ||
+             (leg == OBSTACLE_AVOID_LEG_PASS)) &&
+            !p_ctx->b_watching && !p_ctx->b_watch_done)
+        {
+            /* Look ahead along the obstacle side of the path. On the car
+             * the servo's 60 degree end faces right of the heading
+             * (hardware, 2026-11-04): a left bypass watches at 60. */
+            p_ctx->b_watching = true;
+            p_ctx->b_watch_seen = false;
+            p_ctx->watch_sequence = p_in->watch.sequence;
+            p_act->b_watch = true;
+            p_act->watch_angle = p_ctx->plan.b_gap_right
+                                     ? (int16_t)OBSTACLE_SWEEP_LAST_DEG
+                                     : (int16_t)OBSTACLE_SWEEP_FIRST_DEG;
+        }
         p_ctx->part = obstacle_avoid_next_part(p_ctx->remaining);
-        p_ctx->cmd = robot_motion_cmd_move(p_ctx->part, false,
+        p_ctx->cmd = robot_motion_cmd_move(p_ctx->part,
+                                           leg == OBSTACLE_AVOID_LEG_REVERSE,
                                            leg == OBSTACLE_AVOID_LEG_RETURN);
         expected_ms = (p_ctx->part * 1000u) / p_timing->move_speed_mm_s;
     }
@@ -884,6 +1079,17 @@ move_done (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
            obstacle_avoid_input_t const * p_in)
 {
     p_ctx->b_blocked = false;
+    if (p_ctx->b_backoff)
+    {
+        /* Drive the reversed distance again as part of this leg. */
+        p_ctx->b_backoff = false;
+        if (leg_is_move(p_ctx->leg))
+        {
+            p_ctx->remaining += p_ctx->part;
+        }
+        start_leg(p_ctx, p_act, p_in);
+        return;
+    }
     if ((p_ctx->leg == OBSTACLE_AVOID_LEG_RETURN) &&
         (p_in->motion_done == ROBOT_MOTION_DONE_LINE))
     {
@@ -1042,14 +1248,34 @@ step_run_leg (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
     {
         retry_or_fault(p_ctx, p_act, p_in, false, "stall");
     }
-    else if (b_critical)
+    else if (p_ctx->b_backoff &&
+             (p_in->b_stall ||
+              elapsed(p_in->now_ms, p_ctx->entered_ms, p_ctx->leg_timeout_ms)))
+    {
+        /* Count nothing as driven; the forward remainder grows instead. */
+        p_ctx->b_backoff = false;
+        if (leg_is_move(p_ctx->leg))
+        {
+            p_ctx->remaining += p_ctx->part;
+        }
+        p_ctx->part = 0u;
+        retry_or_fault(p_ctx, p_act, p_in, false, "back-off failed");
+    }
+    else if (b_critical && !p_ctx->b_backoff &&
+             (p_ctx->leg != OBSTACLE_AVOID_LEG_REVERSE))
     {
         interrupt_leg(p_ctx, p_act, p_in, "critical");
     }
-    else if (leg_is_move(p_ctx->leg) && p_in->b_stop_requested)
+    else if (leg_is_move(p_ctx->leg) && p_in->b_stop_requested &&
+             !p_ctx->b_backoff && (p_ctx->leg != OBSTACLE_AVOID_LEG_REVERSE) &&
+             p_ctx->p_config->timing.b_recheck)
     {
         /* Turns sweep the sensor past the obstacle; moves must not. */
         interrupt_leg(p_ctx, p_act, p_in, "obstacle ahead");
+    }
+    else if (watch_step(p_ctx, p_act, p_in))
+    {
+        /* Stopped to shift away from the obstacle. */
     }
     else if (p_in->b_move_done)
     {
@@ -1062,6 +1288,125 @@ step_run_leg (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
     else
     {
         /* Command still running. */
+    }
+}
+
+/*
+ * Use a new watch reading on the diagonal or the pass. The sensor looks
+ * (90 - OBSTACLE_SWEEP_FIRST_DEG) degrees toward the obstacle side of the
+ * heading, so a point at range r lies r sin of that from the path and
+ * r cos of it ahead. A point ahead within this leg and closer to the path
+ * than half the car plus the margin widens the offset: on the diagonal by
+ * driving it farther, on the pass by stopping to sidestep out. Once the
+ * car has driven past the last point seen (plus WATCH_CLEAR_EXTRA_MM)
+ * without seeing it again, the sensor faces ahead again.
+ * Returns true only when it stopped the car.
+ */
+static bool
+watch_step (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
+            obstacle_avoid_input_t const * p_in)
+{
+    obstacle_avoid_config_t const * const p_config = p_ctx->p_config;
+    obstacle_avoid_leg_t const leg = p_ctx->leg;
+    if (!p_ctx->b_watching || p_ctx->b_backoff || !p_in->watch.b_active ||
+        (p_in->watch.sequence == p_ctx->watch_sequence) ||
+        ((leg != OBSTACLE_AVOID_LEG_SIDESTEP) &&
+         (leg != OBSTACLE_AVOID_LEG_PASS)))
+    {
+        return false;
+    }
+    p_ctx->watch_sequence = p_in->watch.sequence;
+    float range_mm = 0.0f;
+    bool const b_seen = (p_in->watch.echo_us != 0u) &&
+                        obstacle_width_range_mm(p_in->watch.echo_us,
+                                                &p_config->width, &range_mm) &&
+                        (range_mm < WATCH_RANGE_MM);
+    if (!b_seen)
+    {
+        int32_t const since = p_in->distance_mm - p_ctx->watch_seen_mm;
+        uint32_t const past =
+            (since < 0) ? (uint32_t)(-since) : (uint32_t)since;
+        if (p_ctx->b_watch_seen && p_in->b_odometry_valid &&
+            (past >= ((uint32_t)p_ctx->watch_ahead_mm + WATCH_CLEAR_EXTRA_MM)))
+        {
+            watch_off(p_ctx, p_act);
+            p_ctx->b_watch_done = true;
+            p_act->p_reason = "obstacle passed, sensor ahead";
+        }
+        return false;
+    }
+
+    float const off_rad =
+        (float)(OBSTACLE_CENTRE_DEG - OBSTACLE_SWEEP_FIRST_DEG) * DEG_TO_RAD;
+    float const lateral_mm = range_mm * sinf(off_rad);
+    float const ahead_mm = range_mm * cosf(off_rad);
+    p_ctx->b_watch_seen = true;
+    p_ctx->watch_seen_mm = p_in->distance_mm;
+    p_ctx->watch_ahead_mm = (uint16_t)ceilf(ahead_mm);
+    int32_t const moved = p_in->b_odometry_valid
+                              ? (p_in->distance_mm - p_ctx->start_distance_mm)
+                              : 0;
+    uint32_t const driven = (moved < 0) ? (uint32_t)(-moved) : (uint32_t)moved;
+    float const left_mm =
+        (p_ctx->remaining > driven) ? (float)(p_ctx->remaining - driven) : 0.0f;
+    float const need_mm = (float)p_config->geometry.half_width_mm +
+                          (float)p_config->geometry.margin_mm;
+    if (p_ctx->b_watch_widened || !(lateral_mm < need_mm) ||
+        (ahead_mm > left_mm))
+    {
+        return false;
+    }
+    float shift_mm = ceilf(need_mm - lateral_mm);
+    if (shift_mm < WATCH_SHIFT_MIN_MM)
+    {
+        shift_mm = WATCH_SHIFT_MIN_MM;
+    }
+    uint32_t const shift = (uint32_t)shift_mm;
+    uint32_t const offset_mm =
+        p_ctx->lateral_mm + ((leg == OBSTACLE_AVOID_LEG_SIDESTEP)
+                                 ? (uint32_t)p_ctx->sidestep_mm
+                                 : 0u);
+    if ((offset_mm + shift) > p_config->geometry.lateral_max_mm)
+    {
+        return false; /* No more room; CRITICAL still guards. */
+    }
+    p_ctx->b_watch_widened = true;
+    if (leg == OBSTACLE_AVOID_LEG_SIDESTEP)
+    {
+        /* Drive the diagonal farther once this command ends. */
+        p_ctx->sidestep_mm = (uint16_t)(p_ctx->sidestep_mm + shift);
+        p_ctx->remaining += along_diagonal(shift, p_ctx->plan.angle_deg);
+        p_act->p_reason = "too close, widening";
+        return false;
+    }
+
+    /* On the pass: keep the progress, then sidestep out and carry on. */
+    uint32_t const before = p_ctx->remaining;
+    if (!record_progress(p_ctx, p_in))
+    {
+        latch_fault(p_ctx, p_act, OBSTACLE_AVOID_FAULT_ODOMETRY, p_in->now_ms,
+                    "no odometry");
+        return true;
+    }
+    p_ctx->forward_mm += before - p_ctx->remaining;
+    p_ctx->sidestep_mm = (uint16_t)shift;
+    p_ctx->leg = OBSTACLE_AVOID_LEG_TURN_OUT;
+    p_ctx->b_leg_started = false;
+    p_ctx->b_shift = true;
+    hold(p_ctx, p_act, OBSTACLE_AVOID_RETRY_WAIT, p_in->now_ms,
+         "too close, shifting out");
+    return true;
+}
+
+/* Face the sensor ahead again, if it was watching. */
+static void
+watch_off (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act)
+{
+    if (p_ctx->b_watching)
+    {
+        p_ctx->b_watching = false;
+        p_act->b_watch = true;
+        p_act->watch_angle = (int16_t)OBSTACLE_SCAN_WATCH_OFF;
     }
 }
 
@@ -1222,4 +1567,216 @@ pass_left (obstacle_avoid_t const * p_ctx)
     return (p_ctx->forward_mm < p_ctx->plan.pass_mm)
                ? (p_ctx->plan.pass_mm - p_ctx->forward_mm)
                : 0u;
+}
+
+/* Reverse backoff_mm along the current heading, away from CRITICAL. */
+static void
+send_backoff (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
+              obstacle_avoid_input_t const * p_in)
+{
+    obstacle_avoid_timing_t const * const p_timing = &p_ctx->p_config->timing;
+    p_ctx->part = p_ctx->p_config->geometry.backoff_mm;
+    p_ctx->cmd = robot_motion_cmd_move(p_ctx->part, true, false);
+    p_ctx->leg_timeout_ms =
+        (2u * ((p_ctx->part * 1000u) / p_timing->move_speed_mm_s)) +
+        LEG_TIMEOUT_EXTRA_MS;
+    p_ctx->start_distance_mm = p_in->distance_mm;
+    p_ctx->start_heading_deg = p_in->heading_deg;
+    p_act->b_send = true;
+    p_act->cmd = p_ctx->cmd;
+    p_act->p_reason = "back off";
+    enter(p_ctx, OBSTACLE_AVOID_SEND, p_in->now_ms);
+}
+
+/* Measure the whole 60-120 degree arc from here to choose a direction;
+ * a corridor sweep runs whatever is straight ahead. */
+static void
+start_replan (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
+              obstacle_avoid_input_t const * p_in)
+{
+    p_ctx->b_replan_pending = false;
+    p_ctx->b_watching = false; /* The corridor sweep takes the servo. */
+    p_ctx->b_corridor_started = false;
+    p_ctx->corridor_sequence = p_in->corridor.sequence;
+    p_act->b_corridor = true;
+    p_act->p_reason = "re-sweep";
+    enter(p_ctx, OBSTACLE_AVOID_REPLAN, p_in->now_ms);
+}
+
+/*
+ * Check the corridor sweep for both sides: each is clear, needs a shift,
+ * or is blocked. Before any sideways move either side may be taken, after
+ * it only the side already used. Nothing in the way: carry on (follow the
+ * line if the bypass has not started). Otherwise measured sector clearance
+ * wins (ties keep the current side) and sizes the next sidestep; none fits:
+ * wait held.
+ */
+static void
+step_replan (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
+             obstacle_avoid_input_t const * p_in, bool b_inhibited)
+{
+    obstacle_avoid_config_t const * const p_config = p_ctx->p_config;
+    if (p_in->corridor_request == OBSTACLE_AVOID_CORRIDOR_REQ_STARTED)
+    {
+        p_ctx->b_corridor_started = true;
+    }
+    if (!p_ctx->b_corridor_started ||
+        (p_in->corridor.sequence == p_ctx->corridor_sequence))
+    {
+        if (elapsed(p_in->now_ms, p_ctx->entered_ms,
+                    p_config->timing.verify_ms))
+        {
+            latch_fault(p_ctx, p_act, OBSTACLE_AVOID_FAULT_SCANNER,
+                        p_in->now_ms, "no re-sweep result");
+        }
+        else if (!p_ctx->b_corridor_started)
+        {
+            p_act->b_corridor = true; /* Refused or not answered yet. */
+        }
+        else
+        {
+            /* Sweep running. */
+        }
+        return;
+    }
+
+    bool const b_any_side =
+        (p_ctx->lateral_mm == 0u) && (p_ctx->sidesteps == 0u);
+    uint32_t const left_pass = pass_left(p_ctx);
+    uint16_t const pass_mm =
+        (left_pass > 0u) ? (uint16_t)left_pass : p_ctx->plan.pass_mm;
+    uint16_t shift_mm[2] = {0u, 0u};
+    obstacle_avoid_corridor_t side[2];
+    for (uint8_t right = 0u; right < 2u; ++right)
+    {
+        side[right] = obstacle_avoid_check_corridor(
+            &p_in->corridor, &p_config->width, &p_config->geometry, pass_mm,
+            right != 0u, &shift_mm[right]);
+        bool const b_allowed =
+            b_any_side || ((right != 0u) == p_ctx->plan.b_gap_right);
+        if (!b_allowed)
+        {
+            side[right] = OBSTACLE_AVOID_CORRIDOR_BLOCKED;
+        }
+        if (side[right] == OBSTACLE_AVOID_CORRIDOR_SHIFT)
+        {
+            uint16_t const step =
+                (shift_mm[right] < p_config->geometry.sidestep_min_mm)
+                    ? p_config->geometry.sidestep_min_mm
+                    : shift_mm[right];
+            if ((p_ctx->sidesteps >= p_config->timing.max_sidesteps) ||
+                ((p_ctx->lateral_mm + step) >
+                 p_config->geometry.lateral_max_mm))
+            {
+                side[right] = OBSTACLE_AVOID_CORRIDOR_BLOCKED;
+            }
+        }
+    }
+    uint8_t const current = p_ctx->plan.b_gap_right ? 1u : 0u;
+    if (side[current] == OBSTACLE_AVOID_CORRIDOR_CLEAR)
+    {
+        if (b_any_side && (p_ctx->leg == OBSTACLE_AVOID_LEG_TURN_OUT))
+        {
+            p_ctx->leg = OBSTACLE_AVOID_LEG_FOLLOW; /* Not in the way. */
+        }
+        else if (p_ctx->leg == OBSTACLE_AVOID_LEG_VERIFY)
+        {
+            next_leg(p_ctx);
+        }
+        else
+        {
+            /* Carry on with the current leg. */
+        }
+        resume_after_replan(p_ctx, p_act, p_in, b_inhibited, "path clear");
+        return;
+    }
+
+    uint8_t const other = (uint8_t)(1u - current);
+    uint8_t chosen = current;
+    if ((side[current] == OBSTACLE_AVOID_CORRIDOR_BLOCKED) ||
+        ((side[other] != OBSTACLE_AVOID_CORRIDOR_BLOCKED) &&
+         (corridor_clearance(&p_in->corridor, other != 0u) >
+          corridor_clearance(&p_in->corridor, current != 0u))))
+    {
+        chosen = other;
+    }
+    uint16_t const step_mm =
+        (shift_mm[chosen] < p_config->geometry.sidestep_min_mm)
+            ? p_config->geometry.sidestep_min_mm
+            : shift_mm[chosen];
+    if ((side[chosen] != OBSTACLE_AVOID_CORRIDOR_BLOCKED) &&
+        (p_ctx->sidesteps < p_config->timing.max_sidesteps) &&
+        ((p_ctx->lateral_mm + step_mm) <= p_config->geometry.lateral_max_mm))
+    {
+        p_ctx->plan.b_gap_right = chosen != 0u;
+        p_ctx->sidestep_mm = step_mm;
+        p_ctx->leg = OBSTACLE_AVOID_LEG_TURN_OUT;
+        p_ctx->b_leg_started = false;
+        resume_after_replan(p_ctx, p_act, p_in, b_inhibited, "re-planned");
+    }
+    else if (b_any_side &&
+             ((p_ctx->escaped_mm + ESCAPE_STEP_MM) <= ESCAPE_MAX_MM))
+    {
+        /* No side fits from here: reverse, then sweep again. */
+        uint32_t const pass_mm = (uint32_t)p_ctx->plan.pass_mm + ESCAPE_STEP_MM;
+        p_ctx->plan.pass_mm = (pass_mm > p_config->geometry.pass_max_mm)
+                                  ? p_config->geometry.pass_max_mm
+                                  : (uint16_t)pass_mm;
+        p_ctx->escaped_mm += ESCAPE_STEP_MM;
+        p_ctx->leg = OBSTACLE_AVOID_LEG_REVERSE;
+        p_ctx->b_leg_started = true;
+        p_ctx->remaining = ESCAPE_STEP_MM;
+        p_ctx->b_replan_pending = true;
+        resume_after_replan(p_ctx, p_act, p_in, b_inhibited,
+                            "back away and look again");
+    }
+    else
+    {
+        hold(p_ctx, p_act, OBSTACLE_AVOID_BLOCKED_WAIT, p_in->now_ms,
+             "no bypass from here");
+    }
+}
+
+/* Rank a side by its closest measured return across that half of the
+ * sweep. The centre obstacle is common to both and is not a side reading.
+ * No echo ranks above finite echoes, as in the scanner's side decision. */
+static uint32_t
+corridor_clearance (obstacle_scan_corridor_t const * p_corridor, bool b_right)
+{
+    uint32_t nearest = UINT32_MAX;
+    uint8_t const first = b_right ? (uint8_t)(OBSTACLE_CENTRE_INDEX + 1u) : 0u;
+    uint8_t const end = b_right ? (uint8_t)OBSTACLE_SWEEP_POINTS
+                                : (uint8_t)OBSTACLE_CENTRE_INDEX;
+    for (uint8_t index = first; index < end; ++index)
+    {
+        if ((p_corridor->valid_mask & (uint16_t)(1u << index)) == 0u)
+        {
+            return 0u;
+        }
+        uint16_t const echo = p_corridor->echo_us[index];
+        if ((echo != 0u) && ((uint32_t)echo < nearest))
+        {
+            nearest = echo;
+        }
+    }
+    return nearest;
+}
+
+/* Carry on with side scans off again: release INHIBIT first if held. */
+static void
+resume_after_replan (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
+                     obstacle_avoid_input_t const * p_in, bool b_inhibited,
+                     char const * p_reason)
+{
+    p_ctx->backoffs = 0u;
+    if (b_inhibited)
+    {
+        release(p_ctx, p_act, false, p_in->now_ms, p_reason);
+    }
+    else
+    {
+        start_leg(p_ctx, p_act, p_in);
+        p_act->p_reason = p_reason;
+    }
+    p_act->b_side_scans_off = !p_ctx->p_config->timing.b_recheck;
 }

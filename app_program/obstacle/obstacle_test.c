@@ -73,6 +73,7 @@ typedef struct
     bool b_auto;           /* Answer PREPARE, RUN_LEG and VERIFY. */
     uint32_t sends;        /* Commands queued. */
     uint32_t last_cmd;     /* Last command queued. */
+    int16_t watch_angle;   /* Last watch angle set. */
 } avoid_sim_t;
 
 /* Static data. */
@@ -166,9 +167,20 @@ static bool sim_in_sidestep (void);
 static bool avoid_fault_valid (void);
 static bool avoid_obstacles_valid (void);
 static bool avoid_angle_valid (void);
+static bool avoid_no_recheck_valid (void);
+static bool avoid_backoff_valid (void);
+static bool avoid_replan_valid (void);
+static bool avoid_reverse_valid (void);
 static bool plan_clear_side_valid (void);
 static bool plan_end_room_valid (void);
 static bool plan_measured_clearance_valid (void);
+static bool replan_measured_clearance_valid (void);
+static bool avoid_turn_backoff_valid (void);
+static bool avoid_probe_valid (void);
+static bool avoid_watch_valid (void);
+static void sim_watch (uint16_t echo_us);
+static void sim_blocked_corridor (void);
+static bool sim_held_critical (obstacle_avoid_leg_t leg);
 
 /* Public function definitions. */
 
@@ -239,12 +251,28 @@ obstacle_test (void)
                "avoid: blocked moves resume; turns ignore stop; full box");
     TEST_CHECK("OBS-U55", avoid_angle_valid(),
                "avoid: angle from the room ahead; diagonals and pass sized");
+    TEST_CHECK("OBS-U56", avoid_no_recheck_valid(),
+               "avoid: no re-checks; stop ignored, CRITICAL holds, resumes");
+    TEST_CHECK("OBS-U57", avoid_backoff_valid(),
+               "avoid: side scans off for the bypass; CRITICAL backs off");
+    TEST_CHECK("OBS-U58", avoid_replan_valid(),
+               "avoid: CRITICAL after back-offs re-sweeps and re-plans");
+    TEST_CHECK("OBS-U59", avoid_reverse_valid(),
+               "avoid: too close reverses to the minimum room first");
     TEST_CHECK("OBS-U60", plan_clear_side_valid(),
                "plan: only a side with free space is chosen");
+    TEST_CHECK("OBS-U61", avoid_turn_backoff_valid(),
+               "avoid: CRITICAL during a turn backs off, then turns on");
+    TEST_CHECK("OBS-U62", avoid_probe_valid(),
+               "avoid: no side fits: reverse and sweep again, no 90 look");
     TEST_CHECK("OBS-U64", plan_measured_clearance_valid(),
                "plan: use the scanner's farther clear side, not width");
+    TEST_CHECK("OBS-U65", replan_measured_clearance_valid(),
+               "replan: closest sector return ranks usable sides");
     TEST_CHECK("OBS-U66", plan_end_room_valid(),
                "plan: a clear end counts only if the car fits past it");
+    TEST_CHECK("OBS-U67", avoid_watch_valid(),
+               "avoid: watch the obstacle side and widen while driving");
 
     TEST_CHECK("OBS-U10", packed_obstacle_fields_valid(),
                "packed obstacle fields clamp without changing neighbours");
@@ -1667,7 +1695,9 @@ avoid_config (void)
                                                  .turn_speed_deg_s = 90u,
                                                  .resume_min_mm = 10u,
                                                  .resume_min_deg = 3u,
-                                                 .max_sidesteps = 3u},
+                                                 .max_sidesteps = 3u,
+                                                 .b_recheck = true,
+                                                 .resweep_ms = 3000u},
                                       .width = width_fixture(0.0f)};
     return config;
 }
@@ -1686,6 +1716,14 @@ sim_scan (robot_obstacle_status_t status, robot_obstacle_direction_t dir,
     sim.in.geometry = (status == ROBOT_OBSTACLE_PATH_FOUND)
                           ? geometry_at(250u, 100, -100)
                           : geometry_at(0u, 0, 0);
+}
+
+/* Publish one watch reading; 0 is no echo. */
+static void
+sim_watch (uint16_t echo_us)
+{
+    sim.in.watch.echo_us = echo_us;
+    sim.in.watch.sequence = (uint8_t)(sim.in.watch.sequence + 1u);
 }
 
 /* Publish a corridor sweep: empty, or one point 250 mm straight ahead. */
@@ -1733,7 +1771,8 @@ sim_step (void)
                                      ? ROBOT_MOTION_DONE_LINE
                                      : ROBOT_MOTION_DONE_DIST;
         }
-        else if ((sim.ctx.state == OBSTACLE_AVOID_VERIFY) &&
+        else if (((sim.ctx.state == OBSTACLE_AVOID_VERIFY) ||
+                  (sim.ctx.state == OBSTACLE_AVOID_REPLAN)) &&
                  sim.ctx.b_corridor_started)
         {
             sim_corridor(false);
@@ -1781,6 +1820,16 @@ sim_step (void)
     sim.in.corridor_request = sim.act.b_corridor
                                   ? OBSTACLE_AVOID_CORRIDOR_REQ_STARTED
                                   : OBSTACLE_AVOID_CORRIDOR_REQ_NONE;
+    if (sim.act.b_corridor)
+    {
+        sim.in.watch.b_active = false; /* The sweep takes the servo. */
+    }
+    if (sim.act.b_watch)
+    {
+        sim.watch_angle = sim.act.watch_angle;
+        sim.in.watch.b_active =
+            sim.act.watch_angle != (int16_t)OBSTACLE_SCAN_WATCH_OFF;
+    }
     sim.in.send = OBSTACLE_AVOID_SEND_NONE;
     if (sim.act.b_send)
     {
@@ -2225,6 +2274,211 @@ avoid_angle_valid (void)
            (seen == ARRAY_COUNT(expected)) && (sim.sends - first == seen);
 }
 
+/* OBS-U56: without re-checks the whole box runs from the first sweep: no
+ * rearm or corridor request, a latched stop never holds a move, CRITICAL
+ * holds it and the remainder resumes as soon as CRITICAL clears. */
+static bool
+avoid_no_recheck_valid (void)
+{
+    bool ok = sim_detect_path();
+    sim.config.timing.b_recheck = false;
+    uint32_t rechecks = 0u;
+    sim.b_auto = true;
+    for (uint32_t index = 0u;
+         ok && (index < 200u) && (sim.ctx.state != OBSTACLE_AVOID_IDLE);
+         ++index)
+    {
+        sim.in.b_stop_requested = true; /* Latched, never released. */
+        obstacle_avoid_action_t const act = sim_step();
+        rechecks += (act.b_rearm || act.b_corridor) ? 1u : 0u;
+        ok = sim.ctx.state != OBSTACLE_AVOID_BLOCKED_WAIT;
+    }
+    sim.b_auto = false;
+    ok = ok && (sim.ctx.state == OBSTACLE_AVOID_IDLE) && (rechecks == 0u) &&
+         (sim.last_cmd == robot_motion_cmd_follow());
+
+    /* CRITICAL 50 mm into the sidestep holds; clearing it resumes 185 mm
+     * at once, with the stop request still latched. */
+    ok = ok && sim_detect_path();
+    sim.config.timing.b_recheck = false;
+    sim.config.timing.backoff_delay_ms = 1000u; /* Hold, no re-sweep. */
+    sim.in.distance_mm = 0;
+    ok = ok &&
+         sim_until(OBSTACLE_AVOID_RUN_LEG, OBSTACLE_AVOID_LEG_SIDESTEP, 30u);
+    sim.in.distance_mm = 50;
+    sim.in.scan.flags = robot_obstacle_set_critical(sim.in.scan.flags, true);
+    ok = ok && sim_step().b_set_inhibit &&
+         (sim.ctx.state == OBSTACLE_AVOID_BLOCKED_WAIT);
+    ok = ok && sim_stays(OBSTACLE_AVOID_BLOCKED_WAIT, 5u);
+    sim.in.scan.flags = robot_obstacle_set_critical(sim.in.scan.flags, false);
+    sim.in.b_stop_requested = true;
+    ok = ok && sim_step().b_clear_inhibit && !sim_step().b_rearm &&
+         (sim.ctx.state == OBSTACLE_AVOID_SEND) &&
+         (sim.act.cmd == robot_motion_cmd_move(185u, false, false));
+    return ok;
+}
+
+/* OBS-U57: without re-checks, planning turns side scans off and FOLLOW
+ * turns them on. CRITICAL 100 mm into the 235 mm sidestep holds; after
+ * 300 ms it reverses 50 mm, then drives 135 + 50 = 185 mm. Two back-offs
+ * at most; the third CRITICAL turns back to re-sweep and the box
+ * completes. */
+static bool
+avoid_backoff_valid (void)
+{
+    bool ok = sim_detect_path();
+    sim.config.timing.b_recheck = false;
+    sim.config.timing.backoff_delay_ms = 300u;
+    sim.config.geometry.backoff_mm = 50u;
+    sim.config.geometry.max_backoffs = 2u;
+    ok = ok && sim_step().b_side_scans_off;
+    sim.in.distance_mm = 0;
+    ok = ok &&
+         sim_until(OBSTACLE_AVOID_RUN_LEG, OBSTACLE_AVOID_LEG_SIDESTEP, 30u);
+    for (uint32_t backoff = 0u; ok && (backoff < 3u); ++backoff)
+    {
+        sim.in.distance_mm = (backoff == 0u) ? 100 : sim.in.distance_mm;
+        sim.in.scan.flags =
+            robot_obstacle_set_critical(sim.in.scan.flags, true);
+        ok = sim_step().b_set_inhibit &&
+             (sim.ctx.state == OBSTACLE_AVOID_BLOCKED_WAIT) &&
+             sim_stays(OBSTACLE_AVOID_BLOCKED_WAIT, 29u);
+        if (backoff == 2u)
+        {
+            /* Back-offs used up: turn back parallel to re-sweep. */
+            (void)sim_step();
+            ok = ok && sim_step().b_clear_inhibit && sim.ctx.b_replan_pending;
+            break;
+        }
+        (void)sim_step();
+        ok = ok && sim_step().b_clear_inhibit && sim_step().b_send &&
+             (sim.act.cmd == robot_motion_cmd_move(50u, true, false));
+        (void)sim_step(); /* Queued. */
+        sim.in.b_move_done = true;
+        sim.in.motion_done = ROBOT_MOTION_DONE_DIST;
+        ok = ok && sim_step().b_send &&
+             (sim.act.cmd == robot_motion_cmd_move(
+                                 (backoff == 0u) ? 185u : 235u, false, false));
+        (void)sim_step(); /* Queued. */
+    }
+    sim.in.scan.flags = robot_obstacle_set_critical(sim.in.scan.flags, false);
+    sim.in.b_stop_requested = false;
+    ok = ok &&
+         sim_until(OBSTACLE_AVOID_IDLE, OBSTACLE_AVOID_LEG_FOLLOW, 200u) &&
+         sim.act.b_side_scans_on;
+    return ok;
+}
+
+/* Without re-checks or back-offs, run to the given move and hold it with
+ * CRITICAL until the 300 ms back-off delay has passed. */
+static bool
+sim_held_critical (obstacle_avoid_leg_t leg)
+{
+    bool ok = sim_detect_path();
+    sim.config.timing.b_recheck = false;
+    sim.config.timing.backoff_delay_ms = 300u;
+    sim.in.distance_mm = 0;
+    ok = ok && sim_until(OBSTACLE_AVOID_RUN_LEG, leg, 60u);
+    sim.in.distance_mm = 100;
+    sim.in.scan.flags = robot_obstacle_set_critical(sim.in.scan.flags, true);
+    return ok && sim_step().b_set_inhibit &&
+           (sim.ctx.state == OBSTACLE_AVOID_BLOCKED_WAIT) &&
+           sim_stays(OBSTACLE_AVOID_BLOCKED_WAIT, 29u);
+}
+
+/* OBS-U58: on the pass (left side, 235 mm out) a held CRITICAL re-sweeps
+ * the corridor; a point 250 mm ahead needs 135 mm more, so the left takes
+ * a 135 mm sidestep. In the sidestep, 100 mm in, it turns back parallel
+ * keeping 100 mm, re-sweeps, and on a clear corridor drives the pass. */
+static bool
+avoid_replan_valid (void)
+{
+    bool ok = sim_held_critical(OBSTACLE_AVOID_LEG_PASS);
+    (void)sim_step();
+    ok =
+        ok && sim_step().b_corridor && (sim.ctx.state == OBSTACLE_AVOID_REPLAN);
+    (void)sim_step(); /* Corridor request answered. */
+    sim_corridor(true);
+    ok = ok && sim_step().b_clear_inhibit && sim.act.b_side_scans_off &&
+         (sim.ctx.sidestep_mm == 135u) && (sim.ctx.lateral_mm == 235u) &&
+         !sim.ctx.plan.b_gap_right;
+    sim.in.scan.flags = robot_obstacle_set_critical(sim.in.scan.flags, false);
+    ok = ok && sim_step().b_send &&
+         (sim.act.cmd == robot_motion_cmd_turn(90u, false, false));
+
+    ok = ok && sim_held_critical(OBSTACLE_AVOID_LEG_SIDESTEP);
+    (void)sim_step();
+    ok = ok && sim_step().b_clear_inhibit && (sim.ctx.lateral_mm == 100u);
+    sim.in.scan.flags = robot_obstacle_set_critical(sim.in.scan.flags, false);
+    ok = ok && sim_step().b_send &&
+         (sim.act.cmd == robot_motion_cmd_turn(90u, true, false));
+    (void)sim_step(); /* Queued. */
+    sim.in.b_move_done = true;
+    sim.in.motion_done = ROBOT_MOTION_DONE_DIST;
+    ok =
+        ok && sim_step().b_corridor && (sim.ctx.state == OBSTACLE_AVOID_REPLAN);
+    (void)sim_step();
+    sim_corridor(false);
+    ok = ok && sim_step().b_send &&
+         (sim.act.cmd == robot_motion_cmd_move(650u, false, false)) &&
+         (sim.ctx.lateral_mm == 100u);
+    return ok;
+}
+
+/* OBS-U59: with 200 mm minimum room, an obstacle 50 mm away plans from
+ * 200 mm: reverse 150 mm, sweep the corridor from there, then turn; the
+ * pass is 200 + 80 + 200 + 60 + 60 = 600 mm. At 250 mm nothing is
+ * reversed. With nothing in the way after reversing it resumes
+ * following. */
+static bool
+avoid_reverse_valid (void)
+{
+    obstacle_avoid_geometry_t car = avoid_fixture();
+    car.min_room_mm = 200u;
+    robot_obstacle_result_t const left =
+        path_result(ROBOT_OBSTACLE_DIR_LEFT_60, true, true);
+    obstacle_avoid_plan_t const near =
+        obstacle_avoid_plan(left, geometry_at(50u, 100, -100), &car);
+    obstacle_avoid_plan_t const far =
+        obstacle_avoid_plan(left, geometry_at(250u, 100, -100), &car);
+    bool ok = (near.status == OBSTACLE_AVOID_PLAN_OK) &&
+              (near.reverse_mm == 150u) && (near.pass_mm == 600u) &&
+              (far.reverse_mm == 0u) && (far.pass_mm == 650u);
+
+    ok = ok && sim_detect_path();
+    sim.config.geometry.min_room_mm = 200u;
+    sim.in.geometry = geometry_at(50u, 100, -100);
+    sim.in.scan.flags = robot_obstacle_set_critical(sim.in.scan.flags, true);
+    (void)sim_step();
+    ok = ok && sim_step().b_send &&
+         (sim.act.cmd == robot_motion_cmd_move(150u, true, false));
+    (void)sim_step(); /* Queued; CRITICAL does not stop a reverse. */
+    ok = ok && (sim.ctx.state == OBSTACLE_AVOID_RUN_LEG);
+    sim.in.scan.flags = robot_obstacle_set_critical(sim.in.scan.flags, false);
+    sim.in.b_move_done = true;
+    sim.in.motion_done = ROBOT_MOTION_DONE_DIST;
+    /* The first sweep was too close to trust: sweep the corridor. A
+     * point straight ahead needs 135 mm either way; the tie keeps left. */
+    ok =
+        ok && sim_step().b_corridor && (sim.ctx.state == OBSTACLE_AVOID_REPLAN);
+    (void)sim_step();
+    sim_corridor(true);
+    ok = ok && sim_step().b_send &&
+         (sim.act.cmd == robot_motion_cmd_turn(90u, false, false)) &&
+         (sim.ctx.sidestep_mm == 135u);
+
+    /* Nothing in the way after reversing: resume following. */
+    ok = ok && sim_detect_path();
+    sim.config.geometry.min_room_mm = 200u;
+    sim.in.geometry = geometry_at(50u, 100, -100);
+    ok = ok &&
+         sim_until(OBSTACLE_AVOID_REPLAN, OBSTACLE_AVOID_LEG_TURN_OUT, 20u);
+    (void)sim_step();
+    sim_corridor(false);
+    ok = ok && sim_step().b_send && (sim.act.cmd == robot_motion_cmd_follow());
+    return ok;
+}
+
 /* OBS-U60: edges at +300 (left needs 435, capped 400) and -40 (right
  * needs 175). Only the left clear: left, capped. Both clear: the scanner's
  * measured preference wins. Only right clear with no right edge: right at the
@@ -2288,6 +2542,158 @@ plan_end_room_valid (void)
            plan_is(roomier, false, false, 195u, 650u) && roomier.b_no_fit;
 }
 
+/* OBS-U61: CRITICAL 40 degrees into the 90 degree turn out holds; after
+ * 300 ms it reverses 50 mm, then turns the remaining 50 degrees. */
+static bool
+avoid_turn_backoff_valid (void)
+{
+    bool ok = sim_detect_path();
+    sim.config.timing.b_recheck = false;
+    sim.config.timing.backoff_delay_ms = 300u;
+    sim.config.geometry.backoff_mm = 50u;
+    sim.config.geometry.max_backoffs = 1u;
+    sim.in.heading_deg = 0;
+    ok = ok &&
+         sim_until(OBSTACLE_AVOID_RUN_LEG, OBSTACLE_AVOID_LEG_TURN_OUT, 20u);
+    sim.in.heading_deg = 40;
+    sim.in.scan.flags = robot_obstacle_set_critical(sim.in.scan.flags, true);
+    ok = ok && sim_step().b_set_inhibit &&
+         (sim.ctx.state == OBSTACLE_AVOID_BLOCKED_WAIT) &&
+         sim_stays(OBSTACLE_AVOID_BLOCKED_WAIT, 29u);
+    (void)sim_step();
+    ok = ok && sim_step().b_clear_inhibit && sim_step().b_send &&
+         (sim.act.cmd == robot_motion_cmd_move(50u, true, false));
+    (void)sim_step(); /* Queued. */
+    sim.in.scan.flags = robot_obstacle_set_critical(sim.in.scan.flags, false);
+    sim.in.b_move_done = true;
+    sim.in.motion_done = ROBOT_MOTION_DONE_DIST;
+    ok = ok && sim_step().b_send &&
+         (sim.act.cmd == robot_motion_cmd_turn(50u, false, false));
+    return ok;
+}
+
+/* Publish a corridor sweep with no usable position: blocked both ways. */
+static void
+sim_blocked_corridor (void)
+{
+    sim.in.corridor = empty_corridor();
+    sim.in.corridor.valid_mask = 0u;
+    sim.in.corridor.sequence = (uint8_t)(sim.ctx.corridor_sequence + 1u);
+}
+
+/* OBS-U62: after reversing for room, a corridor blocked both ways
+ * reverses 100 mm and sweeps again, up to 300 mm, then waits held; a clear
+ * corridor after the first 100 mm resumes following. A BLOCKED first
+ * sweep reverses 100 mm and sweeps before turning. No 90 degree look. */
+static bool
+avoid_probe_valid (void)
+{
+    bool ok = true;
+    for (uint32_t clear_first = 0u; ok && (clear_first < 2u); ++clear_first)
+    {
+        ok = sim_detect_path();
+        sim.config.timing.b_recheck = false;
+        sim.config.geometry.min_room_mm = 200u;
+        sim.in.geometry = geometry_at(50u, 100, -100);
+        ok = ok &&
+             sim_until(OBSTACLE_AVOID_REPLAN, OBSTACLE_AVOID_LEG_TURN_OUT, 20u);
+        for (uint32_t step = 1u; ok && (step <= 3u); ++step)
+        {
+            (void)sim_step();
+            sim_blocked_corridor();
+            ok = ok && sim_step().b_send &&
+                 (sim.act.cmd == robot_motion_cmd_move(100u, true, false)) &&
+                 (sim.ctx.escaped_mm == (100u * step));
+            (void)sim_step(); /* Queued. */
+            sim.in.b_move_done = true;
+            sim.in.motion_done = ROBOT_MOTION_DONE_DIST;
+            ok = ok && sim_step().b_corridor &&
+                 (sim.ctx.state == OBSTACLE_AVOID_REPLAN);
+            if (clear_first != 0u)
+            {
+                (void)sim_step();
+                sim_corridor(false);
+                ok = ok && sim_step().b_send &&
+                     (sim.act.cmd == robot_motion_cmd_follow());
+                break;
+            }
+        }
+        if (clear_first == 0u)
+        {
+            (void)sim_step();
+            sim_blocked_corridor();
+            (void)sim_step();
+            ok = ok && (sim.ctx.state == OBSTACLE_AVOID_BLOCKED_WAIT);
+        }
+    }
+
+    /* BLOCKED from the first sweep: reverse and look again first. */
+    sim_reset();
+    sim_scan(ROBOT_OBSTACLE_CLEAR, ROBOT_OBSTACLE_DIR_CENTRE_90, false, false);
+    ok = ok && sim_until(OBSTACLE_AVOID_IDLE, OBSTACLE_AVOID_LEG_FOLLOW, 10u);
+    sim.config.timing.b_recheck = false;
+    sim_scan(ROBOT_OBSTACLE_SCANNING, ROBOT_OBSTACLE_DIR_NONE, true, false);
+    (void)sim_step();
+    (void)sim_step();
+    sim_scan(ROBOT_OBSTACLE_BLOCKED, ROBOT_OBSTACLE_DIR_NONE, true, false);
+    sim.in.geometry = geometry_at(250u, 100, -100);
+    ok = ok &&
+         sim_until(OBSTACLE_AVOID_RUN_LEG, OBSTACLE_AVOID_LEG_REVERSE, 10u) &&
+         (sim.last_cmd == robot_motion_cmd_move(100u, true, false)) &&
+         (sim.ctx.escaped_mm == 100u) && sim.ctx.b_replan_pending;
+    return ok;
+}
+
+/* OBS-U67: the bypass watches the obstacle side while it drives. Left gap
+ * (sensor at 60 degrees, right on the car), 235 mm sidestep, re-checks off. A point 200 mm
+ * away (100 mm from the path, inside 135) lengthens the sidestep by 35 mm;
+ * the same on the pass, 100 mm in, stops and sidesteps 35 mm more, then
+ * passes the remaining 550 mm. No echo with the last point (174 mm
+ * ahead) not yet passed by 50 mm keeps watching; then sensor ahead. */
+static bool
+avoid_watch_valid (void)
+{
+    bool ok = sim_detect_path();
+    sim.config.timing.b_recheck = false;
+    ok = ok &&
+         sim_until(OBSTACLE_AVOID_RUN_LEG, OBSTACLE_AVOID_LEG_SIDESTEP, 20u) &&
+         sim.ctx.b_watching && sim.in.watch.b_active &&
+         (sim.watch_angle == (int16_t)OBSTACLE_SWEEP_FIRST_DEG) &&
+         (sim.ctx.sidestep_mm == 235u);
+    sim_watch(1170u);
+    (void)sim_step();
+    ok = ok && (sim.ctx.sidestep_mm == 270u) && (sim.ctx.remaining == 270u);
+    sim.in.b_move_done = true;
+    sim.in.motion_done = ROBOT_MOTION_DONE_DIST;
+    ok = ok && sim_step().b_send &&
+         (sim.act.cmd == robot_motion_cmd_move(35u, false, false));
+
+    ok = ok &&
+         sim_until(OBSTACLE_AVOID_RUN_LEG, OBSTACLE_AVOID_LEG_PASS, 20u) &&
+         (sim.ctx.remaining == 650u);
+    sim.in.distance_mm += 100;
+    sim_watch(1170u);
+    ok = ok && sim_step().b_set_inhibit &&
+         (sim.ctx.state == OBSTACLE_AVOID_RETRY_WAIT) &&
+         (sim.ctx.leg == OBSTACLE_AVOID_LEG_TURN_OUT) &&
+         (sim.ctx.sidestep_mm == 35u) && (sim.ctx.forward_mm == 100u);
+    ok = ok &&
+         sim_until(OBSTACLE_AVOID_RUN_LEG, OBSTACLE_AVOID_LEG_PASS, 30u) &&
+         (sim.ctx.remaining == 550u) && (sim.ctx.lateral_mm == 305u);
+    /* A dropout with the last point still ahead keeps watching. */
+    sim_watch(0u);
+    ok = ok && !sim_step().b_watch && sim.ctx.b_watching;
+    sim.in.distance_mm += 223; /* 174 mm ahead + 50: one short. */
+    sim_watch(0u);
+    ok = ok && !sim_step().b_watch && sim.ctx.b_watching;
+    sim.in.distance_mm += 1;
+    sim_watch(0u);
+    ok = ok && sim_step().b_watch &&
+         (sim.act.watch_angle == (int16_t)OBSTACLE_SCAN_WATCH_OFF) &&
+         !sim.ctx.b_watching && sim.ctx.b_watch_done;
+    return ok;
+}
+
 /* OBS-U64: actual coarse decisions reach the planner unchanged, even
  * when the winning side needs a wider detour or has no measured edge. */
 static bool
@@ -2329,6 +2735,40 @@ plan_measured_clearance_valid (void)
     obstacle_avoid_plan_t const plan = obstacle_avoid_plan(
         path_result(open.direction, true, true), geometry, &car);
     return plan_is(plan, false, false, 400u, 650u);
+}
+
+/* OBS-U65: a central obstacle needs 135 mm either way. Both routes fit;
+ * farther sector returns win, all-no-echo wins, and ties keep the old side. */
+static bool
+replan_measured_clearance_valid (void)
+{
+    for (unsigned int choice = 0u; choice < 4u; ++choice)
+    {
+        bool ok = sim_detect_path();
+        sim.config.timing.b_recheck = false;
+        sim.config.geometry.min_room_mm = 200u;
+        sim.in.geometry = geometry_at(50u, 100, -100);
+        ok = ok &&
+             sim_until(OBSTACLE_AVOID_REPLAN, OBSTACLE_AVOID_LEG_TURN_OUT, 30u);
+        (void)sim_step();
+        sim_corridor(true);
+        sim.in.corridor.echo_us[0] = choice == 0u ? 6000u : 9000u;
+        sim.in.corridor.echo_us[LAST_EDGE_INDEX] =
+            choice == 0u ? 9000u : (choice == 1u ? 6000u : 9000u);
+        if (choice == 3u)
+        {
+            sim.in.corridor.echo_us[LAST_EDGE_INDEX] = 0u;
+        }
+        bool const right = (choice == 0u) || (choice == 3u);
+        ok = ok && sim_step().b_send &&
+             (sim.act.cmd == robot_motion_cmd_turn(90u, right, false)) &&
+             (sim.ctx.plan.b_gap_right == right);
+        if (!ok)
+        {
+            return false;
+        }
+    }
+    return true;
 }
 
 #endif /* APP_TEST */
