@@ -330,15 +330,15 @@ uint16_t obstacle_avoid_next_part (uint32_t remaining_mm);
 /**
  * @brief Check a corridor sweep against the path the car will pass along.
  *
- * Each usable non-zero echo at angle 60 + 5 i degrees gives a point at
+ * Each usable non-zero echo at angle 30 + 10 i degrees gives a point at
  * x = r cos(angle), y = axle_to_pivot + r sin(angle) from the axle. Points
  * with y below pass_mm + axle_to_pivot are in range. Let g be x measured
  * toward the gap. A point in range with |x| < half_width + margin is in the
  * path; the shift is the largest g + half_width + margin over those, which
  * puts each one on the far side. A point in range on the gap side outside
  * the path (g >= half_width + margin) limits the shift to
- * g - half_width - margin. The 60-120 degree sweep cannot see beside the
- * front wheels; the first sweep's edges cover that area, this does not.
+ * g - half_width - margin. The 30-150 degree sweep sees little beside
+ * the front wheels; the first sweep's edges cover that area, this does not.
  *
  * @param p_corridor Non-null corridor sweep, taken with the car stopped.
  * @param p_width Non-null range corrections.

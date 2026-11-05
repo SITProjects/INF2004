@@ -1020,16 +1020,18 @@ send_part (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
              (leg == OBSTACLE_AVOID_LEG_PASS)) &&
             !p_ctx->b_watching && !p_ctx->b_watch_done)
         {
-            /* Look ahead along the obstacle side of the path. On the car
-             * the servo's 60 degree end faces right of the heading
-             * (hardware, 2026-11-04): a left bypass watches at 60. */
+            /* Look ahead along the obstacle side of the path. Unmirrored,
+             * the servo's 60 degree command faces right of the heading
+             * (hardware, 2026-11-04), so a left bypass watches at 60. With
+             * OBSTACLE_SERVO_MIRRORED the scan angles are true sides. */
             p_ctx->b_watching = true;
             p_ctx->b_watch_seen = false;
             p_ctx->watch_sequence = p_in->watch.sequence;
             p_act->b_watch = true;
-            p_act->watch_angle = p_ctx->plan.b_gap_right
-                                     ? (int16_t)OBSTACLE_SWEEP_LAST_DEG
-                                     : (int16_t)OBSTACLE_SWEEP_FIRST_DEG;
+            p_act->watch_angle =
+                (p_ctx->plan.b_gap_right != (OBSTACLE_SERVO_MIRRORED != 0))
+                    ? (int16_t)OBSTACLE_WATCH_RIGHT_DEG
+                    : (int16_t)OBSTACLE_WATCH_LEFT_DEG;
         }
         p_ctx->part = obstacle_avoid_next_part(p_ctx->remaining);
         p_ctx->cmd = robot_motion_cmd_move(p_ctx->part,
@@ -1301,7 +1303,7 @@ step_run_leg (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
 
 /*
  * Use a new watch reading on the diagonal or the pass. The sensor looks
- * (90 - OBSTACLE_SWEEP_FIRST_DEG) degrees toward the obstacle side of the
+ * (90 - OBSTACLE_WATCH_LEFT_DEG) degrees toward the obstacle side of the
  * heading, so a point at range r lies r sin of that from the path and
  * r cos of it ahead. A point ahead within this leg and closer to the path
  * than half the car plus the margin widens the offset: on the diagonal by
@@ -1345,7 +1347,7 @@ watch_step (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
     }
 
     float const off_rad =
-        (float)(OBSTACLE_CENTRE_DEG - OBSTACLE_SWEEP_FIRST_DEG) * DEG_TO_RAD;
+        (float)(OBSTACLE_CENTRE_DEG - OBSTACLE_WATCH_LEFT_DEG) * DEG_TO_RAD;
     float const lateral_mm = range_mm * sinf(off_rad);
     float const ahead_mm = range_mm * cosf(off_rad);
     p_ctx->b_watch_seen = true;

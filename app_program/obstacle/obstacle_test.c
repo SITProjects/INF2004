@@ -46,6 +46,11 @@
 #define WIDTH_TOLERANCE_MM 2u
 #define CENTRE_EDGE_INDEX ((uint8_t)OBSTACLE_CENTRE_INDEX)
 #define LAST_EDGE_INDEX ((uint8_t)(OBSTACLE_SWEEP_POINTS - 1u))
+/* Echo at which a sweep end stops counting as the obstacle: the ends are
+ * 60 degrees off centre, where a flat face reads twice the centre echo. */
+#define END_LIMIT_US(centre_us) ((2u * (centre_us)) + OBSTACLE_EDGE_JUMP_US)
+_Static_assert((OBSTACLE_CENTRE_DEG - OBSTACLE_SWEEP_FIRST_DEG) == 60u,
+               "END_LIMIT_US assumes the sweep ends are 60 degrees off");
 
 /** One side-selection case: both inputs and the expected decision. */
 typedef struct
@@ -611,61 +616,88 @@ width_unavailable (obstacle_width_result_t width)
            !width.b_left_found && !width.b_right_found && !width.b_collapsed;
 }
 
-/* OBS-U05: centre 1458 us gives a HIT limit of 1924 us (exclusive). */
+/* OBS-U05: centre 1458 us gives a HIT limit of 1924 us (exclusive) at the
+ * centre; a flat face reads 1683.5 us 30 degrees off (limit 2150 us) and
+ * 2916 us at the 60 degree ends (limit 3382 us). */
 static bool
 classify_valid (void)
 {
-    return (obstacle_width_classify(ULTRASONIC_VALID, 1923u, 1458u) ==
+    uint8_t const centre = CENTRE_EDGE_INDEX;
+    return (obstacle_width_classify(ULTRASONIC_VALID, 1923u, 1458u, centre) ==
             OBSTACLE_WIDTH_HIT) &&
-           (obstacle_width_classify(ULTRASONIC_VALID, 1924u, 1458u) ==
+           (obstacle_width_classify(ULTRASONIC_VALID, 1924u, 1458u, centre) ==
             OBSTACLE_WIDTH_MISS) &&
-           (obstacle_width_classify(ULTRASONIC_VALID, 1u, 1458u) ==
+           (obstacle_width_classify(ULTRASONIC_VALID, 1u, 1458u, centre) ==
             OBSTACLE_WIDTH_HIT) &&
-           (obstacle_width_classify(ULTRASONIC_NO_ECHO, 0u, 1458u) ==
+           (obstacle_width_classify(ULTRASONIC_NO_ECHO, 0u, 1458u, centre) ==
             OBSTACLE_WIDTH_MISS) &&
-           (obstacle_width_classify(ULTRASONIC_FAULT, 0u, 1458u) ==
+           (obstacle_width_classify(ULTRASONIC_FAULT, 0u, 1458u, centre) ==
             OBSTACLE_WIDTH_INVALID) &&
-           (obstacle_width_classify(ULTRASONIC_PENDING, 1u, 1458u) ==
+           (obstacle_width_classify(ULTRASONIC_PENDING, 1u, 1458u, centre) ==
             OBSTACLE_WIDTH_INVALID) &&
+           (obstacle_width_classify(ULTRASONIC_VALID, 2149u, 1458u, 3u) ==
+            OBSTACLE_WIDTH_HIT) &&
+           (obstacle_width_classify(ULTRASONIC_VALID, 2150u, 1458u, 9u) ==
+            OBSTACLE_WIDTH_MISS) &&
+           (obstacle_width_classify(ULTRASONIC_VALID, 3381u, 1458u, 0u) ==
+            OBSTACLE_WIDTH_HIT) &&
+           (obstacle_width_classify(ULTRASONIC_VALID, 3382u, 1458u,
+                                    LAST_EDGE_INDEX) == OBSTACLE_WIDTH_MISS) &&
+           /* Beyond the grid counts as the centre. */
+           (obstacle_width_classify(ULTRASONIC_VALID, 1924u, 1458u,
+                                    LAST_EDGE_INDEX + 1u) ==
+            OBSTACLE_WIDTH_MISS) &&
            /* 65500 + 466 exceeds 16 bits; the sum must not wrap. */
-           (obstacle_width_classify(ULTRASONIC_VALID, UINT16_MAX, 65500u) ==
+           (obstacle_width_classify(ULTRASONIC_VALID, UINT16_MAX, 65500u,
+                                    centre) == OBSTACLE_WIDTH_HIT) &&
+           (obstacle_width_classify(ULTRASONIC_VALID, UINT16_MAX, 65500u, 0u) ==
             OBSTACLE_WIDTH_HIT);
 }
 
-/* OBS-U06: flat wall 300 mm ahead covers both ends (346 mm at 60/120). */
+/* OBS-U06: flat wall 100 mm ahead covers both ends (200 mm at 30/150). */
 static bool
 width_wall_valid (void)
 {
     obstacle_width_config_t config = width_fixture(0.0f);
-    obstacle_width_edge_t left = {.index = 0u, .echo_us = 2020u};
-    obstacle_width_edge_t right = {.index = LAST_EDGE_INDEX, .echo_us = 2020u};
+    obstacle_width_edge_t left = {.index = 0u, .echo_us = 1166u};
+    obstacle_width_edge_t right = {.index = LAST_EDGE_INDEX, .echo_us = 1166u};
     return width_matches(obstacle_width_estimate(left, right, &config), 346u,
                          0u, LAST_EDGE_INDEX, false, false);
 }
 
-/* OBS-U07: 200 mm box centred 250 mm ahead hits 70..110 degrees. */
+/* OBS-U07: 200 mm box centred 250 mm ahead hits 70..110 degrees; the
+ * edges lie half a step out, at 65 and 115 degrees. */
 static bool
 width_box_valid (void)
 {
     obstacle_width_config_t config = width_fixture(0.0f);
-    obstacle_width_edge_t left = {.index = 2u, .echo_us = 1551u};
-    obstacle_width_edge_t right = {.index = 10u, .echo_us = 1551u};
+    obstacle_width_edge_t left = {.index = 4u, .echo_us = 1551u};
+    obstacle_width_edge_t right = {.index = 8u, .echo_us = 1551u};
     obstacle_width_result_t width =
         obstacle_width_estimate(left, right, &config);
-    return width_matches(width, 204u, 2u, 10u, true, true) &&
-           (width.left_bound_ddeg == 675u) && (width.right_bound_ddeg == 1125u);
+    return width_matches(width, 225u, 4u, 8u, true, true) &&
+           (width.left_bound_ddeg == 650u) && (width.right_bound_ddeg == 1150u);
 }
 
-/* OBS-U08: the same box 80 mm left continues past 60 degrees. */
+/* OBS-U08: the same box 80 mm left hits 60..90 degrees, so both edges
+ * are found. A 230 mm box 150 mm ahead (edges 37.5 degrees off centre)
+ * hits 60..120 and misses 50 and 130, so both edges are found, where the
+ * 60..120 sweep found none; without beam spread the half-step bound reads
+ * 199 mm, before OBSTACLE_EDGE_CORRECTION_DEG is fitted on the car. */
 static bool
 width_shifted_valid (void)
 {
     obstacle_width_config_t config = width_fixture(0.0f);
-    obstacle_width_edge_t left = {.index = 0u, .echo_us = 1683u};
+    obstacle_width_edge_t left = {.index = 3u, .echo_us = 1683u};
     obstacle_width_edge_t right = {.index = CENTRE_EDGE_INDEX,
                                    .echo_us = 1458u};
-    return width_matches(obstacle_width_estimate(left, right, &config), 155u,
-                         0u, CENTRE_EDGE_INDEX, false, true);
+    obstacle_width_edge_t wide_left = {.index = 3u, .echo_us = 1010u};
+    obstacle_width_edge_t wide_right = {.index = 9u, .echo_us = 1010u};
+    return width_matches(obstacle_width_estimate(left, right, &config), 188u,
+                         3u, CENTRE_EDGE_INDEX, true, true) &&
+           width_matches(
+               obstacle_width_estimate(wide_left, wide_right, &config), 199u,
+               3u, 9u, true, true);
 }
 
 /* OBS-U09: a 20 mm pole at 250 mm hits only the centre. */
@@ -677,14 +709,14 @@ width_pole_valid (void)
                                     .echo_us = 1458u};
     obstacle_width_result_t width =
         obstacle_width_estimate(centre, centre, &config);
-    if (!width_matches(width, 22u, CENTRE_EDGE_INDEX, CENTRE_EDGE_INDEX, true,
+    if (!width_matches(width, 44u, CENTRE_EDGE_INDEX, CENTRE_EDGE_INDEX, true,
                        true) ||
         width.b_collapsed)
     {
         return false;
     }
-    /* 5 degrees inward from 87.5/92.5 crosses: both move to 90 degrees. */
-    config = width_fixture(5.0f);
+    /* 6 degrees inward from 85/95 crosses: both move to 90 degrees. */
+    config = width_fixture(6.0f);
     width = obstacle_width_estimate(centre, centre, &config);
     return (width.width_mm == 1u) && width.b_collapsed &&
            (width.left_bound_ddeg == 900u) && (width.right_bound_ddeg == 900u);
@@ -851,20 +883,18 @@ sides_valid (void)
          ROBOT_OBSTACLE_PATH_FOUND, ROBOT_OBSTACLE_DIR_RIGHT_120},
         {ULTRASONIC_NO_ECHO, 0u, ULTRASONIC_FAULT, 0u, 0u,
          ROBOT_OBSTACLE_PATH_FOUND, ROBOT_OBSTACLE_DIR_LEFT_60},
-        /* A square-on wall near detection still occupies both sides. */
-        {ULTRASONIC_VALID, (uint16_t)((uint32_t)NEAR_US * 1155u / 1000u),
-         ULTRASONIC_VALID, (uint16_t)((uint32_t)NEAR_US * 1155u / 1000u),
-         NEAR_US, ROBOT_OBSTACLE_BLOCKED, ROBOT_OBSTACLE_DIR_NONE},
-        /* The jump boundary is inclusive, on either side. */
-        {ULTRASONIC_VALID, NEAR_US + OBSTACLE_EDGE_JUMP_US, ULTRASONIC_VALID,
-         NEAR_US, NEAR_US, ROBOT_OBSTACLE_PATH_FOUND,
-         ROBOT_OBSTACLE_DIR_LEFT_60},
-        {ULTRASONIC_VALID, NEAR_US, ULTRASONIC_VALID,
-         NEAR_US + OBSTACLE_EDGE_JUMP_US, NEAR_US, ROBOT_OBSTACLE_PATH_FOUND,
-         ROBOT_OBSTACLE_DIR_RIGHT_120},
-        {ULTRASONIC_VALID, NEAR_US + OBSTACLE_EDGE_JUMP_US - 1u,
-         ULTRASONIC_VALID, NEAR_US, NEAR_US, ROBOT_OBSTACLE_BLOCKED,
+        /* A square-on wall near detection still occupies both sides: at the
+         * 60 degree ends it reads twice the centre echo. */
+        {ULTRASONIC_VALID, (uint16_t)(2u * NEAR_US), ULTRASONIC_VALID,
+         (uint16_t)(2u * NEAR_US), NEAR_US, ROBOT_OBSTACLE_BLOCKED,
          ROBOT_OBSTACLE_DIR_NONE},
+        /* The flat-face boundary is inclusive, on either side. */
+        {ULTRASONIC_VALID, END_LIMIT_US(NEAR_US), ULTRASONIC_VALID, NEAR_US,
+         NEAR_US, ROBOT_OBSTACLE_PATH_FOUND, ROBOT_OBSTACLE_DIR_LEFT_60},
+        {ULTRASONIC_VALID, NEAR_US, ULTRASONIC_VALID, END_LIMIT_US(NEAR_US),
+         NEAR_US, ROBOT_OBSTACLE_PATH_FOUND, ROBOT_OBSTACLE_DIR_RIGHT_120},
+        {ULTRASONIC_VALID, END_LIMIT_US(NEAR_US) - 1u, ULTRASONIC_VALID,
+         NEAR_US, NEAR_US, ROBOT_OBSTACLE_BLOCKED, ROBOT_OBSTACLE_DIR_NONE},
         /* A tiny centre echo leaves the detection threshold in charge. */
         {ULTRASONIC_VALID, NEAR_US, ULTRASONIC_VALID, NEAR_US, 1u,
          ROBOT_OBSTACLE_BLOCKED, ROBOT_OBSTACLE_DIR_NONE},
@@ -908,7 +938,7 @@ sides_agree_valid (void)
 
     for (unsigned int c = 0u; c < ARRAY_COUNT(centres); ++c)
     {
-        uint32_t const jump = (uint32_t)centres[c] + OBSTACLE_EDGE_JUMP_US;
+        uint32_t const jump = obstacle_width_hit_limit_us(centres[c], 0u);
         uint32_t const echoes[] = {
             0u,         1u,        NEAR_US, THRESHOLD_US, CLEAR_US,
             FARTHER_US, jump - 1u, jump,    jump + 1u,    UINT16_MAX};
@@ -921,8 +951,8 @@ sides_agree_valid (void)
             uint16_t const echo = (uint16_t)echoes[e];
             bool const b_clear =
                 (echo >= OBSTACLE_DETECT_ECHO_US) &&
-                (obstacle_width_classify(ULTRASONIC_VALID, echo, centres[c]) ==
-                 OBSTACLE_WIDTH_MISS);
+                (obstacle_width_classify(ULTRASONIC_VALID, echo, centres[c],
+                                         0u) == OBSTACLE_WIDTH_MISS);
             obstacle_side_decision_t const left = obstacle_decision_sides(
                 ULTRASONIC_VALID, echo, ULTRASONIC_FAULT, 0u, centres[c]);
             obstacle_side_decision_t const right = obstacle_decision_sides(
@@ -1098,19 +1128,19 @@ packed_obstacle_fields_valid (void)
     return true;
 }
 
-/* OBS-U39: the OBS-U07 box (edges 67.5 and 112.5 deg at 266 mm) lies
- * 266 * cos(67.5 deg) = 102 mm either side of the pivot. */
+/* OBS-U39: the OBS-U07 box (edges 65 and 115 deg at 266 mm) lies
+ * 266 * cos(65 deg) = 112 mm either side of the pivot. */
 static bool
 width_offsets_valid (void)
 {
     obstacle_width_config_t config = width_fixture(0.0f);
-    obstacle_width_edge_t left = {.index = 2u, .echo_us = 1551u};
-    obstacle_width_edge_t right = {.index = 10u, .echo_us = 1551u};
+    obstacle_width_edge_t left = {.index = 4u, .echo_us = 1551u};
+    obstacle_width_edge_t right = {.index = 8u, .echo_us = 1551u};
     obstacle_width_result_t width =
         obstacle_width_estimate(left, right, &config);
     obstacle_width_result_t none = obstacle_width_unavailable();
-    return (width.left_x_mm >= 99) && (width.left_x_mm <= 105) &&
-           (width.right_x_mm <= -99) && (width.right_x_mm >= -105) &&
+    return (width.left_x_mm >= 109) && (width.left_x_mm <= 115) &&
+           (width.right_x_mm <= -109) && (width.right_x_mm >= -115) &&
            (none.left_x_mm == 0) && (none.right_x_mm == 0);
 }
 
@@ -1175,7 +1205,7 @@ wait_result (obstacle_scan_test_snapshot_t * p_snapshot,
 }
 
 /* OBS-U49: a scripted sweep (near centre, both ends no echo, fine hits at
- * 115 and 65 degrees) publishes PATH_FOUND left with its geometry. The
+ * 140 and 40 degrees) publishes PATH_FOUND left with its geometry. The
  * geometry outlives reset_sweep() and is replaced by the next publish. */
 static bool
 geometry_persists_valid (void)
@@ -1639,7 +1669,7 @@ corridor_check_valid (void)
 
     /* 100 degrees at 290 mm is 50.4 mm right: 85 mm more to the left. */
     corridor = empty_corridor();
-    corridor.echo_us[8] = 1691u;
+    corridor.echo_us[7] = 1691u; /* 100 degrees. */
     ok = ok &&
          (obstacle_avoid_check_corridor(&corridor, &width, &car, 650u, false,
                                         &shift_mm) ==
@@ -1648,7 +1678,7 @@ corridor_check_valid (void)
 
     /* The mirror: 80 degrees at 290 mm with the gap on the right. */
     corridor = empty_corridor();
-    corridor.echo_us[4] = 1691u;
+    corridor.echo_us[5] = 1691u; /* 80 degrees. */
     ok = ok &&
          (obstacle_avoid_check_corridor(&corridor, &width, &car, 650u, true,
                                         &shift_mm) ==
@@ -1658,7 +1688,7 @@ corridor_check_valid (void)
     /* Beyond the pass, or a wall on the gap side outside the path: clear. */
     corridor = empty_corridor();
     corridor.echo_us[CENTRE_EDGE_INDEX] = 4665u;
-    corridor.echo_us[0] = 2332u;
+    corridor.echo_us[3] = 2332u; /* 60 degrees: 200 mm left. */
     ok = ok && (obstacle_avoid_check_corridor(&corridor, &width, &car, 650u,
                                               false, &shift_mm) ==
                 OBSTACLE_AVOID_CORRIDOR_CLEAR);
@@ -2514,11 +2544,12 @@ plan_clear_side_valid (void)
 }
 
 /* OBS-U66: edges at +-60 mm, 250 mm ahead, need 195 mm either way, so a
- * point beside the shifted car must be 330 mm out. The scanner chose right
- * and both ends were clear. Right end at 659 mm (329.5 mm out, inside the
- * 650 mm pass): too close, so left. At 662 mm: fits, right. At 800 mm:
- * beyond the pass, right. Both ends too close (300 mm): the scanner's
- * right, flagged tight; left at 400 mm instead: the roomier left. */
+ * point beside the shifted car must be 330 mm out. The ends are 60 degrees
+ * off the heading. The scanner chose right and both ends were clear. Right
+ * end at 380 mm (329.1 mm out, inside the 650 mm pass): too close, so
+ * left. At 382 mm: fits, right. At 1310 mm: beyond the pass, right. Both
+ * ends too close (300 mm): the scanner's right, flagged tight; left at
+ * 350 mm instead: the roomier left. */
 static bool
 plan_end_room_valid (void)
 {
@@ -2528,20 +2559,20 @@ plan_end_room_valid (void)
     obstacle_scan_geometry_t geometry = geometry_at(250u, 60, -60);
     geometry.b_left_clear = true;
     geometry.b_right_clear = true;
-    geometry.right_end_mm = 659u;
+    geometry.right_end_mm = 380u;
     obstacle_avoid_plan_t const tight =
         obstacle_avoid_plan(result, geometry, &car);
-    geometry.right_end_mm = 662u;
+    geometry.right_end_mm = 382u;
     obstacle_avoid_plan_t const fits =
         obstacle_avoid_plan(result, geometry, &car);
-    geometry.right_end_mm = 800u;
+    geometry.right_end_mm = 1310u;
     obstacle_avoid_plan_t const beyond =
         obstacle_avoid_plan(result, geometry, &car);
     geometry.right_end_mm = 300u;
     geometry.left_end_mm = 300u;
     obstacle_avoid_plan_t const neither =
         obstacle_avoid_plan(result, geometry, &car);
-    geometry.left_end_mm = 400u;
+    geometry.left_end_mm = 350u;
     obstacle_avoid_plan_t const roomier =
         obstacle_avoid_plan(result, geometry, &car);
     return plan_is(tight, false, false, 195u, 650u) && !tight.b_no_fit &&
@@ -2667,7 +2698,7 @@ avoid_watch_valid (void)
     ok = ok &&
          sim_until(OBSTACLE_AVOID_RUN_LEG, OBSTACLE_AVOID_LEG_SIDESTEP, 20u) &&
          sim.ctx.b_watching && sim.in.watch.b_active &&
-         (sim.watch_angle == (int16_t)OBSTACLE_SWEEP_FIRST_DEG) &&
+         (sim.watch_angle == (int16_t)OBSTACLE_WATCH_LEFT_DEG) &&
          (sim.ctx.sidestep_mm == 235u);
     sim_watch(1170u);
     (void)sim_step();
@@ -2799,7 +2830,7 @@ static bool
 plan_measured_clearance_valid (void)
 {
     obstacle_avoid_geometry_t car = avoid_fixture();
-    uint16_t const clear_us = THRESHOLD_US + OBSTACLE_EDGE_JUMP_US + 100u;
+    uint16_t const clear_us = END_LIMIT_US(NEAR_US) + 100u;
     for (unsigned int right = 0u; right < 2u; ++right)
     {
         obstacle_side_decision_t const decision = obstacle_decision_sides(

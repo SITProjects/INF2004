@@ -6,8 +6,8 @@
  * shared state. They may run on either core and are exercised directly by
  * obstacle_test.c. Echo values are durations in microseconds; zero means no
  * echo was returned. Angles use the shared grid in robot_types.h: index 0 is
- * 60 degrees (left), the centre index is 90 degrees and the last index is
- * 120 degrees (right).
+ * 30 degrees (left), the centre index is 90 degrees and the last index is
+ * 150 degrees (right).
  */
 
 #ifndef OBSTACLE_WIDTH_H
@@ -62,18 +62,31 @@ typedef struct
 /* Public function declarations. */
 
 /**
+ * @brief First echo that is not on the obstacle at one grid position.
+ * @param centre_echo_us Median near-vote echo of the confirming centre group.
+ * @param index Grid index; one beyond the grid counts as the centre.
+ * @return centre_echo_us / cos(angle off centre), rounded, plus
+ *         OBSTACLE_EDGE_JUMP_US, in 32 bits: the echo a flat face square to
+ *         the heading would give there, plus the margin. At the centre it
+ *         is exactly centre_echo_us + OBSTACLE_EDGE_JUMP_US.
+ */
+uint32_t obstacle_width_hit_limit_us (uint16_t centre_echo_us, uint8_t index);
+
+/**
  * @brief Classify one completed sweep position against the centre echo.
  * @param measurement Position result after retries: VALID, NO_ECHO or a
  *        fault. PENDING is not a completed result and classifies INVALID.
  * @param echo_us Echo in microseconds, used only when VALID.
  * @param centre_echo_us Median near-vote echo of the confirming centre group.
- * @return HIT when VALID and echo_us < centre_echo_us + OBSTACLE_EDGE_JUMP_US
- *         (summed without 16-bit wrap); MISS for NO_ECHO or a VALID echo at
- *         or beyond that sum; INVALID otherwise.
+ * @param index Grid index of the position (see obstacle_width_hit_limit_us).
+ * @return HIT when VALID and echo_us is below
+ *         obstacle_width_hit_limit_us(centre_echo_us, index); MISS for
+ *         NO_ECHO or a VALID echo at or beyond it; INVALID otherwise.
  */
 obstacle_width_class_t obstacle_width_classify (ultrasonic_result_t measurement,
                                                 uint16_t echo_us,
-                                                uint16_t centre_echo_us);
+                                                uint16_t centre_echo_us,
+                                                uint8_t index);
 
 /**
  * @brief Estimate the obstacle width from the outermost hit on each side.

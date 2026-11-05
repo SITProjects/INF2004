@@ -29,9 +29,23 @@ static int16_t lateral_mm (float range_mm, float angle_deg);
 
 /* Public function definitions. */
 
+uint32_t
+obstacle_width_hit_limit_us (uint16_t centre_echo_us, uint8_t index)
+{
+    float off_deg = 0.0f;
+    if (index <= LAST_INDEX)
+    {
+        off_deg = fabsf(index_angle_deg(index) - (float)OBSTACLE_CENTRE_DEG);
+    }
+    /* The sweep stays within 60 degrees of centre, so cos >= 0.5 and the
+     * quotient stays below 2^17. Rounding keeps cos(60) = 0.5 exact. */
+    float const flat_us = (float)centre_echo_us / cosf(off_deg * DEG_TO_RAD);
+    return (uint32_t)(flat_us + 0.5f) + OBSTACLE_EDGE_JUMP_US;
+}
+
 obstacle_width_class_t
 obstacle_width_classify (ultrasonic_result_t measurement, uint16_t echo_us,
-                         uint16_t centre_echo_us)
+                         uint16_t centre_echo_us, uint8_t index)
 {
     if (measurement == ULTRASONIC_NO_ECHO)
     {
@@ -41,7 +55,7 @@ obstacle_width_classify (ultrasonic_result_t measurement, uint16_t echo_us,
     {
         return OBSTACLE_WIDTH_INVALID;
     }
-    uint32_t limit_us = (uint32_t)centre_echo_us + OBSTACLE_EDGE_JUMP_US;
+    uint32_t limit_us = obstacle_width_hit_limit_us(centre_echo_us, index);
     return ((uint32_t)echo_us < limit_us) ? OBSTACLE_WIDTH_HIT
                                           : OBSTACLE_WIDTH_MISS;
 }
@@ -183,7 +197,7 @@ index_angle_deg (uint8_t index)
                    (OBSTACLE_SWEEP_STEP_DEG * index));
 }
 
-/* Boundary angles lie within the sweep, 60..120 degrees, so this fits. */
+/* Boundary angles lie within the sweep, 30..150 degrees, so this fits. */
 static uint16_t
 angle_ddeg (float angle_deg)
 {

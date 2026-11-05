@@ -33,15 +33,15 @@ typedef struct
     uint16_t centre_mm;    /**< Servo pivot to obstacle face, 0 if none. */
     int16_t left_x_mm;     /**< Left boundary, lateral mm from pivot. */
     int16_t right_x_mm;    /**< Right boundary, lateral mm from pivot. */
-    bool b_left_clear;     /**< The 60 degree end was clear (free space). */
-    bool b_right_clear;    /**< The 120 degree end was clear (free space). */
-    uint16_t left_end_mm;  /**< Range at the 60 degree end, 0 if no echo. */
-    uint16_t right_end_mm; /**< Range at the 120 degree end, 0 if none. */
+    bool b_left_clear;     /**< The first (30 degree) end was clear. */
+    bool b_right_clear;    /**< The last (150 degree) end was clear. */
+    uint16_t left_end_mm;  /**< Range at the 30 degree end, 0 if none. */
+    uint16_t right_end_mm; /**< Range at the 150 degree end, 0 if none. */
 } obstacle_scan_geometry_t;
 
 /**
- * One stationary corridor sweep: every grid position from 60 to 120
- * degrees, index 0 at 60 degrees (left). Echoes are medians in
+ * One stationary corridor sweep: every grid position from 30 to 150
+ * degrees, index 0 at 30 degrees (left). Echoes are medians in
  * microseconds; 0 is no echo. A position whose faults exhausted its retries
  * has its valid bit clear; a timed-out or cancelled sweep has none set.
  */
@@ -115,7 +115,7 @@ typedef struct
  * Any coarse or fine position whose faults exhaust its retries makes the
  * width unavailable (width 0, edges EDGE_NONE, both flags false) while the
  * direction is still published. Edges are the first hit from outside, valid
- * for one contiguous obstacle in the 60..120 degree arc; a found edge is
+ * for one contiguous obstacle in the 30..150 degree arc; a found edge is
  * accurate to about half a step before calibration. Results assume the car
  * is stationary throughout the sweep. See obstacle_width.h for the geometry
  * and robot_types.h for the bit layout.
@@ -205,8 +205,8 @@ obstacle_scan_watch_t obstacle_scan_watch (void);
 /**
  * @brief Start a corridor sweep for bypass verification.
  *
- * Latches the stop request, then measures every grid position from 60 to
- * 120 degrees with the side-position ping count, retries and median. When
+ * Latches the stop request, then measures every grid position from 30 to
+ * 150 degrees with the side-position ping count, retries and median. When
  * done, or after OBSTACLE_CORRIDOR_TIMEOUT_MS, the sweep is published for
  * obstacle_scan_corridor() and obstacle_scan_rearm() runs. Assumes the car
  * is stationary throughout.

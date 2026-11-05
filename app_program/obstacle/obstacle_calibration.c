@@ -3,7 +3,7 @@
  * @brief Stationary raw measurements; no normal scanner or motor calls.
  *
  * CAL timestamps are accepted-trigger times, with kernel tick resolution.
- * Logical angles precede trim. CALMETA records follow completed readings so
+ * Logical (scan) angles precede the mirror and trim. CALMETA records follow completed readings so
  * console output cannot delay a measured move-to-trigger interval. Elapsed
  * times include driver spacing retries, tick rounding and scheduling delay.
  */
@@ -26,6 +26,11 @@
 #define CAL_SETTLE_MARGIN_STEP_MS 50
 #define CAL_SETTLE_REPEATS 10u
 #define CAL_HOLD_MS 10000u
+#define CAL_WIDE_FIRST_DEG 30
+#define CAL_WIDE_LAST_DEG 150
+#define CAL_WIDE_STEP_DEG 5
+#define CAL_WIDE_PINGS 5u
+#define CAL_WIDE_PASS_GAP_MS 3000u /* Time to move the test object. */
 
 /* Static data. */
 static int commanded_angle;
@@ -93,7 +98,7 @@ static void
 cal_move (int angle, uint32_t wait_ms)
 {
     move_time_ms = cal_now_ms();
-    servo_set_angle(angle + OBSTACLE_SERVO_TRIM_DEG);
+    servo_set_angle(OBSTACLE_SERVO_COMMAND_DEG(angle));
     commanded_angle = angle;
     move_wait_ms = wait_ms;
     cal_wait(wait_ms);
@@ -130,7 +135,7 @@ cal_ping_point (int angle, uint16_t pings)
                   (unsigned int)echo_us);
         tm_printf((UB *)"CALMETA,MOVE,%lu,%d,%d,%d,%lu\n",
                   (unsigned long)move_time_ms, commanded_angle,
-                  commanded_angle + OBSTACLE_SERVO_TRIM_DEG,
+                  OBSTACLE_SERVO_COMMAND_DEG(commanded_angle),
                   (int)OBSTACLE_SERVO_TRIM_DEG, (unsigned long)move_wait_ms);
         tm_printf((UB *)"CALMETA,PING,%lu,%d,%u,%lu\n",
                   (unsigned long)trigger_ms, angle, (unsigned int)ping,
@@ -222,6 +227,67 @@ cal_run_mode (void)
                 cal_ping_point(angle, 1u);
             }
         }
+    }
+}
+#elif OBSTACLE_CALIBRATION_MODE == OBSTACLE_CAL_MODE_WIDE
+/*
+ * Repeated passes over the widened sweep, one line per angle:
+ * CALWIDE,pass,scan_deg,servo_cmd,valid_pings,nearest_us,farthest_us
+ * (echoes 0 when none). Run it with nothing in front to find where the
+ * car's body shows, then with an object on the car's left to check the
+ * servo direction (OBSTACLE_SERVO_MIRRORED), then with the obstacle
+ * whose width is to be checked.
+ */
+static void
+cal_run_mode (void)
+{
+    for (uint32_t pass = 1u;; pass++)
+    {
+        int previous = CAL_WIDE_LAST_DEG;
+        for (int angle = CAL_WIDE_FIRST_DEG; angle <= CAL_WIDE_LAST_DEG;
+             angle += CAL_WIDE_STEP_DEG)
+        {
+            int delta = angle - previous;
+            uint32_t travel = (uint32_t)((delta < 0) ? -delta : delta);
+            cal_move(angle, OBSTACLE_SETTLE_MS(travel));
+            previous = angle;
+            unsigned int valid = 0u;
+            uint16_t nearest_us = 0u;
+            uint16_t farthest_us = 0u;
+            for (uint16_t ping = 0u; ping < CAL_WIDE_PINGS; ping++)
+            {
+                while (!ultrasonic_trigger())
+                {
+                    cal_wait(OBSTACLE_TICK_MS);
+                }
+                uint16_t echo_us = 0u;
+                ultrasonic_result_t result;
+                do
+                {
+                    result = ultrasonic_read(&echo_us);
+                    if (result == ULTRASONIC_PENDING)
+                    {
+                        cal_wait(OBSTACLE_TICK_MS);
+                    }
+                } while (result == ULTRASONIC_PENDING);
+                if (result == ULTRASONIC_VALID)
+                {
+                    valid++;
+                    if ((nearest_us == 0u) || (echo_us < nearest_us))
+                    {
+                        nearest_us = echo_us;
+                    }
+                    if (echo_us > farthest_us)
+                    {
+                        farthest_us = echo_us;
+                    }
+                }
+            }
+            tm_printf((UB *)"CALWIDE,%lu,%d,%d,%u,%u,%u\n", (unsigned long)pass,
+                      angle, OBSTACLE_SERVO_COMMAND_DEG(angle), valid,
+                      (unsigned int)nearest_us, (unsigned int)farthest_us);
+        }
+        cal_wait(CAL_WIDE_PASS_GAP_MS);
     }
 }
 #endif

@@ -685,7 +685,10 @@ read_result (void)
 #endif
     if ((state_has(SCAN_SCANNING_SIDES) || state_has(SCAN_CORRIDOR) ||
          (watch_angle != OBSTACLE_SCAN_WATCH_OFF)) &&
-        (sensor_angle <= OBSTACLE_SIDE_SELF_MAX_DEG) &&
+        ((OBSTACLE_SERVO_PHYSICAL_DEG(sensor_angle) <=
+          OBSTACLE_SIDE_SELF_MAX_DEG) ||
+         (OBSTACLE_SERVO_PHYSICAL_DEG(sensor_angle) >=
+          OBSTACLE_SIDE_SELF_MIN_DEG)) &&
         (measurement == ULTRASONIC_VALID) &&
         (echo_us < OBSTACLE_SIDE_SELF_ECHO_US))
     {
@@ -927,10 +930,10 @@ scan_sides (ultrasonic_result_t measurement, uint16_t echo_us)
               (unsigned int)centre_echo_us);
     pending_flags = robot_obstacle_pack_flags(decision.status,
                                               decision.direction, false, false);
-    if ((obstacle_width_classify(left, left_echo_us, centre_echo_us) ==
+    if ((obstacle_width_classify(left, left_echo_us, centre_echo_us, 0u) ==
          OBSTACLE_WIDTH_INVALID) ||
-        (obstacle_width_classify(measurement, echo_us, centre_echo_us) ==
-         OBSTACLE_WIDTH_INVALID))
+        (obstacle_width_classify(measurement, echo_us, centre_echo_us,
+                                 LAST_INDEX) == OBSTACLE_WIDTH_INVALID))
     {
         /* A faulty end is no evidence of an edge: no width, same direction. */
         obstacle_width_result_t width = obstacle_width_unavailable();
@@ -945,7 +948,7 @@ static void
 start_fine_side (bool b_right, ultrasonic_result_t end, uint16_t end_echo_us)
 {
     uint8_t end_index = b_right ? LAST_INDEX : 0u;
-    if (obstacle_width_classify(end, end_echo_us, centre_echo_us) ==
+    if (obstacle_width_classify(end, end_echo_us, centre_echo_us, end_index) ==
         OBSTACLE_WIDTH_HIT)
     {
         record_hit(b_right, end_index, end_echo_us);
@@ -978,7 +981,7 @@ read_fine (ultrasonic_result_t measurement, uint16_t echo_us)
     bool b_right = state_get(SCAN_SIDE_MASK, SCAN_SIDE_SHIFT) != 0u;
     uint8_t index = edge_index(b_right);
     obstacle_width_class_t position =
-        obstacle_width_classify(measurement, echo_us, centre_echo_us);
+        obstacle_width_classify(measurement, echo_us, centre_echo_us, index);
     if (position == OBSTACLE_WIDTH_INVALID)
     {
         uint16_t retries = state_get(SCAN_RETRY_MASK, SCAN_RETRY_SHIFT);
@@ -1029,7 +1032,7 @@ record_hit (bool b_right, uint8_t index, uint16_t echo_us)
     }
 }
 
-/* The right walk runs first because the servo is already at 120 degrees. */
+/* The right walk runs first because the servo is already at 150 degrees. */
 static void
 next_fine_side (bool b_right)
 {
@@ -1137,7 +1140,7 @@ move_sensor (int angle)
     uint32_t travel_ms =
         (travel_degrees * servo_timing.travel_ms_per_60_degrees + 59u) / 60u;
     reset_position();
-    servo_set_angle(angle + OBSTACLE_SERVO_TRIM_DEG);
+    servo_set_angle(OBSTACLE_SERVO_COMMAND_DEG(angle));
     sensor_angle = angle;
     settle_start_ms = now_ms();
     settle_duration_ms = travel_ms + servo_timing.settle_margin_ms;
