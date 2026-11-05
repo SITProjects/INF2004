@@ -81,7 +81,7 @@
  * 1000 in MOT-U19, so the speed loop always has duty in hand (also
  * confirms the 16-bit counter margin).
  */
-#define MOTION_MAX_SPEED_MM_S 500.0f
+#define MOTION_MAX_SPEED_MM_S 620.0f
 
 /*
  * Feed-forward duty = MOTION_FF_OFFSET + MOTION_FF_GAIN * speed_mm_s; the
@@ -92,8 +92,8 @@
  * both wheels: GAIN = duty change / speed change between two lines above
  * the start-up duty, OFFSET = duty - GAIN * speed at either of them.
  */
-#define MOTION_FF_OFFSET 0.20f
-#define MOTION_FF_GAIN 0.0012f
+#define MOTION_FF_OFFSET 0.009f
+#define MOTION_FF_GAIN 0.00122f
 
 /*
  * Speed PI loop of each wheel, on top of the feed-forward duty (report
