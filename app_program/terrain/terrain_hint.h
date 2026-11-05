@@ -9,11 +9,13 @@
  * tilt is held.
  *
  * They come from the motion subsystem's odometry (motion_get_odometry(),
- * TEAM.md IF-05). For now only the distance and the ground speed are
- * given. The distance is not used: the hump height comes from the lean
- * alone (one wheel on a ramp). The ground speed confirms collisions.
- * Whether the speed is changing, and turns, are unknown, so the terrain
- * module never holds tilt. Adding them changes only terrain_hint.c.
+ * TEAM.md IF-05). For now only the distance, the ground speed and the two
+ * wheel speeds are given. The distance is not used: the hump height comes
+ * from the lean alone (one wheel on a ramp). The ground speed confirms
+ * collisions; the wheel speeds give the turn rate. Whether the speed is
+ * changing, and whether to hold roll in turns, are unknown, so the
+ * terrain module never holds tilt. Adding them changes only
+ * terrain_hint.c.
  *
  * Internal to the terrain module; other modules should not call it.
  *
@@ -49,6 +51,10 @@ typedef struct
                                 + is forward. Valid while
                                 b_distance_known (same reading). Averaged
                                 by motion over about 100 ms. */
+    int16_t left_mm_s;     /**< Left wheel speed, mm/s; + is forward.
+                                Valid while b_distance_known (same
+                                reading). For the turn rate. */
+    int16_t right_mm_s;    /**< Right wheel speed, as left_mm_s. */
 } terrain_hint_t;
 
 /* Public function declarations. */

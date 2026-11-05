@@ -359,6 +359,52 @@
 #endif
 
 /*
+ * Turning state (terrain_detect.h), from the turn rate: how fast the
+ * car's body rotates, worked out from motion's two wheel speeds, in
+ * degrees per second. Either way round counts the same.
+ *
+ * TURNING once the turn rate stays above TERRAIN_TURN_ON_DPS for
+ * TERRAIN_TURN_ON_SAMPLES samples (10 = 100 ms, so one steering twitch
+ * does not count). Turns in place run at 90 deg/s (MOTION_TURN_SPEED_DEG_S)
+ * and always count; a gentle line-following curve below 20 deg/s is just
+ * following the line, not a turn.
+ * STRAIGHT once it stays below TERRAIN_TURN_OFF_DPS for
+ * TERRAIN_TURN_OFF_SAMPLES samples (30 = 300 ms). The gap between the two
+ * limits stops the state flickering when the rate hovers near one of
+ * them. TODO(car day): check the small line-following corrections stay
+ * under the on limit (TER-U23).
+ */
+#ifndef TERRAIN_TURN_ON_DPS
+#define TERRAIN_TURN_ON_DPS 20u
+#endif
+
+#ifndef TERRAIN_TURN_OFF_DPS
+#define TERRAIN_TURN_OFF_DPS 10u
+#endif
+
+#ifndef TERRAIN_TURN_ON_SAMPLES
+#define TERRAIN_TURN_ON_SAMPLES 10u
+#endif
+
+#ifndef TERRAIN_TURN_OFF_SAMPLES
+#define TERRAIN_TURN_OFF_SAMPLES 30u
+#endif
+
+/* The turn rate field stops at 255 deg/s; the turn counter is 5 bits. */
+#if (TERRAIN_TURN_ON_DPS < 1) || (TERRAIN_TURN_ON_DPS > 255)
+#error "TERRAIN_TURN_ON_DPS must be 1 to 255"
+#endif
+#if (TERRAIN_TURN_OFF_DPS < 1) || (TERRAIN_TURN_OFF_DPS >= TERRAIN_TURN_ON_DPS)
+#error "TERRAIN_TURN_OFF_DPS must be 1 to below TERRAIN_TURN_ON_DPS"
+#endif
+#if (TERRAIN_TURN_ON_SAMPLES < 1) || (TERRAIN_TURN_ON_SAMPLES > 31)
+#error "TERRAIN_TURN_ON_SAMPLES must be 1 to 31"
+#endif
+#if (TERRAIN_TURN_OFF_SAMPLES < 1) || (TERRAIN_TURN_OFF_SAMPLES > 31)
+#error "TERRAIN_TURN_OFF_SAMPLES must be 1 to 31"
+#endif
+
+/*
  * Motion's odometry (TEAM.md IF-05) counts as stale, and its distance as
  * unknown, once its update count has not changed for this long, in ms.
  * tMotion publishes every 20 ms, so 2 s means it has stopped, not that

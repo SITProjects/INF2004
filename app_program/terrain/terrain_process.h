@@ -246,6 +246,18 @@ float terrain_process_pitch_deg (terrain_vec3_t const * p_accel);
 float terrain_process_roll_deg (terrain_vec3_t const * p_accel);
 
 /**
+ * @brief Turn rate of the car's body from its two wheel speeds.
+ * @param left_mm_s Left wheel speed, mm/s; + is forward.
+ * @param right_mm_s Right wheel speed, mm/s; + is forward.
+ * @param track_mm Track width: centre of one drive wheel to the other, mm.
+ * @return Degrees per second, (right - left) / track in radians; turning
+ *         left (right wheel faster) is positive, forward or reversing
+ *         alike. Not rounded or clamped. 0 if @p track_mm is not positive.
+ */
+float terrain_process_turn_rate_dps (int16_t left_mm_s, int16_t right_mm_s,
+                                     float track_mm);
+
+/**
  * @brief Clear the tilt: angles 0, nothing held, filters empty.
  * @param p_tilt Tilt to clear; ignored if NULL.
  */

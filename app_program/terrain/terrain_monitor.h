@@ -5,8 +5,9 @@
  * Phase 1: initialise the GY-511 and read acceleration in the car's
  * axes. Phase 2: calibrate at every start, then correct every reading.
  * Phase 3: pitch and roll. Phase 4: hump state and an event queue. Phase
- * 9: hump height. Turn rate, collisions and motion state follow in later
- * phases.
+ * 5: turn rate and turning state, from motion's wheel speeds. Phase 7:
+ * collisions. Phase 9: hump height. Motion state follows in a later
+ * phase.
  *
  * Call terrain_monitor_init() once, then terrain_monitor_update()
  * regularly (about every 10 ms) from one place only. Calibration then skips
@@ -67,6 +68,16 @@ typedef enum
 } terrain_hump_state_t;
 
 /**
+ * @brief Whether the car is turning, judged from the turn rate (how fast
+ *        its body rotates, from motion's wheel speeds). Resting value 0.
+ */
+typedef enum
+{
+    TERRAIN_TURN_STRAIGHT = 0, /**< Not rotating, or only slowly. */
+    TERRAIN_TURN_TURNING       /**< Rotating faster than the turn limit. */
+} terrain_turn_state_t;
+
+/**
  * @brief Kind of event. The codes are fixed, because events are passed to
  *        other subsystems; new kinds take the next free code.
  */
@@ -80,11 +91,13 @@ typedef enum
     TERRAIN_EVENT_STATIONARY,   /**< Reserved: speed state. */
     TERRAIN_EVENT_ACCELERATING, /**< Reserved: speed state. */
     TERRAIN_EVENT_CRUISING,     /**< Reserved: speed state. */
-    TERRAIN_EVENT_DECELERATING  /**< Reserved: speed state. */
+    TERRAIN_EVENT_DECELERATING, /**< Reserved: speed state. */
+    TERRAIN_EVENT_TURNING,      /**< The car started turning. */
+    TERRAIN_EVENT_STRAIGHT      /**< The car stopped turning. */
 } terrain_event_type_t;
 
 /* Number of event codes in use; codes from here up to 15 are spare. */
-#define TERRAIN_EVENT_TYPES 9u
+#define TERRAIN_EVENT_TYPES 11u
 
 /**
  * @brief One event, packed into one word: type 4 bits, value 12 bits,
@@ -123,9 +136,17 @@ typedef struct
  * The highest hump is the largest LEVEL event height since init, in mm
  * (see terrain_monitor_poll_event()). It is kept through a recalibration.
  *
+ * The turn rate is how fast the car's body rotates, from motion's two
+ * wheel speeds, in whole degrees per second from -256 to +255 (clamped);
+ * turning left is positive. The turning state is TURNING while the car
+ * rotates faster than TERRAIN_TURN_ON_DPS and STRAIGHT otherwise (see
+ * terrain_monitor_poll_event()). Both come from the wheels, not the
+ * accelerometer, so they are given in every calibration state. While
+ * motion's odometry is missing or stale the turn rate reads 0.
+ *
  * The acceleration, tilt and hump state fields are 0 (and nothing is
  * held) unless the calibration state is TERRAIN_CALIB_VALID. An all-zero
- * snapshot reads as CALIBRATING, LEVEL, with everything 0.
+ * snapshot reads as CALIBRATING, LEVEL, STRAIGHT, with everything 0.
  */
 typedef struct
 {
@@ -260,10 +281,19 @@ terrain_status_t terrain_monitor_recalibrate (void);
  *   Then none for TERRAIN_COLLISION_COOLDOWN_SAMPLES. Value: the biggest
  *   push of the hit, tenths of a g, 0 to 127 (stops at 12.7 g).
  *
+ * In every calibration state (the turn rate comes from motion's wheel
+ * speeds, not the accelerometer):
+ * - TURNING: the size of the turn rate stayed above TERRAIN_TURN_ON_DPS
+ *   for TERRAIN_TURN_ON_SAMPLES samples, either way round. Value: 0.
+ * - STRAIGHT: after TURNING, the size of the turn rate stayed below
+ *   TERRAIN_TURN_OFF_DPS for TERRAIN_TURN_OFF_SAMPLES samples. Value: 0.
+ * Turns in place and line-following curves faster than the limit count;
+ * each separate turn of an obstacle detour counts as its own turn.
+ *
  * The queue holds TERRAIN_EVENT_QUEUE_LEN events; when it is full the
  * oldest is dropped and counted (terrain_monitor_events_dropped()). A
  * recalibration resets the hump state to LEVEL and the collision check to
- * ready without an event, and keeps
+ * ready without an event, keeps the turning state, and keeps
  * the events already queued. Only terrain_monitor_init() empties it.
  * Safe to call from other tasks while terrain_monitor_update() runs.
  */
@@ -332,6 +362,25 @@ terrain_monitor_data_hump_state (terrain_data_t const * p_data);
  *         @p p_data is NULL or before the first hump.
  */
 uint8_t terrain_monitor_data_highest_hump_mm (terrain_data_t const * p_data);
+
+/**
+ * @brief Turn rate in a snapshot: how fast the car's body rotates.
+ * @param p_data Snapshot.
+ * @return Degrees per second, -256 to 255 (clamped), whole degrees;
+ *         turning left is positive. Given in every calibration state; 0
+ *         while motion's odometry is missing or stale, or if @p p_data is
+ *         NULL.
+ */
+int16_t terrain_monitor_data_turn_rate_dps (terrain_data_t const * p_data);
+
+/**
+ * @brief Turning state in a snapshot.
+ * @param p_data Snapshot.
+ * @return The state, in every calibration state; TERRAIN_TURN_STRAIGHT if
+ *         @p p_data is NULL.
+ */
+terrain_turn_state_t
+terrain_monitor_data_turn_state (terrain_data_t const * p_data);
 
 /**
  * @brief Pitch in a snapshot.
@@ -481,6 +530,13 @@ char const * terrain_monitor_calib_text (terrain_calib_state_t state);
  * @return A constant string such as "ASCENDING"; never NULL.
  */
 char const * terrain_monitor_hump_text (terrain_hump_state_t state);
+
+/**
+ * @brief Name of a turning state, for printing.
+ * @param state Any terrain_turn_state_t value.
+ * @return A constant string such as "TURNING"; never NULL.
+ */
+char const * terrain_monitor_turn_text (terrain_turn_state_t state);
 
 /**
  * @brief Name of an event kind, for printing.
