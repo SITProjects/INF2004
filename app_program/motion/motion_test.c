@@ -88,7 +88,7 @@
 #endif /* MOTION_TASK_TESTS */
 
 #if MOTION_MANUAL_TESTS
-#define TURN_WINDOW_MS 120000
+#define TURN_WINDOW_MS 20000
 #define TURN_PRINT_MS 500
 
 /* MOT-U06: each wheel alone, forward then backward, at a gentle duty. */
