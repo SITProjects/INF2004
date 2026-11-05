@@ -1,0 +1,40 @@
+=~=~=~=~=~=~=~=~=~=~=~= PuTTY log 2026.11.05 19:43:38 =~=~=~=~=~=~=~=~=~=~=~=
+
+
+microT-Kernel Version 3.00
+
+
+=== micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+dual-core (SMP) build, usermain on core 0
+motion: motors initialized and braked
+motion: encoders counting on PIO0
+motion: line adapter dry run; no motor API calls
+MOTION ONLY (local app_main.c)
+
+[TEST] === test run start ===
+[TEST] MOT-U01 PASS  both motors run 20 kHz PWM and are braked
+[TEST] MOT-U03 PASS  both encoders count on PIO0 and hold still at rest
+[TEST] MOT-U07 PASS  moves start stopped, odometry holds at rest, 0 refused
+[TEST] MOT-U18 PASS  PID P, I, D terms, limits, anti-windup and reset
+[TEST] MOT-U22 50 updates took 1000 ms (1000 expected)
+[TEST] MOT-U22 PASS  test-loop updates run at MOTION_UPDATE_PERIOD_MS
+[TEST] MOT-U23 PASS  straight-line loop idle at rest, switches on and off
+[TEST] MOT-U27 PASS  follow and line input refuse bad values, line debounced
+[TEST] MOT-U08 car on the floor: mark its position; it drives FORWARD 1000 mm in 5 s
+[TEST] MOT-U08 state 0 after 4980 ms; odometry 998 mm (target 1000): ruler must agree within 3 percent
+[TEST] MOT-U09 car on the floor: mark its position; it drives BACKWARD 100 mm in 5 s
+[TEST] MOT-U09 state 0 after 520 ms; odometry -101 mm (target -100): ruler must agree within 3 percent
+[TEST] MOT-U10 lift the car and hold the LEFT wheel still: the car is driven forward in 10 s
+[TEST] MOT-U10 stalled 1 after 500 ms (expect about 300), braked 1, refused 1, cleared 1
+[TEST] MOT-U10 PASS  held wheel stalls, brakes, refuses moves until stopped
+[TEST] MOT-U33 PASS  motion commands pack, saturate and decode
+motion: STOP edge_error=0 seen=0 valid=0 (dry run)
+[TEST] MOT-U34 52 updates, period 19992..20009 us (20000 expected), longest update 418 us
+[TEST] MOT-U34 PASS  tMotion updates every period within 1 ms (NFR1)
+[TEST] MOT-U35 INHIBIT to brake 73 us (limit 20000)
+[TEST] MOT-U35 refused 1 stop 1 inhibited 1 cleared 1
+[TEST] MOT-U35 PASS  tMotion refuses bad commands, INHIBIT brakes and flushes
+[TEST] MOT-U38 11 updates in 200 ms (10 expected), distance 940 mm, heading 48 deg
+[TEST] MOT-U38 PASS  shared odometry rises every update and holds at rest
+[TEST] motion SUMMARY 12 passed, 0 failed
+[TEST] === test run end ===
