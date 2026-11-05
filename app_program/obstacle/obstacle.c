@@ -128,6 +128,11 @@ static uint32_t log_time_ms (void);
 #if AVOID_ACTIVE
 static void avoid_loop (robot_obstacle_result_t scan, bool b_stop);
 static void apply_actions (obstacle_avoid_action_t const * p_act);
+#if TM_MQTT
+static void publish_avoid (obstacle_avoid_action_t const * p_act);
+static void text_append (char * p_text, uint32_t * p_length,
+                         char const * p_part);
+#endif
 #endif
 
 /* Public function definitions. */
@@ -549,6 +554,42 @@ apply_actions (obstacle_avoid_action_t const * p_act)
                   (unsigned long)log_time_ms(),
                   obstacle_avoid_state_name(p_act->from),
                   obstacle_avoid_state_name(p_act->to), p_act->p_reason);
+#if TM_MQTT
+        publish_avoid(p_act);
+#endif
     }
 }
+
+#if TM_MQTT
+/* Queue "avoid FROM>TO reason" for MQTT, cut to the record size. A full or
+ * busy queue drops it: the console line above is the full record. */
+static void
+publish_avoid (obstacle_avoid_action_t const * p_act)
+{
+    char text[TELEMETRY_TEXT_SIZE];
+    uint32_t length = 0u;
+    text[0] = '\0';
+    text_append(text, &length, "avoid ");
+    text_append(text, &length, obstacle_avoid_state_name(p_act->from));
+    text_append(text, &length, ">");
+    text_append(text, &length, obstacle_avoid_state_name(p_act->to));
+    text_append(text, &length, " ");
+    text_append(text, &length, p_act->p_reason);
+    uint32_t sequence = 0u;
+    (void)telemetry_queue_push(log_time_ms(), text, &sequence);
+}
+
+/* Append p_part, keeping p_text terminated within TELEMETRY_TEXT_SIZE. */
+static void
+text_append (char * p_text, uint32_t * p_length, char const * p_part)
+{
+    while ((*p_part != '\0') && ((*p_length + 1u) < TELEMETRY_TEXT_SIZE))
+    {
+        p_text[*p_length] = *p_part;
+        ++*p_length;
+        ++p_part;
+    }
+    p_text[*p_length] = '\0';
+}
+#endif
 #endif
