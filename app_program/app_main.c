@@ -20,7 +20,8 @@
  * -------------------------------------
  *   obstacle/       ultrasonic sensor on a servo, scans for a path
  *   motion/         two H-bridge DC motors, held braked for now
- *   line_follow/    two IR sensors -> line-following commands
+ *   line_follow/    two digital IR sensors -> line-following requests
+ *   barcode/        third IR sensor -> Code 39 text
  *   terrain/        GY-511 accelerometer, calibration at start-up
  *   communication/  Wi-Fi connection status from the kernel's radio task
  *
@@ -117,6 +118,9 @@ usermain (void)
     app_check(motion_init(), "motion_init");
 #endif
     app_check(line_follow_init(), "line_follow_init");
+#if !IR_MOTOR_TEST
+    app_check(barcode_init(), "barcode_init");
+#endif
 #if !IR_CALIBRATION_ONLY && !IR_MOTOR_TEST
     app_check(terrain_init(), "terrain_init");
     app_check(communication_init(), "communication_init");
@@ -130,6 +134,9 @@ usermain (void)
     app_check(motion_start(), "motion_start");
 #endif
     app_check(line_follow_start(), "line_follow_start");
+#if !IR_MOTOR_TEST
+    app_check(barcode_start(), "barcode_start");
+#endif
 #if !IR_CALIBRATION_ONLY && !IR_MOTOR_TEST
     app_check(terrain_start(), "terrain_start");
     app_check(communication_start(), "communication_start");
@@ -139,7 +146,8 @@ usermain (void)
     tm_printf(
         (UB *)"IR MOTOR TEST: continuous line following; no run cutoff\n\n");
 #else
-    tm_printf((UB *)"IR calibration only: GP26 left, GP27 right\n\n");
+    tm_printf((UB *)"IR calibration only: DO on GP26 left, GP27 right, "
+                    "GP28 barcode\n\n");
 #endif
 
 #if APP_TEST && !IR_CALIBRATION_ONLY && !IR_MOTOR_TEST
@@ -152,6 +160,7 @@ usermain (void)
     obstacle_test();
     motion_test();
     line_follow_test();
+    barcode_test();
     terrain_test();
     communication_test();
     tm_printf((UB *)"[TEST] === test run end ===\n");
