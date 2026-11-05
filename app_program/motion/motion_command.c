@@ -1,10 +1,14 @@
 /**
  * @file motion_command.c
- * @brief Feed calibrated IR edge errors to the existing motion controller.
+ * @brief Pass the line task's requests to the motion module.
  *
  * A mutex protects a latest-value slot. tMotion services this adapter once
  * per update before its single motion_move_update() call. This module creates
  * no task. Dry-run and APP_TEST builds never call motion APIs from it.
+ *
+ * The line task decides everything; this adapter only maps its request on
+ * the motion module: TRACK holds the requested heading at a constant speed,
+ * SEARCH pivots to the requested heading once per new target, STOP brakes.
  */
 
 #include "motion_command.h"
@@ -14,62 +18,20 @@
 
 /* Private types, constants, and macros. */
 #define ACTUATION_ACTIVE (MOTION_COMMAND_ACTUATION_ENABLED && !APP_TEST)
-#define ADC_MAX 4095u
-_Static_assert(MOTION_LINE_ERROR_MAX <= 1023, "Line error must fit 11 bits");
-_Static_assert(LINE_COMMAND_ALIGN_RIGHT <= 15,
-               "Line command must fit four bits");
-_Static_assert(MOTION_COMMAND_PROBE_ERROR > 0 &&
-                   MOTION_COMMAND_PROBE_ERROR <= MOTION_COMMAND_EDGE_ERROR &&
-                   MOTION_COMMAND_SEARCH_ERROR > 0 &&
-                   MOTION_COMMAND_SEARCH_ERROR <= MOTION_COMMAND_STEER_ERROR,
-               "Invalid probe/search correction");
-_Static_assert(MOTION_COMMAND_STEER_ERROR > 1 &&
-                   MOTION_COMMAND_STEER_ERROR <= MOTION_LINE_ERROR_MAX,
-               "Invalid steering magnitude");
-_Static_assert(MOTION_COMMAND_EDGE_ERROR > 0 &&
-                   MOTION_COMMAND_EDGE_ERROR <= MOTION_COMMAND_STEER_ERROR,
-               "Invalid gentle edge correction");
-_Static_assert(LINE_LEFT_WHITE_MAX < LINE_LEFT_DETECT_MIN &&
-                   LINE_LEFT_DETECT_MIN < LINE_LEFT_BLACK_MIN,
-               "Invalid left detection/calibration range");
-_Static_assert(LINE_RIGHT_WHITE_MAX < LINE_RIGHT_DETECT_MIN &&
-                   LINE_RIGHT_DETECT_MIN < LINE_RIGHT_BLACK_MIN,
-               "Invalid right detection/calibration range");
+#define STALL_RETRY_UPDATES                                                    \
+    (MOTION_COMMAND_STALL_RETRY_MS / MOTION_UPDATE_PERIOD_MS)
+
 _Static_assert(MOTION_COMMAND_FOLLOW_SPEED_MM_S > 0u &&
                    MOTION_COMMAND_FOLLOW_SPEED_MM_S <= MOTION_MAX_SPEED_MM_S,
                "Invalid follow speed");
-_Static_assert(MOTION_COMMAND_SEARCH_SPEED_MM_S > 0u &&
-                   MOTION_COMMAND_SEARCH_SPEED_MM_S <=
-                       MOTION_COMMAND_FOLLOW_SPEED_MM_S,
-               "Invalid search speed");
 
 typedef struct
 {
     uint32_t received_ms;
-    signed int error : 11;
-    unsigned int command : 4;
-    unsigned int b_seen : 1;
-    unsigned int b_valid : 1;
-    unsigned int b_pending : 1;
-#if IR_MOTOR_TEST
-    ir_sensor_reading_t reading;
-#endif
-} command_request_t;
-
-#if ACTUATION_ACTIVE && IR_MOTOR_TEST
-#define TEST_TRACE_SAMPLES 32u
-
-typedef struct
-{
-    uint32_t time_ms;
-    ir_sensor_reading_t reading;
-    int16_t error;
-    int16_t turn_deg_s;
-    line_command_t command;
-    motion_state_t state;
+    line_request_t request;
     bool b_valid;
-} test_trace_t;
-#endif
+    bool b_pending;
+} command_slot_t;
 
 /* Static data. */
 static ID command_mutex;
@@ -79,33 +41,23 @@ static uint32_t startup_ms;
 static bool b_control_previous;
 #endif
 /* Shared only under command_mutex. */
-static command_request_t latest_request;
+static command_slot_t latest_slot;
 /* The following state belongs exclusively to the motion task. */
-static command_request_t active_request;
+static command_slot_t active_slot;
 #if ACTUATION_ACTIVE
 static bool b_fault_latched;
-/* LOCAL TEST: updates since a stall latched; it is cleared after
- * STALL_RETRY_UPDATES so following (and searching) carries on. */
-#define STALL_RETRY_UPDATES (500u / MOTION_UPDATE_PERIOD_MS)
 static uint32_t stall_updates;
-static bool b_slow_active;
-static bool b_search_right;
-static bool b_recovery_turn;
-static bool b_turn_latched;
+static bool b_search_active;
+static int32_t search_target_deg;
 #endif
 
 /* Private function declarations. */
 static ER take_request (bool * p_new);
-static int16_t estimate_error (line_command_t command,
-                               ir_sensor_reading_t reading);
-static int16_t edge_error (uint16_t raw, uint16_t detect, uint16_t black);
 #if ACTUATION_ACTIVE
 static void update_controller (bool b_new);
-static motion_status_t apply_reading (void);
+static motion_status_t apply_request (void);
+static motion_status_t start_search (int32_t target_deg);
 static void latch_fault (motion_status_t status);
-#if IR_MOTOR_TEST
-static void motor_test_trace (bool b_new);
-#endif
 #else
 static void report_request (void);
 #endif
@@ -151,30 +103,18 @@ motion_command_start (void)
 }
 
 ER
-motion_command_submit (line_command_t command,
-                       ir_sensor_reading_t const * p_reading)
+motion_command_submit (line_request_t const * p_request)
 {
-    bool const b_command_valid =
-        ((unsigned int)command <= LINE_COMMAND_ALIGN_RIGHT);
-    bool const b_counts_valid =
-        (p_reading == NULL) ||
-        ((p_reading->left_raw <= ADC_MAX) && (p_reading->right_raw <= ADC_MAX));
-    command_request_t request = {.command = LINE_COMMAND_STOP};
+    command_slot_t slot = {.request = {.mode = LINE_MODE_STOP}};
+    bool const b_mode_valid =
+        (p_request == NULL) ||
+        ((unsigned int)p_request->mode <= (unsigned int)LINE_MODE_STOP);
     SYSTIM now;
 
-#if IR_MOTOR_TEST
-    if (p_reading != NULL)
+    if ((p_request != NULL) && b_mode_valid)
     {
-        request.reading = *p_reading;
-    }
-#endif
-    if (b_command_valid && b_counts_valid && (p_reading != NULL))
-    {
-        request.command = command;
-        request.error = estimate_error(command, *p_reading);
-        request.b_seen = (p_reading->left_raw >= LINE_LEFT_DETECT_MIN) ||
-                         (p_reading->right_raw >= LINE_RIGHT_DETECT_MIN);
-        request.b_valid = 1u;
+        slot.request = *p_request;
+        slot.b_valid = true;
     }
     if (command_mutex <= 0)
     {
@@ -188,14 +128,12 @@ motion_command_submit (line_command_t command,
     result = tk_get_otm(&now);
     if (result == E_OK)
     {
-        request.received_ms = (uint32_t)now.lo;
-        request.b_pending = 1u;
-        latest_request = request;
+        slot.received_ms = (uint32_t)now.lo;
+        slot.b_pending = true;
+        latest_slot = slot;
     }
     (void)tk_unl_mtx(command_mutex);
-    return (result < E_OK)
-               ? result
-               : ((b_command_valid && b_counts_valid) ? E_OK : E_PAR);
+    return (result < E_OK) ? result : (b_mode_valid ? E_OK : E_PAR);
 }
 
 /* Public owner hook: tMotion remains the sole caller of motion APIs. */
@@ -208,25 +146,22 @@ motion_command_service (bool b_control_enabled)
     bool const b_clock = (tk_get_otm(&now) == E_OK);
     /* Contention skips this poll; the cached timestamp still expires. */
     if (((result < E_OK) && (result != E_TMOUT)) || !b_clock ||
-        ((uint32_t)((uint32_t)now.lo - active_request.received_ms) >=
+        ((uint32_t)((uint32_t)now.lo - active_slot.received_ms) >=
          MOTION_LINE_TIMEOUT_MS))
     {
-        active_request.b_valid = 0u;
+        active_slot.b_valid = false;
     }
 #if ACTUATION_ACTIVE
     bool const b_take_over = b_control_enabled && !b_control_previous;
     b_control_previous = b_control_enabled;
     if (!b_control_enabled)
     {
-        b_recovery_turn = false;
-        b_turn_latched = false;
-        b_slow_active = false;
+        b_search_active = false;
         /* External MOVE/TURN stop-at-line still receives current visibility,
-         * but no line decision may replace the queued command or inhibit. */
-        if (b_new && active_request.b_valid)
+         * but no line request may replace the queued command or inhibit. */
+        if (b_new && active_slot.b_valid)
         {
-            (void)motion_move_set_line((int16_t)active_request.error,
-                                       active_request.b_seen != 0u);
+            (void)motion_move_set_line(active_slot.request.b_seen);
         }
         return;
     }
@@ -259,77 +194,14 @@ take_request (bool * p_new)
     {
         return result;
     }
-    *p_new = (latest_request.b_pending != 0u);
+    *p_new = latest_slot.b_pending;
     if (*p_new)
     {
-        active_request = latest_request;
-        latest_request.b_pending = 0u;
+        active_slot = latest_slot;
+        latest_slot.b_pending = false;
     }
     (void)tk_unl_mtx(command_mutex);
     return E_OK;
-}
-
-/* Single-edge coverage supplies calibrated correction. During alignment,
- * ambiguous pairs keep the remembered gentle bias. D may counter-steer. */
-static int16_t
-estimate_error (line_command_t command, ir_sensor_reading_t reading)
-{
-    bool const b_left_line = (reading.left_raw >= LINE_LEFT_DETECT_MIN);
-    bool const b_right_line = (reading.right_raw >= LINE_RIGHT_DETECT_MIN);
-    if (!b_left_line && !b_right_line)
-    {
-        if (command == LINE_COMMAND_PROBE_LEFT)
-        {
-            return MOTION_COMMAND_PROBE_ERROR;
-        }
-        if (command == LINE_COMMAND_PROBE_RIGHT)
-        {
-            return -MOTION_COMMAND_PROBE_ERROR;
-        }
-    }
-    if (((command == LINE_COMMAND_STEER_LEFT) ||
-         (command == LINE_COMMAND_ALIGN_LEFT)) &&
-        b_left_line && !b_right_line)
-    {
-        return edge_error(reading.left_raw, LINE_LEFT_DETECT_MIN,
-                          LINE_LEFT_BLACK_MIN);
-    }
-    if (((command == LINE_COMMAND_STEER_RIGHT) ||
-         (command == LINE_COMMAND_ALIGN_RIGHT)) &&
-        !b_left_line && b_right_line)
-    {
-        return -edge_error(reading.right_raw, LINE_RIGHT_DETECT_MIN,
-                           LINE_RIGHT_BLACK_MIN);
-    }
-    if (b_left_line == b_right_line)
-    {
-        if (command == LINE_COMMAND_ALIGN_LEFT)
-        {
-            return MOTION_COMMAND_PROBE_ERROR;
-        }
-        if (command == LINE_COMMAND_ALIGN_RIGHT)
-        {
-            return -MOTION_COMMAND_PROBE_ERROR;
-        }
-    }
-    return 0;
-}
-
-/* Start gently at detection, then ramp with calibrated line coverage.
- * Both callers guarantee raw >= detect and calibration gives black > detect. */
-static int16_t
-edge_error (uint16_t raw, uint16_t detect, uint16_t black)
-{
-    uint32_t distance = (uint32_t)raw - detect;
-    uint32_t const span = (uint32_t)black - detect;
-    if (distance > span)
-    {
-        distance = span;
-    }
-    uint32_t const range =
-        MOTION_COMMAND_STEER_ERROR - MOTION_COMMAND_EDGE_ERROR;
-    return (int16_t)(MOTION_COMMAND_EDGE_ERROR +
-                     (distance * range + span / 2u) / span);
 }
 
 #if ACTUATION_ACTIVE
@@ -340,13 +212,14 @@ update_controller (bool b_new)
     if (state == MOTION_STATE_STALLED)
     {
         latch_fault(MOTION_ERR_STALLED);
-        /* LOCAL TEST: retry instead of staying stopped for good. */
+        /* Retry instead of staying stopped for good. */
         if (++stall_updates >= STALL_RETRY_UPDATES)
         {
             stall_updates = 0u;
             (void)motion_move_stop();
             b_fault_latched = false;
-            tm_printf((UB *)"motion: stall cleared, searching again\n");
+            b_search_active = false;
+            tm_printf((UB *)"motion: stall cleared, following again\n");
         }
     }
     else if (state == MOTION_STATE_TIMED_OUT)
@@ -356,9 +229,9 @@ update_controller (bool b_new)
     if (!b_fault_latched)
     {
         motion_status_t status = MOTION_OK;
-        if (!active_request.b_valid)
+        if (!active_slot.b_valid)
         {
-            b_recovery_turn = false;
+            b_search_active = false;
             if (motion_move_is_busy())
             {
                 status = motion_move_stop();
@@ -366,100 +239,85 @@ update_controller (bool b_new)
         }
         else if (b_new)
         {
-            status = apply_reading();
+            status = apply_request();
         }
         if (status != MOTION_OK)
         {
             latch_fault(status);
         }
     }
-#if IR_MOTOR_TEST
-    motor_test_trace(b_new);
-#endif
 }
 
 static motion_status_t
-apply_reading (void)
+apply_request (void)
 {
-    line_command_t const command = (line_command_t)active_request.command;
-    bool const b_turn = (command == LINE_COMMAND_TURN_LEFT) ||
-                        (command == LINE_COMMAND_TURN_RIGHT);
-    if (command == LINE_COMMAND_STOP)
-    {
-        b_recovery_turn = false;
-        return motion_move_is_busy() ? motion_move_stop() : MOTION_OK;
-    }
-    /* A fresh sensor stream is required throughout the encoder turn. Side
-     * corrections observed while pivoting must not replace its target. */
-    if (b_recovery_turn)
-    {
-        if (motion_move_get_state() == MOTION_STATE_TURN)
-        {
-            return motion_move_set_line(0, active_request.b_seen != 0u);
-        }
-        b_recovery_turn = false;
-    }
-    if (b_turn && !b_turn_latched)
-    {
-        b_search_right = (command == LINE_COMMAND_TURN_RIGHT);
-        motion_status_t const status = b_search_right
-                                           ? motion_move_turn_right(90u)
-                                           : motion_move_turn_left(90u);
-        if (status == MOTION_OK)
-        {
-            b_recovery_turn = true;
-            b_turn_latched = true;
-            tm_printf((UB *)"motion: search reacquisition TURN_%s_90\n",
-                      b_search_right ? "RIGHT" : "LEFT");
-        }
-        return status;
-    }
-    if (!b_turn)
-    {
-        b_turn_latched = false;
-    }
-    if ((command == LINE_COMMAND_STEER_LEFT) ||
-        (command == LINE_COMMAND_PROBE_LEFT) ||
-        (command == LINE_COMMAND_ALIGN_LEFT))
-    {
-        b_search_right = false;
-    }
-    else if ((command == LINE_COMMAND_STEER_RIGHT) ||
-             (command == LINE_COMMAND_PROBE_RIGHT) ||
-             (command == LINE_COMMAND_ALIGN_RIGHT))
-    {
-        b_search_right = true;
-    }
-    /* A held turn request after completion resumes search, not another pivot. */
-    bool const b_search = (command == LINE_COMMAND_SEARCH) || b_turn;
-    bool const b_slow = b_search || (command == LINE_COMMAND_ALIGN_LEFT) ||
-                        (command == LINE_COMMAND_ALIGN_RIGHT);
-    int16_t const error = b_search
-                              ? (b_search_right ? -MOTION_COMMAND_SEARCH_ERROR
-                                                : MOTION_COMMAND_SEARCH_ERROR)
-                              : (int16_t)active_request.error;
-    /* The trace records the actual owner-selected search input as well. */
-    active_request.error = error;
-    motion_status_t status =
-        motion_move_set_line(error, active_request.b_seen != 0u);
+    line_request_t const * p_request = &active_slot.request;
+    motion_status_t status = motion_move_set_line(p_request->b_seen);
     if (status != MOTION_OK)
     {
         return status;
     }
-    /* Restart only on entry or a tracking/search speed change, never on
-     * each fresh sample. The existing controller owns all wheel commands. */
-    if ((motion_move_get_state() != MOTION_STATE_FOLLOW) ||
-        (b_slow != b_slow_active))
+    switch (p_request->mode)
     {
-        uint16_t const speed = b_slow ? MOTION_COMMAND_SEARCH_SPEED_MM_S
-                                      : MOTION_COMMAND_FOLLOW_SPEED_MM_S;
-        status = motion_move_follow(speed);
-        if (status == MOTION_OK)
-        {
-            b_slow_active = b_slow;
-        }
+        case LINE_MODE_TRACK:
+            b_search_active = false;
+            if (motion_move_get_state() != MOTION_STATE_FOLLOW)
+            {
+                status = motion_move_follow(MOTION_COMMAND_FOLLOW_SPEED_MM_S);
+            }
+            if (status == MOTION_OK)
+            {
+                status = motion_move_set_follow_heading(
+                    p_request->target_heading_deg);
+            }
+            break;
+
+        case LINE_MODE_SEARCH_LEFT:
+        case LINE_MODE_SEARCH_RIGHT:
+            /* One pivot per target; the line task moves the target on. */
+            if (!b_search_active ||
+                (search_target_deg != p_request->target_heading_deg))
+            {
+                status = start_search(p_request->target_heading_deg);
+            }
+            break;
+
+        default:
+            b_search_active = false;
+            if (motion_move_is_busy())
+            {
+                status = motion_move_stop();
+            }
+            break;
     }
     return status;
+}
+
+/* Pivot from the current heading to @p target_deg. */
+static motion_status_t
+start_search (int32_t target_deg)
+{
+    motion_odometry_t odometry;
+    motion_status_t status = motion_move_get_odometry(&odometry);
+    if (status != MOTION_OK)
+    {
+        return status;
+    }
+    b_search_active = true;
+    search_target_deg = target_deg;
+
+    int32_t const turn = target_deg - odometry.heading_deg;
+    uint32_t magnitude = (uint32_t)((turn < 0) ? -turn : turn);
+    if (magnitude > MOTION_MAX_TURN_DEG)
+    {
+        magnitude = MOTION_MAX_TURN_DEG;
+    }
+    if (0u == magnitude)
+    {
+        return motion_move_is_busy() ? motion_move_stop() : MOTION_OK;
+    }
+    return (turn > 0) ? motion_move_turn_left((uint16_t)magnitude)
+                      : motion_move_turn_right((uint16_t)magnitude);
 }
 
 static void
@@ -479,98 +337,23 @@ latch_fault (motion_status_t status)
                   (INT)status);
     }
 }
-#if IR_MOTOR_TEST
-/* Retain fresh inputs without printing during following or recovery turns.
- * Dump once on the first actual stop, including faults or turn completion. */
-static void
-motor_test_trace (bool b_new)
-{
-    static test_trace_t trace[TEST_TRACE_SAMPLES];
-    static uint32_t next;
-    static uint32_t count;
-    static bool b_started;
-    static bool b_dumped;
-    if (b_dumped)
-    {
-        return;
-    }
-    motion_state_t const state = motion_move_get_state();
-    if (!b_started)
-    {
-        if (state != MOTION_STATE_FOLLOW)
-        {
-            return;
-        }
-        b_started = true;
-    }
-    bool const b_moving =
-        (state == MOTION_STATE_FOLLOW) || (state == MOTION_STATE_TURN);
-    if (b_new || !b_moving)
-    {
-        SYSTIM now;
-        motion_follow_t follow;
-        if ((tk_get_otm(&now) == E_OK) &&
-            (motion_move_get_follow(&follow) == MOTION_OK))
-        {
-            trace[next] = (test_trace_t){
-                .time_ms = (uint32_t)now.lo,
-                .reading = active_request.reading,
-                .error = (int16_t)active_request.error,
-                .turn_deg_s = follow.turn_deg_s,
-                .command = (line_command_t)active_request.command,
-                .state = state,
-                .b_valid = (active_request.b_valid != 0u)};
-            next = (next + 1u) % TEST_TRACE_SAMPLES;
-            if (count < TEST_TRACE_SAMPLES)
-            {
-                ++count;
-            }
-        }
-    }
-    if (b_moving)
-    {
-        return;
-    }
-    b_dumped = true;
-    tm_printf((UB *)"motion: TRACE after first stop; oldest first; "
-                    "turn +left/-right, mode 5=follow/3=turn/0=stopped\n");
-    for (uint32_t i = 0u; i < count; ++i)
-    {
-        uint32_t const index =
-            (next + TEST_TRACE_SAMPLES - count + i) % TEST_TRACE_SAMPLES;
-        test_trace_t const * p_trace = &trace[index];
-        tm_printf((UB *)"t=%u L=%u R=%u cmd=%s err=%d turn=%d "
-                        "mode=%u valid=%u\n",
-                  (UINT)p_trace->time_ms, (UINT)p_trace->reading.left_raw,
-                  (UINT)p_trace->reading.right_raw,
-                  line_command_name(p_trace->command), (INT)p_trace->error,
-                  (INT)p_trace->turn_deg_s, (UINT)p_trace->state,
-                  (UINT)p_trace->b_valid);
-    }
-    tm_printf((UB *)"motion: TRACE end\n");
-}
-
-#endif
-
 #else
 static void
 report_request (void)
 {
-    static line_command_t previous = (line_command_t)-1;
+    static line_mode_t previous = LINE_MODE_STOP;
     static bool b_previous_valid;
-    line_command_t const command = active_request.b_valid
-                                       ? (line_command_t)active_request.command
-                                       : LINE_COMMAND_STOP;
-    /* Raw changes are already reported by the line task. Log transitions
-     * only, so the dry-run adapter does not flood the calibration console. */
-    if ((command != previous) ||
-        ((active_request.b_valid != 0u) != b_previous_valid))
+    line_mode_t const mode =
+        active_slot.b_valid ? active_slot.request.mode : LINE_MODE_STOP;
+    /* Log transitions only, so the dry run does not flood the console. */
+    if ((mode != previous) || (active_slot.b_valid != b_previous_valid))
     {
-        tm_printf((UB *)"motion: %s edge_error=%d seen=%u valid=%u (dry run)\n",
-                  line_command_name(command), (INT)active_request.error,
-                  (UINT)active_request.b_seen, (UINT)active_request.b_valid);
-        previous = command;
-        b_previous_valid = (active_request.b_valid != 0u);
+        tm_printf((UB *)"motion: %s target=%d seen=%u valid=%u (dry run)\n",
+                  line_track_mode_name(mode),
+                  (INT)active_slot.request.target_heading_deg,
+                  (UINT)active_slot.request.b_seen, (UINT)active_slot.b_valid);
+        previous = mode;
+        b_previous_valid = active_slot.b_valid;
     }
 }
 #endif /* ACTUATION_ACTIVE */

@@ -170,34 +170,30 @@
 #define MOTION_FOLLOW_SPEED_MM_S 120u
 
 /*
- * Line PD loop of line following (plan step 6b). It turns the line error
- * (-MOTION_LINE_ERROR_MAX to MOTION_LINE_ERROR_MAX, + is line to the
- * left) into a turn rate for both wheels' setpoints. KP: deg/s per unit of
- * error, so 0.1 turns at 100 deg/s with the line at one side. KD: deg/s per
- * unit of error per second (in seconds).
- * TODO(calibrate) with MOT-U31 on a straight, then the tightest curve:
- * with KD 0, raise KP until the car weaves along a straight line, then
- * halve it; then raise KD until the weave dies within about one swing.
+ * Heading PI loop of line following. It turns the error between the
+ * target heading (set by the line task one step at a time) and the
+ * odometry heading into a turn rate for both wheels' setpoints, so each
+ * step is a short arc and the car runs straight between steps. KP: deg/s
+ * per deg of error. KI: deg/s per deg of error per second.
+ * TODO(calibrate) with MOT-U41/U42, then on a 2 m straight: raise KP until
+ * a 4 deg step settles within about 40 mm without overshoot; raise KI only
+ * if the car holds a steady offset from the target.
  */
-/* Validated on the robot at 120 mm/s on straights and both curve directions. */
-#define MOTION_FOLLOW_KP 0.3f
-#define MOTION_FOLLOW_KD 0.006f
+#define MOTION_FOLLOW_KP 4.0f
+#define MOTION_FOLLOW_KI 0.5f
 
 /*
- * Largest turn rate the line loop asks for, in deg/s. Each wheel's
- * setpoint changes by rate * track / 2 (about 113 mm/s at 120 deg/s), so
- * at MOTION_FOLLOW_SPEED_MM_S the inner wheel nearly stops. Following
- * also caps the rate at 2 * speed / track (128 deg/s at 120 mm/s), so the
- * inner wheel never reverses at a slower follow speed or a wider track.
- * TODO(calibrate): at least the follow speed / the tightest curve radius
- * (in rad/s), so the car can hold that curve (MOT-U31).
+ * Largest turn rate the heading loop asks for, in deg/s: the arc of a
+ * heading step. Each wheel's setpoint changes by rate * track / 2 (about
+ * 28 mm/s at 30 deg/s), well inside MOTION_FOLLOW_SPEED_MM_S, so steps
+ * never slow a wheel much and the car keeps a steady speed for barcodes.
+ * Following also caps the rate at 2 * speed / track.
  */
-/* Bound the combined proportional and damping correction. */
-#define MOTION_FOLLOW_MAX_DEG_S 128.0f /* LOCAL TEST: was 90. */
+#define MOTION_FOLLOW_MAX_DEG_S 30.0f
 
 /*
- * Following stops (state STOPPED) when the last line error is older than
- * this, so the car never drives on with stale steering.
+ * Following stops (state STOPPED) when the last line reading is older
+ * than this, so the car never drives on without the line task.
  * A multiple of MOTION_UPDATE_PERIOD_MS.
  */
 #define MOTION_LINE_TIMEOUT_MS 100u
@@ -322,10 +318,11 @@
 #define MOTION_SYNC_TESTS 0
 
 /*
- * Set 1 to add the manual line-following steps (MOT-U28..U30) to make
- * TEST=1. They spin the lifted car's wheels, then drive it on the floor
- * with hand-fed line errors, and block the test run for about a minute and
- * a half; keep this 0 except during a motion test session.
+ * Set 1 to add the manual line-following steps (MOT-U41, MOT-U29,
+ * MOT-U42) to make TEST=1. They spin the lifted car's wheels, then drive
+ * it on the floor with hand-set target headings, and block the test run
+ * for about a minute and a half; keep this 0 except during a motion test
+ * session.
  */
 #define MOTION_FOLLOW_TESTS 0
 

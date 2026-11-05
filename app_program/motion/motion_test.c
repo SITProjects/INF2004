@@ -189,11 +189,12 @@ typedef struct
 #endif /* MOTION_SYNC_TESTS */
 
 #if MOTION_FOLLOW_TESTS
-/* MOT-U28: lifted follow steering; MOT-U29: lifted stop-at-line. */
+/* MOT-U41: lifted follow steering; MOT-U29: lifted stop-at-line. */
 #define FOLLOW_START_DELAY_MS 10000
 #define FOLLOW_STEP_MS 1500
-/* With MOTION_FOLLOW_KP 0.1 this asks for 30 deg/s. */
-#define FOLLOW_TEST_ERROR 300
+/* Target heading step, in degrees, and how close following must get. */
+#define FOLLOW_TEST_STEP_DEG 20
+#define FOLLOW_TEST_BAND_DEG 3
 /* Longest wait for following to stop, or a move to end, in the checks. */
 #define FOLLOW_END_WAIT_MS 3000
 #define LINE_GONE_MS 500
@@ -312,7 +313,7 @@ extern UW tm_usb_pending (void);
 static BOOL check_follow_lifted (void);
 static BOOL check_stop_at_line_lifted (void);
 static void follow_arcs_floor (void);
-static void feed_line_for (int16_t error, bool b_seen, INT duration_ms);
+static void feed_line_for (bool b_seen, INT duration_ms);
 static INT feed_line_until_idle (bool b_seen);
 #endif
 #if MOTION_MOVE_TESTS || MOTION_TURN_TESTS
@@ -369,8 +370,8 @@ motion_test (void)
     TEST_CHECK("MOT-U23", sync_idle_at_rest(),
                "straight-line loop idle at rest, switches on and off");
 
-    /* MOT-U27: follow and line input refusals, debouncing; no motors. */
-    TEST_CHECK("MOT-U27", follow_idle_at_rest(),
+    /* MOT-U40: follow and line input refusals, debouncing; no motors. */
+    TEST_CHECK("MOT-U40", follow_idle_at_rest(),
                "follow and line input refuse bad values, line debounced");
 
 #if MOTION_MANUAL_TESTS
@@ -422,9 +423,9 @@ motion_test (void)
 #endif
 
 #if MOTION_FOLLOW_TESTS
-    /* MOT-U28..U30: manual; see testing/motion/TEST_LOG.md. */
-    TEST_CHECK("MOT-U28", check_follow_lifted(),
-               "follow steers towards the error, stops on stale input");
+    /* MOT-U41, MOT-U29, MOT-U42: manual; see testing/motion/TEST_LOG.md. */
+    TEST_CHECK("MOT-U41", check_follow_lifted(),
+               "follow turns to each target heading, stops on stale input");
     TEST_CHECK("MOT-U29", check_stop_at_line_lifted(),
                "moves and turns end when the line comes into view");
     follow_arcs_floor();
@@ -668,10 +669,7 @@ follow_idle_at_rest (void)
     BOOL b_refused = (motion_move_follow(0u) == MOTION_ERR_PARAM) &&
                      (motion_move_follow((uint16_t)MOTION_MAX_SPEED_MM_S +
                                          1u) == MOTION_ERR_PARAM) &&
-                     (motion_move_set_line(MOTION_LINE_ERROR_MAX + 1, false) ==
-                      MOTION_ERR_PARAM) &&
-                     (motion_move_set_line(-MOTION_LINE_ERROR_MAX - 1, false) ==
-                      MOTION_ERR_PARAM) &&
+                     (motion_move_set_follow_heading(0) == MOTION_ERR_PARAM) &&
                      (motion_move_stop_at_line() == MOTION_ERR_PARAM) &&
                      (motion_move_get_follow(NULL) == MOTION_ERR_PARAM);
 
@@ -681,7 +679,7 @@ follow_idle_at_rest (void)
         bool b_seen = (0u == pass);
         for (UW i = 1u; i <= MOTION_LINE_SEEN_SAMPLES; i++)
         {
-            (void)motion_move_set_line(0, b_seen);
+            (void)motion_move_set_line(b_seen);
             (void)motion_move_get_follow(&follow);
             bool b_expected =
                 (i == MOTION_LINE_SEEN_SAMPLES) ? b_seen : !b_seen;
@@ -993,7 +991,7 @@ task_commands_lifted (void)
     for (INT elapsed = 0; elapsed < TASK_FOLLOW_MS;
          elapsed += (INT)MOTION_UPDATE_PERIOD_MS)
     {
-        motion_set_line_input(0, true);
+        motion_test_set_line(true);
         if ((elapsed == TASK_REACT_MS) &&
             !send_command(robot_motion_cmd_follow()))
         {
@@ -1784,66 +1782,74 @@ wait_console_drained (void)
 
 #if MOTION_FOLLOW_TESTS
 /*
- * On the lifted car, follow with hand-fed errors 0, +, 0, -: a + error
- * (line to the left) must speed the right wheel up over the left. Then
- * stop feeding errors: following must brake after MOTION_LINE_TIMEOUT_MS.
+ * On the lifted car, follow with target headings 0, +step, 0, -step from
+ * the start: the wheel odometry must reach each one (a + target speeds
+ * the right wheel up first) and hold it. Then stop feeding line readings:
+ * following must brake after MOTION_LINE_TIMEOUT_MS.
  */
 static BOOL
 check_follow_lifted (void)
 {
-    static int16_t const errors[] = {0, FOLLOW_TEST_ERROR, 0,
-                                     -FOLLOW_TEST_ERROR};
+    static int32_t const steps[] = {0, FOLLOW_TEST_STEP_DEG, 0,
+                                    -FOLLOW_TEST_STEP_DEG};
     motion_command_t command;
     motion_odometry_t odometry;
     motion_follow_t follow;
     BOOL b_steered = TRUE;
 
-    tm_printf((UB *)"[TEST] MOT-U28 keep the car lifted: it follows at %d "
-                    "mm/s with line errors 0, %d, 0, %d, %d s each, in %d s\n",
-              (INT)MOTION_FOLLOW_SPEED_MM_S, FOLLOW_TEST_ERROR,
-              -FOLLOW_TEST_ERROR, FOLLOW_STEP_MS / 1000,
+    tm_printf((UB *)"[TEST] MOT-U41 keep the car lifted: it follows at %d "
+                    "mm/s to headings 0, %d, 0, %d, %d s each, in %d s\n",
+              (INT)MOTION_FOLLOW_SPEED_MM_S, FOLLOW_TEST_STEP_DEG,
+              -FOLLOW_TEST_STEP_DEG, FOLLOW_STEP_MS / 1000,
               FOLLOW_START_DELAY_MS / 1000);
     (void)motion_move_stop();
     update_for(FOLLOW_START_DELAY_MS);
 
-    (void)motion_move_set_line(0, true);
-    if (motion_move_follow(MOTION_FOLLOW_SPEED_MM_S) != MOTION_OK)
+    (void)motion_move_set_line(true);
+    if ((motion_move_follow(MOTION_FOLLOW_SPEED_MM_S) != MOTION_OK) ||
+        (motion_move_get_follow(&follow) != MOTION_OK))
     {
         return FALSE;
     }
-    for (UW i = 0u; i < (sizeof(errors) / sizeof(errors[0])); i++)
+    int32_t const start_deg = follow.target_heading_deg;
+    for (UW i = 0u; i < (sizeof(steps) / sizeof(steps[0])); i++)
     {
-        feed_line_for(errors[i], true, FOLLOW_STEP_MS);
+        int32_t const target = start_deg + steps[i];
+        (void)motion_move_set_follow_heading(target);
+        /* Early in the step: the wheels must turn the right way. */
+        feed_line_for(true, 2 * (INT)MOTION_UPDATE_PERIOD_MS);
         (void)motion_drive_get_command(&command);
         (void)motion_move_get_odometry(&odometry);
-        (void)motion_move_get_follow(&follow);
-        tm_printf((UB *)"[TEST] MOT-U28 error %d turn %d deg/s set L %d R %d "
-                        "speed L %d R %d mm/s state %d\n",
-                  (INT)errors[i], (INT)follow.turn_deg_s,
-                  (INT)command.left_setpoint_mm_s,
-                  (INT)command.right_setpoint_mm_s,
-                  (INT)odometry.left_speed_mm_s, (INT)odometry.right_speed_mm_s,
-                  (INT)motion_move_get_state());
-
         INT difference =
             (INT)command.right_setpoint_mm_s - (INT)command.left_setpoint_mm_s;
-        if (errors[i] > 0)
+        int32_t const error = target - odometry.heading_deg;
+        if (error > FOLLOW_TEST_BAND_DEG)
         {
             b_steered = b_steered && (difference > 0);
         }
-        else if (errors[i] < 0)
+        else if (error < -FOLLOW_TEST_BAND_DEG)
         {
             b_steered = b_steered && (difference < 0);
         }
         else
         {
-            b_steered = b_steered && (0 == difference);
+            /* Already there. */
         }
-        b_steered =
-            b_steered && (MOTION_STATE_FOLLOW == motion_move_get_state());
+        feed_line_for(true, FOLLOW_STEP_MS);
+        (void)motion_move_get_odometry(&odometry);
+        (void)motion_move_get_follow(&follow);
+        tm_printf((UB *)"[TEST] MOT-U41 target %d heading %d turn %d deg/s "
+                        "speed L %d R %d mm/s state %d\n",
+                  (INT)target, (INT)odometry.heading_deg,
+                  (INT)follow.turn_deg_s, (INT)odometry.left_speed_mm_s,
+                  (INT)odometry.right_speed_mm_s, (INT)motion_move_get_state());
+        int32_t const settled = target - odometry.heading_deg;
+        b_steered = b_steered && (settled <= FOLLOW_TEST_BAND_DEG) &&
+                    (settled >= -FOLLOW_TEST_BAND_DEG) &&
+                    (MOTION_STATE_FOLLOW == motion_move_get_state());
     }
 
-    /* No more line errors: following must stop on its own. */
+    /* No more line readings: following must stop on its own. */
     INT elapsed = 0;
     while ((MOTION_STATE_FOLLOW == motion_move_get_state()) &&
            (elapsed < FOLLOW_END_WAIT_MS))
@@ -1856,8 +1862,8 @@ check_follow_lifted (void)
                                        (2 * (INT)MOTION_UPDATE_PERIOD_MS)) &&
                        slice_braked(MOTION_LEFT_MOTOR_PIN_A) &&
                        slice_braked(MOTION_RIGHT_MOTOR_PIN_A);
-    tm_printf((UB *)"[TEST] MOT-U28 steered %d; stopped %d ms after the "
-                    "last error (limit %d)\n",
+    tm_printf((UB *)"[TEST] MOT-U41 steered %d; stopped %d ms after the "
+                    "last reading (limit %d)\n",
               (INT)b_steered, elapsed, (INT)MOTION_LINE_TIMEOUT_MS);
     (void)motion_move_stop();
     update_for(MOVE_SETTLE_MS);
@@ -1881,37 +1887,37 @@ check_stop_at_line_lifted (void)
     update_for(FOLLOW_START_DELAY_MS);
 
     /* (a) Gone, then seen: ends within the debounce. */
-    feed_line_for(0, false, LINE_GONE_MS);
+    feed_line_for(false, LINE_GONE_MS);
     BOOL b_a = (motion_move_forward(1000u) == MOTION_OK) &&
                (motion_move_stop_at_line() == MOTION_OK);
-    feed_line_for(0, false, LINE_GONE_MS);
+    feed_line_for(false, LINE_GONE_MS);
     INT updates_a = feed_line_until_idle(true);
     b_a = b_a && (MOTION_DONE_LINE == motion_move_get_done_reason()) &&
           (updates_a <= (INT)MOTION_LINE_SEEN_SAMPLES);
     update_for(MOVE_SETTLE_MS);
 
     /* (b) Starts on the line: keeps turning until it is gone and back. */
-    feed_line_for(0, true, LINE_ON_MS);
+    feed_line_for(true, LINE_ON_MS);
     BOOL b_b = (motion_move_turn_left(LINE_TURN_DEG) == MOTION_OK) &&
                (motion_move_stop_at_line() == MOTION_OK);
-    feed_line_for(0, true, LINE_ON_MS);
+    feed_line_for(true, LINE_ON_MS);
     b_b = b_b && (MOTION_STATE_TURN == motion_move_get_state());
-    feed_line_for(0, false, LINE_GONE_MS);
+    feed_line_for(false, LINE_GONE_MS);
     INT updates_b = feed_line_until_idle(true);
     b_b = b_b && (MOTION_DONE_LINE == motion_move_get_done_reason()) &&
           (updates_b <= (INT)MOTION_LINE_SEEN_SAMPLES);
     update_for(MOVE_SETTLE_MS);
 
     /* (c) Not asked to stop: crosses the line, ends at its distance. */
-    feed_line_for(0, false, LINE_GONE_MS);
+    feed_line_for(false, LINE_GONE_MS);
     BOOL b_c = (motion_move_forward(LINE_MOVE_MM) == MOTION_OK);
-    feed_line_for(0, false, LINE_GONE_MS / 2);
+    feed_line_for(false, LINE_GONE_MS / 2);
     (void)feed_line_until_idle(true);
     b_c = b_c && (MOTION_DONE_TARGET == motion_move_get_done_reason());
     update_for(MOVE_SETTLE_MS);
 
     /* (d) Asked to stop, never sees it: ends at its distance. */
-    feed_line_for(0, false, LINE_GONE_MS);
+    feed_line_for(false, LINE_GONE_MS);
     BOOL b_d = (motion_move_forward(LINE_MOVE_MM) == MOTION_OK) &&
                (motion_move_stop_at_line() == MOTION_OK);
     (void)feed_line_until_idle(false);
@@ -1927,41 +1933,45 @@ check_stop_at_line_lifted (void)
 }
 
 /*
- * On the floor, follow with hand-fed errors +, 0, -: the car must arc
- * left, run straight, then arc right. Print each phase's heading change by
- * odometry against the turn rate asked for.
+ * On the floor, follow with target headings +step, +step, 0 from the
+ * start: the car must turn left by the step in a short arc, run straight,
+ * then turn back. Print each phase's heading and travel by odometry.
  */
 static void
 follow_arcs_floor (void)
 {
-    static int16_t const errors[] = {FOLLOW_TEST_ERROR, 0, -FOLLOW_TEST_ERROR};
+    static int32_t const steps[] = {FOLLOW_TEST_STEP_DEG, FOLLOW_TEST_STEP_DEG,
+                                    0};
     motion_odometry_t start;
     motion_odometry_t end;
     motion_follow_t follow;
 
-    tm_printf((UB *)"[TEST] MOT-U30 car on the floor, 1 m clear all round: "
-                    "it arcs LEFT, runs straight, then arcs RIGHT, %d s "
-                    "each, in %d s\n",
-              FOLLOW_STEP_MS / 1000, FOLLOW_START_DELAY_MS / 1000);
+    tm_printf((UB *)"[TEST] MOT-U42 car on the floor, 1 m clear all round: "
+                    "it turns LEFT %d deg, runs straight, then turns back, "
+                    "%d s each, in %d s\n",
+              FOLLOW_TEST_STEP_DEG, FOLLOW_STEP_MS / 1000,
+              FOLLOW_START_DELAY_MS / 1000);
     (void)motion_move_stop();
     update_for(FOLLOW_START_DELAY_MS);
 
-    (void)motion_move_set_line(errors[0], true);
-    if (motion_move_follow(MOTION_FOLLOW_SPEED_MM_S) != MOTION_OK)
+    (void)motion_move_set_line(true);
+    if ((motion_move_follow(MOTION_FOLLOW_SPEED_MM_S) != MOTION_OK) ||
+        (motion_move_get_follow(&follow) != MOTION_OK))
     {
-        tm_printf((UB *)"[TEST] MOT-U30 follow refused\n");
+        tm_printf((UB *)"[TEST] MOT-U42 follow refused\n");
         return;
     }
-    for (UW i = 0u; i < (sizeof(errors) / sizeof(errors[0])); i++)
+    int32_t const start_deg = follow.target_heading_deg;
+    for (UW i = 0u; i < (sizeof(steps) / sizeof(steps[0])); i++)
     {
+        (void)motion_move_set_follow_heading(start_deg + steps[i]);
         (void)motion_move_get_odometry(&start);
-        feed_line_for(errors[i], true, FOLLOW_STEP_MS);
+        feed_line_for(true, FOLLOW_STEP_MS);
         (void)motion_move_get_odometry(&end);
-        (void)motion_move_get_follow(&follow);
-        tm_printf((UB *)"[TEST] MOT-U30 error %d: heading %d deg (asked %d), "
+        tm_printf((UB *)"[TEST] MOT-U42 target %d: heading %d deg (from %d), "
                         "distance %d mm, state %d\n",
-                  (INT)errors[i], (INT)(end.heading_deg - start.heading_deg),
-                  ((INT)follow.turn_deg_s * FOLLOW_STEP_MS) / 1000,
+                  (INT)(start_deg + steps[i]), (INT)end.heading_deg,
+                  (INT)start.heading_deg,
                   (INT)(end.distance_mm - start.distance_mm),
                   (INT)motion_move_get_state());
     }
@@ -1971,12 +1981,12 @@ follow_arcs_floor (void)
 
 /* Pass in one line reading, then update, every period for @p duration_ms. */
 static void
-feed_line_for (int16_t error, bool b_seen, INT duration_ms)
+feed_line_for (bool b_seen, INT duration_ms)
 {
     for (INT elapsed = 0; elapsed < duration_ms;
          elapsed += (INT)MOTION_UPDATE_PERIOD_MS)
     {
-        (void)motion_move_set_line(error, b_seen);
+        (void)motion_move_set_line(b_seen);
         (void)wait_update_period();
         (void)motion_move_update();
     }
@@ -1994,7 +2004,7 @@ feed_line_until_idle (bool b_seen)
     while (motion_move_is_busy() &&
            ((updates * (INT)MOTION_UPDATE_PERIOD_MS) < FOLLOW_END_WAIT_MS))
     {
-        feed_line_for(0, b_seen, (INT)MOTION_UPDATE_PERIOD_MS);
+        feed_line_for(b_seen, (INT)MOTION_UPDATE_PERIOD_MS);
         updates++;
     }
     return updates;

@@ -62,7 +62,7 @@ feed (bool seen, unsigned int samples)
 {
     for (unsigned int i = 0; i < samples; ++i)
     {
-        (void)motion_move_set_line(0, seen);
+        (void)motion_move_set_line(seen);
         (void)motion_move_update();
     }
 }
@@ -145,6 +145,43 @@ main (void)
     check("new ordinary command clears acquisition mode",
           motion_move_get_state() == MOTION_STATE_MOVE);
     (void)motion_move_stop();
+
+    /* Heading-hold following (the stub never turns, so the error stays). */
+    check("follow heading refused while not following",
+          motion_move_set_follow_heading(10) == MOTION_ERR_PARAM);
+    feed(true, MOTION_LINE_SEEN_SAMPLES);
+    check("follow starts on a fresh line",
+          motion_move_follow(MOTION_FOLLOW_SPEED_MM_S) == MOTION_OK);
+    (void)motion_move_set_line(true);
+    (void)motion_move_update();
+    check(
+        "on target: both wheels at follow speed",
+        (command.left_setpoint_mm_s == (int16_t)MOTION_FOLLOW_SPEED_MM_S) &&
+            (command.right_setpoint_mm_s == (int16_t)MOTION_FOLLOW_SPEED_MM_S));
+    (void)motion_move_set_follow_heading(20);
+    (void)motion_move_set_line(true);
+    (void)motion_move_update();
+    motion_follow_t follow;
+    (void)motion_move_get_follow(&follow);
+    check("left target turns left, capped at the follow limit",
+          (follow.turn_deg_s == (int16_t)MOTION_FOLLOW_MAX_DEG_S) &&
+              (follow.heading_error_deg == 20) &&
+              (command.right_setpoint_mm_s > command.left_setpoint_mm_s));
+    (void)motion_move_set_follow_heading(-1);
+    (void)motion_move_set_line(true);
+    (void)motion_move_update();
+    (void)motion_move_get_follow(&follow);
+    check("small right error turns right gently",
+          (follow.turn_deg_s < 0) &&
+              (follow.turn_deg_s > -(int16_t)MOTION_FOLLOW_MAX_DEG_S));
+    feed(true, 0u);
+    for (unsigned int i = 0;
+         i <= MOTION_LINE_TIMEOUT_MS / MOTION_UPDATE_PERIOD_MS; ++i)
+    {
+        (void)motion_move_update();
+    }
+    check("stale line input ends following",
+          motion_move_get_state() == MOTION_STATE_STOPPED);
     printf("%u failures\n", failures);
     return failures ? 1 : 0;
 }

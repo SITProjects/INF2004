@@ -12,8 +12,8 @@
  * a straight-line PI loop first turns the change in that difference since
  * the move started (a heading error) into a turn rate for
  * motion_drive_set_velocity(), so the speed loops steer the car back.
- * While following, a line PD loop does the same from the line error the
- * owner passes in. The owner's line readings are debounced here into a
+ * While following, a heading PI loop does the same towards the target
+ * heading the owner passes in. The owner's line readings are debounced here into a
  * seen/gone state; a move or turn asked to stop at the line ends when it
  * changes from gone to seen.
  *
@@ -50,7 +50,7 @@
 #define STALL_MIN_SPEED_MM_S                                                   \
     ((2.0f * MM_PER_TICK * 1000.0f) / (float)MOTION_STALL_TIMEOUT_MS)
 
-/* Updates without a new line error after which following stops. */
+/* Updates without a new line reading after which following stops. */
 #define LINE_TIMEOUT_UPDATES (MOTION_LINE_TIMEOUT_MS / MOTION_UPDATE_PERIOD_MS)
 
 typedef enum
@@ -110,24 +110,24 @@ static bool b_stop_at_line = false;
 static bool b_acquire_line = false;
 
 /*
- * Line input: last error, updates since it arrived, the debounced seen
- * state, readings in a row that disagree with it, and the state at the
- * last update (to spot the line coming into view).
+ * Line input: updates since the last reading, the debounced seen state,
+ * readings in a row that disagree with it, and the state at the last
+ * update (to spot the line coming into view).
  */
-static int16_t line_error = 0;
 static uint32_t line_age_updates = 0u;
 static bool b_line_seen = false;
 static uint32_t line_change_samples = 0u;
 static bool b_line_seen_last = false;
 
 /*
- * Line following: chassis speed, PD loop, its last turn rate, and updates
- * since its last step (the step's dt).
+ * Line following: chassis speed, heading PI loop, target heading, and the
+ * loop's last error and turn rate.
  */
 static uint16_t follow_speed_mm_s = 0u;
 static motion_pid_t follow_pid;
+static int32_t follow_target_deg = 0;
+static int16_t follow_error_deg = 0;
 static int16_t follow_turn_deg_s = 0;
-static uint32_t follow_step_updates = 0u;
 
 /* Private function declarations. */
 static motion_status_t start_move (uint16_t distance_mm, int32_t dir);
@@ -142,7 +142,8 @@ static bool wheel_stalled (wheel_t wheel, int16_t delta, int16_t setpoint);
 static void update_speeds (int16_t delta_left, int16_t delta_right);
 static void correct_heading (void);
 static void reset_sync (void);
-static void follow_line (void);
+static float heading_deg (void);
+static void follow_heading (void);
 static void reset_follow (void);
 static int16_t round_rate (float rate);
 
@@ -169,12 +170,11 @@ motion_move_init (void)
     window_index = 0u;
     motion_pid_init(&sync_pid, MOTION_SYNC_KP, MOTION_SYNC_KI, 0.0f,
                     -MOTION_SYNC_MAX_DEG_S, MOTION_SYNC_MAX_DEG_S);
-    motion_pid_init(&follow_pid, MOTION_FOLLOW_KP, 0.0f, MOTION_FOLLOW_KD,
+    motion_pid_init(&follow_pid, MOTION_FOLLOW_KP, MOTION_FOLLOW_KI, 0.0f,
                     -MOTION_FOLLOW_MAX_DEG_S, MOTION_FOLLOW_MAX_DEG_S);
     b_sync = true;
 
     /* No line reading yet: stale, and not seen. */
-    line_error = 0;
     line_age_updates = LINE_TIMEOUT_UPDATES + 1u;
     b_line_seen = false;
     line_change_samples = 0u;
@@ -217,19 +217,13 @@ motion_move_update (void)
     }
     else if (MOTION_STATE_FOLLOW == state)
     {
-        follow_step_updates++;
         if (line_age_updates > LINE_TIMEOUT_UPDATES)
         {
             enter_stopped();
         }
-        else if (1u == line_age_updates)
-        {
-            /* A new reading since the last update: one line step. */
-            follow_line();
-        }
         else
         {
-            /* No new reading: hold the turn rate, so D sees no step. */
+            follow_heading();
         }
     }
     else
@@ -352,23 +346,37 @@ motion_move_follow (uint16_t speed_mm_s)
     /* No target or timeout: following runs until replaced or stopped. */
     begin(MOTION_STATE_FOLLOW, 0, 1, 0, 0u);
     follow_speed_mm_s = speed_mm_s;
+    float const heading = heading_deg();
+    follow_target_deg =
+        (int32_t)((heading >= 0.0f) ? (heading + 0.5f) : (heading - 0.5f));
     (void)motion_drive_set_velocity((int16_t)speed_mm_s, 0);
     return MOTION_OK;
 }
 
 motion_status_t
-motion_move_set_line (int16_t error, bool b_seen)
+motion_move_set_follow_heading (int32_t target_deg)
 {
     if (!b_initialised)
     {
         return MOTION_ERR_NOT_INIT;
     }
-    if ((error < -MOTION_LINE_ERROR_MAX) || (error > MOTION_LINE_ERROR_MAX))
+    if (MOTION_STATE_FOLLOW != state)
     {
         return MOTION_ERR_PARAM;
     }
 
-    line_error = error;
+    follow_target_deg = target_deg;
+    return MOTION_OK;
+}
+
+motion_status_t
+motion_move_set_line (bool b_seen)
+{
+    if (!b_initialised)
+    {
+        return MOTION_ERR_NOT_INIT;
+    }
+
     line_age_updates = 0u;
 
     /* Change the seen state only after enough readings in a row agree. */
@@ -469,9 +477,7 @@ motion_move_get_odometry (motion_odometry_t * p_odometry)
                   2);
     p_odometry->left_speed_mm_s = wheel_speed_mm_s[WHEEL_LEFT];
     p_odometry->right_speed_mm_s = wheel_speed_mm_s[WHEEL_RIGHT];
-    p_odometry->heading_deg =
-        (int32_t)(((float)tick_difference() * MM_PER_TICK) /
-                  (MOTION_TRACK_WIDTH_MM * DEG_TO_RAD));
+    p_odometry->heading_deg = (int32_t)heading_deg();
     return MOTION_OK;
 }
 
@@ -523,7 +529,8 @@ motion_move_get_follow (motion_follow_t * p_follow)
         return MOTION_ERR_NOT_INIT;
     }
 
-    p_follow->line_error = line_error;
+    p_follow->target_heading_deg = follow_target_deg;
+    p_follow->heading_error_deg = follow_error_deg;
     p_follow->b_line_seen = b_line_seen;
     p_follow->turn_deg_s = follow_turn_deg_s;
     return MOTION_OK;
@@ -759,20 +766,26 @@ reset_sync (void)
     sync_correction_deg_s = 0;
 }
 
+/* Heading since motion_move_init(), in degrees; + is left. */
+static float
+heading_deg (void)
+{
+    return ((float)tick_difference() * MM_PER_TICK) /
+           (MOTION_TRACK_WIDTH_MM * DEG_TO_RAD);
+}
+
 /*
- * One line step while following: steer towards the line. A + error (line
- * to the left) needs a + (left) turn, so the error goes in as it is. The
- * step's dt is the time since the last one, so D stays right when the
- * line task reads slower than motion_move_update() runs.
+ * One heading step while following: a + error (target to the left) needs
+ * a + (left) turn, so the error goes in as it is. The turn limit makes a
+ * heading step a gentle arc, after which the car runs straight.
  */
 static void
-follow_line (void)
+follow_heading (void)
 {
-    float dt_s = (float)follow_step_updates * UPDATE_PERIOD_S;
-
-    follow_step_updates = 0u;
+    float const error = (float)follow_target_deg - heading_deg();
+    follow_error_deg = round_rate(error);
     int16_t rate =
-        round_rate(motion_pid_update(&follow_pid, (float)line_error, dt_s));
+        round_rate(motion_pid_update(&follow_pid, error, UPDATE_PERIOD_S));
     if (rate != follow_turn_deg_s)
     {
         follow_turn_deg_s = rate;
@@ -780,13 +793,13 @@ follow_line (void)
     }
 }
 
-/* Clear the line loop's history, turn rate and step timing. */
+/* Clear the heading loop's history, error and turn rate. */
 static void
 reset_follow (void)
 {
     motion_pid_reset(&follow_pid);
+    follow_error_deg = 0;
     follow_turn_deg_s = 0;
-    follow_step_updates = 0u;
 }
 
 /* The drive takes whole deg/s: round @p rate to nearest. */

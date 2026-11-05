@@ -1,6 +1,6 @@
 /**
  * @file line_follow.h
- * @brief Line-following subsystem: two IR sensors. GitHub: kaiwenteoo.
+ * @brief Line-following subsystem: two digital IR sensors. GitHub: kaiwenteoo.
  *
  * This header is the line-following subsystem's PUBLIC interface: only what
  * other subsystems may use. Everything else stays private in the .c files.
@@ -18,7 +18,7 @@
 /** Line task priority: tLine, design freeze 4 + 3 (TEAM.md section 4). */
 #define LINE_FOLLOW_PRI_SENSE 7
 
-/** ID of the line task, which owns the ADC. */
+/** ID of the line task, which owns the line DO pins (GP26, GP27). */
 extern ID line_follow_tid_sense;
 
 /* Public function declarations. */

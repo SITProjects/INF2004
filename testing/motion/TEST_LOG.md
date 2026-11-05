@@ -46,6 +46,11 @@ Define a test here before running it. Test IDs never change.
 | MOT-U36 | through tMotion on the lifted car: (a) a 300 mm move ends with MOVE_DONE, reason DIST; (b) a move replaced by another gives MOVE_DONE only for the second; (c) STOP ends a move without MOVE_DONE; (d) INHIBIT during a move brakes within 20 ms, discards a move sent meanwhile, and clearing it gives no MOVE_DONE; (e) FOLLOW runs on the interim line input and ends with FOLLOW_ENDED once readings stop | step 9, design review 6.4, NFR6 | manual + auto | 1. Set `MOTION_TASK_TESTS` to 1 in `motion_config.h` and flash `make TEST=1` with the car lifted. 2. When `MOT-U36 keep the car lifted` appears, keep clear for about 20 s. | `[TEST] MOT-U36 PASS`; every part `1`; `INHIBIT to brake … us` ≤ 20000. Watch the wheels: each part stops when it should |
 | MOT-U37 | through tMotion, a held wheel raises STALL and mode STALLED; a new move is refused until STOP | step 9, FR12 | manual + auto | Same run: when `MOT-U37` appears, hold the LEFT wheel firmly still before the right one starts (10 s). | `[TEST] MOT-U37 PASS`; the right wheel brakes within about 0.3–0.8 s |
 | MOT-U38 | `motion_get_odometry()` (IF-05, for terrain) refuses NULL, its update count rises by one per period while tMotion runs, and at rest distance and heading hold and every speed is 0 | step 9, IF-05 | auto | `motion_test.c`; reads the snapshot from the test task for 200 ms while tMotion runs; no motors | `[TEST] MOT-U38 PASS`; `updates` within 2 of 10 |
+| MOT-U39 | line following restarts after a stall or timed-out recovery turn, at most 3 times in a row | line adapter (`motion_command.c`) | manual | Normal firmware, following a line: hold one wheel for about 1 s, release; repeat; then hold it until the car gives up; after that, STOP then FOLLOW, run 3 s, and hold again | Each hold: `fault 3, retry n of 3 in 500 ms` (3 = STALLED), then `fault cleared, searching again` and following resumes. The fourth fault in a row latches with `STOP then FOLLOW or restart required` and the car stays stopped. After 3 s of running without a fault the count starts again at 1 |
+| MOT-U40 | follow refuses out-of-range speeds and a target heading while not following, stop-at-line needs a move in progress, the line counts as seen or gone only after `MOTION_LINE_SEEN_SAMPLES` readings agree, and follow refuses a line reading older than `MOTION_LINE_TIMEOUT_MS`; no motors | step 6b, IF-04 | auto | `motion_test.c`; car lifted, wheels untouched | `[TEST] MOT-U40 PASS` |
+| MOT-U41 | following turns to each hand-set target heading and holds it, and stops when line readings stop | step 6b, IF-04 | manual + auto | 1. Set `MOTION_FOLLOW_TESTS` to 1 in `motion_config.h` and flash `make TEST=1` with the car lifted. 2. When `MOT-U41 keep the car lifted` appears, keep clear: the wheels turn for four 1.5 s steps with targets 0, +20°, 0, −20° from the start heading. 3. Save the `target … heading … turn` lines. | `[TEST] MOT-U41 PASS`: a target to the left first speeds the right wheel up, to the right the left wheel; each step ends within ±3° of its target (wheel odometry). Both wheels brake within about 100 ms of the last reading (`stopped … ms` ≤ 140). If the speeds do not follow the setpoints, tune the speed loop (MOT-U20) first |
+| MOT-U42 | on the floor, a heading step is a short arc and the car then runs straight | step 6b, IF-04 | manual | Same run, after MOT-U29: when `MOT-U42` appears, put the car on the floor with 1 m clear all round. It follows with target +20° (turns left), +20° again (straight), then 0 (turns back), 1.5 s each. Save the `target … heading … distance` lines. | each phase ends within a few degrees of its target by odometry, and the straight phase changes the heading by under 2°; check by eye that the arc is short and the car runs straight. A slow or overshooting step means `MOTION_FOLLOW_KP`/`KI` need tuning |
+| MOT-U43 | line following resumes after a stall, with no retry limit | line adapter (`motion_command.c`) | manual | Normal firmware, following a line: hold one wheel for about 1 s, then release; repeat three times | Each hold: `controller fault 3` (3 = STALLED), then `stall cleared, following again` about `MOTION_COMMAND_STALL_RETRY_MS` (500 ms) later, and the car finds the line and follows again every time |
 
 *Method:* **auto** = `TEST_CHECK` in code, result printed on the console;
 **manual** = a person observes the result (LED, scope, meter, phone app…).
@@ -70,6 +75,16 @@ working encoders and a measured `MOTION_ENCODER_TICKS_PER_REV` (MOT-U04)
 first, and MOT-U11..U16 also a calibrated `MOTION_WHEEL_DIAMETER_MM`
 (MOT-U08). To measure a turn, see how far the tape line has moved sideways
 500 mm from the pivot: 5° is about 44 mm, 3° about 26 mm.
+
+MOT-U40..U43 replace MOT-U27, MOT-U28, MOT-U30 and MOT-U39 from the
+digital IR rewrite (2026-11-05) on: following now holds a target heading
+set by the line task instead of running the line-error PD loop, and a
+stall retries with no limit. The earlier four test the old code and their
+results stand for it; `motion_test.c` now prints MOT-U40..U42 in their
+place. MOT-U40 runs in every `make TEST=1` image, MOT-U41 and MOT-U42
+only with `MOTION_FOLLOW_TESTS` set to 1 (with MOT-U29), and they need
+the same calibration as MOT-U28..U30. Following a real line is
+LINE-U05..U07, and the bypass's stop at real tape INT-14/16.
 
 ## Test sessions
 

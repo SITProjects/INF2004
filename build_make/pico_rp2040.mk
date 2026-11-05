@@ -106,7 +106,7 @@ ifeq ($(TEST),1)
 TEST_SUFFIX := _test
 endif
 
-# Only the ADC-owning line task runs while measuring mounted IR sensors.
+# Only the IR sensor tasks run (motors off) while setting the DO thresholds.
 IR_CALIBRATION ?= 0
 ifneq ($(filter $(IR_CALIBRATION),0 1),$(IR_CALIBRATION))
 $(error IR_CALIBRATION must be 0 or 1)
