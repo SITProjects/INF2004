@@ -69,6 +69,7 @@ typedef struct
     uint16_t sidestep_mm; /**< First sideways offset (not distance driven). */
     uint16_t pass_mm;     /**< Axle travel along the line, from the stop. */
     uint8_t angle_deg;    /**< Turn angle of every turn, 5..90 degrees. */
+    bool b_no_fit;        /**< Ends had space, none fits: roomier end taken. */
 } obstacle_avoid_plan_t;
 
 /** Result of checking a corridor sweep against the path ahead. */
@@ -250,11 +251,17 @@ typedef struct
  * The line is assumed to continue behind the obstacle. PATH_FOUND and
  * BLOCKED results are both used. Each side whose edge was found (with the
  * width available) needs edge + half_width + margin sideways (-right_x on
- * the right); a side without one needs sidestep_max. PATH_FOUND takes the
- * scanner's measured-clearest direction even if its sidestep is longer or
- * its edge is unknown (then at sidestep_max, b_edge_unknown). BLOCKED goes
- * round the found edge needing the smaller sidestep; with no edge found it
- * has nothing to try (NOT_PATH).
+ * the right); a side without one needs sidestep_max. When the geometry
+ * says which ends had free space, only those sides are candidates, and
+ * only if the car, shifted aside, passes the point measured at that end
+ * (beyond the pass, or sidestep + half_width + margin out). When ends had
+ * space but none fits (b_no_fit), the free end measured farther is used
+ * (no echo farthest; a tie keeps the scanner's side). Prefer
+ * the scanner's measured-clearest direction even if its sidestep is longer
+ * or its edge is unknown. Without a usable measured preference, fall back
+ * to the edge geometry among usable sides. With no edge found, PATH_FOUND
+ * takes the scanner's direction
+ * at sidestep_max (b_edge_unknown); BLOCKED has nothing to try (NOT_PATH).
  * The sidestep is raised to sidestep_min. A sidestep above sidestep_max or
  * a pass above pass_max is capped there and b_limited set: the car tries
  * anyway, guarded by CRITICAL. The pass distance is centre + axle_to_pivot

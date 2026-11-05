@@ -147,6 +147,13 @@ clear_rank (ultrasonic_result_t measurement, uint16_t echo_us,
 }
 
 bool
+obstacle_decision_side_clear (ultrasonic_result_t measurement, uint16_t echo_us,
+                              uint16_t centre_echo_us)
+{
+    return clear_rank(measurement, echo_us, centre_echo_us) != 0u;
+}
+
+bool
 obstacle_decision_is_critical (ultrasonic_result_t measurement,
                                uint16_t echo_us)
 {

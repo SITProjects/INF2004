@@ -166,6 +166,9 @@ static bool sim_in_sidestep (void);
 static bool avoid_fault_valid (void);
 static bool avoid_obstacles_valid (void);
 static bool avoid_angle_valid (void);
+static bool plan_clear_side_valid (void);
+static bool plan_end_room_valid (void);
+static bool plan_measured_clearance_valid (void);
 
 /* Public function definitions. */
 
@@ -236,6 +239,12 @@ obstacle_test (void)
                "avoid: blocked moves resume; turns ignore stop; full box");
     TEST_CHECK("OBS-U55", avoid_angle_valid(),
                "avoid: angle from the room ahead; diagonals and pass sized");
+    TEST_CHECK("OBS-U60", plan_clear_side_valid(),
+               "plan: only a side with free space is chosen");
+    TEST_CHECK("OBS-U64", plan_measured_clearance_valid(),
+               "plan: use the scanner's farther clear side, not width");
+    TEST_CHECK("OBS-U66", plan_end_room_valid(),
+               "plan: a clear end counts only if the car fits past it");
 
     TEST_CHECK("OBS-U10", packed_obstacle_fields_valid(),
                "packed obstacle fields clamp without changing neighbours");
@@ -2214,6 +2223,112 @@ avoid_angle_valid (void)
     sim.b_auto = false;
     return ok && (sim.ctx.state == OBSTACLE_AVOID_IDLE) &&
            (seen == ARRAY_COUNT(expected)) && (sim.sends - first == seen);
+}
+
+/* OBS-U60: edges at +300 (left needs 435, capped 400) and -40 (right
+ * needs 175). Only the left clear: left, capped. Both clear: the scanner's
+ * measured preference wins. Only right clear with no right edge: right at the
+ * maximum with the edge unknown. */
+static bool
+plan_clear_side_valid (void)
+{
+    obstacle_avoid_geometry_t car = avoid_fixture();
+    robot_obstacle_result_t const result =
+        path_result(ROBOT_OBSTACLE_DIR_RIGHT_120, true, true);
+    obstacle_scan_geometry_t geometry = geometry_at(250u, 300, -40);
+    geometry.b_left_clear = true;
+    obstacle_avoid_plan_t const left_only =
+        obstacle_avoid_plan(result, geometry, &car);
+    geometry.b_right_clear = true;
+    obstacle_avoid_plan_t const both =
+        obstacle_avoid_plan(result, geometry, &car);
+    geometry.b_left_clear = false;
+    obstacle_avoid_plan_t const right_only = obstacle_avoid_plan(
+        path_result(ROBOT_OBSTACLE_DIR_RIGHT_120, true, false), geometry, &car);
+    return plan_is(left_only, false, false, 400u, 650u) &&
+           left_only.b_limited && plan_is(both, true, false, 175u, 650u) &&
+           plan_is(right_only, true, true, 400u, 650u);
+}
+
+/* OBS-U66: edges at +-60 mm, 250 mm ahead, need 195 mm either way, so a
+ * point beside the shifted car must be 330 mm out. The scanner chose right
+ * and both ends were clear. Right end at 659 mm (329.5 mm out, inside the
+ * 650 mm pass): too close, so left. At 662 mm: fits, right. At 800 mm:
+ * beyond the pass, right. Both ends too close (300 mm): the scanner's
+ * right, flagged tight; left at 400 mm instead: the roomier left. */
+static bool
+plan_end_room_valid (void)
+{
+    obstacle_avoid_geometry_t car = avoid_fixture();
+    robot_obstacle_result_t const result =
+        path_result(ROBOT_OBSTACLE_DIR_RIGHT_120, true, true);
+    obstacle_scan_geometry_t geometry = geometry_at(250u, 60, -60);
+    geometry.b_left_clear = true;
+    geometry.b_right_clear = true;
+    geometry.right_end_mm = 659u;
+    obstacle_avoid_plan_t const tight =
+        obstacle_avoid_plan(result, geometry, &car);
+    geometry.right_end_mm = 662u;
+    obstacle_avoid_plan_t const fits =
+        obstacle_avoid_plan(result, geometry, &car);
+    geometry.right_end_mm = 800u;
+    obstacle_avoid_plan_t const beyond =
+        obstacle_avoid_plan(result, geometry, &car);
+    geometry.right_end_mm = 300u;
+    geometry.left_end_mm = 300u;
+    obstacle_avoid_plan_t const neither =
+        obstacle_avoid_plan(result, geometry, &car);
+    geometry.left_end_mm = 400u;
+    obstacle_avoid_plan_t const roomier =
+        obstacle_avoid_plan(result, geometry, &car);
+    return plan_is(tight, false, false, 195u, 650u) && !tight.b_no_fit &&
+           plan_is(fits, true, false, 195u, 650u) &&
+           plan_is(beyond, true, false, 195u, 650u) &&
+           plan_is(neither, true, false, 195u, 650u) && neither.b_no_fit &&
+           plan_is(roomier, false, false, 195u, 650u) && roomier.b_no_fit;
+}
+
+/* OBS-U64: actual coarse decisions reach the planner unchanged, even
+ * when the winning side needs a wider detour or has no measured edge. */
+static bool
+plan_measured_clearance_valid (void)
+{
+    obstacle_avoid_geometry_t car = avoid_fixture();
+    uint16_t const clear_us = THRESHOLD_US + OBSTACLE_EDGE_JUMP_US + 100u;
+    for (unsigned int right = 0u; right < 2u; ++right)
+    {
+        obstacle_side_decision_t const decision = obstacle_decision_sides(
+            ULTRASONIC_VALID, clear_us + (right ? 0u : 100u), ULTRASONIC_VALID,
+            clear_us + (right ? 100u : 0u), NEAR_US);
+        robot_obstacle_result_t result =
+            path_result(decision.direction, true, true);
+        obstacle_scan_geometry_t geometry =
+            right ? geometry_at(250u, 40, -300) : geometry_at(250u, 300, -40);
+        geometry.b_left_clear = true;
+        geometry.b_right_clear = true;
+        obstacle_avoid_plan_t plan =
+            obstacle_avoid_plan(result, geometry, &car);
+        if (!plan_is(plan, right != 0u, false, 400u, 650u) || !plan.b_limited)
+        {
+            return false;
+        }
+        result.flags = robot_obstacle_pack_flags(ROBOT_OBSTACLE_PATH_FOUND,
+                                                 decision.direction,
+                                                 right != 0u, right == 0u);
+        plan = obstacle_avoid_plan(result, geometry, &car);
+        if (!plan_is(plan, right != 0u, true, 400u, 650u))
+        {
+            return false;
+        }
+    }
+    obstacle_side_decision_t const open = obstacle_decision_sides(
+        ULTRASONIC_NO_ECHO, 0u, ULTRASONIC_VALID, UINT16_MAX, NEAR_US);
+    obstacle_scan_geometry_t geometry = geometry_at(250u, 300, -40);
+    geometry.b_left_clear = true;
+    geometry.b_right_clear = true;
+    obstacle_avoid_plan_t const plan = obstacle_avoid_plan(
+        path_result(open.direction, true, true), geometry, &car);
+    return plan_is(plan, false, false, 400u, 650u);
 }
 
 #endif /* APP_TEST */
