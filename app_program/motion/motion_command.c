@@ -84,6 +84,11 @@ static command_request_t latest_request;
 static command_request_t active_request;
 #if ACTUATION_ACTIVE
 static bool b_fault_latched;
+/* Updates since a stall latched. After STALL_RETRY_UPDATES (500 ms) it is
+ * cleared, so following and searching carry on instead of stopping for
+ * good; a wheel still blocked stalls and latches again. */
+#define STALL_RETRY_UPDATES (500u / MOTION_UPDATE_PERIOD_MS)
+static uint32_t stall_updates;
 static bool b_slow_active;
 static bool b_search_right;
 static bool b_recovery_turn;
@@ -336,10 +341,21 @@ update_controller (bool b_new)
     if (state == MOTION_STATE_STALLED)
     {
         latch_fault(MOTION_ERR_STALLED);
+        if (++stall_updates >= STALL_RETRY_UPDATES)
+        {
+            stall_updates = 0u;
+            (void)motion_move_stop();
+            b_fault_latched = false;
+            tm_printf((UB *)"motion: stall cleared, searching again\n");
+        }
     }
     else if (state == MOTION_STATE_TIMED_OUT)
     {
         latch_fault(MOTION_ERR_TIMED_OUT);
+    }
+    if (state != MOTION_STATE_STALLED)
+    {
+        stall_updates = 0u; /* The next stall waits the full delay. */
     }
     if (!b_fault_latched)
     {
