@@ -67,13 +67,17 @@
 
 /*
  * Distance between the two wheels' contact points (tyre centres), in mm.
- * Measured 127 mm outside to outside, less one 19.5 mm tyre width.
- * TODO(calibrate): tune with MOT-U11 and MOT-U12 (360 degrees three times
- * each way) on the demo floor: new = old * 1080 / mean of the two measured
- * total angles. Calibrate the wheel diameter (MOT-U08) first, since turns
- * depend on track width / mm per count.
+ * Measured 107.5 mm: 127 mm outside to outside, less one 19.5 mm tyre width.
+ * This is the effective value for turns, not the measured one.
+ * MOT-U11/U12 (2026-11-05): about 10 degrees short per 360 by eye, so a
+ * total of about 1050: 107.5 * 1080 / 1050 = 110.6. MOT-U11..U14 pass at
+ * 110.6 (2026-11-05), checked by eye.
+ * To retune with MOT-U11 and MOT-U12 (360 degrees three times each way) on
+ * the demo floor: new = old * 1080 / mean of the two measured total angles.
+ * Calibrate the wheel diameter (MOT-U08) first, since turns depend on track
+ * width / mm per count.
  */
-#define MOTION_TRACK_WIDTH_MM 107.5f
+#define MOTION_TRACK_WIDTH_MM 110.6f
 
 /*
  * Highest wheel speed any command may request, in mm/s.
@@ -221,7 +225,7 @@
 
 /*
  * Turn rate of turns in place, in degrees per second; each wheel moves at
- * rate * track / 2 (about 84 mm/s at 90 deg/s). The MBF_MOTION_CMD
+ * rate * track / 2 (about 87 mm/s at 90 deg/s). The MBF_MOTION_CMD
  * packing has no speed field, so every turn uses this rate.
  * TODO(calibrate): the slowest rate that turns smoothly on the floor
  * without stalling (MOT-U11); slower skids and overshoots less.
