@@ -1,0 +1,97 @@
+[filtered 2026-11-05: 3 boots of the normal image, car lifted. Removed Wi-Fi retry lines, obstacle fine-scan position lines, IR sensor lines after the first of each boot, and everything after each boot's first commanded movement (bypass legs, later scans)]
+=~=~=~=~=~=~=~=~=~=~=~= PuTTY log 2026.11.05 20:34:39 =~=~=~=~=~=~=~=~=~=~=~=
+
+
+microT-Kernel Version 3.00
+
+
+=== micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+dual-core (SMP) build, usermain on core 0
+obstacle: motors held until the path is confirmed clear
+motion: motors initialized and braked
+motion: encoders counting on PIO0
+motion: tMotion line adapter at 120 mm/s; 5 s startup delay, no run cutoff
+all subsystems started
+
+[0 ms]obstacle: scanning started
+[0 ms]obstacle: stop request ACTIVE (sensing output only)
+terrain: IMU ready; calibrating, keep the car still on level ground
+[750 ms]obstacle: avoid WAIT_CLEAR -> RELEASING (path clear)
+[750 ms]obstacle: stop request RELEASED
+[750 ms]obstacle: [0x11] CLEAR dir 90
+[770 ms]obstacle: avoid RELEASING -> SEND (resume following)
+[790 ms]obstacle: avoid SEND -> IDLE (following)
+terrain: calibration NOT_LEVEL
+line_follow: IR line sensing started. Submitting commands to motion.
+Left AO: 3219 | Right AO: 3173 | Command: SEARCH
+motion: search reacquisition TURN_LEFT_90
+terrain: TURNING t 5.37 s
+=~=~=~=~=~=~=~=~=~=~=~= PuTTY log 2026.11.05 20:36:08 =~=~=~=~=~=~=~=~=~=~=~=
+
+
+microT-Kernel Version 3.00
+
+
+=== micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+dual-core (SMP) build, usermain on core 0
+obstacle: motors held until the path is confirmed clear
+motion: motors initialized and braked
+motion: encoders counting on PIO0
+motion: tMotion line adapter at 120 mm/s; 5 s startup delay, no run cutoff
+all subsystems started
+
+[0 ms]obstacle: scanning started
+[0 ms]obstacle: stop request ACTIVE (sensing output only)
+terrain: IMU ready; calibrating, keep the car still on level ground
+[730 ms]obstacle: avoid WAIT_CLEAR -> RELEASING (path clear)
+[730 ms]obstacle: stop request RELEASED
+[730 ms]obstacle: [0x11] CLEAR dir 90
+[750 ms]obstacle: avoid RELEASING -> SEND (resume following)
+[770 ms]obstacle: avoid SEND -> IDLE (following)
+[2530 ms]obstacle: avoid IDLE -> STOPPING (critical)
+[2530 ms]obstacle: CRITICAL set
+[2530 ms]obstacle: stop request ACTIVE
+[2530 ms]obstacle: [0x80] SCANNING dir -1
+[2550 ms]obstacle: avoid STOPPING -> WAIT_RESULT (motors inhibited)
+[2690 ms]obstacle: side scan started
+terrain: calibration NOT_LEVEL
+[3590 ms]obstacle: ends L VALID 2005 us clear, R NO_ECHO 0 us clear (centre 450 us)
+line_follow: IR line sensing started. Submitting commands to motion.
+Left AO: 3210 | Right AO: 2970 | Command: SEARCH
+[5790 ms]obstacle: width 1 mm hits 90..90 bounds 90.0..90.0 collapsed
+[5790 ms]obstacle: side scan completed after 3100 ms
+[5790 ms]obstacle: avoid WAIT_RESULT -> RELEASING (path found)
+[5790 ms]obstacle: [0xFA] PATH_FOUND dir 120 width 1 mm hits 90..90 (L found, R found)
+[5810 ms]obstacle: avoid RELEASING -> SEND (reverse for room)
+
+
+microT-Kernel Version 3.00
+
+
+=== micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+dual-core (SMP) build, usermain on core 0
+obstacle: motors held until the path is confirmed clear
+motion: motors initialized and braked
+motion: encoders counting on PIO0
+motion: tMotion line adapter at 120 mm/s; 5 s startup delay, no run cutoff
+all subsystems started
+
+[0 ms]obstacle: scanning started
+[0 ms]obstacle: stop request ACTIVE (sensing output only)
+terrain: IMU ready; calibrating, keep the car still on level ground
+[730 ms]obstacle: avoid WAIT_CLEAR -> RELEASING (path clear)
+[730 ms]obstacle: stop request RELEASED
+[730 ms]obstacle: [0x11] CLEAR dir 90
+[750 ms]obstacle: avoid RELEASING -> SEND (resume following)
+[770 ms]obstacle: avoid SEND -> IDLE (following)
+[2890 ms]obstacle: avoid IDLE -> STOPPING (stop request)
+[2890 ms]obstacle: stop request ACTIVE
+[2890 ms]obstacle: [0x00] SCANNING dir -1
+[2910 ms]obstacle: avoid STOPPING -> WAIT_RESULT (motors inhibited)
+[3030 ms]obstacle: side scan started
+[3890 ms]obstacle: ends L VALID 1234 us blocked, R VALID 632 us blocked (centre 922 us)
+[3890 ms]obstacle: width 166 mm hits 60..120 bounds 60.0..120.0
+[3890 ms]obstacle: side scan completed after 860 ms
+[3890 ms]obstacle: avoid WAIT_RESULT -> RELEASING (no free side, reverse and look again)
+[3890 ms]obstacle: [0x03] BLOCKED dir -1 width 166 mm hits 60..120 (L not found, R not found)
+[3910 ms]obstacle: avoid RELEASING -> SEND (reverse for room)
