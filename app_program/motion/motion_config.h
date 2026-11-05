@@ -104,7 +104,7 @@
  * Check on the floor with MOT-U21.
  */
 #define MOTION_SPEED_KP 0.001f
-#define MOTION_SPEED_KI 0.003f
+#define MOTION_SPEED_KI 0.006f
 
 /*
  * Updates over which each wheel's speed is averaged. At 2 mm per count
