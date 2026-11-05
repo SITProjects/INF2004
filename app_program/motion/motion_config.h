@@ -140,6 +140,19 @@
 #define MOTION_SYNC_KI 0.5f
 
 /*
+ * How much further the right wheel travels per count than the left, as a
+ * fraction; the straight-line loop counts it, so equal distances are not
+ * equal counts. The encoders cannot see this: with 0 they read 0 degrees
+ * while the car curves left. MOT-U25 (2026-11-05): 85-140 mm left over 1 m
+ * with sync on, mean 112 mm, is 2 * 112 * track / 1000^2 = 0.025.
+ * Used only by this loop: turns and the odometry heading ignore it, so the
+ * heading of a straight 1 m move reads about -13 degrees.
+ * TODO(calibrate): confirm with MOT-U25 and the MOT-U26 reverse. Raise it if
+ * the car still curves left, lower it if it curves right.
+ */
+#define MOTION_SYNC_RIGHT_SCALE 0.025f
+
+/*
  * Largest sync correction, in deg/s. Each wheel's setpoint changes by
  * rate * track / 2 (about 19 mm/s at 20 deg/s), which must stay well below
  * MOTION_MOVE_SPEED_MM_S so neither wheel slows to a stop or reverses.
