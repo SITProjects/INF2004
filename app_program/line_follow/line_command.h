@@ -22,11 +22,15 @@
  */
 #define LINE_LEFT_DETECT_MIN 710u
 #define LINE_RIGHT_DETECT_MIN 750u
-/** Full-black references for junction confirmation and correction ramps. */
+/** Full-black references for junction confirmation and correction ramps.
+ * On the car the right sensor reads 1250-2200 over the line edge, so its
+ * reference is 1800 rather than the 3374 full-black bench reading.
+ */
 #define LINE_LEFT_BLACK_MIN 1689u
-#define LINE_RIGHT_BLACK_MIN 3374u
-/** Time without either edge before requesting SEARCH, in milliseconds. */
-#define LINE_EDGE_PROBE_MS 1000u
+#define LINE_RIGHT_BLACK_MIN 1800u
+/** Time without either edge before requesting SEARCH, in milliseconds;
+ * short, so an edge lost on a tight curve is searched for at once. */
+#define LINE_EDGE_PROBE_MS 250u
 /** Minimum slow reacquisition time; a fresh edge is needed to finish. */
 #define LINE_REACQUIRE_CONFIRM_MS 1000u
 

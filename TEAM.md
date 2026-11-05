@@ -167,16 +167,21 @@ What students *can* do:
 
 ## 4. Task priorities
 
-1 is the highest. 1–4 are used by the kernel (USB console 3, WiFi 4). Each subsystem gets its own band by default;
-change it only by team agreement. Write down every task you create.
+1 is the highest. 1–4 are used by the kernel: the initial task 1 (it runs
+the tests in `make TEST=1` builds), USB console 3 and Wi-Fi 4, both pinned
+to core 0. Application tasks follow the order of the Week 6 design freeze,
+each at its freeze priority + 3 so they sit below the kernel's tasks.
+Change it only by team agreement. Write down every task you create.
 
-| Subsystem | Priority band | Tasks (name – priority – core) |
+| Subsystem | Priority | Tasks (name – priority – core) |
 |---|---|---|
-| obstacle | 12–13 | `obstacle_scan_task` – 12 – core 0 (`TP_PRC1`; the echo interrupt is on core 0) |
-| motion | 14–15 | `tMotion` – 14 – any (design freeze says 3: to settle) |
-| line_follow | 16–17 | `line_follow_task` – 16 – any |
-| terrain | 18–19 | `terrain_task` – 18 – any |
-| communication | 20–21 | `communication_task` – 20 – any |
+| *safety (unassigned)* | 5 | *tSafety – 5 (reserved)* |
+| motion | 6 | `tMotion` – 6 – core 1 (`TP_PRC2`; nothing above it runs there, NFR1) |
+| line_follow | 7–8 | `line_follow_task` (tLine) – 7 – any; *tBarcode – 8 (reserved)* |
+| terrain | 9 | `terrain_task` (tImu) – 9 – any |
+| *mission (unassigned)* | 10 | *tMission – 10 (reserved)* |
+| obstacle | 11–12 | `obstacle_scan_task` (tScan) – 11 – core 0 (`TP_PRC1`; the echo interrupt is on core 0); its test helper task 12; with the bypass on, it also holds INHIBIT from start-up and sends motion commands (IF-06) |
+| communication | 13 | `communication_task` (tComms) – 13 – any |
 
 Core: `TP_PRC1` = core 0, `TP_PRC2` = core 1, or "any".
 
@@ -186,16 +191,18 @@ Every arrow between two subsystems is listed here. The **provider** creates
 the kernel object and publishes its ID in its own `<name>.h`; the **user**
 only sends to it or waits on it. Agree on the data format before coding.
 
-Rows marked *proposed* or *interim* are not agreed yet; the obstacle
-results and line commands are still TODOs.
+Rows marked *proposed* or *interim* are not agreed yet; the line commands
+are still TODOs.
 
 | ID | From → To | Mechanism | Object ID name | Data / meaning | Agreed by |
 |---|---|---|---|---|---|
-| IF-01 | tMission → motion | Message buffer | `motion_mbf_cmd` (MBF_MOTION_CMD) | one `uint32_t` command word, packed with the `robot_motion_cmd_` helpers in `robot_types.h` (22-bit layout, Tribunal 1) | proposed by motion; tMission owner to agree |
+| IF-01 | tMission → motion | Message buffer | `motion_mbf_cmd` (MBF_MOTION_CMD) | one `uint32_t` command word, packed with the `robot_motion_cmd_` helpers in `robot_types.h` (22-bit layout, Tribunal 1; stop-at-line acquires fresh current visibility) | proposed by motion; tMission owner to agree |
 | IF-02 | tSafety → motion | Event flag | `motion_flg_ctrl` (FLG_MOTION), bit `MOTION_FLG_INHIBIT` | set: brake at once and discard commands; clear: back to STOPPED | proposed by motion; tSafety owner to agree |
-| IF-03 | motion → tMission | Event flag + status word | `motion_flg_event` (`MOTION_EVT_` bits), `motion_get_status()` | MOVE_DONE (reason in status), STALL, ENC_FAULT, REJECTED, FOLLOW_ENDED; mode 3 bits | interim until FLG_MISSION exists |
+| IF-03 | motion → tMission | Event flag + status word | `motion_flg_event` (`MOTION_EVT_` bits), `motion_get_status()` | MOVE_DONE (reason in status), STALL, ENC_FAULT, REJECTED, FOLLOW_ENDED; mode 3 bits. The status is published before any event bit is set, so a reader that sees an event and then reads the status gets that command's done reason | interim until FLG_MISSION exists |
 | IF-04 | line_follow → motion | Function (one 32-bit store) | `motion_set_line_input()` | signed line error −1000..+1000 and line-seen, every reading | interim until `line_state_t` under MTX_LINE; kaiwenteoo to agree |
 | IF-05 | motion → terrain | Shared copy, sequence-checked (no lock, never waits) | `motion_get_odometry()` | `motion_shared_odometry_t`: update count, distance mm and heading deg (`int32`), speed and both wheel speeds mm/s (`int16`); + forward and left; updated every 20 ms | proposed by motion; ann to agree; moves into `telemetry_t` under MTX_TELEM in step 8 |
+| IF-06 | obstacle → motion | Uses IF-01, IF-02, IF-03 | `motion_mbf_cmd`, `motion_flg_ctrl` (`MOTION_FLG_INHIBIT`), `motion_flg_event` | interim tMission/tSafety for obstacles, only while `OBSTACLE_AVOID_ENABLED`: INHIBIT from start-up until a confirmed clear path and on every stop; box-bypass commands; FOLLOW to resume; a latched FAULT keeps INHIBIT until reboot. The only task that sets or clears INHIBIT and the only consumer of MOVE_DONE (clears every `MOTION_EVT_` bit before each command); hands both to tSafety/tMission when they exist | proposed by obstacle; felicia-chuaxy to agree |
+| IF-07 | obstacle → any | Event flag + shared copy, sequence-checked (no lock, never waits) | `obstacle_flg_event` (FLG_OBSTACLE), `obstacle_get_state()` | STOP, CRITICAL and FAULT levels; RESULT edge on a new result sequence (one consumer clears it); `obstacle_shared_state_t`: packed result, its geometry (mm from the servo pivot), stop request, bypass state and fault reason | proposed by obstacle |
 
 Each interface is tested by at least one integration test
 (`testing/integration/TEST_LOG.md`).
@@ -209,7 +216,7 @@ limit there.
 |---|---|---|---|---|---|---|
 | Task | 32 | 1 | 1 | 1 | 1 | 1 |
 | Semaphore | 16 | | | | | |
-| Event flag | 16 | | 2 | | | |
+| Event flag | 16 | 1 | 2 | | | |
 | Mailbox | 12 | | | | | |
 | Mutex | 12 | | | | | |
 | Message buffer | 12 | | 1 | | | |
@@ -220,3 +227,24 @@ limit there.
 
 (The kernel's USB and WiFi service tasks, and its I2C and ADC drivers, also
 use a few of these.)
+
+## TIMER tick initialization (cold-boot fix)
+
+`usermain()` explicitly configures the watchdog tick to 1 MHz from the
+12 MHz `CLK_REF` before it blocks or starts application subsystems. This
+shared `app_main.c` change leaves kernel sources untouched. TIMER remains
+read-only for application tasks after that one startup configuration.
+
+On 2026-11-04, isolated diagnostic images on the Pico reproduced CYCLES=0
+and about 23,672 TIMER counts over 1,010 ms after removing all power, for
+both default and WIFI=none builds. After BOOTSEL flashing both had
+CYCLES=12 and about 1,010,000 counts. See `testing/integration/TIMER_DIAGNOSTIC.md`
+for source/firmware provenance and before/after evidence.
+
+The initial task was observed on core 0 in these SMP runs. The radio task
+is pinned to core 0; it starts using TIMER after the initial task blocks.
+This placement must be revisited if startup affinity/scheduling changes.
+Kernel consumers before `usermain()` (including SMP lock statistics) remain
+outside this application's initialization guarantee. Motion, terrain and
+communication measurements that relied on TIMER after a cold boot before
+this fix need review; the test history must not be retroactively marked PASS.

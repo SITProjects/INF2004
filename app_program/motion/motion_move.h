@@ -225,6 +225,17 @@ motion_status_t motion_move_set_line (int16_t error, bool b_seen);
 motion_status_t motion_move_stop_at_line (void);
 
 /**
+ * @brief End the current move/turn at a fresh, confirmed visible line.
+ * @return As motion_move_stop_at_line(). Only the motion owner may call.
+ * A line already visible when armed also counts; the next update brakes
+ * and reports MOTION_DONE_LINE. Stale visibility never counts. If no line
+ * is seen, the command ends at its distance/angle as usual. The setting
+ * lasts for this command only. Used by queued stop-at-line commands for
+ * obstacle reacquisition; the lower-level edge-only API stays available.
+ */
+motion_status_t motion_move_acquire_line (void);
+
+/**
  * @brief Brake both wheels, end any move, turn or following, and clear a
  * stall or timeout.
  * @return MOTION_OK or MOTION_ERR_NOT_INIT.

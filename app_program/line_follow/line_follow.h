@@ -15,8 +15,8 @@
 
 /* Public types, constants, and macros. */
 
-/** Line task priority; the line-following band is 16-17 (TEAM.md). */
-#define LINE_FOLLOW_PRI_SENSE 16
+/** Line task priority: tLine, design freeze 4 + 3 (TEAM.md section 4). */
+#define LINE_FOLLOW_PRI_SENSE 7
 
 /** ID of the line task, which owns the ADC. */
 extern ID line_follow_tid_sense;

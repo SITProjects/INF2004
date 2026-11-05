@@ -20,6 +20,8 @@
  * With the line adapter enabled, FOLLOW resumes automatic line decisions;
  * STOP/MOVE/TURN suspend them until a new FOLLOW. INHIBIT also suspends
  * them, so clearing it alone cannot replay a cached line command.
+ * Queued MOVE/TURN with stop-at-line acquires any fresh, confirmed visible
+ * line, including one already under the sensors when the command starts.
  *
  * To stop the car (tSafety): tk_set_flg(motion_flg_ctrl,
  * MOTION_FLG_INHIBIT). tMotion wakes and brakes at once (NFR6), discards
@@ -38,8 +40,8 @@
 
 /* Public types, constants, and macros. */
 
-/** Priority of tMotion, in the motion band 14-15 (TEAM.md section 4). */
-#define MOTION_PRI_DRIVE 14
+/** Priority of tMotion: design freeze 3 + 3 (TEAM.md section 4). */
+#define MOTION_PRI_DRIVE 6
 
 /** motion_flg_ctrl (FLG_MOTION): set by the CYC_MOTION handler. */
 #define MOTION_FLG_TICK 0x01u
@@ -62,6 +64,8 @@
 #define MOTION_EVT_REJECTED 0x08u
 /** Following ended because line readings stopped arriving. */
 #define MOTION_EVT_FOLLOW_ENDED 0x10u
+/** Every MOTION_EVT_ bit, for clearing them all before a new command. */
+#define MOTION_EVT_ALL 0x1Fu
 
 /**
  * Odometry as of tMotion's last update (IF-05, motion -> terrain). Units as
@@ -114,6 +118,9 @@ extern ID motion_flg_event;
  * @return Snapshot as of tMotion's last update; ROBOT_MOTION_MODE_STOPPED
  * before the first.
  * Any task, either core: the snapshot is one 32-bit word.
+ * tMotion publishes the status before it sets any MOTION_EVT_ bit, so a
+ * task that reads an event and then calls this sees the done reason of
+ * the command that raised it.
  */
 motion_task_status_t motion_get_status (void);
 

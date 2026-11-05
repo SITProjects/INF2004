@@ -297,7 +297,8 @@ robot_obstacle_get_critical (uint8_t flags)
  * (check longer moves before packing: split them). 0 is refused by
  * tMotion.
  * @param b_backward True to reverse, false to drive forward.
- * @param b_stop_at_line True to end early when the line comes into view.
+ * @param b_stop_at_line True to end early at a fresh confirmed line,
+ * including one already visible when this queued command is armed.
  * @return Command word for MBF_MOTION_CMD.
  */
 static inline uint32_t
@@ -319,7 +320,8 @@ robot_motion_cmd_move (uint32_t distance_mm, bool b_backward,
  * @param angle_deg Angle in degrees; above ANGLE_MAX_DEG it saturates.
  * 0 is refused by tMotion.
  * @param b_right True to turn right (clockwise), false left.
- * @param b_stop_at_line True to end early when the line comes into view.
+ * @param b_stop_at_line True to end early at a fresh confirmed line,
+ * including one already visible when this queued command is armed.
  * @return Command word for MBF_MOTION_CMD.
  */
 static inline uint32_t

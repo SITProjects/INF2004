@@ -6,9 +6,10 @@ that owns the data and published in its `<name>.h`. Each one gets an ID in
 `TEAM.md` section 5 and an integration test in
 `testing/integration/TEST_LOG.md`.
 
-None exist yet: every subsystem runs on its own. The open TODOs that need
-interfaces are in `app_program/obstacle/obstacle.c` (act on scan results)
-and the line-following commands, which nothing drives the motors with yet.
+The obstacle bypass (IF-06, off until the car is measured) is in
+`app_program/obstacle/obstacle_avoid.c`, run by the scan task in
+`app_program/obstacle/obstacle.c`. The line-following commands are still
+open.
 
 Functions that are already safe to call from any task:
 
@@ -18,3 +19,4 @@ Functions that are already safe to call from any task:
 | `terrain_monitor_get_calibration()` | `app_program/terrain/terrain_monitor.h` | calibration details |
 | `terrain_monitor_recalibrate()` | `app_program/terrain/terrain_monitor.h` | restart calibration |
 | `connectivity_is_connected()` | `app_program/communication/connectivity.h` | Wi-Fi joined with an IP address |
+| `obstacle_get_state()` | `app_program/obstacle/obstacle.h` | latest obstacle result, geometry, stop request and bypass state (IF-07) |

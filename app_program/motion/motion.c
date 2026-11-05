@@ -193,8 +193,11 @@ motion_start (void)
         return result;
     }
 
-    /* TODO(step 9, team): priority 3 (design freeze) or 14 (TEAM.md). */
-    ID tid = app_start_task(motion_task, MOTION_PRI_DRIVE, 0u, "tMotion");
+    /*
+     * Core 1: the USB, Wi-Fi and obstacle tasks are pinned to core 0, so
+     * none of them can delay the 20 ms update (NFR1, NFR6).
+     */
+    ID tid = app_start_task(motion_task, MOTION_PRI_DRIVE, TP_PRC2, "tMotion");
     if (tid < E_OK)
     {
         return tid;
@@ -379,8 +382,9 @@ motion_task (INT stacd, void * p_exinf)
         motion_state_t before = motion_move_get_state();
         motion_command_service(b_line_control);
         (void)motion_move_update();
-        report_change(before, motion_move_get_state());
+        /* Status first: an event's reader must see the done reason. */
         publish_status(b_inhibited);
+        report_change(before, motion_move_get_state());
         publish_odometry();
 
         uint32_t busy_us = timer_us() - wake_us;
@@ -486,11 +490,12 @@ run_command (uint32_t cmd)
         b_line_control = false;
     }
 
-    /* Stop at line applies to moves and turns; ignored on STOP / FOLLOW. */
+    /* Queued acquisition accepts a fresh line already under the sensors,
+     * including one seen before the post-obstacle return was armed. */
     if ((MOTION_OK == result) && robot_motion_cmd_get_stop_at_line(cmd) &&
         ((ROBOT_MOTION_CMD_MOVE == type) || (ROBOT_MOTION_CMD_TURN == type)))
     {
-        result = motion_move_stop_at_line();
+        result = motion_move_acquire_line();
     }
     if (result != MOTION_OK)
     {

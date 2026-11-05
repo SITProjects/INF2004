@@ -26,8 +26,9 @@
 
 /*
  * Task priorities: 1 is the highest; the kernel's USB console (3) and
- * Wi-Fi (4) tasks sit above every application task. Each subsystem has its
- * own band (TEAM.md section 4), defined in its own header.
+ * Wi-Fi (4) tasks sit above every application task. Each application task
+ * uses its design-freeze priority + 3, listed per task in TEAM.md section
+ * 4, and defined in its subsystem's own header.
  */
 
 /** Stack size of every application task, in bytes; tm_printf needs ~1 KB. */

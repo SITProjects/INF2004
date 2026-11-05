@@ -46,6 +46,7 @@ Define a test here before running it. Test IDs never change.
 | MOT-U36 | through tMotion on the lifted car: (a) a 300 mm move ends with MOVE_DONE, reason DIST; (b) a move replaced by another gives MOVE_DONE only for the second; (c) STOP ends a move without MOVE_DONE; (d) INHIBIT during a move brakes within 20 ms, discards a move sent meanwhile, and clearing it gives no MOVE_DONE; (e) FOLLOW runs on the interim line input and ends with FOLLOW_ENDED once readings stop | step 9, design review 6.4, NFR6 | manual + auto | 1. Set `MOTION_TASK_TESTS` to 1 in `motion_config.h` and flash `make TEST=1` with the car lifted. 2. When `MOT-U36 keep the car lifted` appears, keep clear for about 20 s. | `[TEST] MOT-U36 PASS`; every part `1`; `INHIBIT to brake … us` ≤ 20000. Watch the wheels: each part stops when it should |
 | MOT-U37 | through tMotion, a held wheel raises STALL and mode STALLED; a new move is refused until STOP | step 9, FR12 | manual + auto | Same run: when `MOT-U37` appears, hold the LEFT wheel firmly still before the right one starts (10 s). | `[TEST] MOT-U37 PASS`; the right wheel brakes within about 0.3–0.8 s |
 | MOT-U38 | `motion_get_odometry()` (IF-05, for terrain) refuses NULL, its update count rises by one per period while tMotion runs, and at rest distance and heading hold and every speed is 0 | step 9, IF-05 | auto | `motion_test.c`; reads the snapshot from the test task for 200 ms while tMotion runs; no motors | `[TEST] MOT-U38 PASS`; `updates` within 2 of 10 |
+| MOT-U39 | line following restarts after a stall or timed-out recovery turn, at most 3 times in a row | line adapter (`motion_command.c`) | manual | Normal firmware, following a line: hold one wheel for about 1 s, release; repeat; then hold it until the car gives up; after that, STOP then FOLLOW, run 3 s, and hold again | Each hold: `fault 3, retry n of 3 in 500 ms` (3 = STALLED), then `fault cleared, searching again` and following resumes. The fourth fault in a row latches with `STOP then FOLLOW or restart required` and the car stays stopped. After 3 s of running without a fault the count starts again at 1 |
 
 *Method:* **auto** = `TEST_CHECK` in code, result printed on the console;
 **manual** = a person observes the result (LED, scope, meter, phone app…).
@@ -100,3 +101,27 @@ confirm the stop-early distance, and MOT-U19/U20 are calibrated at
 | 2026-11-03 | MOT-U09 | `dac27e4` + local | Felicia Chua | FAIL | `logs/2026-11-03_MOT-U08-U10_calibration.txt` | calibration; 3 runs: ruler ≈105 mm each (limit 97–103), odometry −114, −108, −111. Both moves stop about 5 mm past the target (coast after braking), so `MOTION_MOVE_STOP_EARLY_MM` set to 5 |
 | 2026-11-03 | MOT-U10 | `dac27e4` + local | Felicia Chua | PASS | `logs/2026-11-03_MOT-U08-U10_calibration.txt` | calibration; 3 runs: stalled after 740, 580, 500 ms, braked, refused, cleared |
 | 2026-11-03 | MOT-U10 | `dac27e4` + local | Felicia Chua | PASS | `logs/2026-11-03_MOT-U08-U10.txt` | with `MOTION_MOVE_STOP_EARLY_MM` 5; 3 runs: stalled after 460, 540, 720 ms (above the 300 ms timeout: small wheel movement in the grip restarts it), braked, refused, cleared. U08/U09 odometry 1003, 1003, 1002 / −110, −110, −106; ruler check of U08/U09 pending |
+
+## Host regression: post-obstacle line acquisition
+
+Run `sh testing/motion/host/run.sh` (host C compiler and sanitizer runtime).
+This links the production `motion_move.c` and PID module to a simulated
+stationary drive; no motor or sensor hardware is accessed.
+
+Checks include a confirmed line already visible before the return/inward
+turn is armed, fresh detection debounce, stale visibility, resetting the
+mode on a new command, invalid state and retaining the edge-only API's
+leave-and-reenter behaviour. Queued stop-at-line uses acquisition semantics;
+`motion_move_stop_at_line()` remains edge-only for callers that need it.
+
+Physical validation: with the car beyond the obstacle, start the inward turn
+and return while the sensors already cover the line, then repeat with an
+initially white surface and an approaching line. Both must brake on confirmed
+line evidence and then align/follow. Record raw IR values and `line found,
+aligning`; stable tracking and physical braking are NOT RUN until observed.
+
+Host result (2026-11-04): 12 checks PASS with ASan/UBSan. The same regression
+against the previous edge-only queued behaviour fails the already-visible
+return, already-visible inward turn, and fresh-refresh cases (3 failures).
+This is a software reproduction; it does not establish which failure the
+reported physical run encountered without its current console capture.
