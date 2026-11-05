@@ -222,8 +222,8 @@
  * Hump state machine (terrain_detect.h), on the lean (size of the
  * smoothed roll) while calibrated. The course's humps are ramps under one
  * drive wheel, so the car leans sideways. A wheel lifted h mm leans the
- * car by asin(h / TERRAIN_TRACK_WIDTH_MM): on a 107.5 mm track, 1 mm is
- * about 0.53 degrees, and an 11 mm ramp about 5.9 degrees.
+ * car by asin(h / TERRAIN_TRACK_WIDTH_MM): on a 110.6 mm track, 1 mm is
+ * about 0.52 degrees, and an 11 mm ramp about 5.7 degrees.
  *
  * Climb: lean above TERRAIN_HUMP_UP_DEG for TERRAIN_HUMP_ENTER_SAMPLES
  * samples in a row (5 = 50 ms, so a single jolt does not count). 2.1
@@ -279,10 +279,12 @@
  * Hump height (terrain_height.h). Track width: centre of one drive wheel
  * to the centre of the other, in mm. The height is track width x
  * sin(lean), so a track width 10 % too wide reads every height 10 % too
- * high. 107.5 mm is motion's MOTION_TRACK_WIDTH_MM (same car).
+ * high. 110.6 mm is motion's MOTION_TRACK_WIDTH_MM (same car), calibrated
+ * for turns (MOT-U11/U12); the wheels measure 107.5 mm apart, so heights
+ * read about 3 % high.
  */
 #ifndef TERRAIN_TRACK_WIDTH_MM
-#define TERRAIN_TRACK_WIDTH_MM 107.5f
+#define TERRAIN_TRACK_WIDTH_MM 110.6f
 #endif
 
 /*

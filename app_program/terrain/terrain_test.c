@@ -65,14 +65,14 @@
 #define DG_PER_G 10.0f
 
 /* TER-U22 wheel speeds (mm/s) and turn rates (deg/s): a gentle curve
- * (right 160, left 80: 42.6 deg/s left), a turn in place at motion's
- * 90 deg/s (wheels at +/-84 mm/s: 89.5 deg/s), and rates below the off
+ * (right 160, left 80: 41.4 deg/s left), a turn in place at motion's
+ * 90 deg/s (wheels at +/-87 mm/s: 90.1 deg/s), and rates below the off
  * limit, between the limits, above the on limit and a turn in place. */
 #define TURN_CURVE_LEFT_MM_S 80
 #define TURN_CURVE_RIGHT_MM_S 160
-#define TURN_CURVE_DPS_X10 426 /* Expected, tenths of a deg/s. */
-#define TURN_SPIN_MM_S 84
-#define TURN_SPIN_DPS_X10 895
+#define TURN_CURVE_DPS_X10 414 /* Expected, tenths of a deg/s. */
+#define TURN_SPIN_MM_S 87
+#define TURN_SPIN_DPS_X10 901
 #define TURN_TOL_X10 5 /* 0.5 deg/s. */
 #define TURN_STILL_DPS 0.0f
 #define TURN_CREEP_DPS 5.0f
