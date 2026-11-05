@@ -100,3 +100,27 @@ confirm the stop-early distance, and MOT-U19/U20 are calibrated at
 | 2026-11-03 | MOT-U09 | `dac27e4` + local | Felicia Chua | FAIL | `logs/2026-11-03_MOT-U08-U10_calibration.txt` | calibration; 3 runs: ruler ≈105 mm each (limit 97–103), odometry −114, −108, −111. Both moves stop about 5 mm past the target (coast after braking), so `MOTION_MOVE_STOP_EARLY_MM` set to 5 |
 | 2026-11-03 | MOT-U10 | `dac27e4` + local | Felicia Chua | PASS | `logs/2026-11-03_MOT-U08-U10_calibration.txt` | calibration; 3 runs: stalled after 740, 580, 500 ms, braked, refused, cleared |
 | 2026-11-03 | MOT-U10 | `dac27e4` + local | Felicia Chua | PASS | `logs/2026-11-03_MOT-U08-U10.txt` | with `MOTION_MOVE_STOP_EARLY_MM` 5; 3 runs: stalled after 460, 540, 720 ms (above the 300 ms timeout: small wheel movement in the grip restarts it), braked, refused, cleared. U08/U09 odometry 1003, 1003, 1002 / −110, −110, −106; ruler check of U08/U09 pending |
+
+## Host regression: post-obstacle line acquisition
+
+Run `sh testing/motion/host/run.sh` (host C compiler and sanitizer runtime).
+This links the production `motion_move.c` and PID module to a simulated
+stationary drive; no motor or sensor hardware is accessed.
+
+Checks include a confirmed line already visible before the return/inward
+turn is armed, fresh detection debounce, stale visibility, resetting the
+mode on a new command, invalid state and retaining the edge-only API's
+leave-and-reenter behaviour. Queued stop-at-line uses acquisition semantics;
+`motion_move_stop_at_line()` remains edge-only for callers that need it.
+
+Physical validation: with the car beyond the obstacle, start the inward turn
+and return while the sensors already cover the line, then repeat with an
+initially white surface and an approaching line. Both must brake on confirmed
+line evidence and then align/follow. Record raw IR values and `line found,
+aligning`; stable tracking and physical braking are NOT RUN until observed.
+
+Host result (2026-11-04): 12 checks PASS with ASan/UBSan. The same regression
+against the previous edge-only queued behaviour fails the already-visible
+return, already-visible inward turn, and fresh-refresh cases (3 failures).
+This is a software reproduction; it does not establish which failure the
+reported physical run encountered without its current console capture.

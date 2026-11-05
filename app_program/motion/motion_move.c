@@ -106,6 +106,7 @@ static int16_t sync_correction_deg_s = 0;
  */
 static motion_done_t done_reason = MOTION_DONE_NONE;
 static bool b_stop_at_line = false;
+static bool b_acquire_line = false;
 
 /*
  * Line input: last error, updates since it arrived, the debounced seen
@@ -205,7 +206,8 @@ motion_move_update (void)
     {
         line_age_updates++;
     }
-    bool b_line_found = b_line_seen && !b_line_seen_last;
+    bool b_line_found = b_line_seen && (!b_line_seen_last || b_acquire_line) &&
+                        (line_age_updates <= LINE_TIMEOUT_UPDATES);
     b_line_seen_last = b_line_seen;
 
     if (MOTION_STATE_MOVE == state)
@@ -398,7 +400,21 @@ motion_move_stop_at_line (void)
     }
 
     b_stop_at_line = true;
+    b_acquire_line = false;
     return MOTION_OK;
+}
+
+motion_status_t
+motion_move_acquire_line (void)
+{
+    motion_status_t const result = motion_move_stop_at_line();
+    if (result == MOTION_OK)
+    {
+        /* A line visible before this command is useful for reacquisition;
+         * do not require leaving it and finding a second edge first. */
+        b_acquire_line = true;
+    }
+    return result;
 }
 
 motion_status_t
@@ -623,6 +639,7 @@ begin (motion_state_t new_state, int32_t start, int32_t dir, int32_t target,
     reset_follow();
     done_reason = MOTION_DONE_NONE;
     b_stop_at_line = false;
+    b_acquire_line = false;
     b_line_seen_last = b_line_seen;
     state = new_state;
 }
@@ -658,6 +675,7 @@ enter_stopped (void)
     reset_follow();
     done_reason = MOTION_DONE_NONE;
     b_stop_at_line = false;
+    b_acquire_line = false;
 }
 
 /*
