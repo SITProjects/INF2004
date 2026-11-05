@@ -275,10 +275,9 @@
 #define OBSTACLE_AVOID_MIN_ROOM_MM 200u
 #define OBSTACLE_AVOID_MAX_BACKOFFS 2u
 #define OBSTACLE_AVOID_BACKOFF_DELAY_MS 300u
-#define OBSTACLE_CAR_WIDTH_MM 127u           /* W, 12.7 cm, ruler. */
-#define OBSTACLE_CAR_AXLE_TO_PIVOT_MM 20u    /* Axle midpoint to servo pivot. */
-#define OBSTACLE_CAR_REAR_MM 162u            /* Axle midpoint to rear bumper. */
-#define OBSTACLE_AVOID_LINE_OVERSHOOT_MM 60u /* IR row to axle, 6 cm. */
+#define OBSTACLE_CAR_WIDTH_MM 127u        /* W, 12.7 cm, ruler. */
+#define OBSTACLE_CAR_AXLE_TO_PIVOT_MM 20u /* Axle midpoint to servo pivot. */
+#define OBSTACLE_CAR_REAR_MM 162u         /* Axle midpoint to rear bumper. */
 #define OBSTACLE_AVOID_MARGIN_MM 60u
 #define OBSTACLE_AVOID_DEPTH_MM 200u /* Largest test obstacle's depth. */
 #define OBSTACLE_AVOID_SIDESTEP_MIN_MM 100u

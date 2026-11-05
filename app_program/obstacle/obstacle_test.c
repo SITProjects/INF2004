@@ -163,6 +163,7 @@ static bool avoid_send_valid (void);
 static bool avoid_rearm_valid (void);
 static bool avoid_verify_valid (void);
 static bool avoid_line_valid (void);
+static bool avoid_rejoin_valid (void);
 static bool sim_in_sidestep (void);
 static bool avoid_fault_valid (void);
 static bool avoid_obstacles_valid (void);
@@ -244,7 +245,7 @@ obstacle_test (void)
     TEST_CHECK("OBS-U45", avoid_verify_valid(),
                "avoid: extra sidesteps lengthen the return; limit holds");
     TEST_CHECK("OBS-U46", avoid_line_valid(),
-               "avoid: line ends the return early; one search, then FAULT");
+               "avoid: a found line hands over to FOLLOW; two misses FAULT");
     TEST_CHECK("OBS-U47", avoid_fault_valid(),
                "avoid: one retry from odometry; FAULT never releases");
     TEST_CHECK("OBS-U48", avoid_obstacles_valid(),
@@ -265,6 +266,9 @@ obstacle_test (void)
                "avoid: CRITICAL during a turn backs off, then turns on");
     TEST_CHECK("OBS-U62", avoid_probe_valid(),
                "avoid: no side fits: reverse and sweep again, no 90 look");
+    TEST_CHECK(
+        "OBS-U63", avoid_rejoin_valid(),
+        "avoid: complete the pass, then reacquire the route; safety first");
     TEST_CHECK("OBS-U64", plan_measured_clearance_valid(),
                "plan: use the scanner's farther clear side, not width");
     TEST_CHECK("OBS-U65", replan_measured_clearance_valid(),
@@ -1441,7 +1445,6 @@ avoid_fixture (void)
                                           .lateral_max_mm = 500u,
                                           .pass_max_mm = 1500u,
                                           .return_extra_mm = 150u,
-                                          .overshoot_mm = 40u,
                                           .angle_min_deg = 90u};
     return geometry;
 }
@@ -2087,9 +2090,9 @@ avoid_line_valid (void)
     sim.in.b_move_done = true;
     sim.in.motion_done = ROBOT_MOTION_DONE_LINE;
     ok = ok && sim_step().b_send &&
-         (sim.act.cmd == robot_motion_cmd_move(40u, false, false)) &&
+         (sim.act.cmd == robot_motion_cmd_follow()) &&
          (sim.act.p_reason != NULL) &&
-         (sim.ctx.leg == OBSTACLE_AVOID_LEG_OVERSHOOT);
+         (sim.ctx.leg == OBSTACLE_AVOID_LEG_FOLLOW);
 
     /* Missed line: one search move of 150 mm, then FAULT. */
     ok = ok && sim_detect_path();
@@ -2105,8 +2108,15 @@ avoid_line_valid (void)
     (void)sim_step();
     sim.in.b_move_done = true;
     sim.in.motion_done = ROBOT_MOTION_DONE_DIST;
-    (void)sim_step();
-    return ok && (sim.ctx.fault == OBSTACLE_AVOID_FAULT_RETRY_USED);
+    ok = ok && sim_step().b_set_inhibit && !sim.act.b_send &&
+         !sim.act.b_clear_inhibit && (sim.ctx.state == OBSTACLE_AVOID_FAULT) &&
+         (sim.ctx.fault == OBSTACLE_AVOID_FAULT_RETRY_USED);
+    for (uint32_t index = 0u; ok && (index < 100u); ++index)
+    {
+        ok = sim_step().b_set_inhibit && !sim.act.b_send &&
+             !sim.act.b_clear_inhibit;
+    }
+    return ok;
 }
 
 /* Run to the sidestep with its move just queued at odometry 0. */
@@ -2245,10 +2255,8 @@ avoid_angle_valid (void)
                                  robot_motion_cmd_move(470u, false, false),
                                  robot_motion_cmd_turn(30u, true, false),
                                  robot_motion_cmd_move(593u, false, false),
-                                 robot_motion_cmd_turn(30u, true, false),
+                                 robot_motion_cmd_turn(30u, true, true),
                                  robot_motion_cmd_move(770u, false, true),
-                                 robot_motion_cmd_move(40u, false, false),
-                                 robot_motion_cmd_turn(30u, false, false),
                                  robot_motion_cmd_follow()};
     ok = ok && sim_detect_path();
     sim.config.geometry.angle_min_deg = 30u;
@@ -2692,6 +2700,125 @@ avoid_watch_valid (void)
          (sim.act.watch_angle == (int16_t)OBSTACLE_SCAN_WATCH_OFF) &&
          !sim.ctx.b_watching && sim.ctx.b_watch_done;
     return ok;
+}
+
+/* OBS-U63: complete the outward move and pass before handing back to
+ * line following. Both sides, post-pass line capture, the heading left
+ * when the inward turn is cut short, and safety priority. */
+static bool
+avoid_rejoin_valid (void)
+{
+    obstacle_avoid_leg_t const legs[] = {OBSTACLE_AVOID_LEG_TURN_IN,
+                                         OBSTACLE_AVOID_LEG_RETURN};
+    for (uint32_t right = 0u; right < 2u; ++right)
+    {
+        for (size_t index = 0u; index < ARRAY_COUNT(legs); ++index)
+        {
+            bool ok = sim_detect_path();
+            sim.config.timing.b_recheck = false;
+            if (right != 0u)
+            {
+                sim_scan(ROBOT_OBSTACLE_PATH_FOUND,
+                         ROBOT_OBSTACLE_DIR_RIGHT_120, true, false);
+            }
+            ok = ok &&
+                 sim_until(OBSTACLE_AVOID_SEND, OBSTACLE_AVOID_LEG_TURN_OUT,
+                           50u) &&
+                 !robot_motion_cmd_get_stop_at_line(sim.act.cmd);
+            ok = ok &&
+                 sim_until(OBSTACLE_AVOID_SEND, OBSTACLE_AVOID_LEG_SIDESTEP,
+                           50u) &&
+                 !robot_motion_cmd_get_stop_at_line(sim.act.cmd);
+            ok = ok &&
+                 sim_until(OBSTACLE_AVOID_SEND, OBSTACLE_AVOID_LEG_PASS, 50u) &&
+                 !robot_motion_cmd_get_stop_at_line(sim.act.cmd);
+            ok = ok && sim_until(OBSTACLE_AVOID_SEND, legs[index], 100u) &&
+                 robot_motion_cmd_get_stop_at_line(sim.act.cmd);
+            (void)sim_step(); /* Acquisition command queued. */
+            sim.in.b_move_done = true;
+            sim.in.motion_done = ROBOT_MOTION_DONE_LINE;
+            sim.b_send_busy = true;
+            ok = ok && sim_step().b_send &&
+                 (sim.act.cmd == robot_motion_cmd_follow()) &&
+                 (sim.ctx.leg == OBSTACLE_AVOID_LEG_FOLLOW);
+            for (uint32_t step = 0u; ok && (step < 3u); ++step)
+            {
+                ok = sim_step().b_send &&
+                     (sim.act.cmd == robot_motion_cmd_follow()) &&
+                     (sim.ctx.state == OBSTACLE_AVOID_SEND);
+            }
+            sim.b_send_busy = false;
+            (void)sim_step(); /* Queued on this retry. */
+            (void)sim_step(); /* Accepted: resume sensing and alignment. */
+            ok = ok && (sim.ctx.state == OBSTACLE_AVOID_IDLE) &&
+                 sim.act.b_side_scans_on;
+            if (!ok)
+            {
+                return false;
+            }
+        }
+    }
+    for (size_t index = 0u; index < ARRAY_COUNT(legs); ++index)
+    {
+        bool ok = sim_detect_path() &&
+                  sim_until(OBSTACLE_AVOID_RUN_LEG, legs[index], 100u);
+        sim.in.b_move_done = true;
+        sim.in.motion_done = ROBOT_MOTION_DONE_LINE;
+        sim.in.scan.flags =
+            robot_obstacle_set_critical(sim.in.scan.flags, true);
+        ok = ok && sim_step().b_set_inhibit && !sim.act.b_send &&
+             (sim.ctx.state == OBSTACLE_AVOID_BLOCKED_WAIT);
+        if (!ok)
+        {
+            return false;
+        }
+    }
+    /* TURN_IN cut short by a line (12 of 30 degrees, or 40 of 90 on a box
+     * path): FOLLOW is the next and only command, so line following starts
+     * from the partial heading; nothing turns the car further first. */
+    for (uint32_t box = 0u; box < 2u; ++box)
+    {
+        bool ok = sim_detect_path();
+        sim.config.timing.b_recheck = false;
+        sim.config.geometry.angle_min_deg = (box != 0u) ? 90u : 30u;
+        sim.in.geometry = geometry_at(600u, 100, -100);
+        ok = ok &&
+             sim_until(OBSTACLE_AVOID_RUN_LEG, OBSTACLE_AVOID_LEG_TURN_IN,
+                       100u) &&
+             (sim.ctx.plan.angle_deg == ((box != 0u) ? 90u : 30u));
+        uint32_t const sends = sim.sends;
+        sim.in.heading_deg += (box != 0u) ? 40 : 12;
+        sim.in.b_move_done = true;
+        sim.in.motion_done = ROBOT_MOTION_DONE_LINE;
+        ok = ok && sim_step().b_send &&
+             (sim.act.cmd == robot_motion_cmd_follow()) &&
+             (sim.ctx.leg == OBSTACLE_AVOID_LEG_FOLLOW);
+        (void)sim_step(); /* Queued. */
+        ok = ok && (sim.ctx.state == OBSTACLE_AVOID_IDLE) &&
+             (sim.sends == (sends + 1u));
+        if (!ok)
+        {
+            return false;
+        }
+    }
+    /* Forward obstruction retains priority while completing the detour. */
+    obstacle_avoid_leg_t const outward[] = {OBSTACLE_AVOID_LEG_SIDESTEP,
+                                            OBSTACLE_AVOID_LEG_PASS};
+    for (size_t index = 0u; index < ARRAY_COUNT(outward); ++index)
+    {
+        bool ok = sim_detect_path() &&
+                  sim_until(OBSTACLE_AVOID_RUN_LEG, outward[index], 100u);
+        sim.in.b_move_done = true;
+        sim.in.motion_done = ROBOT_MOTION_DONE_LINE;
+        sim.in.b_stop_requested = true;
+        ok = ok && sim_step().b_set_inhibit && !sim.act.b_send &&
+             (sim.ctx.state == OBSTACLE_AVOID_BLOCKED_WAIT);
+        if (!ok)
+        {
+            return false;
+        }
+    }
+    return true;
 }
 
 /* OBS-U64: actual coarse decisions reach the planner unchanged, even

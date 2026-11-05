@@ -726,8 +726,7 @@ leg_is_move (obstacle_avoid_leg_t leg)
     return (leg == OBSTACLE_AVOID_LEG_REVERSE) ||
            (leg == OBSTACLE_AVOID_LEG_SIDESTEP) ||
            (leg == OBSTACLE_AVOID_LEG_PASS) ||
-           (leg == OBSTACLE_AVOID_LEG_RETURN) ||
-           (leg == OBSTACLE_AVOID_LEG_OVERSHOOT);
+           (leg == OBSTACLE_AVOID_LEG_RETURN);
 }
 
 static char const *
@@ -751,10 +750,6 @@ leg_reason (obstacle_avoid_leg_t leg)
             return "turn toward the line";
         case OBSTACLE_AVOID_LEG_RETURN:
             return "return to the line";
-        case OBSTACLE_AVOID_LEG_OVERSHOOT:
-            return "axle onto the line";
-        case OBSTACLE_AVOID_LEG_TURN_HOME:
-            return "original heading";
         case OBSTACLE_AVOID_LEG_FOLLOW:
         default:
             return "resume following";
@@ -967,22 +962,17 @@ start_leg (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
                         p_ctx->lateral_mm + p_geometry->return_extra_mm,
                         p_ctx->plan.angle_deg);
                     break;
-                case OBSTACLE_AVOID_LEG_OVERSHOOT:
-                    p_ctx->remaining = p_geometry->overshoot_mm;
-                    break;
                 default:
                     p_ctx->remaining = p_ctx->plan.angle_deg;
                     break;
             }
             /* A move after a turn or a sweep needs fresh readings. */
-            p_ctx->b_need_prepare = (leg != OBSTACLE_AVOID_LEG_OVERSHOOT) &&
-                                    (leg != OBSTACLE_AVOID_LEG_REVERSE) &&
-                                    leg_is_move(leg);
+            p_ctx->b_need_prepare =
+                (leg != OBSTACLE_AVOID_LEG_REVERSE) && leg_is_move(leg);
         }
         uint32_t const resume_min = leg_is_move(leg) ? p_timing->resume_min_mm
                                                      : p_timing->resume_min_deg;
-        if ((p_ctx->remaining == 0u) || ((p_ctx->remaining <= resume_min) &&
-                                         (leg != OBSTACLE_AVOID_LEG_OVERSHOOT)))
+        if (p_ctx->remaining <= resume_min)
         {
             if (leg == OBSTACLE_AVOID_LEG_RETURN)
             {
@@ -1039,12 +1029,15 @@ send_part (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
     }
     else
     {
-        /* Toward the gap on the way out and home, away from it between. */
+        /* Toward the gap on the way out, away from it on the way back. */
         bool const b_away = (leg == OBSTACLE_AVOID_LEG_TURN_BACK) ||
                             (leg == OBSTACLE_AVOID_LEG_TURN_IN);
         p_ctx->part = p_ctx->remaining;
-        p_ctx->cmd = robot_motion_cmd_turn(
-            p_ctx->part, b_away != p_ctx->plan.b_gap_right, false);
+        /* Reacquisition starts after PASS: a line encountered while
+         * turning inward is just as usable as one found on the return. */
+        p_ctx->cmd = robot_motion_cmd_turn(p_ctx->part,
+                                           b_away != p_ctx->plan.b_gap_right,
+                                           leg == OBSTACLE_AVOID_LEG_TURN_IN);
         expected_ms = (p_ctx->part * 1000u) / p_timing->turn_speed_deg_s;
     }
     p_ctx->leg_timeout_ms = (2u * expected_ms) + LEG_TIMEOUT_EXTRA_MS;
@@ -1090,16 +1083,21 @@ move_done (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
         start_leg(p_ctx, p_act, p_in);
         return;
     }
-    if ((p_ctx->leg == OBSTACLE_AVOID_LEG_RETURN) &&
+    if (((p_ctx->leg == OBSTACLE_AVOID_LEG_TURN_IN) ||
+         (p_ctx->leg == OBSTACLE_AVOID_LEG_RETURN)) &&
         (p_in->motion_done == ROBOT_MOTION_DONE_LINE))
     {
+        /* Motion has braked on fresh, confirmed IR evidence. Let the line
+         * follower align with this line from the heading the car stopped
+         * at, even if it is not the old one: there is no fixed overshoot or
+         * home turn, which could drive away from a new line. */
         p_ctx->remaining = 0u;
-        p_ctx->leg = OBSTACLE_AVOID_LEG_OVERSHOOT;
+        p_ctx->leg = OBSTACLE_AVOID_LEG_FOLLOW;
         p_ctx->b_leg_started = false;
         start_leg(p_ctx, p_act, p_in);
         if (p_ctx->state == OBSTACLE_AVOID_SEND)
         {
-            p_act->p_reason = "line found";
+            p_act->p_reason = "line found, aligning";
         }
         return;
     }
