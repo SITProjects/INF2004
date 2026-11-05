@@ -239,6 +239,7 @@ scan_task (INT stacd, void * p_exinf)
     UB sample_text[TELEMETRY_TEXT_SIZE];
 #endif
     uint8_t last_sequence = 0u;
+    uint8_t last_flags = 0u;
     bool b_last_stop_requested = obstacle_scan_stop_requested();
     bool b_last_critical = false;
     tm_printf(
@@ -295,13 +296,16 @@ scan_task (INT stacd, void * p_exinf)
                           ? "found"
                           : "not found");
         }
-        else if (new_result)
+        else if (new_result && (scan.flags != last_flags))
         {
+            /* Every clear ping publishes CLEAR; log changes only, or the
+             * USB console drops other tasks' lines. */
             tm_printf((UB *)"[%lu ms]obstacle: [0x%02X] %s dir %d\n",
                       log_time_ms(), (unsigned int)scan.flags,
                       obstacle_scan_status_name(status),
                       direction_degrees(direction));
         }
+        last_flags = scan.flags;
 
 #if TM_MQTT
         uint32_t now_ms = log_time_ms();

@@ -1,0 +1,47 @@
+obstacle: motors held until the path is confirmed clear
+[0 ms]obstacle: scanning started
+[0 ms]obstacle: stop request ACTIVE (sensing output only)
+[750 ms]obstacle: avoid WAIT_CLEAR -> RELEASING (path clear)
+[750 ms]obstacle: stop request RELEASED
+[770 ms]obstacle: avoid RELEASING -> SEND (resume following)
+[790 ms]obstacle: avoid SEND -> IDLE (following)
+obstacle: motors held until the path is confirmed clear
+[0 ms]obstacle: scanning started
+[0 ms]obstacle: stop request ACTIVE (sensing output only)
+[770 ms]obstacle: avoid WAIT_CLEAR -> RELEASING (path clear)
+[770 ms]obstacle: stop request RELEASED
+[790 ms]obstacle: avoid RELEASING -> SEND (resume following)
+[810 ms]obstacle: avoid SEND -> IDLE (following)
+[22090 ms]obstacle: avoid IDLE -> STOPPING (critical)
+[22090 ms]obstacle: CRITICAL set
+[22090 ms]obstacle: stop request ACTIVE
+[22090 ms]obstacle: [0x80] SCANNING dir -1
+[22110 ms]obstacle: avoid STOPPING -> WAIT_RESULT (motors inhibited)
+[22230 ms]obstacle: side scan started
+[23310 ms]obstacle: fine 115 deg NO_ECHO 0 us MISS
+[23530 ms]obstacle: fine 110 deg NO_ECHO 0 us MISS
+[23750 ms]obstacle: fine 105 deg NO_ECHO 0 us MISS
+[23970 ms]obstacle: fine 100 deg NO_ECHO 0 us MISS
+[24190 ms]obstacle: fine 95 deg NO_ECHO 0 us MISS
+[24450 ms]obstacle: fine 65 deg VALID 9587 us MISS
+[24650 ms]obstacle: fine 70 deg VALID 9465 us MISS
+[24850 ms]obstacle: fine 75 deg VALID 9452 us MISS
+[25070 ms]obstacle: fine 80 deg NO_ECHO 0 us MISS
+[25290 ms]obstacle: fine 85 deg NO_ECHO 0 us MISS
+[25290 ms]obstacle: width 1 mm hits 90..90 bounds 90.0..90.0 collapsed
+[25290 ms]obstacle: side scan completed after 3060 ms
+[25290 ms]obstacle: avoid WAIT_RESULT -> RELEASING (path found)
+[25290 ms]obstacle: [0xEA] PATH_FOUND dir 60 width 1 mm hits 90..90 (L found, R found)
+[25310 ms]obstacle: avoid RELEASING -> SEND (turn toward the gap)
+[25350 ms]obstacle: avoid RUN_LEG -> BLOCKED_WAIT (critical)
+[25670 ms]obstacle: avoid BLOCKED_WAIT -> RELEASING (path clear again)
+[25670 ms]obstacle: CRITICAL cleared
+[25670 ms]obstacle: stop request RELEASED
+[25690 ms]obstacle: avoid RELEASING -> SEND (turn toward the gap)
+[26470 ms]obstacle: avoid RUN_LEG -> SEND (sidestep)
+[26510 ms]obstacle: stop request ACTIVE
+[26510 ms]obstacle: [0x00] SCANNING dir -1
+[27050 ms]obstacle: avoid RUN_LEG -> SEND (turn back)
+[27530 ms]obstacle: stop request RELEASED
+[28870 ms]obstacle: avoid RUN_LEG -> SEND (pass)
+[31270 ms]obstacle: avoid RUN_LEG -> SEND (turn toward the line)
