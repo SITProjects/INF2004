@@ -84,17 +84,10 @@ static command_request_t latest_request;
 static command_request_t active_request;
 #if ACTUATION_ACTIVE
 static bool b_fault_latched;
-/* A stall or timed-out turn holds the car for FAULT_RETRY_UPDATES (500 ms),
- * then is cleared so following and searching carry on. After
- * FAULT_RETRY_MAX retries in a row it latches for good, so a wheel that
- * stays blocked is not driven into the stall forever; FAULT_RETRY_RESET
- * updates (3 s) without a fault start the count again. */
-#define FAULT_RETRY_UPDATES (500u / MOTION_UPDATE_PERIOD_MS)
-#define FAULT_RETRY_MAX 3u
-#define FAULT_RETRY_RESET (3000u / MOTION_UPDATE_PERIOD_MS)
-static uint32_t fault_updates;   /* Updates in the current fault. */
-static uint32_t fault_retries;   /* Retries since the last quiet spell. */
-static uint32_t healthy_updates; /* Updates without a fault since. */
+/* LOCAL TEST: updates since a stall latched; it is cleared after
+ * STALL_RETRY_UPDATES so following (and searching) carries on. */
+#define STALL_RETRY_UPDATES (500u / MOTION_UPDATE_PERIOD_MS)
+static uint32_t stall_updates;
 static bool b_slow_active;
 static bool b_search_right;
 static bool b_recovery_turn;
@@ -344,45 +337,21 @@ static void
 update_controller (bool b_new)
 {
     motion_state_t const state = motion_move_get_state();
-    if ((state == MOTION_STATE_STALLED) || (state == MOTION_STATE_TIMED_OUT))
+    if (state == MOTION_STATE_STALLED)
     {
-        motion_status_t const fault = (state == MOTION_STATE_STALLED)
-                                          ? MOTION_ERR_STALLED
-                                          : MOTION_ERR_TIMED_OUT;
-        healthy_updates = 0u;
-        if (fault_retries >= FAULT_RETRY_MAX)
+        latch_fault(MOTION_ERR_STALLED);
+        /* LOCAL TEST: retry instead of staying stopped for good. */
+        if (++stall_updates >= STALL_RETRY_UPDATES)
         {
-            latch_fault(fault); /* For good: STOP then FOLLOW, or restart. */
-        }
-        else if (fault_updates == 0u)
-        {
-            ++fault_updates;
-            b_fault_latched = true; /* Held for the retry delay. */
-            tm_printf((UB *)"motion: fault %d, retry %u of %u in 500 ms\n",
-                      (INT)fault, (unsigned int)(fault_retries + 1u),
-                      (unsigned int)FAULT_RETRY_MAX);
-        }
-        else if (++fault_updates >= FAULT_RETRY_UPDATES)
-        {
-            fault_updates = 0u;
-            ++fault_retries;
+            stall_updates = 0u;
             (void)motion_move_stop();
             b_fault_latched = false;
-            tm_printf((UB *)"motion: fault cleared, searching again\n");
-        }
-        else
-        {
-            /* Waiting out the retry delay. */
+            tm_printf((UB *)"motion: stall cleared, searching again\n");
         }
     }
-    else
+    else if (state == MOTION_STATE_TIMED_OUT)
     {
-        fault_updates = 0u; /* The next fault waits the full delay. */
-        if ((fault_retries > 0u) && (++healthy_updates >= FAULT_RETRY_RESET))
-        {
-            fault_retries = 0u;
-            healthy_updates = 0u;
-        }
+        latch_fault(MOTION_ERR_TIMED_OUT);
     }
     if (!b_fault_latched)
     {

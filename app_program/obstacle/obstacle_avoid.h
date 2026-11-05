@@ -49,6 +49,7 @@ typedef struct
     uint16_t lateral_max_mm;   /**< Largest total offset from the line. */
     uint16_t pass_max_mm;      /**< Largest pass distance accepted. */
     uint16_t return_extra_mm;  /**< Drive past the offset to find the line. */
+    uint16_t overshoot_mm;     /**< IR row to axle; 0 skips that leg. */
     uint8_t angle_min_deg;     /**< Shallowest turn, 5..90 degrees. */
     uint16_t backoff_mm;       /**< Reverse when CRITICAL holds a move. */
     uint8_t max_backoffs;      /**< Back-offs per bypass; 0 never. */
@@ -219,14 +220,16 @@ typedef struct
 typedef enum
 {
     OBSTACLE_AVOID_LEG_REVERSE,   /**< Back away to min_room_mm first. */
-    OBSTACLE_AVOID_LEG_TURN_OUT,  /**< Turn toward the gap. */
+    OBSTACLE_AVOID_LEG_TURN_OUT,  /**< Turn 90 degrees toward the gap. */
     OBSTACLE_AVOID_LEG_SIDESTEP,  /**< Move sideways off the line. */
     OBSTACLE_AVOID_LEG_TURN_BACK, /**< Turn back parallel to the line. */
     OBSTACLE_AVOID_LEG_VERIFY,    /**< Corridor sweep. */
     OBSTACLE_AVOID_LEG_PASS,      /**< Move past the obstacle. */
     OBSTACLE_AVOID_LEG_TURN_IN,   /**< Past obstacle: turn, acquiring a line. */
     OBSTACLE_AVOID_LEG_RETURN,    /**< Search back; acquire any line. */
-    OBSTACLE_AVOID_LEG_FOLLOW     /**< Line found: line following aligns. */
+    OBSTACLE_AVOID_LEG_OVERSHOOT, /**< Put the axle on the line. */
+    OBSTACLE_AVOID_LEG_TURN_HOME, /**< Original heading. */
+    OBSTACLE_AVOID_LEG_FOLLOW     /**< Resume line following. */
 } obstacle_avoid_leg_t;
 
 /** State machine context; fields are private to obstacle_avoid.c. */

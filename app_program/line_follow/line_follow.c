@@ -3,7 +3,7 @@
  * @brief Line-following subsystem: dual IR line sensing and decisions.
  *
  * The line task reads both IR sensors and runs the line-following logic
- * at a nominal 20 ms interval, and prints periodic raw snapshots. It
+ * at a nominal 40 ms interval, and prints periodic raw snapshots. It
  * owns the ADC and submits decisions to the motion task, which owns
  * the motors. It never calls the motor driver directly.
  * APP_TEST prints raw readings and per-sensor line-detection labels.
@@ -16,11 +16,11 @@
 #include "../motion/motion_command_config.h"
 
 /* Private types, constants, and macros. */
-#define SAMPLE_INTERVAL_MS 20
+#define SAMPLE_INTERVAL_MS 40
 #if APP_TEST
-#define SAMPLES_PER_PRINT 5u /* 5 x 20 ms: nominal 100 ms diagnostics. */
+#define SAMPLES_PER_PRINT 5u /* 5 x 40 ms: nominal 200 ms diagnostics. */
 #else
-#define SAMPLES_PER_PRINT 20u /* Roughly 600 ms with the kernel delay. */
+#define SAMPLES_PER_PRINT 20u /* Nominal 800 ms, plus kernel delay overhead. */
 #endif
 
 /* Static data. */

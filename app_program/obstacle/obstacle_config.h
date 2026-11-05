@@ -259,10 +259,10 @@
  * motion commands.
  */
 #define OBSTACLE_AVOID_ENABLED 1
-/* The car's own body shows in the sensor's view at about 5 cm, at the
- * 60-70 degree end of the sweep. Side and watch readings nearer than this
- * distance, at or below this angle, count as no echo; every other reading
- * is used as measured. Centre readings are not affected. */
+/* The car's own body shows in the sensor's view at about 5 cm, 60-70
+ * degrees left. Side readings nearer than this distance, at or left of
+ * this angle, count as no echo; every other reading is used as measured.
+ * Centre readings, and so CRITICAL, are not affected. */
 #define OBSTACLE_SIDE_SELF_DISTANCE_MM 60u
 #define OBSTACLE_SIDE_SELF_MAX_DEG 70
 #define OBSTACLE_SIDE_SELF_ECHO_US                                             \
@@ -275,9 +275,10 @@
 #define OBSTACLE_AVOID_MIN_ROOM_MM 200u
 #define OBSTACLE_AVOID_MAX_BACKOFFS 2u
 #define OBSTACLE_AVOID_BACKOFF_DELAY_MS 300u
-#define OBSTACLE_CAR_WIDTH_MM 127u        /* W, 12.7 cm, ruler. */
-#define OBSTACLE_CAR_AXLE_TO_PIVOT_MM 20u /* Axle midpoint to servo pivot. */
-#define OBSTACLE_CAR_REAR_MM 162u         /* Axle midpoint to rear bumper. */
+#define OBSTACLE_CAR_WIDTH_MM 127u           /* W, 12.7 cm, ruler. */
+#define OBSTACLE_CAR_AXLE_TO_PIVOT_MM 20u    /* Axle midpoint to servo pivot. */
+#define OBSTACLE_CAR_REAR_MM 162u            /* Axle midpoint to rear bumper. */
+#define OBSTACLE_AVOID_LINE_OVERSHOOT_MM 60u /* IR row to axle, 6 cm. */
 #define OBSTACLE_AVOID_MARGIN_MM 60u
 #define OBSTACLE_AVOID_DEPTH_MM 200u /* Largest test obstacle's depth. */
 #define OBSTACLE_AVOID_SIDESTEP_MIN_MM 100u

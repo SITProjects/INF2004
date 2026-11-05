@@ -192,14 +192,13 @@
  * TODO(calibrate): at least the follow speed / the tightest curve radius
  * (in rad/s), so the car can hold that curve (MOT-U31).
  */
-/* Bound the combined proportional and damping correction: the
- * 2 * speed / track limit at 120 mm/s, for the tightest test curves. */
-#define MOTION_FOLLOW_MAX_DEG_S 128.0f
+/* Bound the combined proportional and damping correction. */
+#define MOTION_FOLLOW_MAX_DEG_S 128.0f /* LOCAL TEST: was 90. */
 
 /*
  * Following stops (state STOPPED) when the last line error is older than
- * this, so the car never drives on with stale steering. About five of the
- * line task's 20 ms readings. A multiple of MOTION_UPDATE_PERIOD_MS.
+ * this, so the car never drives on with stale steering.
+ * A multiple of MOTION_UPDATE_PERIOD_MS.
  */
 #define MOTION_LINE_TIMEOUT_MS 100u
 

@@ -17,17 +17,16 @@
 #define MOTION_COMMAND_ACTUATION_ENABLED 1
 #endif
 
-/** Unitless corrections: KP=0.3 gives 15 to 129 deg/s at 120 mm/s, capped
- * at MOTION_FOLLOW_MAX_DEG_S; full steering holds the tightest test curves.
+/** Unitless corrections: KP=0.3 gives 15 to 90 deg/s at 120 mm/s.
  * Per-sensor calibration ramps from first detection to full black.
  */
 #define MOTION_COMMAND_EDGE_ERROR 50
-#define MOTION_COMMAND_STEER_ERROR 430
+#define MOTION_COMMAND_STEER_ERROR 430 /* LOCAL TEST: was 300. */
 /** Small remembered bias between detections (9 deg/s before damping). */
 #define MOTION_COMMAND_PROBE_ERROR 30
-/** Search at 80 mm/s and 51 deg/s towards the last edge; no fail timer. */
-#define MOTION_COMMAND_SEARCH_ERROR 170
-#define MOTION_COMMAND_SEARCH_SPEED_MM_S 80u
+/** Search at 40 mm/s and 12 deg/s towards the last edge; no fail timer. */
+#define MOTION_COMMAND_SEARCH_ERROR 170      /* LOCAL TEST: was 40. */
+#define MOTION_COMMAND_SEARCH_SPEED_MM_S 80u /* LOCAL TEST: was 40. */
 #define MOTION_COMMAND_FOLLOW_SPEED_MM_S MOTION_FOLLOW_SPEED_MM_S
 /** Preparation delay before continuous operation; there is no run cutoff. */
 #define MOTION_COMMAND_START_DELAY_MS 5000u

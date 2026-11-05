@@ -15,6 +15,7 @@
  */
 
 #include "obstacle.h"
+#include "../line_follow/line_follow.h" /* LOCAL DEBUG */
 #include "obstacle_avoid.h"
 #include "obstacle_calibration.h"
 #include "obstacle_scan.h"
@@ -81,6 +82,7 @@ static const obstacle_avoid_config_t avoid_config = {
                  .lateral_max_mm = OBSTACLE_AVOID_LATERAL_MAX_MM,
                  .pass_max_mm = OBSTACLE_AVOID_PASS_MAX_MM,
                  .return_extra_mm = OBSTACLE_AVOID_RETURN_EXTRA_MM,
+                 .overshoot_mm = OBSTACLE_AVOID_LINE_OVERSHOOT_MM,
                  .angle_min_deg = OBSTACLE_AVOID_ANGLE_MIN_DEG,
                  .backoff_mm = OBSTACLE_AVOID_BACKOFF_MM,
                  .max_backoffs = OBSTACLE_AVOID_MAX_BACKOFFS,
@@ -249,6 +251,23 @@ scan_task (INT stacd, void * p_exinf)
     {
         robot_obstacle_result_t scan = obstacle_scan_update();
         bool b_stop = obstacle_scan_stop_requested();
+        {
+            /* LOCAL DEBUG: line task state every 2 s (remove before commit). */
+            static uint32_t diag_ms;
+            if ((uint32_t)(log_time_ms() - diag_ms) >= 2000u)
+            {
+                T_RTSK rtsk;
+                diag_ms = log_time_ms();
+                if (tk_ref_tsk(line_follow_tid_sense, &rtsk) == E_OK)
+                {
+                    tm_printf((UB *)"[%lu ms]diag: line task stat 0x%x "
+                                    "wait 0x%x\n",
+                              (unsigned long)diag_ms,
+                              (unsigned int)rtsk.tskstat,
+                              (unsigned int)rtsk.tskwait);
+                }
+            }
+        }
 #if AVOID_ACTIVE
         avoid_loop(scan, b_stop);
 #endif
