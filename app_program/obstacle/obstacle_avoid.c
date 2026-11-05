@@ -12,8 +12,9 @@
 
 #define DEG_TO_RAD (3.14159265f / 180.0f)
 
-/* Every turn of the box is a quarter turn. */
-#define TURN_DEG 90u
+/* Turn angles are whole multiples of this, up to a quarter turn. */
+#define ANGLE_STEP_DEG 5u
+#define ANGLE_MAX_DEG 90u
 
 /* Leg timeout: twice the expected time plus this. */
 #define LEG_TIMEOUT_EXTRA_MS 1000u
@@ -26,6 +27,11 @@
 /* Private function declarations. */
 
 static bool plan_usable (robot_obstacle_result_t result, bool * p_gap_right);
+static uint8_t plan_angle (uint16_t sidestep_mm, uint16_t centre_mm,
+                           obstacle_avoid_geometry_t const * p_geometry);
+static uint32_t along_diagonal (uint32_t lateral_mm, uint8_t angle_deg);
+static uint32_t diagonal_forward (uint32_t lateral_mm, uint8_t angle_deg);
+static uint32_t pass_left (obstacle_avoid_t const * p_ctx);
 static bool elapsed (uint32_t now_ms, uint32_t since_ms, uint32_t limit_ms);
 static bool sequence_newer (uint8_t sequence, uint8_t reference);
 static bool leg_is_move (obstacle_avoid_leg_t leg);
@@ -83,9 +89,14 @@ obstacle_avoid_plan (robot_obstacle_result_t result,
     obstacle_avoid_plan_t plan = {.status = OBSTACLE_AVOID_PLAN_NOT_PATH,
                                   .b_gap_right = false,
                                   .b_edge_unknown = false,
+                                  .b_limited = false,
                                   .sidestep_mm = 0u,
-                                  .pass_mm = 0u};
-    if ((p_geometry == NULL) || !plan_usable(result, &plan.b_gap_right))
+                                  .pass_mm = 0u,
+                                  .angle_deg = ANGLE_MAX_DEG};
+    robot_obstacle_status_t const status =
+        robot_obstacle_get_status(result.flags);
+    if ((p_geometry == NULL) || ((status != ROBOT_OBSTACLE_PATH_FOUND) &&
+                                 (status != ROBOT_OBSTACLE_BLOCKED)))
     {
         return plan;
     }
@@ -95,41 +106,67 @@ obstacle_avoid_plan (robot_obstacle_result_t result,
         return plan;
     }
 
-    uint8_t const edge_flag = plan.b_gap_right ? ROBOT_OBSTACLE_RIGHT_EDGE_FOUND
-                                               : ROBOT_OBSTACLE_LEFT_EDGE_FOUND;
-    bool const b_edge_found =
-        ((result.flags & edge_flag) != 0u) &&
-        (result.width_mm != ROBOT_OBSTACLE_WIDTH_UNAVAILABLE);
-    if (b_edge_found)
-    {
-        int32_t edge_mm = plan.b_gap_right ? -(int32_t)geometry.right_x_mm
-                                           : (int32_t)geometry.left_x_mm;
-        int32_t need_mm = edge_mm + (int32_t)p_geometry->half_width_mm +
-                          (int32_t)p_geometry->margin_mm;
-        if (need_mm > (int32_t)p_geometry->sidestep_max_mm)
-        {
-            plan.status = OBSTACLE_AVOID_PLAN_TOO_WIDE;
-            return plan;
-        }
-        plan.sidestep_mm = (need_mm < (int32_t)p_geometry->sidestep_min_mm)
-                               ? p_geometry->sidestep_min_mm
-                               : (uint16_t)need_mm;
-    }
-    else
-    {
-        plan.b_edge_unknown = true;
-        plan.sidestep_mm = p_geometry->sidestep_max_mm;
-    }
+    /* Sideways distance each side needs, where its edge is known. */
+    bool const b_width = result.width_mm != ROBOT_OBSTACLE_WIDTH_UNAVAILABLE;
+    bool const b_left =
+        b_width && ((result.flags & ROBOT_OBSTACLE_LEFT_EDGE_FOUND) != 0u);
+    bool const b_right =
+        b_width && ((result.flags & ROBOT_OBSTACLE_RIGHT_EDGE_FOUND) != 0u);
+    int32_t const clearance_mm =
+        (int32_t)p_geometry->half_width_mm + (int32_t)p_geometry->margin_mm;
+    int32_t const need_left_mm = (int32_t)geometry.left_x_mm + clearance_mm;
+    int32_t const need_right_mm = -(int32_t)geometry.right_x_mm + clearance_mm;
+    bool b_scanner_right = false;
+    bool const b_scanner_side = (status == ROBOT_OBSTACLE_PATH_FOUND) &&
+                                plan_usable(result, &b_scanner_right);
 
     uint32_t pass_mm = (uint32_t)geometry.centre_mm +
                        p_geometry->axle_to_pivot_mm + p_geometry->depth_mm +
                        p_geometry->rear_mm + p_geometry->margin_mm;
     if (pass_mm > p_geometry->pass_max_mm)
     {
-        plan.status = OBSTACLE_AVOID_PLAN_TOO_FAR;
-        return plan;
+        plan.b_limited = true;
+        pass_mm = p_geometry->pass_max_mm;
     }
+
+    int32_t need_mm;
+    if (b_scanner_side)
+    {
+        /* The scanner ranks measured clearance, not detour length. Keep
+         * its choice even when the other edge needs a shorter sidestep. */
+        plan.b_gap_right = b_scanner_right;
+        bool const b_edge = plan.b_gap_right ? b_right : b_left;
+        plan.b_edge_unknown = !b_edge;
+        need_mm = b_edge ? (plan.b_gap_right ? need_right_mm : need_left_mm)
+                         : (int32_t)p_geometry->sidestep_max_mm;
+    }
+    else if (b_left && b_right)
+    {
+        plan.b_gap_right = (need_right_mm == need_left_mm)
+                               ? b_scanner_right
+                               : (need_right_mm < need_left_mm);
+        need_mm = plan.b_gap_right ? need_right_mm : need_left_mm;
+    }
+    else if (b_left || b_right)
+    {
+        plan.b_gap_right = b_right;
+        need_mm = b_right ? need_right_mm : need_left_mm;
+    }
+    else
+    {
+        return plan; /* Wider than the sweep on both sides. */
+    }
+    if (need_mm > (int32_t)p_geometry->sidestep_max_mm)
+    {
+        plan.b_limited = true;
+        need_mm = (int32_t)p_geometry->sidestep_max_mm;
+    }
+    plan.sidestep_mm = (need_mm < (int32_t)p_geometry->sidestep_min_mm)
+                           ? p_geometry->sidestep_min_mm
+                           : (uint16_t)need_mm;
     plan.pass_mm = (uint16_t)pass_mm;
+    plan.angle_deg =
+        plan_angle(plan.sidestep_mm, geometry.centre_mm, p_geometry);
     plan.status = OBSTACLE_AVOID_PLAN_OK;
     return plan;
 }
@@ -596,8 +633,10 @@ static bool
 try_plan (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
           obstacle_avoid_input_t const * p_in)
 {
-    if ((robot_obstacle_get_status(p_in->scan.flags) !=
-         ROBOT_OBSTACLE_PATH_FOUND) ||
+    robot_obstacle_status_t const status =
+        robot_obstacle_get_status(p_in->scan.flags);
+    if (((status != ROBOT_OBSTACLE_PATH_FOUND) &&
+         (status != ROBOT_OBSTACLE_BLOCKED)) ||
         (p_ctx->b_plan_sequence &&
          (p_in->scan.sequence == p_ctx->plan_sequence)))
     {
@@ -609,9 +648,8 @@ try_plan (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
                                       &p_ctx->p_config->geometry);
     if (p_ctx->plan.status != OBSTACLE_AVOID_PLAN_OK)
     {
-        static char const * const reasons[] = {"plan ok", "not a path",
-                                               "no geometry", "gap too wide",
-                                               "pass too long"};
+        static char const * const reasons[] = {"plan ok", "no side to try",
+                                               "no geometry"};
         enter(p_ctx, OBSTACLE_AVOID_WAIT_CLEAR, p_in->now_ms);
         p_act->p_reason = ((uint32_t)p_ctx->plan.status <
                            (sizeof(reasons) / sizeof(reasons[0])))
@@ -623,13 +661,16 @@ try_plan (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
     p_ctx->b_leg_started = false;
     p_ctx->sidestep_mm = p_ctx->plan.sidestep_mm;
     p_ctx->lateral_mm = 0u;
+    p_ctx->forward_mm = 0u;
     p_ctx->sidesteps = 0u;
     p_ctx->b_retry_used = false;
     p_ctx->b_blocked = false;
     p_ctx->b_need_prepare = false;
     release(p_ctx, p_act, false, p_in->now_ms,
-            p_ctx->plan.b_edge_unknown ? "path found, gap edge unknown"
-                                       : "path found");
+            p_ctx->plan.b_limited
+                ? "path found, best effort"
+                : (p_ctx->plan.b_edge_unknown ? "path found, gap edge unknown"
+                                              : "path found"));
     return true;
 }
 
@@ -669,20 +710,22 @@ start_leg (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
             switch (leg)
             {
                 case OBSTACLE_AVOID_LEG_SIDESTEP:
-                    p_ctx->remaining = p_ctx->sidestep_mm;
+                    p_ctx->remaining = along_diagonal(p_ctx->sidestep_mm,
+                                                      p_ctx->plan.angle_deg);
                     break;
                 case OBSTACLE_AVOID_LEG_PASS:
-                    p_ctx->remaining = p_ctx->plan.pass_mm;
+                    p_ctx->remaining = pass_left(p_ctx);
                     break;
                 case OBSTACLE_AVOID_LEG_RETURN:
-                    p_ctx->remaining =
-                        p_ctx->lateral_mm + p_geometry->return_extra_mm;
+                    p_ctx->remaining = along_diagonal(
+                        p_ctx->lateral_mm + p_geometry->return_extra_mm,
+                        p_ctx->plan.angle_deg);
                     break;
                 case OBSTACLE_AVOID_LEG_OVERSHOOT:
                     p_ctx->remaining = p_geometry->overshoot_mm;
                     break;
                 default:
-                    p_ctx->remaining = TURN_DEG;
+                    p_ctx->remaining = p_ctx->plan.angle_deg;
                     break;
             }
             /* A move after a turn or a sweep needs fresh readings. */
@@ -756,6 +799,8 @@ next_leg (obstacle_avoid_t * p_ctx)
     if (p_ctx->leg == OBSTACLE_AVOID_LEG_SIDESTEP)
     {
         p_ctx->lateral_mm += p_ctx->sidestep_mm;
+        p_ctx->forward_mm +=
+            diagonal_forward(p_ctx->sidestep_mm, p_ctx->plan.angle_deg);
         ++p_ctx->sidesteps;
     }
     p_ctx->leg = (p_ctx->leg >= OBSTACLE_AVOID_LEG_FOLLOW)
@@ -973,7 +1018,7 @@ step_verify (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
         obstacle_avoid_corridor_t const corridor =
             obstacle_avoid_check_corridor(
                 &p_in->corridor, &p_config->width, &p_config->geometry,
-                p_ctx->plan.pass_mm, p_ctx->plan.b_gap_right, &shift_mm);
+                (uint16_t)pass_left(p_ctx), p_ctx->plan.b_gap_right, &shift_mm);
         if (corridor == OBSTACLE_AVOID_CORRIDOR_CLEAR)
         {
             p_ctx->b_blocked = false;
@@ -1014,4 +1059,65 @@ step_verify (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
     {
         /* Sweep running. */
     }
+}
+
+/*
+ * Shallowest angle whose diagonal reaches the sideways offset before the
+ * stopped car's front (about the pivot) covers the room left in front of
+ * the obstacle face, less the margin; rounded up to ANGLE_STEP_DEG and kept
+ * within angle_min_deg..90. No room left means a quarter turn.
+ */
+static uint8_t
+plan_angle (uint16_t sidestep_mm, uint16_t centre_mm,
+            obstacle_avoid_geometry_t const * p_geometry)
+{
+    uint32_t angle_deg = ANGLE_MAX_DEG;
+    if (centre_mm > p_geometry->margin_mm)
+    {
+        float const room_mm = (float)(centre_mm - p_geometry->margin_mm);
+        float const need_deg = atan2f((float)sidestep_mm, room_mm) / DEG_TO_RAD;
+        angle_deg =
+            (uint32_t)ceilf(need_deg / (float)ANGLE_STEP_DEG) * ANGLE_STEP_DEG;
+    }
+    if (angle_deg < p_geometry->angle_min_deg)
+    {
+        angle_deg = p_geometry->angle_min_deg;
+    }
+    return (angle_deg > ANGLE_MAX_DEG) ? (uint8_t)ANGLE_MAX_DEG
+                                       : (uint8_t)angle_deg;
+}
+
+/* Distance driven along a diagonal to move lateral_mm sideways. */
+static uint32_t
+along_diagonal (uint32_t lateral_mm, uint8_t angle_deg)
+{
+    if (angle_deg >= ANGLE_MAX_DEG)
+    {
+        return lateral_mm;
+    }
+    return (uint32_t)ceilf((float)lateral_mm /
+                           sinf((float)angle_deg * DEG_TO_RAD));
+}
+
+/* Progress along the line made by that diagonal. */
+static uint32_t
+diagonal_forward (uint32_t lateral_mm, uint8_t angle_deg)
+{
+    if (angle_deg >= ANGLE_MAX_DEG)
+    {
+        return 0u;
+    }
+    return (uint32_t)((float)lateral_mm / tanf((float)angle_deg * DEG_TO_RAD));
+}
+
+/* Pass distance still to drive after the outward diagonals' forward
+ * progress. The return diagonal is driven after the pass, beyond the
+ * obstacle, so its forward travel is not taken off: the rear must clear
+ * the obstacle before the car turns back in. */
+static uint32_t
+pass_left (obstacle_avoid_t const * p_ctx)
+{
+    return (p_ctx->forward_mm < p_ctx->plan.pass_mm)
+               ? (p_ctx->plan.pass_mm - p_ctx->forward_mm)
+               : 0u;
 }

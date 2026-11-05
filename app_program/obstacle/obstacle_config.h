@@ -253,16 +253,16 @@
 
 /*
  * Bypass (issue #86): stop, drive a box around the obstacle and rejoin the
- * line, through tMotion (IF-06). Off until the car is measured: every car
- * dimension below is 0 until it is recorded (OBS-U31 and a ruler), and
- * enabling the bypass with any of them still 0 is a build error. With the
- * bypass off, obstacle never sets INHIBIT or sends motion commands.
+ * line, through tMotion (IF-06). The car dimensions were measured with a
+ * ruler on 2026-11-04 (whole mm); enabling the bypass with any of them 0 is
+ * a build error. With the bypass off, obstacle never sets INHIBIT or sends
+ * motion commands.
  */
-#define OBSTACLE_AVOID_ENABLED 0
-#define OBSTACLE_CAR_WIDTH_MM 0u            /* W, OBS-U31; not measured. */
-#define OBSTACLE_CAR_AXLE_TO_PIVOT_MM 0u    /* Axle midpoint to servo pivot. */
-#define OBSTACLE_CAR_REAR_MM 0u             /* Axle midpoint to rear bumper. */
-#define OBSTACLE_AVOID_LINE_OVERSHOOT_MM 0u /* IR row to axle; 0 skips. */
+#define OBSTACLE_AVOID_ENABLED 1
+#define OBSTACLE_CAR_WIDTH_MM 127u           /* W, 12.7 cm, ruler. */
+#define OBSTACLE_CAR_AXLE_TO_PIVOT_MM 20u    /* Axle midpoint to servo pivot. */
+#define OBSTACLE_CAR_REAR_MM 162u            /* Axle midpoint to rear bumper. */
+#define OBSTACLE_AVOID_LINE_OVERSHOOT_MM 60u /* IR row to axle, 6 cm. */
 #define OBSTACLE_AVOID_MARGIN_MM 60u
 #define OBSTACLE_AVOID_DEPTH_MM 200u /* Largest test obstacle's depth. */
 #define OBSTACLE_AVOID_SIDESTEP_MIN_MM 100u
@@ -273,6 +273,9 @@
 #define OBSTACLE_AVOID_MAX_SIDESTEPS 3u /* First plus two extra. */
 #define OBSTACLE_AVOID_RESUME_MIN_MM 10u
 #define OBSTACLE_AVOID_RESUME_MIN_DEG 3u
+/* Shallowest turn toward or away from the gap; steeper when the obstacle
+ * leaves less room in front. 90 gives the box path. */
+#define OBSTACLE_AVOID_ANGLE_MIN_DEG 30u
 
 /*
  * Bypass time limits. A rearm may start a full side scan, and a corridor
@@ -455,6 +458,9 @@
       (OBSTACLE_AVOID_SIDESTEP_MAX_MM <= OBSTACLE_AVOID_LATERAL_MAX_MM) &&     \
       (OBSTACLE_AVOID_RESUME_MIN_MM < OBSTACLE_AVOID_SIDESTEP_MIN_MM))
 #error "Bypass sidesteps must satisfy resume < min <= max <= lateral max"
+#endif
+#if (OBSTACLE_AVOID_ANGLE_MIN_DEG < 5u) || (OBSTACLE_AVOID_ANGLE_MIN_DEG > 90u)
+#error "Bypass turn angle must be 5..90 degrees"
 #endif
 #if (OBSTACLE_AVOID_MAX_SIDESTEPS < 1u) || (OBSTACLE_AVOID_MAX_SIDESTEPS > 255u)
 #error "Bypass sidestep count must be 1..255"
