@@ -1,0 +1,83 @@
+=~=~=~=~=~=~=~=~=~=~=~= PuTTY log 2026.11.05 21:40:51 =~=~=~=~=~=~=~=~=~=~=~=
+
+
+microT-Kernel Version 3.00
+
+
+=== micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+dual-core (SMP) build, usermain on core 0
+motion: motors initialized and braked
+motion: encoders counting on PIO0
+motion: line adapter dry run; no motor API calls
+MOTION ONLY (local app_main.c)
+
+[TEST] === test run start ===
+[TEST] MOT-U01 PASS  both motors run 20 kHz PWM and are braked
+[TEST] MOT-U03 PASS  both encoders count on PIO0 and hold still at rest
+[TEST] MOT-U07 PASS  moves start stopped, odometry holds at rest, 0 refused
+[TEST] MOT-U18 PASS  PID P, I, D terms, limits, anti-windup and reset
+[TEST] MOT-U22 50 updates took 1000 ms (1000 expected)
+[TEST] MOT-U22 PASS  test-loop updates run at MOTION_UPDATE_PERIOD_MS
+[TEST] MOT-U23 PASS  straight-line loop idle at rest, switches on and off
+[TEST] MOT-U27 PASS  follow and line input refuse bad values, line debounced
+[TEST] MOT-U11 car on the floor: mark its heading; it turns LEFT 360 deg, 3 times, in 5 s
+[TEST] MOT-U11 run 1 state 4 after 12500 ms; heading -4203 deg (target 360), coast -15
+[TEST] MOT-U11 run 2 state 4 after 12500 ms; heading -4167 deg (target 360), coast -15
+[TEST] MOT-U11 run 3 state 4 after 12500 ms; heading -4188 deg (target 360), coast -15
+[TEST] MOT-U11 total heading -12558 deg (target 1080): measure it
+[TEST] MOT-U12 car on the floor: mark its heading; it turns RIGHT 360 deg, 3 times, in 5 s
+[TEST] MOT-U12 run 1 state 4 after 12500 ms; heading 4280 deg (target -360), coast 15
+[TEST] MOT-U12 run 2 state 4 after 12500 ms; heading 4294 deg (target -360), coast 15
+[TEST] MOT-U12 run 3 state 4 after 12500 ms; heading 4329 deg (target -360), coast 16
+[TEST] MOT-U12 total heading 12903 deg (target -1080): measure it
+[TEST] MOT-U13 car on the floor: mark its heading; it turns LEFT 90 deg, 5 times, in 5 s
+[TEST] MOT-U13 run 1 state 4 after 3500 ms; heading -1138 deg (target 90), coast -15
+[TEST] MOT-U13 measure, then re-mark; next turn in 8 s
+[TEST] MOT-U13 run 2 state 4 after 3500 ms; heading -1115 deg (target 90), coast -15
+[TEST] MOT-U13 measure, then re-mark; next turn in 8 s
+[TEST] MOT-U13 run 3 state 4 after 3500 ms; heading -1113 deg (target 90), coast -15
+[TEST] MOT-U13 measure, then re-mark; next turn in 8 s
+[TEST] MOT-U13 run 4 state 4 after 3500 ms; heading -1112 deg (target 90), coast -15
+[TEST] MOT-U13 measure, then re-mark; next turn in 8 s
+[TEST] MOT-U13 run 5 state 4 after 3500 ms; heading -1110 deg (target 90), coast -15
+[TEST] MOT-U13 total heading -5588 deg (target 450): measure it
+[TEST] MOT-U13 car on the floor: mark its heading; it turns RIGHT 90 deg, 5 times, in 5 s
+[TEST] MOT-U13 run 1 state 4 after 3500 ms; heading 1138 deg (target -90), coast 16
+[TEST] MOT-U13 measure, then re-mark; next turn in 8 s
+[TEST] MOT-U13 run 2 state 4 after 3500 ms; heading 1156 deg (target -90), coast 15
+[TEST] MOT-U13 measure, then re-mark; next turn in 8 s
+[TEST] MOT-U13 run 3 state 4 after 3500 ms; heading 1150 deg (target -90), coast 15
+[TEST] MOT-U13 measure, then re-mark; next turn in 8 s
+[TEST] MOT-U13 run 4 state 4 after 3500 ms; heading 1162 deg (target -90), coast 16
+[TEST] MOT-U13 measure, then re-mark; next turn in 8 s
+[TEST] MOT-U13 run 5 state 4 after 3500 ms; heading 1166 deg (target -90), coast 16
+[TEST] MOT-U13 total heading 5772 deg (target -450): measure it
+[TEST] MOT-U14 car on the floor: mark its heading; it turns U-TURN 180 deg, 5 times, in 5 s
+[TEST] MOT-U14 run 1 state 4 after 6500 ms; heading -2133 deg (target 180), coast -15
+[TEST] MOT-U14 measure, then re-mark; next turn in 8 s
+[TEST] MOT-U14 run 2 state 4 after 6500 ms; heading -2163 deg (target 180), coast -16
+[TEST] MOT-U14 measure, then re-mark; next turn in 8 s
+[TEST] MOT-U14 run 3 state 4 after 6500 ms; heading -2147 deg (target 180), coast -15
+[TEST] MOT-U14 measure, then re-mark; next turn in 8 s
+[TEST] MOT-U14 run 4 state 4 after 6500 ms; heading -2172 deg (target 180), coast -15
+[TEST] MOT-U14 measure, then re-mark; next turn in 8 s
+[TEST] MOT-U14 run 5 state 4 after 6500 ms; heading -2155 deg (target 180), coast -15
+[TEST] MOT-U14 total heading -10770 deg (target 900): measure it
+[TEST] MOT-U15 car on the floor, 1 m clear ahead: mark its heading; it drives forward, turns LEFT 90 deg partway, starts a turn that a short reverse replaces, then a turn that is stopped, in 5 s
+[TEST] MOT-U15 moving 1, replaced 1, turn done 0, move replaced turn 0, stopped 0; turn heading -1111 deg (target 90)
+[TEST] MOT-U15 FAIL  a turn replaces a move, and stop ends a turn at once   (../app_program/motion/motion_test.c:399)
+[TEST] MOT-U16 lift the car and hold the LEFT wheel still: the car is driven turning left in 10 s
+[TEST] MOT-U16 FAIL  held wheel stalls a turn, brakes, refuses until stopped   (../app_program/motion/motion_test.c:401)
+[TEST] MOT-U17 keep the car lifted: it turns LEFT 90 deg in 5 s
+[TEST] MOT-U17 turn refused
+[TEST] MOT-U33 PASS  motion commands pack, saturate and decode
+motion: STOP edge_error=0 seen=0 valid=0 (dry run)
+[TEST] MOT-U34 52 updates, period 19979..20019 us (20000 expected), longest update 453 us
+[TEST] MOT-U34 PASS  tMotion updates every period within 1 ms (NFR1)
+[TEST] MOT-U35 INHIBIT to brake 69 us (limit 20000)
+[TEST] MOT-U35 refused 1 stop 1 inhibited 1 cleared 1
+[TEST] MOT-U35 PASS  tMotion refuses bad commands, INHIBIT brakes and flushes
+[TEST] MOT-U38 11 updates in 200 ms (10 expected), distance 13894 mm, heading -10915 deg
+[TEST] MOT-U38 PASS  shared odometry rises every update and holds at rest
+[TEST] motion SUMMARY 11 passed, 2 failed
+[TEST] === test run end ===

@@ -204,6 +204,8 @@ confirm the stop-early distance, and MOT-U19/U20 are calibrated at
 | 2026-11-05 | MOT-U14 | `3abd3cc` + local | Felicia Chua | PASS | `logs/2026-11-05_S06_MOT-U11-U16.txt` | S06 rerun; 5 U-turns; tester reports the turns correct; no angle recorded. Encoder 182–183°, coast 1–2° |
 | 2026-11-05 | MOT-U15 | `3abd3cc` + local | Felicia Chua | PASS | `logs/2026-11-05_S06_MOT-U11-U16.txt` | S06 rerun; moving 1, replaced 1, turn done 1, move replaced turn 1, stopped 1; encoder turn heading 92° (target 90°) |
 | 2026-11-05 | MOT-U16 | `3abd3cc` + local | Felicia Chua | PASS | `logs/2026-11-05_S06_MOT-U11-U16.txt` | S06 rerun, left wheel held; stalled after 420 ms (expect about 300), braked, refused, cleared |
+| 2026-11-05 | MOT-U17 | `b2a4b6d` + local | Felicia Chua | NOT RUN | `logs/2026-11-05_S07_MOT-U17_run1.txt` | S07 first run, `MOTION_LEFT_ENCODER_INVERTED` flipped, `MOTION_TURN_TESTS` 1, car lifted. `MOT-U17 turn refused`: the timed-out turn in MOT-U15 was never stopped, so MOT-U16 and MOT-U17 were refused. A test sequencing fault, not a motion fault; fixed by a `motion_move_stop()` after MOT-U15 |
+| 2026-11-05 | MOT-U17 | `b2a4b6d` + local | Felicia Chua | PASS | `logs/2026-11-05_S07_MOT-U17.txt` | S07 rerun with that stop as a local change; same flags, car lifted. `state 4 after 3500 ms, retry 4`, as expected. MOT-U15 and MOT-U16 FAIL in this run only because of the flipped flag; their results come from S06 |
 
 ## Host regression: post-obstacle line acquisition
 
