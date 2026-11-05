@@ -92,7 +92,7 @@
  * both wheels: GAIN = duty change / speed change between two lines above
  * the start-up duty, OFFSET = duty - GAIN * speed at either of them.
  */
-#define MOTION_FF_OFFSET 0.009f
+#define MOTION_FF_OFFSET 0.05f
 #define MOTION_FF_GAIN 0.00122f
 
 /*
