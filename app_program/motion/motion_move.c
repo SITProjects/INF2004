@@ -97,6 +97,7 @@ static uint32_t move_limit_updates = 0u;
 static bool b_sync = true;
 static motion_pid_t sync_pid;
 static int32_t heading_start = 0;
+static int32_t sync_right_start = 0;
 static int32_t sync_error_ticks = 0;
 static int16_t sync_correction_deg_s = 0;
 
@@ -635,6 +636,7 @@ begin (motion_state_t new_state, int32_t start, int32_t dir, int32_t target,
     still_updates[WHEEL_LEFT] = 0u;
     still_updates[WHEEL_RIGHT] = 0u;
     heading_start = tick_difference();
+    sync_right_start = total_ticks[WHEEL_RIGHT];
     reset_sync();
     reset_follow();
     done_reason = MOTION_DONE_NONE;
@@ -720,7 +722,8 @@ update_speeds (int16_t delta_left, int16_t delta_right)
  * One straight-line step of a move: measure the heading change since the
  * move started and, with the loop on, steer against it. Heading does not
  * depend on the direction of travel, so the same sign corrects forward and
- * backward moves.
+ * backward moves. With the loop on, the error also counts the right wheel's
+ * extra travel per count (MOTION_SYNC_RIGHT_SCALE).
  */
 static void
 correct_heading (void)
@@ -730,6 +733,10 @@ correct_heading (void)
     {
         return;
     }
+
+    float extra_ticks = (float)(total_ticks[WHEEL_RIGHT] - sync_right_start) *
+                        MOTION_SYNC_RIGHT_SCALE;
+    sync_error_ticks += (int32_t)extra_ticks;
 
     float error_deg = ((float)sync_error_ticks * MM_PER_TICK) /
                       (MOTION_TRACK_WIDTH_MM * DEG_TO_RAD);
