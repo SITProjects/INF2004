@@ -1,6 +1,7 @@
 /**
  * @file terrain_detect.c
- * @brief Terrain detectors: the hump and collision state machines.
+ * @brief Terrain detectors: the hump, collision and turning state
+ *        machines.
  *
  * Copyright (c) 2026 10x Slackers
  * SPDX-License-Identifier: MIT
@@ -15,7 +16,7 @@
 /* Private types, constants, and macros. */
 
 /* Detector word: hump state 2 | climb counter 4 | other counter 4 |
- * peak lean 8. */
+ * peak lean 8 | turning state 1 | turn counter 5 | spare 8. */
 #define HUMP_SHIFT 0u
 #define HUMP_BITS 2u
 #define CLIMB_SHIFT 2u
@@ -23,6 +24,11 @@
 #define COUNT_BITS 4u
 #define PEAK_SHIFT 10u
 #define PEAK_BITS 8u
+#define HUMP_FIELDS_MASK 0x0003FFFFu /* Bits 0-17: every hump field. */
+#define TURN_SHIFT 18u
+#define TURN_BITS 1u
+#define TURN_COUNT_SHIFT 19u
+#define TURN_COUNT_BITS 5u
 
 /* Lean and peak in tenths of a degree. */
 #define DDEG_PER_DEG 10.0f
@@ -53,11 +59,17 @@ _Static_assert(TERRAIN_DETECT_COOLDOWN_MAX == ((1u << COOLDOWN_BITS) - 1u),
                "cooldown limit must match the cooldown width");
 _Static_assert(TERRAIN_DETECT_PUSH_MAX_DG == ((1u << PUSH_BITS) - 1u),
                "push limit must match the push width");
+_Static_assert(HUMP_FIELDS_MASK == ((1u << TURN_SHIFT) - 1u),
+               "hump fields must end where the turn fields start");
+_Static_assert(TERRAIN_TURN_TURNING < (1u << TURN_BITS),
+               "turning states must fit their field");
+_Static_assert(TERRAIN_DETECT_TURN_COUNT_MAX == ((1u << TURN_COUNT_BITS) - 1u),
+               "turn count limit must match the counter width");
 
 /* Static data. */
 
 /* Private function declarations. */
-static uint32_t count_if (bool b_condition, uint32_t count);
+static uint32_t count_if (bool b_condition, uint32_t count, uint32_t width);
 static uint32_t samples_needed (uint8_t samples);
 static uint32_t samples_capped (uint8_t samples, uint32_t max);
 static uint32_t to_ddeg (float deg);
@@ -91,7 +103,8 @@ terrain_detect_hump_step (uint32_t * p_word, float roll_deg,
     switch (state)
     {
         case TERRAIN_HUMP_LEVEL:
-            climb = count_if(lean > to_ddeg(p_limits->up_deg), climb);
+            climb =
+                count_if(lean > to_ddeg(p_limits->up_deg), climb, COUNT_BITS);
             if (climb >= enter)
             {
                 next = TERRAIN_HUMP_ASCENDING;
@@ -100,7 +113,7 @@ terrain_detect_hump_step (uint32_t * p_word, float roll_deg,
             }
             break;
         case TERRAIN_HUMP_ASCENDING:
-            other = count_if(!b_new_peak, other);
+            other = count_if(!b_new_peak, other, COUNT_BITS);
             if (b_new_peak)
             {
                 peak = lean;
@@ -115,7 +128,7 @@ terrain_detect_hump_step (uint32_t * p_word, float roll_deg,
             }
             break;
         case TERRAIN_HUMP_TOP:
-            other = count_if(b_dropped, other);
+            other = count_if(b_dropped, other, COUNT_BITS);
             if (b_new_peak)
             {
                 /* Climbing in steps: the same hump, a higher peak. */
@@ -133,7 +146,8 @@ terrain_detect_hump_step (uint32_t * p_word, float roll_deg,
             break;
         default:
             /* DESCENDING. */
-            other = count_if(lean < to_ddeg(p_limits->level_deg), other);
+            other = count_if(lean < to_ddeg(p_limits->level_deg), other,
+                             COUNT_BITS);
             if (other >= samples_needed(p_limits->level_samples))
             {
                 next = TERRAIN_HUMP_LEVEL;
@@ -163,6 +177,71 @@ terrain_detect_hump_state (uint32_t word)
 {
     return (terrain_hump_state_t)terrain_process_field_get(word, HUMP_SHIFT,
                                                            HUMP_BITS);
+}
+
+uint32_t
+terrain_detect_hump_clear (uint32_t word)
+{
+    return word & ~HUMP_FIELDS_MASK;
+}
+
+terrain_event_type_t
+terrain_detect_turn_step (uint32_t * p_word, float turn_dps,
+                          terrain_turn_limits_t const * p_limits)
+{
+    if ((p_word == NULL) || (p_limits == NULL))
+    {
+        return TERRAIN_EVENT_NONE;
+    }
+
+    uint32_t word = *p_word;
+    terrain_turn_state_t const state = terrain_detect_turn_state(word);
+    uint32_t count =
+        terrain_process_field_get(word, TURN_COUNT_SHIFT, TURN_COUNT_BITS);
+
+    /* Left or right turns alike: only the size of the rate counts. */
+    float const rate_dps = fabsf(turn_dps);
+
+    terrain_turn_state_t next = state;
+    terrain_event_type_t event = TERRAIN_EVENT_NONE;
+
+    if (state == TERRAIN_TURN_STRAIGHT)
+    {
+        count = count_if(rate_dps > p_limits->on_dps, count, TURN_COUNT_BITS);
+        if (count >= samples_needed(p_limits->on_samples))
+        {
+            next = TERRAIN_TURN_TURNING;
+            event = TERRAIN_EVENT_TURNING;
+        }
+    }
+    else
+    {
+        count = count_if(rate_dps < p_limits->off_dps, count, TURN_COUNT_BITS);
+        if (count >= samples_needed(p_limits->off_samples))
+        {
+            next = TERRAIN_TURN_STRAIGHT;
+            event = TERRAIN_EVENT_STRAIGHT;
+        }
+    }
+
+    if (next != state)
+    {
+        count = 0u;
+    }
+
+    word =
+        terrain_process_field_put(word, TURN_SHIFT, TURN_BITS, (uint32_t)next);
+    word = terrain_process_field_put(word, TURN_COUNT_SHIFT, TURN_COUNT_BITS,
+                                     count);
+    *p_word = word;
+    return event;
+}
+
+terrain_turn_state_t
+terrain_detect_turn_state (uint32_t word)
+{
+    return (terrain_turn_state_t)terrain_process_field_get(word, TURN_SHIFT,
+                                                           TURN_BITS);
 }
 
 terrain_event_type_t
@@ -276,13 +355,13 @@ terrain_detect_collision_step (uint32_t * p_word,
 
 /* One more sample in a row while the condition holds, else start again. */
 static uint32_t
-count_if (bool b_condition, uint32_t count)
+count_if (bool b_condition, uint32_t count, uint32_t width)
 {
     if (!b_condition)
     {
         return 0u;
     }
-    return terrain_process_count_add_sat(count, 1u, COUNT_BITS);
+    return terrain_process_count_add_sat(count, 1u, width);
 }
 
 /* Degrees (0 or more) to tenths, rounded, stopping at the peak's 25.5. */

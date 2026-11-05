@@ -29,10 +29,10 @@
  * Signed fields are two's complement, so an all-zero word reads as 0.
  *
  * Snapshot (terrain_data_t), five words:
- *   word 0: pitch 10 | roll 10 | turn rate 9 (P5) | calib state 2 |
+ *   word 0: pitch 10 | roll 10 | turn rate 9 | calib state 2 |
  *           pitch held 1
- *   word 1: roll held 1 | hump state 2 | spare 2 | speed state 2 (P8) |
- *           highest hump 8 (P9) | time 16 | spare 1
+ *   word 1: roll held 1 | hump state 2 | spare 1 | turning state 1 |
+ *           speed state 2 (P8) | highest hump 8 | time 16 | spare 1
  *   word 2: sample count 16 | overrun 6 | errors 6 | sensor resets 4
  *   word 3: accel X 12 | accel Y 12 | spare 8
  *   word 4: accel Z 12 | spare 20
@@ -42,6 +42,8 @@
 #define PITCH_SHIFT 0u
 #define ROLL_SHIFT 10u
 #define ANGLE_BITS 10u
+#define TURN_RATE_SHIFT 20u
+#define TURN_RATE_BITS 9u
 #define CALIB_SHIFT 29u
 #define CALIB_BITS 2u
 #define PITCH_HELD_SHIFT 31u
@@ -50,6 +52,7 @@
 #define ROLL_HELD_SHIFT 0u
 #define HUMP_SHIFT 1u
 #define HUMP_BITS 2u
+#define TURN_STATE_SHIFT 4u
 #define HIGHEST_SHIFT 7u
 #define HIGHEST_BITS 8u
 #define TIME_SHIFT 15u
@@ -95,6 +98,7 @@
 /* Units of the packed fields. */
 #define DDEG_PER_DEG 10.0f
 #define DG_PER_G 10.0f
+#define DPS_PER_STEP 1.0f
 #define MG_PER_STEP 4
 #define STEPS_PER_MPS2 (1000.0f / (TERRAIN_GRAVITY_MPS2 * (float)MG_PER_STEP))
 #define US_PER_TICK 10000u
@@ -112,6 +116,8 @@ _Static_assert(TERRAIN_CALIB_SAMPLES <= UINT8_MAX,
                "calibration samples must fit the 8-bit count");
 _Static_assert(TERRAIN_HUMP_DESCENDING < (1u << HUMP_BITS),
                "hump state must fit its field");
+_Static_assert(TERRAIN_TURN_TURNING < (1u << FLAG_BITS),
+               "turning state must fit its field");
 _Static_assert(TERRAIN_HEIGHT_MAX_MM == ((1u << HIGHEST_BITS) - 1u),
                "highest hump must fit its field");
 _Static_assert(sizeof(terrain_event_queue_t) ==
@@ -145,6 +151,10 @@ static terrain_collision_limits_t const collision_limits = {
     (float)TERRAIN_COLLISION_SURE_DG / DG_PER_G,
     (float)TERRAIN_COLLISION_MIN_SPEED_MM_S, TERRAIN_COLLISION_CHECK_SAMPLES,
     TERRAIN_COLLISION_COOLDOWN_SAMPLES};
+
+static terrain_turn_limits_t const turn_limits = {
+    (float)TERRAIN_TURN_ON_DPS, (float)TERRAIN_TURN_OFF_DPS,
+    TERRAIN_TURN_ON_SAMPLES, TERRAIN_TURN_OFF_SAMPLES};
 
 static terrain_height_limits_t const height_limits = {
     TERRAIN_TRACK_WIDTH_MM, TERRAIN_HUMP_LEVEL_DEG,
@@ -190,12 +200,13 @@ static void detect_sample (terrain_vec3_t const * p_accel,
 static void detect_hump (terrain_vec3_t const * p_accel, uint32_t now_10ms);
 static void detect_collision (terrain_vec3_t const * p_accel,
                               terrain_hint_t const * p_hint, uint32_t now_10ms);
+static void detect_turn (float turn_dps, uint32_t now_10ms);
 static void queue_event (terrain_event_type_t type, uint32_t value,
                          uint32_t now_10ms);
 static void show_calibrating (terrain_data_t * p_data);
 static void clear_calib_info (terrain_calib_info_t * p_info);
-static void publish (terrain_vec3_t const * p_accel, uint32_t new_samples,
-                     bool b_overrun, uint32_t now_10ms);
+static void publish (terrain_vec3_t const * p_accel, float turn_dps,
+                     uint32_t new_samples, bool b_overrun, uint32_t now_10ms);
 static void publish_calib (terrain_calib_out_t const * p_out, bool b_moved);
 static void store_latest (terrain_data_t const * p_data);
 static uint32_t own_get (uint32_t shift, uint32_t width);
@@ -234,6 +245,7 @@ terrain_monitor_init (void)
 
     own_put(OWN_FAIL_SHIFT, OWN_FAIL_BITS, 0u);
     terrain_height_reset(&height);
+    detect_word = 0u; /* calib_start() keeps the turning state: not here. */
     calib_start();
 
     b_ready = true;
@@ -285,6 +297,13 @@ terrain_monitor_update (void)
     bool const b_hold_pitch = hint.b_speed_known && hint.b_speed_changing;
     bool const b_hold_roll = hint.b_turn_known && hint.b_turning;
 
+    /* From the wheels, so it needs no calibration; 0 without odometry. */
+    float const turn_dps =
+        hint.b_distance_known
+            ? terrain_process_turn_rate_dps(hint.left_mm_s, hint.right_mm_s,
+                                            TERRAIN_TRACK_WIDTH_MM)
+            : 0.0f;
+
     for (uint32_t i = 0u; i < count; i++)
     {
         int16_t const board[TERRAIN_AXES] = {buf[i].x, buf[i].y, buf[i].z};
@@ -313,9 +332,12 @@ terrain_monitor_update (void)
                                         b_hold_roll);
             detect_sample(&accel, &hint, now_10ms);
         }
+
+        /* Every calibration state: the wheels need no level reference. */
+        detect_turn(turn_dps, now_10ms);
     }
 
-    publish(&accel, count, b_overrun, now_10ms);
+    publish(&accel, turn_dps, count, b_overrun, now_10ms);
     return TERRAIN_OK;
 }
 
@@ -476,6 +498,21 @@ uint8_t
 terrain_monitor_data_highest_hump_mm (terrain_data_t const * p_data)
 {
     return (uint8_t)data_get(p_data, W_STATE, HIGHEST_SHIFT, HIGHEST_BITS);
+}
+
+int16_t
+terrain_monitor_data_turn_rate_dps (terrain_data_t const * p_data)
+{
+    uint32_t const code =
+        data_get(p_data, W_TILT, TURN_RATE_SHIFT, TURN_RATE_BITS);
+    return (int16_t)terrain_process_decode_signed(code, TURN_RATE_BITS);
+}
+
+terrain_turn_state_t
+terrain_monitor_data_turn_state (terrain_data_t const * p_data)
+{
+    return (terrain_turn_state_t)data_get(p_data, W_STATE, TURN_STATE_SHIFT,
+                                          FLAG_BITS);
 }
 
 int16_t
@@ -669,6 +706,20 @@ terrain_monitor_hump_text (terrain_hump_state_t state)
 }
 
 char const *
+terrain_monitor_turn_text (terrain_turn_state_t state)
+{
+    switch (state)
+    {
+        case TERRAIN_TURN_STRAIGHT:
+            return "STRAIGHT";
+        case TERRAIN_TURN_TURNING:
+            return "TURNING";
+        default:
+            return "UNKNOWN";
+    }
+}
+
+char const *
 terrain_monitor_event_text (terrain_event_type_t type)
 {
     switch (type)
@@ -691,6 +742,10 @@ terrain_monitor_event_text (terrain_event_type_t type)
             return "CRUISING";
         case TERRAIN_EVENT_DECELERATING:
             return "DECELERATING";
+        case TERRAIN_EVENT_TURNING:
+            return "TURNING";
+        case TERRAIN_EVENT_STRAIGHT:
+            return "STRAIGHT";
         default:
             return "UNKNOWN";
     }
@@ -771,8 +826,9 @@ calib_start (void)
     terrain_process_tilt_reset(&tilt);
 
     /* A hump or collision check cut short just ends: no event, queued
-     * events are kept. */
-    detect_word = 0u;
+     * events are kept. Turning comes from the wheels, not this
+     * calibration, so it carries on. */
+    detect_word = terrain_detect_hump_clear(detect_word);
     collide_word = 0u;
     terrain_height_reset(&height);
 }
@@ -903,6 +959,22 @@ detect_hump (terrain_vec3_t const * p_accel, uint32_t now_10ms)
 }
 
 /*
+ * Run the turning state machine on one sample and queue TURNING or
+ * STRAIGHT (value 0). The rate is the batch's: motion updates every
+ * 20 ms, so the samples of one batch share it.
+ */
+static void
+detect_turn (float turn_dps, uint32_t now_10ms)
+{
+    terrain_event_type_t const type =
+        terrain_detect_turn_step(&detect_word, turn_dps, &turn_limits);
+    if (type != TERRAIN_EVENT_NONE)
+    {
+        queue_event(type, 0u, now_10ms);
+    }
+}
+
+/*
  * Run the collision state machine on the newest sample: the horizontal
  * push of the unsmoothed acceleration (a hit lasts about 50 ms, which the
  * tilt smoothing would flatten) and motion's ground speed.
@@ -946,9 +1018,10 @@ queue_event (terrain_event_type_t type, uint32_t value, uint32_t now_10ms)
 
 /*
  * What the shared snapshot shows while calibrating: no readings; counters,
- * time and the highest hump (a fact about the run) kept. Used for the real
- * reset and by the getters while a request is pending, so both always
- * agree.
+ * time and the highest hump (a fact about the run) kept, and the turn
+ * rate and turning state (from the wheels, not the calibration). Used for
+ * the real reset and by the getters while a request is pending, so both
+ * always agree.
  */
 static void
 show_calibrating (terrain_data_t * p_data)
@@ -957,10 +1030,16 @@ show_calibrating (terrain_data_t * p_data)
     uint32_t const time = data_get(p_data, W_STATE, TIME_SHIFT, TIME_BITS);
     uint32_t const highest =
         data_get(p_data, W_STATE, HIGHEST_SHIFT, HIGHEST_BITS);
+    uint32_t const turn_rate =
+        data_get(p_data, W_TILT, TURN_RATE_SHIFT, TURN_RATE_BITS);
+    uint32_t const turning =
+        data_get(p_data, W_STATE, TURN_STATE_SHIFT, FLAG_BITS);
     p_data->word[W_TILT] = 0u;
     p_data->word[W_STATE] = 0u;
+    data_put(p_data, W_TILT, TURN_RATE_SHIFT, TURN_RATE_BITS, turn_rate);
     data_put(p_data, W_STATE, TIME_SHIFT, TIME_BITS, time);
     data_put(p_data, W_STATE, HIGHEST_SHIFT, HIGHEST_BITS, highest);
+    data_put(p_data, W_STATE, TURN_STATE_SHIFT, FLAG_BITS, turning);
     p_data->word[W_ACCEL_XY] = 0u;
     p_data->word[W_ACCEL_Z] = 0u;
 }
@@ -979,8 +1058,8 @@ clear_calib_info (terrain_calib_info_t * p_info)
  * lock. A pending recalibration is hidden by the getters.
  */
 static void
-publish (terrain_vec3_t const * p_accel, uint32_t new_samples, bool b_overrun,
-         uint32_t now_10ms)
+publish (terrain_vec3_t const * p_accel, float turn_dps, uint32_t new_samples,
+         bool b_overrun, uint32_t now_10ms)
 {
     terrain_calib_state_t const state = own_calib_state();
     bool const b_valid = (state == TERRAIN_CALIB_VALID);
@@ -1005,6 +1084,13 @@ publish (terrain_vec3_t const * p_accel, uint32_t new_samples, bool b_overrun,
                                                                         : 0u);
     data_put(&next, W_STATE, HUMP_SHIFT, HUMP_BITS,
              b_valid ? (uint32_t)terrain_detect_hump_state(detect_word) : 0u);
+
+    /* Turning comes from the wheels: given in every calibration state. */
+    data_put(
+        &next, W_TILT, TURN_RATE_SHIFT, TURN_RATE_BITS,
+        terrain_process_encode_signed(turn_dps, DPS_PER_STEP, TURN_RATE_BITS));
+    data_put(&next, W_STATE, TURN_STATE_SHIFT, FLAG_BITS,
+             (uint32_t)terrain_detect_turn_state(detect_word));
 
     /* 10 ms ticks, wrapping: readers only use differences. */
     data_put(&next, W_STATE, TIME_SHIFT, TIME_BITS, now_10ms);

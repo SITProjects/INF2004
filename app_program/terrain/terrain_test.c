@@ -8,9 +8,10 @@
  * testing/terrain/TEST_LOG.md. Test IDs: TER-U01, TER-U02, ...
  *
  * TER-U12 runs the hump state machine and event queue on made-up data,
- * TER-U15 the hump height on made-up one-wheel ramps, and TER-U19 the
- * collision state machine on made-up pushes and speeds; they need only
- * the Pico. The other tests need the GY-511 connected; TER-U02, TER-U04
+ * TER-U15 the hump height on made-up one-wheel ramps, TER-U19 the
+ * collision state machine on made-up pushes and speeds, and TER-U22 the
+ * turn rate and turning state machine on made-up wheel speeds and turn
+ * rates; they need only the Pico. The other tests need the GY-511 connected; TER-U02, TER-U04
  * and TER-U13 also need the car standing still on level ground during
  * power-up. No test waits for a person: every wait is bounded.
  *
@@ -63,6 +64,25 @@
 #define CRASH_GAP 60u  /* Longer than the 50-sample cooldown. */
 #define DG_PER_G 10.0f
 
+/* TER-U22 wheel speeds (mm/s) and turn rates (deg/s): a gentle curve
+ * (right 160, left 80: 42.6 deg/s left), a turn in place at motion's
+ * 90 deg/s (wheels at +/-84 mm/s: 89.5 deg/s), and rates below the off
+ * limit, between the limits, above the on limit and a turn in place. */
+#define TURN_CURVE_LEFT_MM_S 80
+#define TURN_CURVE_RIGHT_MM_S 160
+#define TURN_CURVE_DPS_X10 426 /* Expected, tenths of a deg/s. */
+#define TURN_SPIN_MM_S 84
+#define TURN_SPIN_DPS_X10 895
+#define TURN_TOL_X10 5 /* 0.5 deg/s. */
+#define TURN_STILL_DPS 0.0f
+#define TURN_CREEP_DPS 5.0f
+#define TURN_MID_DPS 15.0f
+#define TURN_SLOW_DPS (-25.0f) /* A slow right curve. */
+#define TURN_FAST_DPS 90.0f
+#define TURN_EVENTS_MAX 8u
+#define TURN_HUMP_BITS 0x0002ABCDu /* Made-up hump fields, bits 0-17. */
+#define TURN_HUMP_MASK 0x0003FFFFu
+
 /* TER-U15 ramps under one wheel, driven at 1.2 mm a sample (120 mm/s,
  * the line-following speed). */
 #define HUMP_STEP_MM 1.2f
@@ -96,6 +116,13 @@ typedef struct
     uint32_t samples;          /**< Length, samples. */
 } crash_part_t;
 
+/** @brief One stretch of a TER-U22 turn-rate trace. */
+typedef struct
+{
+    float turn_dps;   /**< Turn rate for the whole stretch. */
+    uint32_t samples; /**< Length, samples. */
+} turn_part_t;
+
 /** @brief A TER-U15 trapezoid ramp under one wheel, mm. */
 typedef struct
 {
@@ -116,6 +143,10 @@ static bool crash_confirmed_ok (void);
 static bool crash_at_once_ok (void);
 static uint32_t run_crash (crash_part_t const * p_parts, uint32_t n_parts,
                            uint32_t * p_value);
+static bool turn_rate_ok (void);
+static bool rate_near (float dps, int32_t want_x10);
+static bool turn_trace_ok (void);
+static bool turn_keeps_hump_ok (void);
 #if TERRAIN_TEST_BENCH
 static bool bench_step (char const * p_instruction,
                         terrain_calib_info_t * p_out);
@@ -191,6 +222,15 @@ terrain_test (void)
                "push then speed halved gives one COLLISION, biggest push");
     TEST_CHECK("TER-U19", crash_at_once_ok(),
                "sure push or unknown speed at once; one event per cooldown");
+
+    /* TER-U22: turn rate and turning machine on made-up data (no IMU or
+     * motors needed). */
+    TEST_CHECK("TER-U22", turn_rate_ok(),
+               "wheel speeds give the turn rate, left positive");
+    TEST_CHECK("TER-U22", turn_trace_ok(),
+               "turn trace gives TURNING, STRAIGHT, TURNING, STRAIGHT only");
+    TEST_CHECK("TER-U22", turn_keeps_hump_ok(),
+               "turning and hump fields of the detector word kept apart");
 
     /* TER-U13: still and level, so no hump and no events. */
     terrain_data_t still = {0};
@@ -412,6 +452,121 @@ run_crash (crash_part_t const * p_parts, uint32_t n_parts, uint32_t * p_value)
         }
     }
     return events;
+}
+
+/*
+ * TER-U22: a gentle left curve, a turn in place either way, and no wheel
+ * speed difference; a track width of 0 gives 0, not a division by zero.
+ */
+static bool
+turn_rate_ok (void)
+{
+    float const track_mm = TERRAIN_TRACK_WIDTH_MM;
+
+    return rate_near(terrain_process_turn_rate_dps(
+                         TURN_CURVE_LEFT_MM_S, TURN_CURVE_RIGHT_MM_S, track_mm),
+                     TURN_CURVE_DPS_X10) &&
+           rate_near(terrain_process_turn_rate_dps(-TURN_SPIN_MM_S,
+                                                   TURN_SPIN_MM_S, track_mm),
+                     TURN_SPIN_DPS_X10) &&
+           rate_near(terrain_process_turn_rate_dps(TURN_SPIN_MM_S,
+                                                   -TURN_SPIN_MM_S, track_mm),
+                     -TURN_SPIN_DPS_X10) &&
+           rate_near(terrain_process_turn_rate_dps(TURN_CURVE_RIGHT_MM_S,
+                                                   TURN_CURVE_RIGHT_MM_S,
+                                                   track_mm),
+                     0) &&
+           rate_near(terrain_process_turn_rate_dps(TURN_CURVE_LEFT_MM_S,
+                                                   TURN_CURVE_RIGHT_MM_S, 0.0f),
+                     0);
+}
+
+/* A rate within TURN_TOL_X10 of want_x10 (tenths of a deg/s). */
+static bool
+rate_near (float dps, int32_t want_x10)
+{
+    float const diff_x10 = (dps * DDEG_PER_DEG) - (float)want_x10;
+    return (diff_x10 <= (float)TURN_TOL_X10) &&
+           (diff_x10 >= -(float)TURN_TOL_X10);
+}
+
+/*
+ * TER-U22: still, a turn in place one sample too short, and a rate below
+ * the on limit give nothing. A turn in place gives TURNING; a slower
+ * stretch between the limits keeps it; stopping gives STRAIGHT. A slow
+ * right curve above the on limit gives TURNING (either way round counts),
+ * creeping below the off limit STRAIGHT. Nothing else, in that order.
+ */
+static bool
+turn_trace_ok (void)
+{
+    static turn_part_t const trace[] = {
+        {TURN_STILL_DPS, 20u},
+        {TURN_FAST_DPS, TERRAIN_TURN_ON_SAMPLES - 1u},
+        {TURN_STILL_DPS, 5u},
+        {TURN_MID_DPS, 40u},
+        {TURN_FAST_DPS, 20u},
+        {TURN_MID_DPS, 40u},
+        {TURN_STILL_DPS, TERRAIN_TURN_OFF_SAMPLES},
+        {TURN_SLOW_DPS, TERRAIN_TURN_ON_SAMPLES + 5u},
+        {TURN_CREEP_DPS, TERRAIN_TURN_OFF_SAMPLES}};
+    static terrain_event_type_t const expected[] = {
+        TERRAIN_EVENT_TURNING, TERRAIN_EVENT_STRAIGHT, TERRAIN_EVENT_TURNING,
+        TERRAIN_EVENT_STRAIGHT};
+    terrain_turn_limits_t const limits = {
+        (float)TERRAIN_TURN_ON_DPS, (float)TERRAIN_TURN_OFF_DPS,
+        TERRAIN_TURN_ON_SAMPLES, TERRAIN_TURN_OFF_SAMPLES};
+
+    terrain_event_type_t got[TURN_EVENTS_MAX];
+    uint32_t n_got = 0u;
+    uint32_t word = 0u;
+    for (uint32_t part = 0u; part < (sizeof(trace) / sizeof(trace[0])); part++)
+    {
+        for (uint32_t i = 0u; i < trace[part].samples; i++)
+        {
+            terrain_event_type_t const type =
+                terrain_detect_turn_step(&word, trace[part].turn_dps, &limits);
+            if ((type != TERRAIN_EVENT_NONE) && (n_got < TURN_EVENTS_MAX))
+            {
+                got[n_got] = type;
+                n_got++;
+            }
+        }
+    }
+
+    uint32_t const n = sizeof(expected) / sizeof(expected[0]);
+    bool b_ok = (n_got == n) &&
+                (terrain_detect_turn_state(word) == TERRAIN_TURN_STRAIGHT);
+    for (uint32_t i = 0u; b_ok && (i < n); i++)
+    {
+        b_ok = (got[i] == expected[i]);
+    }
+    return b_ok;
+}
+
+/*
+ * TER-U22: the turn step leaves the hump fields alone, and restarting the
+ * humps (as a recalibration does) keeps the turning state.
+ */
+static bool
+turn_keeps_hump_ok (void)
+{
+    terrain_turn_limits_t const limits = {
+        (float)TERRAIN_TURN_ON_DPS, (float)TERRAIN_TURN_OFF_DPS,
+        TERRAIN_TURN_ON_SAMPLES, TERRAIN_TURN_OFF_SAMPLES};
+    uint32_t word = TURN_HUMP_BITS;
+    for (uint32_t i = 0u; i < TERRAIN_TURN_ON_SAMPLES; i++)
+    {
+        (void)terrain_detect_turn_step(&word, TURN_FAST_DPS, &limits);
+    }
+    bool const b_hump_kept =
+        ((word & TURN_HUMP_MASK) == TURN_HUMP_BITS) &&
+        (terrain_detect_turn_state(word) == TERRAIN_TURN_TURNING);
+
+    word = terrain_detect_hump_clear(word);
+    return b_hump_kept && ((word & TURN_HUMP_MASK) == 0u) &&
+           (terrain_detect_hump_state(word) == TERRAIN_HUMP_LEVEL) &&
+           (terrain_detect_turn_state(word) == TERRAIN_TURN_TURNING);
 }
 
 /*

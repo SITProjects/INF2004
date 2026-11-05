@@ -261,6 +261,24 @@ terrain_process_roll_deg (terrain_vec3_t const * p_accel)
     return atan2f(p_accel->x, p_accel->z) * DEG_PER_RAD;
 }
 
+float
+terrain_process_turn_rate_dps (int16_t left_mm_s, int16_t right_mm_s,
+                               float track_mm)
+{
+    if (!(track_mm > 0.0f))
+    {
+        return 0.0f;
+    }
+
+    /*
+     * Each second the right wheel gets (right - left) mm further than the
+     * left; across the track that turns the car by (right - left) / track
+     * radians, like pushing one end of a door.
+     */
+    float const diff_mm_s = (float)right_mm_s - (float)left_mm_s;
+    return (diff_mm_s / track_mm) * DEG_PER_RAD;
+}
+
 void
 terrain_process_tilt_reset (terrain_tilt_t * p_tilt)
 {

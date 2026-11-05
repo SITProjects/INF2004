@@ -3,11 +3,12 @@
  * @brief Movement hints for the terrain module, from the motion
  *        subsystem's odometry (TEAM.md IF-05).
  *
- * Gives the distance driven and the ground speed (for collisions).
- * Whether the speed is changing, and turns, stay unknown, so tilt is
- * never held; they come from the same odometry later. Distance and speed
- * are unknown until tMotion has published, when a read fails, and once
- * the odometry is stale (TERRAIN_HINT_STALE_MS).
+ * Gives the distance driven, the ground speed (for collisions) and both
+ * wheel speeds (for the turn rate). Whether the speed is changing, and
+ * the turn hold, stay unknown, so tilt is never held; they come from the
+ * same odometry later. Distance and speeds are unknown until tMotion has
+ * published, when a read fails, and once the odometry is stale
+ * (TERRAIN_HINT_STALE_MS).
  *
  * Copyright (c) 2026 10x Slackers
  * SPDX-License-Identifier: MIT
@@ -62,7 +63,8 @@ terrain_hint_read (terrain_hint_t * p_out)
         return;
     }
 
-    terrain_hint_t hint = {false, false, false, false, false, false, 0, 0};
+    terrain_hint_t hint = {false, false, false, false, false,
+                           false, 0,     0,     0,     0};
 
     motion_shared_odometry_t odometry;
     if (motion_get_odometry(&odometry) && (odometry.updates != 0u) &&
@@ -71,6 +73,8 @@ terrain_hint_read (terrain_hint_t * p_out)
         hint.b_distance_known = true;
         hint.distance_mm = odometry.distance_mm;
         hint.speed_mm_s = odometry.speed_mm_s;
+        hint.left_mm_s = odometry.left_speed_mm_s;
+        hint.right_mm_s = odometry.right_speed_mm_s;
     }
 
     *p_out = hint;

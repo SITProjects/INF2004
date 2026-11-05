@@ -1,6 +1,7 @@
 /**
  * @file terrain_detect.h
- * @brief Terrain detectors: the hump and collision state machines.
+ * @brief Terrain detectors: the hump, collision and turning state
+ *        machines.
  *
  * Pure C with no kernel calls, so it can be tested on a PC. Each step
  * takes its machine's word and one sample and returns the event it found,
@@ -13,12 +14,17 @@
  * drop from the highest lean of the hump (its peak), not a dip.
  *
  * Detector word, masks and shifts, bit 0 first; all zero is the resting
- * state (LEVEL, counters 0, no peak):
+ * state (LEVEL, STRAIGHT, counters 0, no peak):
  *   hump state 2 | climb counter 4 | other counter 4 | peak lean 8 |
- *   spare 14
+ *   turning state 1 | turn counter 5 | spare 8
  * The peak lean is in tenths of a degree, 0 to 25.5 degrees (stops
  * there): about a 46 mm lift of one wheel on the car's track, far above
- * any ramp it can climb. The spare bits are kept as they are.
+ * any ramp it can climb. The turn counter counts samples, 0 to 31. Each
+ * step changes only its own machine's fields; the spare bits are kept as
+ * they are.
+ *
+ * Turning is found from the turn rate (from motion's wheel speeds), not
+ * the accelerometer: see terrain_detect_turn_step().
  *
  * Collisions are found from the horizontal push (forward/back and
  * sideways): a wall shoves the car back or sideways, a wheel landing
@@ -101,6 +107,22 @@ typedef struct
     int32_t speed_mm_s;        /**< Car speed, mm/s; either sign. */
 } terrain_collision_input_t;
 
+/* Largest sample count the 5-bit turn counter holds. */
+#define TERRAIN_DETECT_TURN_COUNT_MAX 31u
+
+/** @brief Limits of the turning state machine, on the size of the turn
+ *         rate. */
+typedef struct
+{
+    float on_dps;        /**< Faster than this is turning, deg/s. */
+    float off_dps;       /**< Slower than this is straight, deg/s; below
+                              on_dps. */
+    uint8_t on_samples;  /**< Samples in a row to start a turn, 1 to
+                              TERRAIN_DETECT_TURN_COUNT_MAX. */
+    uint8_t off_samples; /**< Samples in a row to end a turn, 1 to
+                              TERRAIN_DETECT_TURN_COUNT_MAX. */
+} terrain_turn_limits_t;
+
 /* Public function declarations. */
 
 /**
@@ -134,6 +156,41 @@ terrain_detect_hump_step (uint32_t * p_word, float roll_deg,
  * @return The state.
  */
 terrain_hump_state_t terrain_detect_hump_state (uint32_t word);
+
+/**
+ * @brief Restart the hump state machine: LEVEL, counters 0, no peak.
+ * @param word Detector word.
+ * @return @p word with only the hump fields cleared; the turning state
+ *         and the spare bits are kept.
+ */
+uint32_t terrain_detect_hump_clear (uint32_t word);
+
+/**
+ * @brief Run the turning state machine on one sample.
+ * @param p_word Detector word; start from 0.
+ * @param turn_dps Turn rate for this sample, deg/s; either sign. Only its
+ *        size is used.
+ * @param p_limits Limits; sample counts of 0 count as 1, and counts over
+ *        TERRAIN_DETECT_TURN_COUNT_MAX can never be reached.
+ * @return The event the sample caused: TURNING, STRAIGHT or NONE. NONE,
+ *         with nothing changed, if a pointer is NULL.
+ *
+ * STRAIGHT -> TURNING (event) after on_samples above on_dps.
+ * TURNING -> STRAIGHT (event) after off_samples below off_dps.
+ * The counter restarts when its condition breaks and on a change of
+ * state. A rate between the two limits keeps the state, so a slow part of
+ * a turn does not end it. A NaN rate counts as neither.
+ */
+terrain_event_type_t
+terrain_detect_turn_step (uint32_t * p_word, float turn_dps,
+                          terrain_turn_limits_t const * p_limits);
+
+/**
+ * @brief Turning state in a detector word.
+ * @param word Detector word.
+ * @return The state.
+ */
+terrain_turn_state_t terrain_detect_turn_state (uint32_t word);
 
 /**
  * @brief Run the collision state machine on one sample.
