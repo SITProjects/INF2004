@@ -146,6 +146,17 @@ confirm the stop-early distance, and MOT-U19/U20 are calibrated at
 | 2026-11-05 | MOT-U34 | `0a0d6bd` + local | Felicia Chua | PASS | `logs/2026-11-05_S03_MOT-U04-U06.txt` | S03, motion only: period 19993..20009 us, longest update 440 us. Not the full-load result the test asks for; that comes from S01 |
 | 2026-11-05 | MOT-U35 | `0a0d6bd` + local | Felicia Chua | PASS | `logs/2026-11-05_S03_MOT-U04-U06.txt` | S03; INHIBIT to brake 69 us |
 | 2026-11-05 | MOT-U38 | `0a0d6bd` + local | Felicia Chua | PASS | `logs/2026-11-05_S03_MOT-U04-U06.txt` | S03; 11 updates in 200 ms |
+| 2026-11-05 | MOT-U01 | `96a2911` + local | Felicia Chua | PASS | `logs/2026-11-05_S01_MOT-auto.txt` | S01, `make TEST=1` with Wi-Fi; local `app_main.c` starts every subsystem's task but runs only `motion_test()`; car lifted |
+| 2026-11-05 | MOT-U03 | `96a2911` + local | Felicia Chua | PASS | `logs/2026-11-05_S01_MOT-auto.txt` | S01 |
+| 2026-11-05 | MOT-U07 | `96a2911` + local | Felicia Chua | PASS | `logs/2026-11-05_S01_MOT-auto.txt` | S01 |
+| 2026-11-05 | MOT-U18 | `96a2911` + local | Felicia Chua | PASS | `logs/2026-11-05_S01_MOT-auto.txt` | S01 |
+| 2026-11-05 | MOT-U22 | `96a2911` + local | Felicia Chua | PASS | `logs/2026-11-05_S01_MOT-auto.txt` | S01; 50 updates took 1000 ms with every task running |
+| 2026-11-05 | MOT-U23 | `96a2911` + local | Felicia Chua | PASS | `logs/2026-11-05_S01_MOT-auto.txt` | S01 |
+| 2026-11-05 | MOT-U27 | `96a2911` + local | Felicia Chua | PASS | `logs/2026-11-05_S01_MOT-auto.txt` | S01 |
+| 2026-11-05 | MOT-U33 | `96a2911` + local | Felicia Chua | PASS | `logs/2026-11-05_S01_MOT-auto.txt` | S01 |
+| 2026-11-05 | MOT-U34 | `96a2911` + local | Felicia Chua | PASS | `logs/2026-11-05_S01_MOT-auto.txt` | S01, full load: obstacle, line_follow, terrain and communication tasks running. 52 updates, period 19925..20050 us (limit 19000..21000), longest update 343 us. Wi-Fi radio up but not joined (placeholder SSID, retrying); terrain IMU not connected (setup retrying) |
+| 2026-11-05 | MOT-U35 | `96a2911` + local | Felicia Chua | PASS | `logs/2026-11-05_S01_MOT-auto.txt` | S01; INHIBIT to brake 200 us (limit 20000) |
+| 2026-11-05 | MOT-U38 | `96a2911` + local | Felicia Chua | PASS | `logs/2026-11-05_S01_MOT-auto.txt` | S01; 11 updates in 200 ms, distance 0 mm, heading 0 deg |
 
 ## Host regression: post-obstacle line acquisition
 
