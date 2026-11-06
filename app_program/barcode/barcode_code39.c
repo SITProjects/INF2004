@@ -23,6 +23,10 @@
 #define CHARACTER_STRIDE (BARCODE_CODE39_ELEMENTS + 1u)
 #define MIN_CHARACTERS 3u
 #define FRAME '*'
+/* A partial read: two characters and their gap, up to a whole "*X*" plus
+ * a stray bar and space at each end. */
+#define PARTIAL_MIN_ELEMENTS ((2u * CHARACTER_STRIDE) - 1u)
+#define PARTIAL_MAX_ELEMENTS ((3u * CHARACTER_STRIDE) + 1u)
 
 typedef struct
 {
@@ -61,6 +65,8 @@ static barcode_code39_status_t decode_direction (uint32_t const * p_widths,
 static barcode_code39_status_t read_character (uint32_t const * p_widths,
                                                uint32_t count, bool b_reverse,
                                                uint32_t first, char * p_symbol);
+static char partial_symbol (uint32_t const * p_widths, uint32_t count,
+                            bool b_reverse);
 static bool mark_wide (scan_view_t const * p_view, uint32_t start,
                        uint32_t wide, uint32_t * p_pattern);
 static bool bars_all_narrow (scan_view_t const * p_view);
@@ -111,6 +117,32 @@ barcode_code39_pattern (char symbol)
         }
     }
     return 0u;
+}
+
+barcode_code39_status_t
+barcode_code39_decode_partial (uint32_t const * p_widths, uint32_t count,
+                               char * p_text, uint32_t text_size,
+                               bool * p_reversed)
+{
+    if ((count < PARTIAL_MIN_ELEMENTS) || (count > PARTIAL_MAX_ELEMENTS))
+    {
+        return BARCODE_CODE39_ERR_LENGTH;
+    }
+    if (text_size < 2u)
+    {
+        return BARCODE_CODE39_ERR_SPACE;
+    }
+    char const forward = partial_symbol(p_widths, count, false);
+    char const backward = partial_symbol(p_widths, count, true);
+    if (('\0' == forward) == ('\0' == backward))
+    {
+        /* Neither, or a reading each way: no way to tell. */
+        return BARCODE_CODE39_ERR_FRAME;
+    }
+    p_text[0] = ('\0' != forward) ? forward : backward;
+    p_text[1] = '\0';
+    *p_reversed = ('\0' == forward);
+    return BARCODE_CODE39_OK;
 }
 
 char const *
@@ -180,6 +212,39 @@ decode_direction (uint32_t const * p_widths, uint32_t count, bool b_reverse,
     }
     p_text[length] = '\0';
     return BARCODE_CODE39_OK;
+}
+
+/*
+ * The character beside a clean '*' in this reading direction, or '\0' if
+ * there is none or two disagree. Characters start on bars, so at even
+ * offsets from the first bar.
+ */
+static char
+partial_symbol (uint32_t const * p_widths, uint32_t count, bool b_reverse)
+{
+    char found = '\0';
+    for (uint32_t first = 0u; (first + PARTIAL_MIN_ELEMENTS) <= count;
+         first += COLOUR_STEP)
+    {
+        char left = '\0';
+        char right = '\0';
+        if ((BARCODE_CODE39_OK !=
+             read_character(p_widths, count, b_reverse, first, &left)) ||
+            (BARCODE_CODE39_OK != read_character(p_widths, count, b_reverse,
+                                                 first + CHARACTER_STRIDE,
+                                                 &right)) ||
+            ((FRAME == left) == (FRAME == right)))
+        {
+            continue;
+        }
+        char const symbol = (FRAME == left) ? right : left;
+        if (('\0' != found) && (found != symbol))
+        {
+            return '\0';
+        }
+        found = symbol;
+    }
+    return found;
 }
 
 /*

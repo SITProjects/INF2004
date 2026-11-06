@@ -50,6 +50,26 @@ barcode_code39_status_t barcode_code39_decode (uint32_t const * p_widths,
                                                bool * p_reversed);
 
 /**
+ * @brief Read a single-character barcode with one damaged end.
+ * The sensor often spoils the first or last character of a scan, more so on
+ * small barcodes. This accepts a clean '*' with a clean character right
+ * beside it, in a scan as long as "*X*" give or take that damage. Use it
+ * only after barcode_code39_decode() has failed.
+ * @param p_widths Element widths, as for barcode_code39_decode().
+ * @param count Number of widths.
+ * @param p_text Receives the one character, NUL-terminated.
+ * @param text_size Size of @p p_text in bytes.
+ * @param p_reversed Set true when the scan ran backwards over the symbol.
+ * @return BARCODE_CODE39_OK, BARCODE_CODE39_ERR_LENGTH for a scan of the
+ * wrong length, or BARCODE_CODE39_ERR_FRAME if no such pair exists or two
+ * readings disagree.
+ */
+barcode_code39_status_t
+barcode_code39_decode_partial (uint32_t const * p_widths, uint32_t count,
+                               char * p_text, uint32_t text_size,
+                               bool * p_reversed);
+
+/**
  * @brief Wide/narrow pattern of @p symbol, for tests: bit 8 is the first
  * element, 1 is wide.
  * @return The 9-bit pattern, or 0 for a character Code 39 lacks.

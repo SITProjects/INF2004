@@ -124,14 +124,20 @@ finish_scan (void)
         bool b_reversed = false;
         barcode_code39_status_t const status = barcode_code39_decode(
             scan.widths, scan.count, text, sizeof(text), &b_reversed);
-        if (BARCODE_CODE39_OK == status)
+        bool const b_partial =
+            (status != BARCODE_CODE39_OK) &&
+            (BARCODE_CODE39_OK ==
+             barcode_code39_decode_partial(scan.widths, scan.count, text,
+                                           sizeof(text), &b_reversed));
+        if ((BARCODE_CODE39_OK == status) || b_partial)
         {
             line_turn_t const turn = remote_command_turn(text);
             line_follow_set_turn(turn);
             tm_printf((UB *)"barcode: %s dir=%s elements=%u narrow=%u us "
-                            "turn=%s\n",
+                            "turn=%s%s\n",
                       text, b_reversed ? "rev" : "fwd", (UINT)scan.count,
-                      (UINT)scan.narrowest_us, line_track_turn_name(turn));
+                      (UINT)scan.narrowest_us, line_track_turn_name(turn),
+                      b_partial ? " partial" : "");
 #if TM_MQTT
             publish(text, b_reversed);
 #endif

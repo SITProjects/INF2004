@@ -175,6 +175,66 @@ feed_scan (barcode_scan_t * p_scan, uint32_t count, uint32_t start_us,
     return now;
 }
 
+/* Decode one logged scan partially; "" if it is refused. */
+static bool
+partial_is (uint32_t const * p_tenths, uint32_t count, char const * p_expected,
+            bool b_expected_reversed)
+{
+    char text[8] = "";
+    bool b_reversed = false;
+    for (uint32_t i = 0u; i < count; i++)
+    {
+        widths[i] = p_tenths[i] * 100u;
+    }
+    barcode_code39_status_t const status = barcode_code39_decode_partial(
+        widths, count, text, sizeof(text), &b_reversed);
+    if ('\0' == p_expected[0])
+    {
+        return status != BARCODE_CODE39_OK;
+    }
+    return (BARCODE_CODE39_OK == status) && (0 == strcmp(p_expected, text)) &&
+           (b_reversed == b_expected_reversed);
+}
+
+/* Scans the car logged on 2026-11-06: each failed the strict decoder. */
+static void
+test_partial (void)
+{
+    static uint32_t const small_rev[] = {
+        1459, 661, 389, 2046, 246, 587,  297, 814,  382, 2014, 1478, 714, 1570,
+        698,  373, 663, 460,  677, 1821, 642, 1626, 611, 486,  1978, 635};
+    static uint32_t const large_fwd[] = {
+        727, 748,  2171, 786, 2123, 854, 631,  823,  2080,
+        825, 579,  883,  602, 2342, 563, 835,  2195, 862,
+        544, 2408, 542,  902, 2007, 897, 2107, 878,  566};
+    static uint32_t const no_frame[] = {1602, 807,  546, 288,  1270, 347,  1139,
+                                        413,  329,  419, 636,  710,  294,  717,
+                                        1044, 645,  207, 752,  793,  1353, 154,
+                                        470,  1096, 320, 1276, 405,  513};
+    static uint32_t const too_short[] = {625,  2484, 556,  729,  2049, 723,
+                                         2209, 824,  693,  849,  654,  811,
+                                         2125, 833,  2368, 2586, 385};
+    bool const b_small =
+        partial_is(small_rev, sizeof(small_rev) / 4u, "F", true);
+    bool const b_large =
+        partial_is(large_fwd, sizeof(large_fwd) / 4u, "A", false);
+    bool const b_none = partial_is(no_frame, sizeof(no_frame) / 4u, "", false);
+    bool const b_short =
+        partial_is(too_short, sizeof(too_short) / 4u, "", false);
+    check("BT13 logged scans with one damaged end read F and A; one with no "
+          "clean '*', or too short, is refused",
+          b_small && b_large && b_none && b_short);
+
+    /* Too long to be one character: *AB* must not read as A. */
+    char text[8] = "";
+    bool b_reversed = false;
+    uint32_t const two = encode("*AB*", RATIO_X10, 0u);
+    bool const b_long = BARCODE_CODE39_ERR_LENGTH ==
+                        barcode_code39_decode_partial(
+                            widths, two, text, sizeof(text), &b_reversed);
+    check("BT14 a longer barcode is never read partially", b_long);
+}
+
 static void
 test_scan_assembly (void)
 {
@@ -380,6 +440,7 @@ main (void)
     test_jitter();
     test_rejects();
     test_scan_assembly();
+    test_partial();
     test_chatter();
     printf("%u failure(s)\n", failures);
     return (0u == failures) ? 0 : 1;
