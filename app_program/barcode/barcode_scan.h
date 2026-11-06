@@ -74,6 +74,16 @@ bool barcode_filter_edge (barcode_filter_t * p_filter, uint32_t edge_us,
                           bool b_black, bool * p_level);
 
 /**
+ * @brief Between scans, take the sensor's level as the current one.
+ * A scan dropped on a long black can leave a stale level, and the next
+ * barcode's first bar would then look like no change. Does nothing during
+ * a scan.
+ * @param p_scan Scan state.
+ * @param b_black Sensor level now.
+ */
+void barcode_scan_sync (barcode_scan_t * p_scan, bool b_black);
+
+/**
  * @brief Start idle at level @p b_black.
  * @param p_scan State to reset.
  * @param b_black Current level.

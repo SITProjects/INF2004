@@ -39,6 +39,15 @@ barcode_filter_edge (barcode_filter_t * p_filter, uint32_t edge_us,
 }
 
 void
+barcode_scan_sync (barcode_scan_t * p_scan, bool b_black)
+{
+    if (!p_scan->b_active)
+    {
+        p_scan->b_black = b_black;
+    }
+}
+
+void
 barcode_scan_init (barcode_scan_t * p_scan, bool b_black, uint32_t now_us)
 {
     p_scan->b_black = b_black;

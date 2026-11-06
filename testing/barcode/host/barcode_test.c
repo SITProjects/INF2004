@@ -318,6 +318,31 @@ test_chatter (void)
                barcode_code39_decode(scan.widths, scan.count, text,
                                      sizeof(text), &b_reversed)) &&
               (0 == strcmp("A", text)));
+
+    /* The same barcode after a dropped scan left the level black. */
+    uint32_t const clean = encode("*A*", RATIO_X10, 0u);
+    barcode_scan_init(&scan, true, 0u);
+    barcode_scan_sync(&scan, false);
+    uint32_t const end = feed_scan(&scan, clean, 1000u, &b_reversed);
+    (void)end;
+    check("BT10 a stale level between scans does not lose the first bar",
+          clean == scan.count);
+
+    /* A scan the car failed on: first bar thin, one wide bar short. */
+    static uint32_t const car_scan[] = {
+        636, 2148, 710,  736, 2083, 814,  2002, 871, 614, 816,
+        618, 1457, 1127, 511, 2090, 2456, 526,  964, 657, 889,
+        534, 2362, 566,  868, 2123, 889,  1900, 937, 589};
+    uint32_t const car_count = sizeof(car_scan) / sizeof(car_scan[0]);
+    for (uint32_t i = 0u; i < car_count; i++)
+    {
+        widths[i] = car_scan[i] * 100u;
+    }
+    barcode_code39_status_t const car_status = barcode_code39_decode(
+        widths, car_count, text, sizeof(text), &b_reversed);
+    check("BT11 a real scan reads *F* forwards, comparing bars with bars",
+          (BARCODE_CODE39_OK == car_status) && (0 == strcmp("F", text)) &&
+              !b_reversed);
 }
 
 int

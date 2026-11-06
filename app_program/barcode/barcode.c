@@ -102,6 +102,7 @@ read_task (INT stacd, void * p_exinf)
         {
             finish_scan();
         }
+        barcode_scan_sync(&scan, drv_barcode_black());
 #if BARCODE_EDGE_REPORT
         calibration_report();
 #endif

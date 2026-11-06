@@ -54,8 +54,9 @@
 #define BARCODE_QUIET_MAX_US 400000u
 
 /**
- * @brief In each character the 3rd-widest element must be at least this
- * many tenths of the 4th-widest, or the wide/narrow split is unclear.
+ * @brief In each character the narrowest wide bar must be at least this
+ * many tenths of the widest narrow bar, and the same for spaces, or the
+ * wide/narrow split is unclear.
  */
 #define BARCODE_WIDE_RATIO_X10 14u
 
