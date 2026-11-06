@@ -6,8 +6,8 @@
  * axes. Phase 2: calibrate at every start, then correct every reading.
  * Phase 3: pitch and roll. Phase 4: hump state and an event queue. Phase
  * 5: turn rate and turning state, from motion's wheel speeds. Phase 7:
- * collisions. Phase 9: hump height. Motion state follows in a later
- * phase.
+ * collisions. Phase 8: speed state. Phase 9: hump height. Phase 10: run
+ * summary.
  *
  * Call terrain_monitor_init() once, then terrain_monitor_update()
  * regularly (about every 10 ms) from one place only. Calibration then skips
@@ -17,9 +17,9 @@
  * are given out only once the calibration state is TERRAIN_CALIB_VALID.
  *
  * terrain_monitor_get_latest(), terrain_monitor_get_calibration(),
- * terrain_monitor_recalibrate(), terrain_monitor_poll_event() and
- * terrain_monitor_events_dropped() may be called from anywhere, including
- * other tasks.
+ * terrain_monitor_recalibrate(), terrain_monitor_poll_event(),
+ * terrain_monitor_events_dropped() and terrain_monitor_get_summary() may
+ * be called from anywhere, including other tasks.
  *
  * Copyright (c) 2026 10x Slackers
  * SPDX-License-Identifier: MIT
@@ -193,6 +193,26 @@ typedef struct
     float gravity_z_mps2; /**< Last attempt's average, Z. */
 } terrain_calib_info_t;
 
+/* Humps whose height the run summary keeps. */
+#define TERRAIN_SUMMARY_HUMPS 8u
+
+/* Words in a packed run summary. */
+#define TERRAIN_SUMMARY_WORDS 3u
+
+/* Bytes in a packed run summary message (terrain_monitor_summary_pack()). */
+#define TERRAIN_SUMMARY_BYTES 11u
+
+/**
+ * @brief Run summary, packed: humps finished, the highest, the height of
+ *        each of the first TERRAIN_SUMMARY_HUMPS, collisions and turns,
+ *        all since init. Read it only through the terrain_monitor_summary_*()
+ *        functions; the layout is private. An all-zero summary is empty.
+ */
+typedef struct
+{
+    uint32_t word[TERRAIN_SUMMARY_WORDS]; /**< Packed fields. */
+} terrain_summary_t;
+
 /* Public function declarations. */
 
 /**
@@ -337,6 +357,81 @@ terrain_status_t terrain_monitor_poll_event (terrain_event_t * p_out);
  * Safe to call from other tasks.
  */
 uint8_t terrain_monitor_events_dropped (void);
+
+/**
+ * @brief Copy the run summary.
+ * @param p_out Receives the summary; read it with the
+ *        terrain_monitor_summary_*() functions.
+ * @return TERRAIN_OK, TERRAIN_ERR_NOT_INIT or TERRAIN_ERR_PARAM.
+ *
+ * Counted as the events are made, so it is up to date at any time,
+ * whether or not anyone polls the events: each LEVEL event adds a hump
+ * and its height, each COLLISION a collision, each TURNING a turn.
+ * Counts stop at their largest value. Only terrain_monitor_init() clears
+ * it; a recalibration keeps it. Safe to call from other tasks while
+ * terrain_monitor_update() runs.
+ */
+terrain_status_t terrain_monitor_get_summary (terrain_summary_t * p_out);
+
+/**
+ * @brief Humps finished in a summary.
+ * @param p_summary Summary from terrain_monitor_get_summary().
+ * @return 0 to 15; stops at 15, so more than TERRAIN_SUMMARY_HUMPS shows
+ *         humps whose height was not kept. 0 if @p p_summary is NULL.
+ * The summary read functions only read their argument: any task may call
+ * them on its own copy.
+ */
+uint8_t
+terrain_monitor_summary_hump_count (terrain_summary_t const * p_summary);
+
+/**
+ * @brief Highest hump in a summary, including humps whose height was not
+ *        kept.
+ * @param p_summary Summary.
+ * @return mm, 0 to 255; 0 before the first hump or if @p p_summary is
+ *         NULL.
+ */
+uint8_t
+terrain_monitor_summary_highest_mm (terrain_summary_t const * p_summary);
+
+/**
+ * @brief Height of one hump in a summary.
+ * @param p_summary Summary.
+ * @param index 0 for the first hump, up to TERRAIN_SUMMARY_HUMPS - 1.
+ * @return mm, 0 to 255; 0 for a hump not finished yet, an index out of
+ *         range, or if @p p_summary is NULL.
+ */
+uint8_t terrain_monitor_summary_hump_mm (terrain_summary_t const * p_summary,
+                                         uint32_t index);
+
+/**
+ * @brief Collisions in a summary.
+ * @param p_summary Summary.
+ * @return 0 to 15; stops at 15. 0 if @p p_summary is NULL.
+ */
+uint8_t
+terrain_monitor_summary_collisions (terrain_summary_t const * p_summary);
+
+/**
+ * @brief Turns (TURNING events) in a summary.
+ * @param p_summary Summary.
+ * @return 0 to 127; stops at 127. 0 if @p p_summary is NULL.
+ */
+uint8_t terrain_monitor_summary_turns (terrain_summary_t const * p_summary);
+
+/**
+ * @brief Pack a summary into the message sent to other subsystems.
+ * @param p_summary Summary.
+ * @param p_bytes Receives TERRAIN_SUMMARY_BYTES bytes, little-endian:
+ *        bytes 0-2 hold hump count (bits 0-3), highest hump in mm (bits
+ *        4-11), collisions (bits 12-15) and turns (bits 16-22), bit 23 is
+ *        0; bytes 3-10 the height of humps 1 to 8 in mm, 0 if unused.
+ * @return TERRAIN_OK; TERRAIN_ERR_PARAM, with @p p_bytes unchanged, if
+ *         either pointer is NULL.
+ */
+terrain_status_t
+terrain_monitor_summary_pack (terrain_summary_t const * p_summary,
+                              uint8_t * p_bytes);
 
 /**
  * @brief Kind of an event.

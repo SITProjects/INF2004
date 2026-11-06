@@ -11,8 +11,9 @@
  * TER-U15 the hump height on made-up one-wheel ramps, TER-U19 the
  * collision state machine on made-up pushes and speeds, TER-U22 the
  * turn rate and turning state machine on made-up wheel speeds and turn
- * rates, and TER-U24 the speed state machine on made-up wheel speeds;
- * they need only the Pico. The other tests need the GY-511 connected;
+ * rates, TER-U24 the speed state machine on made-up wheel speeds, and
+ * TER-U26 the run summary on made-up events; they need only the Pico.
+ * The other tests need the GY-511 connected;
  * TER-U02, TER-U04 and TER-U13 also need the car standing still on level
  * ground during power-up. No test waits for a person: every wait is bounded.
  *
@@ -30,6 +31,7 @@
 #include "terrain_height.h"
 #include "terrain_monitor.h"
 #include "terrain_process.h"
+#include "terrain_summary.h"
 
 #if APP_TEST
 
@@ -92,6 +94,18 @@
 #define SPEED_NOISE_MM_S 140.0f
 #define SPEED_EVENTS_MAX 8u
 
+/* TER-U26 made-up events: event values (a lean in tenths of a degree, a
+ * push in tenths of a g) and hump heights (mm), one too tall for its
+ * 8-bit field; event counts past the summary's limits. */
+#define SUMMARY_LEAN_DDEG 80u
+#define SUMMARY_PUSH_DG 15u
+#define SUMMARY_SMALL_MM 5u
+#define SUMMARY_TALL_MM 300u
+#define SUMMARY_STEP_MM 10u     /* Kept humps of 10, 20, ... 80 mm. */
+#define SUMMARY_MORE_HUMPS 7u   /* 9 + 7 = 16: one past the 15 limit. */
+#define SUMMARY_MANY 130u       /* Past the 15 and 127 limits. */
+#define SUMMARY_UNTOUCHED 0xA5u /* A refused pack must leave this. */
+
 /* TER-U15 ramps under one wheel, driven at 1.2 mm a sample (120 mm/s,
  * the line-following speed). */
 #define HUMP_STEP_MM 1.2f
@@ -139,6 +153,13 @@ typedef struct
     uint32_t samples; /**< Length, samples. */
 } speed_part_t;
 
+/** @brief One made-up event for TER-U26. */
+typedef struct
+{
+    terrain_event_type_t type; /**< Kind. */
+    uint32_t value;            /**< Value, in the kind's unit. */
+} summary_event_t;
+
 /** @brief A TER-U15 trapezoid ramp under one wheel, mm. */
 typedef struct
 {
@@ -164,6 +185,11 @@ static bool rate_near (float dps, int32_t want_x10);
 static bool turn_trace_ok (void);
 static bool turn_keeps_hump_ok (void);
 static bool speed_trace_ok (void);
+static bool summary_mixed_ok (void);
+static bool summary_limits_ok (void);
+static bool summary_refuses_null_ok (void);
+static bool msg_is (terrain_summary_t const * p_summary,
+                    uint8_t const * p_want);
 #if TERRAIN_TEST_BENCH
 static bool bench_step (char const * p_instruction,
                         terrain_calib_info_t * p_out);
@@ -254,6 +280,14 @@ terrain_test (void)
     TEST_CHECK("TER-U24", speed_trace_ok(),
                "speed trace gives ACCELERATING, CRUISING, DECELERATING, "
                "STATIONARY only");
+
+    /* TER-U26: run summary on made-up events (no IMU or motors needed). */
+    TEST_CHECK("TER-U26", summary_mixed_ok(),
+               "only LEVEL, COLLISION and TURNING counted; 11-byte message");
+    TEST_CHECK("TER-U26", summary_limits_ok(),
+               "8 heights kept, 9th counted; counts stop at 15, 15, 127");
+    TEST_CHECK("TER-U26", summary_refuses_null_ok(),
+               "reset empties it; NULL refused without writing");
 
     /* TER-U13: still and level, so no hump and no events. */
     terrain_data_t still = {0};
@@ -651,6 +685,158 @@ speed_trace_ok (void)
         b_ok = (got[i] == expected[i]);
     }
     return b_ok;
+}
+
+/*
+ * TER-U26: a short run with every kind of event. Only the three humps
+ * (11, 9, 20 mm), one collision and two turns count. Word 0 is
+ * 3 | 20 << 4 | 1 << 12 | 2 << 16 = 0x021143, sent low byte first, then
+ * one byte per hump and 0 for the five unused slots.
+ */
+static bool
+summary_mixed_ok (void)
+{
+    static summary_event_t const run[] = {
+        {TERRAIN_EVENT_ASCENDING, SUMMARY_LEAN_DDEG},
+        {TERRAIN_EVENT_DESCENDING, SUMMARY_LEAN_DDEG},
+        {TERRAIN_EVENT_LEVEL, 11u},
+        {TERRAIN_EVENT_TURNING, 0u},
+        {TERRAIN_EVENT_STRAIGHT, 0u},
+        {TERRAIN_EVENT_COLLISION, SUMMARY_PUSH_DG},
+        {TERRAIN_EVENT_ACCELERATING, 0u},
+        {TERRAIN_EVENT_CRUISING, 0u},
+        {TERRAIN_EVENT_LEVEL, 9u},
+        {TERRAIN_EVENT_DECELERATING, 0u},
+        {TERRAIN_EVENT_STATIONARY, 0u},
+        {TERRAIN_EVENT_TURNING, 0u},
+        {TERRAIN_EVENT_STRAIGHT, 0u},
+        {TERRAIN_EVENT_NONE, 0u},
+        {TERRAIN_EVENT_LEVEL, 20u}};
+    static uint8_t const want[TERRAIN_SUMMARY_BYTES] = {
+        0x43u, 0x11u, 0x02u, 0x0Bu, 0x09u, 0x14u, 0u, 0u, 0u, 0u, 0u};
+
+    terrain_summary_t summary;
+    terrain_summary_reset(&summary);
+    for (uint32_t i = 0u; i < (sizeof(run) / sizeof(run[0])); i++)
+    {
+        terrain_summary_add(&summary, run[i].type, run[i].value);
+    }
+
+    return (terrain_summary_hump_count(&summary) == 3u) &&
+           (terrain_summary_hump_mm(&summary, 0u) == 11u) &&
+           (terrain_summary_hump_mm(&summary, 1u) == 9u) &&
+           (terrain_summary_hump_mm(&summary, 2u) == 20u) &&
+           (terrain_summary_hump_mm(&summary, 3u) == 0u) &&
+           (terrain_summary_highest_mm(&summary) == 20u) &&
+           (terrain_summary_collisions(&summary) == 1u) &&
+           (terrain_summary_turns(&summary) == 2u) && msg_is(&summary, want);
+}
+
+/*
+ * TER-U26: humps of 10 to 80 mm fill the 8 slots. A 9th, too tall for its
+ * field, is counted and lifts the highest to 255 but has no slot; 7 small
+ * ones take the count past 15 and do not lower the highest. 130
+ * collisions and turns. Every count stops at its top, so bits 0-22 of
+ * word 0 are all ones: FF FF 7F.
+ */
+static bool
+summary_limits_ok (void)
+{
+    static uint8_t const want[TERRAIN_SUMMARY_BYTES] = {
+        0xFFu, 0xFFu, 0x7Fu, 10u, 20u, 30u, 40u, 50u, 60u, 70u, 80u};
+
+    terrain_summary_t summary;
+    terrain_summary_reset(&summary);
+    for (uint32_t i = 1u; i <= TERRAIN_SUMMARY_HUMPS; i++)
+    {
+        terrain_summary_add(&summary, TERRAIN_EVENT_LEVEL, i * SUMMARY_STEP_MM);
+    }
+    terrain_summary_add(&summary, TERRAIN_EVENT_LEVEL, SUMMARY_TALL_MM);
+    bool const b_ninth =
+        (terrain_summary_hump_count(&summary) ==
+         (TERRAIN_SUMMARY_HUMPS + 1u)) &&
+        (terrain_summary_highest_mm(&summary) == TERRAIN_HEIGHT_MAX_MM) &&
+        (terrain_summary_hump_mm(&summary, TERRAIN_SUMMARY_HUMPS) == 0u);
+
+    for (uint32_t i = 0u; i < SUMMARY_MORE_HUMPS; i++)
+    {
+        terrain_summary_add(&summary, TERRAIN_EVENT_LEVEL, SUMMARY_SMALL_MM);
+    }
+    for (uint32_t i = 0u; i < SUMMARY_MANY; i++)
+    {
+        terrain_summary_add(&summary, TERRAIN_EVENT_COLLISION, SUMMARY_PUSH_DG);
+        terrain_summary_add(&summary, TERRAIN_EVENT_TURNING, 0u);
+    }
+
+    return b_ninth &&
+           (terrain_summary_hump_count(&summary) ==
+            TERRAIN_SUMMARY_HUMP_COUNT_MAX) &&
+           (terrain_summary_highest_mm(&summary) == TERRAIN_HEIGHT_MAX_MM) &&
+           (terrain_summary_collisions(&summary) ==
+            TERRAIN_SUMMARY_COLLISION_MAX) &&
+           (terrain_summary_turns(&summary) == TERRAIN_SUMMARY_TURN_MAX) &&
+           msg_is(&summary, want);
+}
+
+/*
+ * TER-U26: a reset empties a used summary (all-zero message). NULL is
+ * refused: reads give 0 and packs write nothing. The live getter checks
+ * NULL before setup, so this needs no IMU.
+ */
+static bool
+summary_refuses_null_ok (void)
+{
+    static uint8_t const empty[TERRAIN_SUMMARY_BYTES] = {0u};
+
+    terrain_summary_t summary;
+    terrain_summary_reset(&summary);
+    terrain_summary_add(&summary, TERRAIN_EVENT_LEVEL, 11u);
+    terrain_summary_add(&summary, TERRAIN_EVENT_TURNING, 0u);
+    terrain_summary_reset(&summary);
+    bool b_ok = msg_is(&summary, empty);
+
+    /* Must not crash. */
+    terrain_summary_reset(NULL);
+    terrain_summary_add(NULL, TERRAIN_EVENT_LEVEL, 11u);
+
+    uint8_t msg[TERRAIN_SUMMARY_BYTES];
+    for (uint32_t i = 0u; i < TERRAIN_SUMMARY_BYTES; i++)
+    {
+        msg[i] = SUMMARY_UNTOUCHED;
+    }
+    b_ok =
+        b_ok && (terrain_summary_hump_count(NULL) == 0u) &&
+        (terrain_summary_highest_mm(NULL) == 0u) &&
+        (terrain_summary_hump_mm(NULL, 0u) == 0u) &&
+        (terrain_summary_collisions(NULL) == 0u) &&
+        (terrain_summary_turns(NULL) == 0u) &&
+        (terrain_monitor_summary_pack(NULL, msg) == TERRAIN_ERR_PARAM) &&
+        (terrain_monitor_summary_pack(&summary, NULL) == TERRAIN_ERR_PARAM) &&
+        (terrain_monitor_get_summary(NULL) == TERRAIN_ERR_PARAM);
+    for (uint32_t i = 0u; b_ok && (i < TERRAIN_SUMMARY_BYTES); i++)
+    {
+        b_ok = (msg[i] == SUMMARY_UNTOUCHED);
+    }
+    return b_ok;
+}
+
+/* True if the summary packs to exactly the message p_want. */
+static bool
+msg_is (terrain_summary_t const * p_summary, uint8_t const * p_want)
+{
+    uint8_t msg[TERRAIN_SUMMARY_BYTES] = {0u};
+    if (!terrain_summary_pack(p_summary, msg))
+    {
+        return false;
+    }
+    for (uint32_t i = 0u; i < TERRAIN_SUMMARY_BYTES; i++)
+    {
+        if (msg[i] != p_want[i])
+        {
+            return false;
+        }
+    }
+    return true;
 }
 
 /*

@@ -8,7 +8,8 @@
  * fault changes. It is the one reader of the event queue: it prints every
  * hump, collision, turning and speed event as it happens (the LEVEL line
  * carries the hump's height, the COLLISION line the push) and any events
- * dropped from a full queue.
+ * dropped from a full queue. After a LEVEL, COLLISION or TURNING event it
+ * prints the run summary and its packed message.
  * With TERRAIN_DEBUG_PRINT_MS set it also prints pitch, roll, the hump
  * state, the turn rate and the speed state, or the calibration progress
  * until calibrated.
@@ -32,8 +33,9 @@ ID terrain_tid_monitor;
 
 /* Private function declarations. */
 static void monitor_task (INT stacd, void * p_exinf);
-static void print_events (void);
+static bool print_events (void);
 static void print_event (terrain_event_t const * p_event);
+static void print_summary (void);
 #if TERRAIN_DEBUG_PRINT_MS > 0
 static void print_status (void);
 static void print_calibrating (terrain_data_t const * p_data);
@@ -115,7 +117,10 @@ monitor_task (INT stacd, void * p_exinf)
             b_last_fault = b_fault;
         }
 
-        print_events();
+        if (print_events())
+        {
+            print_summary();
+        }
         uint8_t const dropped = terrain_monitor_events_dropped();
         if (dropped != last_dropped)
         {
@@ -137,24 +142,71 @@ monitor_task (INT stacd, void * p_exinf)
     }
 }
 
-/* Print and remove every queued event; the queue is filled only by
- * terrain_monitor_update() in this task, so it cannot grow meanwhile. */
-static void
+/*
+ * Print and remove every queued event; the queue is filled only by
+ * terrain_monitor_update() in this task, so it cannot grow meanwhile.
+ * Returns true if one of them is counted in the run summary.
+ */
+static bool
 print_events (void)
 {
+    bool b_counted = false;
     terrain_event_t event = {0u};
     for (;;)
     {
         if (terrain_monitor_poll_event(&event) != TERRAIN_OK)
         {
-            return;
+            return b_counted;
         }
-        if (terrain_monitor_event_type(&event) == TERRAIN_EVENT_NONE)
+        terrain_event_type_t const type = terrain_monitor_event_type(&event);
+        if (type == TERRAIN_EVENT_NONE)
         {
-            return;
+            return b_counted;
         }
         print_event(&event);
+        if ((type == TERRAIN_EVENT_LEVEL) ||
+            (type == TERRAIN_EVENT_COLLISION) ||
+            (type == TERRAIN_EVENT_TURNING))
+        {
+            b_counted = true;
+        }
     }
+}
+
+/*
+ * The run summary in one line: hump count, the kept heights in order, the
+ * highest, collisions and turns, then the packed message in hex, byte 0
+ * first, exactly as it would be sent.
+ */
+static void
+print_summary (void)
+{
+    terrain_summary_t summary = {{0u}};
+    uint8_t msg[TERRAIN_SUMMARY_BYTES] = {0u};
+    if ((terrain_monitor_get_summary(&summary) != TERRAIN_OK) ||
+        (terrain_monitor_summary_pack(&summary, msg) != TERRAIN_OK))
+    {
+        return;
+    }
+
+    uint32_t const humps = terrain_monitor_summary_hump_count(&summary);
+    uint32_t const kept =
+        (humps < TERRAIN_SUMMARY_HUMPS) ? humps : TERRAIN_SUMMARY_HUMPS;
+    tm_printf((UB *)"terrain: summary humps %d (mm:", (INT)humps);
+    for (uint32_t i = 0u; i < kept; i++)
+    {
+        tm_printf((UB *)" %d",
+                  (INT)terrain_monitor_summary_hump_mm(&summary, i));
+    }
+    tm_printf((UB *)") highest %d mm collisions %d turns %d msg",
+              (INT)terrain_monitor_summary_highest_mm(&summary),
+              (INT)terrain_monitor_summary_collisions(&summary),
+              (INT)terrain_monitor_summary_turns(&summary));
+    for (uint32_t i = 0u; i < TERRAIN_SUMMARY_BYTES; i++)
+    {
+        tm_printf((UB *)" %02X", (UINT)msg[i]);
+    }
+    tm_printf((UB *)"\n");
 }
 
 /*
