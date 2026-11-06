@@ -202,10 +202,10 @@ typedef struct
  *         terrain_monitor_status_text().
  * Does not wait for calibration: terrain_monitor_update() collects the
  * samples. Clears all counters. Raises the IMU fault (terrain_fault.h) if
- * setup fails and clears it if setup succeeds. Safe to call again to retry, for example
- * after plugging the sensor in, but only from the task that calls
- * terrain_monitor_update(); use terrain_monitor_recalibrate() from other
- * tasks.
+ * setup fails and clears it if setup succeeds. Safe to call again to
+ * retry, for example after plugging the sensor in, but only from the task
+ * that calls terrain_monitor_update(); use terrain_monitor_recalibrate()
+ * from other tasks.
  */
 terrain_status_t terrain_monitor_init (void);
 

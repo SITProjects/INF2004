@@ -12,9 +12,9 @@
  * collision state machine on made-up pushes and speeds, TER-U22 the
  * turn rate and turning state machine on made-up wheel speeds and turn
  * rates, and TER-U24 the speed state machine on made-up wheel speeds;
- * they need only the Pico. The other tests need the GY-511 connected; TER-U02, TER-U04
- * and TER-U13 also need the car standing still on level ground during
- * power-up. No test waits for a person: every wait is bounded.
+ * they need only the Pico. The other tests need the GY-511 connected;
+ * TER-U02, TER-U04 and TER-U13 also need the car standing still on level
+ * ground during power-up. No test waits for a person: every wait is bounded.
  *
  * The bench tests TER-U06 and TER-U07 are added only with
  * TERRAIN_TEST_BENCH set to 1 in terrain_config.h. They print what to do

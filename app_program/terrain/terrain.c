@@ -6,11 +6,12 @@
  * retrying while the sensor is missing, then calls
  * terrain_monitor_update() every 10 ms and reports calibration and IMU
  * fault changes. It is the one reader of the event queue: it prints every
- * hump, collision, turning and speed event as it happens (the LEVEL line carries
- * the hump's height, the COLLISION line the push) and any events dropped
- * from a full queue.
+ * hump, collision, turning and speed event as it happens (the LEVEL line
+ * carries the hump's height, the COLLISION line the push) and any events
+ * dropped from a full queue.
  * With TERRAIN_DEBUG_PRINT_MS set it also prints pitch, roll, the hump
- * state, the turn rate and the speed state, or the calibration progress until calibrated.
+ * state, the turn rate and the speed state, or the calibration progress
+ * until calibrated.
  */
 
 #include "terrain.h"
