@@ -21,6 +21,7 @@
 #include "terrain_hint.h"
 #include "terrain_platform.h"
 #include "terrain_process.h"
+#include "terrain_summary.h"
 
 /* Private types, constants, and macros. */
 
@@ -130,6 +131,7 @@ _Static_assert(TERRAIN_HEIGHT_MAX_MM == ((1u << HIGHEST_BITS) - 1u),
 _Static_assert(sizeof(terrain_event_queue_t) ==
                    ((TERRAIN_EVENT_QUEUE_LEN + 1u) * sizeof(uint32_t)),
                "event queue must be one word per event plus one");
+_Static_assert(sizeof(terrain_summary_t) == 12u, "summary must be 3 words");
 
 /* Static data. */
 
@@ -177,12 +179,14 @@ static terrain_height_limits_t const height_limits = {
  * Shared with other tasks; access only under terrain_platform_lock().
  * Only the caller of terrain_monitor_update() writes latest and calib_info;
  * other tasks write only b_recal_request. events is changed by both: the
- * update adds events and terrain_monitor_poll_event() removes them.
+ * update adds events and terrain_monitor_poll_event() removes them. Only
+ * the update writes summary.
  */
 static terrain_data_t latest;
 static terrain_calib_info_t calib_info;
 static bool b_recal_request = false;
 static terrain_event_queue_t events;
+static terrain_summary_t summary;
 
 static bool b_ready = false;
 
@@ -255,6 +259,7 @@ terrain_monitor_init (void)
     clear_calib_info(&calib_info);
     b_recal_request = false;
     terrain_event_queue_reset(&events);
+    terrain_summary_reset(&summary);
     terrain_platform_unlock(saved);
 
     own_put(OWN_FAIL_SHIFT, OWN_FAIL_BITS, 0u);
@@ -473,6 +478,63 @@ terrain_monitor_events_dropped (void)
     uint32_t const dropped = terrain_event_queue_dropped(&events);
     terrain_platform_unlock(saved);
     return (uint8_t)dropped;
+}
+
+terrain_status_t
+terrain_monitor_get_summary (terrain_summary_t * p_out)
+{
+    if (p_out == NULL)
+    {
+        return TERRAIN_ERR_PARAM;
+    }
+    if (!b_ready)
+    {
+        return TERRAIN_ERR_NOT_INIT;
+    }
+
+    uint32_t saved = terrain_platform_lock();
+    *p_out = summary;
+    terrain_platform_unlock(saved);
+    return TERRAIN_OK;
+}
+
+uint8_t
+terrain_monitor_summary_hump_count (terrain_summary_t const * p_summary)
+{
+    return terrain_summary_hump_count(p_summary);
+}
+
+uint8_t
+terrain_monitor_summary_highest_mm (terrain_summary_t const * p_summary)
+{
+    return terrain_summary_highest_mm(p_summary);
+}
+
+uint8_t
+terrain_monitor_summary_hump_mm (terrain_summary_t const * p_summary,
+                                 uint32_t index)
+{
+    return terrain_summary_hump_mm(p_summary, index);
+}
+
+uint8_t
+terrain_monitor_summary_collisions (terrain_summary_t const * p_summary)
+{
+    return terrain_summary_collisions(p_summary);
+}
+
+uint8_t
+terrain_monitor_summary_turns (terrain_summary_t const * p_summary)
+{
+    return terrain_summary_turns(p_summary);
+}
+
+terrain_status_t
+terrain_monitor_summary_pack (terrain_summary_t const * p_summary,
+                              uint8_t * p_bytes)
+{
+    return terrain_summary_pack(p_summary, p_bytes) ? TERRAIN_OK
+                                                    : TERRAIN_ERR_PARAM;
 }
 
 terrain_event_type_t
@@ -1064,8 +1126,9 @@ detect_collision (terrain_vec3_t const * p_accel, terrain_hint_t const * p_hint,
 }
 
 /*
- * Add an event to the queue; a LEVEL event also raises the highest hump.
- * The lock is held only for that.
+ * Add an event to the queue and count it in the run summary; the
+ * snapshot's highest hump follows the summary's. The lock is held only
+ * for that.
  */
 static void
 queue_event (terrain_event_type_t type, uint32_t value, uint32_t now_10ms)
@@ -1074,11 +1137,9 @@ queue_event (terrain_event_type_t type, uint32_t value, uint32_t now_10ms)
 
     uint32_t saved = terrain_platform_lock();
     terrain_event_queue_push(&events, event);
-    if ((type == TERRAIN_EVENT_LEVEL) &&
-        (value > data_get(&latest, W_STATE, HIGHEST_SHIFT, HIGHEST_BITS)))
-    {
-        data_put(&latest, W_STATE, HIGHEST_SHIFT, HIGHEST_BITS, value);
-    }
+    terrain_summary_add(&summary, type, value);
+    data_put(&latest, W_STATE, HIGHEST_SHIFT, HIGHEST_BITS,
+             terrain_summary_highest_mm(&summary));
     terrain_platform_unlock(saved);
 }
 
