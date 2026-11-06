@@ -62,11 +62,9 @@
  * a bend rather than drift, and turns the seek on. A touch of the other
  * sensor turns it off. On a straight touches alternate, or come far apart,
  * so the car holds its heading and barcodes read cleanly: always seeking
- * swung it +-8 degrees (2026-11-06 BAR-U06). A slower car touches again
- * sooner, so this scales with MOTION_FOLLOW_SPEED_MM_S: 80 at 80 mm/s. Left
- * at 80, 50 mm/s took a straight for a bend in LT22's model.
+ * swung it +-8 degrees (2026-11-06 BAR-U06).
  */
-#define LINE_CURVE_TOUCH_MM 50
+#define LINE_CURVE_TOUCH_MM 80
 
 /**
  * @brief In a bend, while both sensors read white, the target heading
