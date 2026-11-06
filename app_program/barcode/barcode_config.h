@@ -63,6 +63,15 @@
  */
 #define BARCODE_TRACE_WIDTHS 64u
 
+/**
+ * @brief 1 prints the sensor level and edge counts twice a second, and
+ * short scans with their widths. Always on in the IR_CALIBRATION image;
+ * set it locally to see them while the car drives past a barcode.
+ */
+#ifndef BARCODE_EDGE_REPORT
+#define BARCODE_EDGE_REPORT IR_CALIBRATION_ONLY
+#endif
+
 /** Barcode task period, in ms: one kernel tick. */
 #define BARCODE_POLL_MS 10u
 

@@ -34,7 +34,7 @@ static barcode_scan_t scan;
 static void read_task (INT stacd, void * p_exinf);
 static void finish_scan (void);
 static void trace_widths (void);
-#if IR_CALIBRATION_ONLY
+#if BARCODE_EDGE_REPORT
 static void calibration_report (void);
 #endif
 static uint32_t now_us (void);
@@ -102,7 +102,7 @@ read_task (INT stacd, void * p_exinf)
         {
             finish_scan();
         }
-#if IR_CALIBRATION_ONLY
+#if BARCODE_EDGE_REPORT
         calibration_report();
 #endif
         (void)tk_dly_tsk(BARCODE_POLL_MS);
@@ -158,7 +158,7 @@ finish_scan (void)
     else
     {
         /* Too short to be a barcode. */
-#if IR_CALIBRATION_ONLY
+#if BARCODE_EDGE_REPORT
         if (scan.count >= SHORT_SCAN_MIN_ELEMENTS)
         {
             tm_printf((UB *)"barcode: short scan elements=%u\n",
@@ -186,7 +186,7 @@ trace_widths (void)
 #endif
 }
 
-#if IR_CALIBRATION_ONLY
+#if BARCODE_EDGE_REPORT
 /*
  * For tuning the potentiometer: the level, and the edges since the last
  * report. raw stays near 0 on plain white or black when DO is clean; a
