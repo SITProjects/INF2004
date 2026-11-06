@@ -755,6 +755,33 @@ test_barcode_stop (void)
           b_bend_refused && b_bypass_refused && b_started && !out.b_slow &&
               (0u == out.reverse_mm));
 
+    /* Turning means a bend, and the barcode sensor crossing the tape. */
+    bool b_turning_refused = true;
+    for (int sign = -1; sign <= 1; sign += 2)
+    {
+        reset();
+        drive(false, false, samples_for(60));
+        unsigned int const samples = samples_for(96);
+        for (unsigned int i = 1u; i <= samples; i++)
+        {
+            in.heading_deg = (sign * 40 * (int)i) / (int)samples;
+            drive(false, false, 1u);
+        }
+        in.b_barcode = true;
+        drive(false, false, 1u);
+        in.b_barcode = false;
+        b_turning_refused =
+            b_turning_refused &&
+            (LINE_BARCODE_NONE == line_track_barcode_phase(&track));
+    }
+    drive(false, false, samples_for(120));
+    in.b_barcode = true;
+    drive(false, false, 1u);
+    in.b_barcode = false;
+    check("LT34 a car still turning takes no slow pass; once straight it does",
+          b_turning_refused &&
+              (LINE_BARCODE_BRAKE == line_track_barcode_phase(&track)));
+
     /* A slow pass spots a bend at the distance scaled for its speed. */
     reset();
     start_creep();

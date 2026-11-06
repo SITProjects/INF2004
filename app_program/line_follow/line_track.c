@@ -76,6 +76,8 @@ static void track_edge (line_track_t * p_track, line_track_input_t const * p_in,
                         uint32_t side, bool b_was_black);
 static void note_heading (line_track_t * p_track,
                           line_track_input_t const * p_in);
+static int32_t recent_turn (line_track_t const * p_track,
+                            line_track_input_t const * p_in);
 static bool crossed_out (line_track_t const * p_track,
                          line_track_input_t const * p_in, uint32_t side);
 static void note_touch (line_track_t * p_track, line_track_input_t const * p_in,
@@ -475,13 +477,19 @@ back_up (line_track_t * p_track, line_track_input_t const * p_in)
     }
 }
 
-/* Start a slow pass, only on plain tracking, and end one. */
+/*
+ * Start a slow pass, only on plain tracking, and end one. A car still
+ * turning is in a bend, and the barcode sensor crossing the tape looks like
+ * a barcode: on 2026-11-06 no pass begun after turning LINE_BEND_TREND_DEG
+ * read anything (6 of 6), and all 8 clean reads began within 5 degrees.
+ */
 static void
 watch_barcode (line_track_t * p_track, line_track_input_t const * p_in)
 {
     if (LINE_BARCODE_NONE == p_track->barcode_phase)
     {
         if (p_in->b_barcode && p_in->b_control && !p_track->b_curve &&
+            (abs_deg(recent_turn(p_track, p_in)) < LINE_BEND_TREND_DEG) &&
             (LINE_MODE_TRACK == p_track->mode) &&
             (JUNCTION_NONE == p_track->junction_phase))
         {
@@ -637,6 +645,13 @@ note_heading (line_track_t * p_track, line_track_input_t const * p_in)
     }
 }
 
+/* Degrees turned over the last stretch of travel, + is left. */
+static int32_t
+recent_turn (line_track_t const * p_track, line_track_input_t const * p_in)
+{
+    return p_in->heading_deg - p_track->trend_deg[p_track->trend_next];
+}
+
 /*
  * The tape has crossed from the other sensor and just left @p side, the
  * side the car has been turning towards: it ran across a bend, and the tape
@@ -649,12 +664,11 @@ crossed_out (line_track_t const * p_track, line_track_input_t const * p_in,
              uint32_t side)
 {
     uint32_t const other = (SIDE_LEFT == side) ? SIDE_RIGHT : SIDE_LEFT;
-    int32_t const turned =
-        p_in->heading_deg - p_track->trend_deg[p_track->trend_next];
     return !p_track->b_black[other] && p_track->b_both_seen &&
            (p_track->entry_side == other) &&
            (JUNCTION_NONE == p_track->junction_phase) &&
-           ((side_sign(side) * turned) >= LINE_BEND_TREND_DEG);
+           ((side_sign(side) * recent_turn(p_track, p_in)) >=
+            LINE_BEND_TREND_DEG);
 }
 
 /* A single-side touch begins: the same side again soon is a bend. */
