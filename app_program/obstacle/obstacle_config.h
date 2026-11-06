@@ -161,8 +161,9 @@
 /*
  * Width geometry from OBS-U71 (2026-11-06, 210 mm obstacle at 150, 200 and
  * 250 mm from the servo shaft). Pivot offset is signed, along the sensor's
- * radial measurement axis: 14 mm puts all three ranges within 1 mm.
- * TODO(calibrate): confirm it with a ruler, servo shaft to sensor face.
+ * radial measurement axis: 14 mm puts all three ranges within 1 mm. A ruler
+ * gives about 20 mm (sensor 80 mm, servo about 60 mm from the axle); the
+ * fit stays, as it also absorbs the provisional OBSTACLE_ECHO_OFFSET_MM.
  * A lateral mounting offset needs a separate coordinate transform.
  * A found edge lies half a step outside its hit; the edge correction then
  * moves it toward the obstacle centre. On a flat face at these ranges the
@@ -289,7 +290,7 @@
 #define OBSTACLE_AVOID_MAX_BACKOFFS 2u
 #define OBSTACLE_AVOID_BACKOFF_DELAY_MS 300u
 #define OBSTACLE_CAR_WIDTH_MM 127u        /* W, 12.7 cm, ruler. */
-#define OBSTACLE_CAR_AXLE_TO_PIVOT_MM 20u /* Axle midpoint to servo pivot. */
+#define OBSTACLE_CAR_AXLE_TO_PIVOT_MM 60u /* Axle midpoint to servo pivot. */
 #define OBSTACLE_CAR_REAR_MM 162u         /* Axle midpoint to rear bumper. */
 #define OBSTACLE_AVOID_LINE_OVERSHOOT_MM 130u /* IR row to axle, 13 cm. */
 #define OBSTACLE_AVOID_MARGIN_MM 60u
