@@ -195,6 +195,26 @@ def run(folder):
     check("D13 a refused change leaves the saved actions alone",
           [r["action"] for r in saved] == ["UTURN", "RIGHT"])
 
+    line = ("CAR v=80 l=70 r=90 d=1234 h=-5 m=5 os=2 ow=208 od=159 av=IDLE "
+            "p=12 ro=-3 tr=15 hu=1 co=2")
+    car.console(line)
+    settle(car)
+    state = get_state()
+    check("D16 a status line reaches the page as numbers and names",
+          state["car"]["v"] == 80 and state["car"]["h"] == -5
+          and state["car"]["av"] == "IDLE" and state["car_age_s"] < 2
+          and state["last_obstacle"] == {"width_mm": 208, "range_mm": 159})
+    car.console(line.replace("ow=208", "ow=0").replace("od=159", "od=0"))
+    car.console("CAR v=1 cut")
+    settle(car)
+    state = get_state()
+    check("D17 the last width stays after the path clears, and a cut line "
+          "changes nothing",
+          state["last_obstacle"]["width_mm"] == 208
+          and state["car"]["ow"] == 0 and state["car"]["v"] == 80)
+    check("D18 status lines stay out of the events",
+          not any("CAR" in event for event in state["events"]))
+
     car.close()
     time.sleep(0.3)
     state = get_state()

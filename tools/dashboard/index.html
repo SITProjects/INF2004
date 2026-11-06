@@ -47,6 +47,12 @@ button.big { padding: 20px 0; font-size: 1.25rem; font-weight: 700;
 .facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .fact span { display: block; color: var(--muted); font-size: .82rem; }
 .fact strong { font-size: 1.1rem; overflow-wrap: anywhere; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px; }
+.tiles.stale { opacity: .45; }
+.fact small { color: var(--muted); font-size: .8rem; }
+h3 { font-size: .82rem; color: var(--muted); margin: 14px 0 6px; font-weight: 600; }
+h3:first-of-type { margin-top: 0; }
 .row { display: grid; grid-template-columns: 90px 1fr auto; gap: 8px;
   margin-bottom: 8px; }
 input, select { font: inherit; padding: 7px 9px; border-radius: 8px;
@@ -88,6 +94,34 @@ li { overflow-wrap: anywhere; color: var(--muted); }
   </section>
 
   <section class="panel">
+    <h2>Car <small id="age" class="hint"></small></h2>
+    <div id="live">
+      <h3>Motion</h3>
+      <div class="tiles">
+        <div class="fact"><span>Speed</span><strong id="speed">–</strong></div>
+        <div class="fact"><span>Wheels (left, right)</span><strong id="wheels">–</strong></div>
+        <div class="fact"><span>Distance</span><strong id="distance">–</strong></div>
+        <div class="fact"><span>Heading</span><strong id="heading">–</strong></div>
+        <div class="fact"><span>Mode</span><strong id="mode">–</strong></div>
+      </div>
+      <h3>Obstacle</h3>
+      <div class="tiles">
+        <div class="fact"><span>Sensor</span><strong id="obstacle">–</strong></div>
+        <div class="fact"><span>Bypass</span><strong id="bypass">–</strong></div>
+        <div class="fact"><span>Last width</span><strong id="width">None yet</strong></div>
+        <div class="fact"><span>Last distance</span><strong id="range">None yet</strong></div>
+      </div>
+      <h3>IMU</h3>
+      <div class="tiles">
+        <div class="fact"><span>Tilt (pitch, roll)</span><strong id="tilt">–</strong></div>
+        <div class="fact"><span>Turn rate</span><strong id="turn">–</strong></div>
+        <div class="fact"><span>Humps</span><strong id="humps">–</strong></div>
+        <div class="fact"><span>Collisions</span><strong id="collisions">–</strong></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
     <h2>Barcode actions at the next junction</h2>
     <div id="rows"></div>
     <div class="foot">
@@ -105,6 +139,10 @@ li { overflow-wrap: anywhere; color: var(--muted); }
 const ACTIONS = [["STRAIGHT", "Straight"], ["LEFT", "Left"], ["RIGHT", "Right"],
                  ["UTURN", "U-turn"]];
 const MAX_ROWS = 8;
+const STALE_S = 2;
+const MODES = ["Stopped", "Moving", "Stalled", "Turning", "Timed out", "Following",
+               "Held"];
+const OBSTACLE = ["Scanning", "Clear", "Path found", "Blocked", "Unknown"];
 const $ = (id) => document.getElementById(id);
 let loaded = false;
 
@@ -171,6 +209,31 @@ async function command(name) {
   }
 }
 
+function showCar(state) {
+  const car = state.car;
+  const stale = !car || state.car_age_s > STALE_S;
+  $("live").querySelectorAll(".tiles").forEach(
+    (tiles) => tiles.classList.toggle("stale", stale));
+  $("age").textContent = !car ? "No data yet"
+    : stale ? `No data for ${Math.round(state.car_age_s)} s: these are old values`
+    : "";
+  const last = state.last_obstacle;
+  $("width").textContent = last ? `${last.width_mm} mm` : "None yet";
+  $("range").textContent = last ? `${last.range_mm} mm` : "None yet";
+  if (!car) { return; }
+  $("speed").textContent = `${car.v} mm/s`;
+  $("wheels").textContent = `${car.l}, ${car.r} mm/s`;
+  $("distance").textContent = `${(car.d / 1000).toFixed(2)} m`;
+  $("heading").textContent = `${car.h}°`;
+  $("mode").textContent = MODES[car.m] || `Mode ${car.m}`;
+  $("obstacle").textContent = OBSTACLE[car.os] || `Status ${car.os}`;
+  $("bypass").textContent = car.av;
+  $("tilt").textContent = `${(car.p / 10).toFixed(1)}°, ${(car.ro / 10).toFixed(1)}°`;
+  $("turn").textContent = `${car.tr}°/s`;
+  $("humps").textContent = car.hu;
+  $("collisions").textContent = car.co;
+}
+
 function show(state) {
   const online = state.car_connected;
   $("link").textContent = online ? "Car connected" : "Car offline";
@@ -184,6 +247,7 @@ function show(state) {
   $("barcode").textContent = state.barcode || "None yet";
   $("action").textContent = state.barcode_action || "–";
   $("junction").textContent = state.junction || "None yet";
+  showCar(state);
   const list = $("events");
   list.replaceChildren(...state.events.map((line) => {
     const item = document.createElement("li");

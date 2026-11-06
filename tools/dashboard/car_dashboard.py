@@ -44,21 +44,46 @@ state = {
     "junction": None,
     "events": collections.deque(maxlen=40),
     "map": [],
+    "car": None,  # The latest CAR line, as numbers and names.
+    "car_age_s": None,
+    "last_obstacle": None,  # Width and range of the last obstacle measured.
 }
+car_seen = 0.0  # time.monotonic() of the latest CAR line.
 car = {"conn": None, "topic": None}
 log_path = "car.log"
 
 
-def log(line):
+def log(line, quiet=False):
     stamp = time.strftime("%H:%M:%S")
     with lock, open(log_path, "a") as out:
         out.write(f"{stamp} {line}\n")
-    print(f"{stamp} {line}", flush=True)
+    if not quiet:
+        print(f"{stamp} {line}", flush=True)
+
+
+def note_car(message):
+    """Keep one CAR line: see app_program/communication/car_status.c."""
+    global car_seen
+    fields = dict(pair.split("=", 1) for pair in message.split()[1:])
+    values = {key: (value if key == "av" else int(value))
+              for key, value in fields.items()}
+    with lock:
+        state["car"] = values
+        car_seen = time.monotonic()
+        if values["ow"] > 0:
+            state["last_obstacle"] = {"width_mm": values["ow"],
+                                      "range_mm": values["od"]}
 
 
 def note_console(text):
     """Update the dashboard state from one console line."""
     message = text.split(" ", 1)[-1]
+    if message.startswith("CAR "):
+        try:
+            note_car(message)
+        except (KeyError, ValueError):
+            pass  # A cut line: the next is half a second away.
+        return
     with lock:
         match = re.search(r"remote: (?:ready|.*state) (stopped|running)", message)
         if match:
@@ -151,7 +176,7 @@ def handle_publish(conn, header, body):
     payload = body[position:].decode(errors="replace")
     if topic.endswith("/console"):
         for text in payload.splitlines():
-            log(f"console {text}")
+            log(f"console {text}", quiet=" CAR " in text)
             note_console(text)
     else:
         log(f"{topic} {payload}")
@@ -270,6 +295,8 @@ class Page(BaseHTTPRequestHandler):
         elif self.path == "/state":
             with lock:
                 snapshot = dict(state, events=list(state["events"]))
+                if car_seen:
+                    snapshot["car_age_s"] = time.monotonic() - car_seen
             self.reply_json(200, snapshot)
         else:
             self.reply_json(404, {"error": "Not found"})
