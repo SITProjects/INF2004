@@ -23,6 +23,7 @@ Functions that are already safe to call from any task:
 | `terrain_monitor_get_latest()` | `app_program/terrain/terrain_monitor.h` | latest acceleration snapshot |
 | `terrain_monitor_get_calibration()` | `app_program/terrain/terrain_monitor.h` | calibration details |
 | `terrain_monitor_recalibrate()` | `app_program/terrain/terrain_monitor.h` | restart calibration |
+| `remote_command_stopped()`, `remote_command_turn()` | `app_program/communication/remote_command.h` | dashboard run state and barcode actions (IF-10) |
 | `terrain_compass_get()` | `app_program/terrain/terrain_compass.h` | latest compass heading and raw field (IF-09) |
 | `connectivity_is_connected()` | `app_program/communication/connectivity.h` | Wi-Fi joined with an IP address |
 | `obstacle_get_state()` | `app_program/obstacle/obstacle.h` | latest obstacle result, geometry, stop request and bypass state (IF-07) |

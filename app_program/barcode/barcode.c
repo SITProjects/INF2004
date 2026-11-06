@@ -14,6 +14,7 @@
 #include "barcode_config.h"
 #include "barcode_scan.h"
 #include "drv_barcode.h"
+#include "../communication/remote_command.h"
 #include "../line_follow/line_follow.h"
 #if TM_MQTT
 #include "../communication/telemetry_queue.h"
@@ -38,7 +39,6 @@ static void trace_widths (void);
 static void calibration_report (void);
 #endif
 static uint32_t now_us (void);
-static line_turn_t turn_for (char const * p_text);
 #if TM_MQTT
 static void publish (char const * p_text, bool b_reversed);
 #endif
@@ -110,18 +110,6 @@ read_task (INT stacd, void * p_exinf)
     }
 }
 
-/*
- * Instruction for the next junction from a decoded barcode's text.
- * TODO(user): map each course barcode to LINE_TURN_LEFT, LINE_TURN_RIGHT
- * or LINE_TURN_UTURN here; anything not mapped goes straight on.
- */
-static line_turn_t
-turn_for (char const * p_text)
-{
-    (void)p_text;
-    return LINE_TURN_STRAIGHT;
-}
-
 /* Decode, report and drop the finished scan. */
 static void
 finish_scan (void)
@@ -138,7 +126,7 @@ finish_scan (void)
             scan.widths, scan.count, text, sizeof(text), &b_reversed);
         if (BARCODE_CODE39_OK == status)
         {
-            line_turn_t const turn = turn_for(text);
+            line_turn_t const turn = remote_command_turn(text);
             line_follow_set_turn(turn);
             tm_printf((UB *)"barcode: %s dir=%s elements=%u narrow=%u us "
                             "turn=%s\n",

@@ -305,6 +305,12 @@ on the console is also published, line by line with the uptime in ms, to
 cable. Every image then joins Wi-Fi, calibration images included, and a
 `TEST=1` image waits up to 20 s for the broker before its tests start.
 
+With `MQTT=1` the car waits for Start on the dashboard. Run
+`python3 tools/dashboard/car_dashboard.py <log file>`, which is the car's
+broker and log, and open http://localhost:8080 on the same computer to start
+and stop the car and set what each barcode does at a junction. The dashboard
+needs the car's Wi-Fi network; the Stop button is not an emergency stop.
+
 ---
 
 *micro T-Kernel 3.0 © Ken Sakamura / TRON Forum, distributed under the

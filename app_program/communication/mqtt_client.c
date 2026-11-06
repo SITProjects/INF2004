@@ -4,11 +4,14 @@
  *
  * All functions and callbacks execute in the radio task. Reconnects and
  * telemetry retries use elapsed milliseconds rather than extra lwIP timers.
+ * It also subscribes to the dashboard's command topic and hands each message
+ * to remote_command_handle().
  */
 #include "mqtt_client.h"
 
 #if TM_MQTT
 #include <stdint.h>
+#include "remote_command.h"
 #include "telemetry_queue.h"
 #include "../console_mirror/console_mirror_mqtt.h"
 #include "lwip/apps/mqtt.h"
@@ -23,6 +26,8 @@
 #define TELEMETRY_TOPIC MQTT_TOPIC "/telemetry"
 #define TELEMETRY_RETRY_MS 1000u
 #define TELEMETRY_DRAIN_MS 100u
+#define COMMAND_TOPIC MQTT_TOPIC "/cmd"
+#define COMMAND_MAX 40u
 
 /* Static data. */
 static mqtt_client_t * client;
@@ -35,6 +40,9 @@ static uintptr_t telemetry_token;
 static uint32_t telemetry_sequence;
 static uint32_t telemetry_attempt_ms;
 static uint32_t telemetry_wait_ms;
+static bool b_subscribed;
+static char command_text[COMMAND_MAX + 1u];
+static uint32_t command_length;
 
 /* Private function declarations. */
 static void connection_cb (mqtt_client_t * p_client, void * p_arg,
@@ -43,6 +51,13 @@ static void telemetry_service (uint32_t now_ms);
 static void telemetry_request_cb (void * p_arg, err_t result);
 static void telemetry_disconnected (void);
 static void telemetry_complete (void);
+static void command_subscribe (void);
+static void subscribe_cb (void * p_arg, err_t result);
+static void command_topic_cb (void * p_arg, char const * p_topic,
+                              u32_t total_length);
+static void command_data_cb (void * p_arg, u8_t const * p_data, u16_t length,
+                             u8_t flags);
+static char const * run_state_name (void);
 
 /* Public function definitions. */
 void
@@ -68,6 +83,10 @@ mqtt_client_service (bool b_network_up)
 
     if ((client != NULL) && mqtt_client_is_connected(client))
     {
+        if (!b_subscribed)
+        {
+            command_subscribe();
+        }
         telemetry_service(now_ms);
         return;
     }
@@ -208,6 +227,7 @@ connection_cb (mqtt_client_t * p_client, void * p_arg,
     (void)p_client;
     (void)p_arg;
     b_connecting = false;
+    b_subscribed = false;
     if (status == MQTT_CONNECT_ACCEPTED)
     {
         b_retry_wait = false;
@@ -221,6 +241,69 @@ connection_cb (mqtt_client_t * p_client, void * p_arg,
         tm_printf((UB *)"mqtt: connection status %d, retrying in 3s\n",
                   (int)status);
     }
+}
+
+/*
+ * The dashboard's commands. A failed request stays unsubscribed, so the
+ * next service pass tries again.
+ */
+static void
+command_subscribe (void)
+{
+    mqtt_set_inpub_callback(client, command_topic_cb, command_data_cb, NULL);
+    b_subscribed =
+        mqtt_subscribe(client, COMMAND_TOPIC, 0, subscribe_cb, NULL) == ERR_OK;
+}
+
+static void
+subscribe_cb (void * p_arg, err_t result)
+{
+    (void)p_arg;
+    if (result == ERR_OK)
+    {
+        tm_printf((UB *)"remote: ready %s\n", run_state_name());
+    }
+    else
+    {
+        b_subscribed = false;
+    }
+}
+
+static void
+command_topic_cb (void * p_arg, char const * p_topic, u32_t total_length)
+{
+    (void)p_arg;
+    (void)p_topic;
+    (void)total_length;
+    command_length = 0u;
+}
+
+/* Only the command topic is subscribed; too long a message reads as bad. */
+static void
+command_data_cb (void * p_arg, u8_t const * p_data, u16_t length, u8_t flags)
+{
+    (void)p_arg;
+    for (uint32_t i = 0u; (i < length) && (command_length < COMMAND_MAX); i++)
+    {
+        command_text[command_length] = (char)p_data[i];
+        command_length++;
+    }
+    if ((flags & MQTT_DATA_FLAG_LAST) == 0u)
+    {
+        return;
+    }
+    remote_command_result_t const result =
+        remote_command_handle(command_text, command_length);
+    command_text[command_length] = '\0';
+    tm_printf((UB *)"remote: %s %s, state %s\n",
+              (REMOTE_COMMAND_OK == result) ? "ok" : "refused", command_text,
+              run_state_name());
+}
+
+static char const *
+run_state_name (void)
+{
+    return remote_command_stopped() ? "stopped" : "running";
 }
 
 #endif /* TM_MQTT */

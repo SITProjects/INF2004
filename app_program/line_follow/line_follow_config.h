@@ -141,9 +141,9 @@
 #define LINE_UTURN_LEFT 1
 
 /**
- * @brief Turn at a junction no barcode has given an instruction for.
- * Keep LINE_TURN_STRAIGHT; set LINE_TURN_LEFT, _RIGHT or _UTURN only
- * locally to try a turn at every junction on the car (LINE-U08).
+ * @brief Turn at a junction no barcode has given an instruction for, and
+ * for a barcode with no action set on the dashboard. Keep
+ * LINE_TURN_STRAIGHT.
  */
 #define LINE_JUNCTION_DEFAULT_TURN LINE_TURN_STRAIGHT
 

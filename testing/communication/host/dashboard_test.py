@@ -1,0 +1,212 @@
+#!/usr/bin/env python3
+"""Drive tools/dashboard/car_dashboard.py with a fake car over real MQTT.
+
+The fake car connects, subscribes to <topic>/cmd and answers as the firmware
+does on <topic>/console. No hardware or browser needed.
+"""
+import json
+import pathlib
+import socket
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.error
+import urllib.request
+
+REPO = pathlib.Path(__file__).resolve().parents[3]
+TOPIC = "mtk3smp-pico/heartbeat"
+MQTT_PORT = 18841
+HTTP_PORT = 18080
+failures = 0
+
+
+def check(name, ok):
+    global failures
+    print(("PASS " if ok else "FAIL ") + name)
+    failures += 0 if ok else 1
+
+
+def length_bytes(count):
+    out = bytearray()
+    while True:
+        byte = count % 128
+        count //= 128
+        out.append(byte | (0x80 if count else 0))
+        if not count:
+            return bytes(out)
+
+
+class FakeCar:
+    def __init__(self, stopped=True):
+        self.sock = socket.create_connection(("127.0.0.1", MQTT_PORT))
+        self.sock.settimeout(0.3)
+        self.stopped = stopped
+        self.received = []
+        self.buffer = b""
+        name = b"fake"
+        connect = (b"\x00\x04MQTT\x04\x02\x00\x3c"
+                   + len(name).to_bytes(2, "big") + name)
+        self.sock.sendall(b"\x10" + length_bytes(len(connect)) + connect)
+        assert self.sock.recv(4)[0] == 0x20
+        topic = f"{TOPIC}/cmd".encode()
+        body = b"\x00\x01" + len(topic).to_bytes(2, "big") + topic + b"\x00"
+        self.sock.sendall(b"\x82" + length_bytes(len(body)) + body)
+        self.console(f"remote: ready {self.state()}")
+
+    def state(self):
+        return "stopped" if self.stopped else "running"
+
+    def console(self, text):
+        topic = f"{TOPIC}/console".encode()
+        body = (len(topic).to_bytes(2, "big") + topic
+                + f"1000 {text}\n".encode())
+        self.sock.sendall(b"\x30" + length_bytes(len(body)) + body)
+
+    def pump(self):
+        """Read what the broker sent, answering as the firmware would."""
+        try:
+            while True:
+                data = self.sock.recv(4096)
+                if not data:
+                    break
+                self.buffer += data
+        except socket.timeout:
+            pass
+        while len(self.buffer) >= 2:
+            kind, length = self.buffer[0] >> 4, self.buffer[1]
+            if len(self.buffer) < 2 + length:
+                break
+            body = self.buffer[2:2 + length]
+            self.buffer = self.buffer[2 + length:]
+            if kind != 3:
+                continue
+            topic_length = int.from_bytes(body[:2], "big")
+            topic = body[2:2 + topic_length].decode()
+            message = body[2 + topic_length:].decode()
+            self.received.append((topic, message))
+            if message in ("start", "stop"):
+                self.stopped = message == "stop"
+            self.console(f"remote: ok {message}, state {self.state()}")
+
+    def close(self):
+        self.sock.close()
+
+
+def get_state():
+    with urllib.request.urlopen(f"http://127.0.0.1:{HTTP_PORT}/state") as reply:
+        return json.load(reply)
+
+
+def post(path, body, header=True):
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{HTTP_PORT}{path}", json.dumps(body).encode(),
+        {"Content-Type": "application/json",
+         **({"X-Car-Dashboard": "1"} if header else {})})
+    try:
+        with urllib.request.urlopen(request) as reply:
+            return reply.status, json.load(reply)
+    except urllib.error.HTTPError as error:
+        return error.code, json.load(error)
+
+
+def settle(car):
+    time.sleep(0.2)
+    car.pump()
+    time.sleep(0.1)
+
+
+def main():
+    with tempfile.TemporaryDirectory() as folder:
+        folder = pathlib.Path(folder)
+        server = subprocess.Popen(
+            [sys.executable, REPO / "tools/dashboard/car_dashboard.py",
+             folder / "log.txt", "--mqtt-port", str(MQTT_PORT),
+             "--http-port", str(HTTP_PORT), "--map-file", folder / "map.json"],
+            stdout=subprocess.DEVNULL)
+        try:
+            time.sleep(0.7)
+            run(folder)
+        finally:
+            server.terminate()
+            server.wait()
+    print(f"{failures} failure(s)")
+    return 1 if failures else 0
+
+
+def run(folder):
+    status, _ = post("/command", {"command": "start"})
+    check("D01 with no car, Start is refused", status == 409)
+    status, reply = post("/map", {"map": [{"barcode": "f", "action": "LEFT"}]})
+    check("D02 with no car, actions are saved for later",
+          status == 200 and not reply["sent"]
+          and reply["map"][0]["barcode"] == "F")
+
+    car = FakeCar()
+    settle(car)
+    messages = [m for _, m in car.received]
+    check("D03 on connecting the car gets the actions, and no Start",
+          messages == ["clear", "map F LEFT"]
+          and all(t == f"{TOPIC}/cmd" for t, _ in car.received))
+    check("D04 the page shows the car connected and stopped",
+          get_state()["car_connected"] and get_state()["run"] == "stopped")
+
+    post("/command", {"command": "start"})
+    settle(car)
+    check("D05 Start reaches the car and the page shows it running",
+          ("start" in [m for _, m in car.received])
+          and get_state()["run"] == "running")
+    post("/command", {"command": "stop"})
+    settle(car)
+    check("D06 Stop reaches the car and the page shows it stopped",
+          car.stopped and get_state()["run"] == "stopped")
+
+    car.console("barcode: F dir=fwd elements=29 narrow=3 us turn=LEFT")
+    car.console("line JUNCTION LEFT t=1 h=2 d=3")
+    settle(car)
+    state = get_state()
+    check("D07 the page shows the barcode, its action and the junction",
+          state["barcode"] == "F" and state["barcode_action"] == "LEFT"
+          and state["junction"] == "LEFT")
+    check("D08 the car does not get its own console back",
+          all(t.endswith("/cmd") for t, _ in car.received))
+
+    car.received.clear()
+    post("/map", {"map": [{"barcode": "F", "action": "UTURN"},
+                          {"barcode": "A", "action": "RIGHT"}]})
+    settle(car)
+    check("D09 a change clears and resends every action",
+          [m for _, m in car.received]
+          == ["clear", "map F UTURN", "map A RIGHT"])
+
+    too_many = [{"barcode": chr(65 + i), "action": "LEFT"} for i in range(9)]
+    bad = [post("/map", {"map": rows})[0] for rows in (
+        [{"barcode": "TOOLONG", "action": "LEFT"}],
+        [{"barcode": "F G", "action": "LEFT"}],
+        [{"barcode": "F", "action": "SIDEWAYS"}],
+        [{"barcode": "F", "action": "LEFT"}, {"barcode": "F", "action": "RIGHT"}],
+        too_many)]
+    check("D10 bad actions are refused", bad == [400] * 5)
+    check("D11 unknown commands are refused",
+          post("/command", {"command": "explode"})[0] == 400)
+    check("D12 a request without the header is refused",
+          post("/command", {"command": "stop"}, header=False)[0] == 403)
+    saved = json.loads((folder / "map.json").read_text())
+    check("D13 a refused change leaves the saved actions alone",
+          [r["action"] for r in saved] == ["UTURN", "RIGHT"])
+
+    car.close()
+    time.sleep(0.3)
+    state = get_state()
+    check("D14 a lost car shows as offline with its state unknown",
+          not state["car_connected"] and state["run"] == "unknown")
+    car = FakeCar()
+    settle(car)
+    check("D15 a reset car stays stopped and gets the actions again",
+          car.stopped and [m for _, m in car.received]
+          == ["clear", "map F UTURN", "map A RIGHT"])
+    car.close()
+
+
+if __name__ == "__main__":
+    sys.exit(main())

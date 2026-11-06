@@ -31,6 +31,7 @@
     (OBSTACLE_AVOID_ENABLED && !APP_TEST &&                                    \
      (OBSTACLE_CALIBRATION_MODE == OBSTACLE_CAL_MODE_OFF))
 #if AVOID_ACTIVE
+#include "../communication/remote_command.h"
 #include "../motion/motion.h"
 #include "../motion/motion_config.h"
 #endif
@@ -125,6 +126,7 @@ static uint32_t log_time_ms (void);
 
 #endif
 #if AVOID_ACTIVE
+static bool remote_hold (void);
 static void avoid_loop (robot_obstacle_result_t scan, bool b_stop);
 static void apply_actions (obstacle_avoid_action_t const * p_act);
 #if TM_MQTT
@@ -435,6 +437,10 @@ edge_degrees (uint8_t index)
 static void
 avoid_loop (robot_obstacle_result_t scan, bool b_stop)
 {
+    if (remote_hold())
+    {
+        return;
+    }
     T_RFLG events = {0};
     ER const read = tk_ref_flg(motion_flg_event, &events);
     if (read < E_OK)
@@ -464,6 +470,45 @@ avoid_loop (robot_obstacle_result_t scan, bool b_stop)
 
     obstacle_avoid_action_t const act = obstacle_avoid_step(&avoid, &avoid_in);
     apply_actions(&act);
+}
+
+/*
+ * The dashboard's Stop holds the motors and pauses the bypass logic, so a
+ * stop is never taken for an obstacle. Start begins again from the power-on
+ * state, wherever the car stands: the next clear path releases it. A latched
+ * FAULT survives that, so Start cannot clear it.
+ * Returns true while stopped.
+ */
+static bool
+remote_hold (void)
+{
+    static bool b_held = false;
+    bool const b_stopped = remote_command_stopped();
+    if (b_stopped && !b_held)
+    {
+        app_check(tk_set_flg(motion_flg_ctrl, MOTION_FLG_INHIBIT),
+                  "obstacle remote stop");
+        obstacle_scan_set_watch(OBSTACLE_SCAN_WATCH_OFF);
+        obstacle_scan_set_side_scans(true);
+        tm_printf((UB *)"[%lu ms]obstacle: stopped by the dashboard\n",
+                  (unsigned long)log_time_ms());
+    }
+    else if (!b_stopped && b_held)
+    {
+        if (avoid.state != OBSTACLE_AVOID_FAULT)
+        {
+            obstacle_avoid_init(&avoid, &avoid_config, log_time_ms());
+            avoid_in = (obstacle_avoid_input_t){0};
+        }
+        tm_printf((UB *)"[%lu ms]obstacle: started by the dashboard\n",
+                  (unsigned long)log_time_ms());
+    }
+    else
+    {
+        /* No change. */
+    }
+    b_held = b_stopped;
+    return b_stopped;
 }
 
 /* Carry out the actions in their documented order and keep each result
