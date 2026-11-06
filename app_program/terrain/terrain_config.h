@@ -128,18 +128,18 @@
  * applied, of the car standing still on a floor checked to be flat.
  * Boot calibration compares against it to decide whether the car is
  * level. Record it again whenever the sensor is remounted.
- * Current values: bench reading with the loose sensor taped flat, chip
- * up, on a flat desk (TER-U06, 2026-11-03; 1.4 degrees from the
- * 2026-11-02 reading), before the sensor was mounted on the car.
+ * Current values: the sensor mounted on the car, car still on a flat
+ * floor (TER-U06, 2026-11-06, single-core SMP=0 TEST=1 build; matched
+ * the TER-U07 flat reading of the same run within 0.1 degree).
  */
 #ifndef TERRAIN_LEVEL_REF_X
-#define TERRAIN_LEVEL_REF_X (-0.366f)
+#define TERRAIN_LEVEL_REF_X (-0.170f)
 #endif
 #ifndef TERRAIN_LEVEL_REF_Y
-#define TERRAIN_LEVEL_REF_Y (0.922f)
+#define TERRAIN_LEVEL_REF_Y (-0.239f)
 #endif
 #ifndef TERRAIN_LEVEL_REF_Z
-#define TERRAIN_LEVEL_REF_Z (8.522f)
+#define TERRAIN_LEVEL_REF_Z (8.181f)
 #endif
 
 /* Samples in one calibration attempt: 200 is 2 s at 100 Hz. */
@@ -402,6 +402,60 @@
 #endif
 #if (TERRAIN_TURN_OFF_SAMPLES < 1) || (TERRAIN_TURN_OFF_SAMPLES > 31)
 #error "TERRAIN_TURN_OFF_SAMPLES must be 1 to 31"
+#endif
+
+/*
+ * Speed state (terrain_detect.h), from the wheel speed: the average of
+ * the sizes of motion's two wheel speeds, in mm/s, so a turn in place
+ * (wheels at +84 and -84 mm/s) counts as moving at 84 mm/s.
+ *
+ * Every TERRAIN_SPEED_WINDOW_SAMPLES samples (10 = 100 ms, the same span
+ * motion averages its speeds over) the speed is compared with the
+ * previous check. Below TERRAIN_SPEED_STOP_MM_S is stopped (motion's
+ * slowest drive is 80 mm/s); a rise or fall of at least
+ * TERRAIN_SPEED_CHANGE_MM_S is speeding up or slowing down (15 mm/s in
+ * 100 ms is 150 mm/s^2); less is cruising. The state changes once the
+ * same answer comes TERRAIN_SPEED_CONFIRM_CHECKS checks in a row
+ * (TERRAIN_SPEED_STOP_CHECKS for STATIONARY), so one noisy check does
+ * not count. TODO(car day): tune the change limit and the checks
+ * (TER-U25).
+ */
+#ifndef TERRAIN_SPEED_STOP_MM_S
+#define TERRAIN_SPEED_STOP_MM_S 20u
+#endif
+
+#ifndef TERRAIN_SPEED_CHANGE_MM_S
+#define TERRAIN_SPEED_CHANGE_MM_S 15u
+#endif
+
+#ifndef TERRAIN_SPEED_WINDOW_SAMPLES
+#define TERRAIN_SPEED_WINDOW_SAMPLES 10u
+#endif
+
+#ifndef TERRAIN_SPEED_CONFIRM_CHECKS
+#define TERRAIN_SPEED_CONFIRM_CHECKS 2u
+#endif
+
+#ifndef TERRAIN_SPEED_STOP_CHECKS
+#define TERRAIN_SPEED_STOP_CHECKS 3u
+#endif
+
+/* The speed field stops at 510 mm/s in 2 mm/s steps; the window count is
+ * 4 bits and the confirm count 2 bits. */
+#if (TERRAIN_SPEED_STOP_MM_S < 2) || (TERRAIN_SPEED_STOP_MM_S > 500)
+#error "TERRAIN_SPEED_STOP_MM_S must be 2 to 500"
+#endif
+#if (TERRAIN_SPEED_CHANGE_MM_S < 2) || (TERRAIN_SPEED_CHANGE_MM_S > 500)
+#error "TERRAIN_SPEED_CHANGE_MM_S must be 2 to 500"
+#endif
+#if (TERRAIN_SPEED_WINDOW_SAMPLES < 1) || (TERRAIN_SPEED_WINDOW_SAMPLES > 15)
+#error "TERRAIN_SPEED_WINDOW_SAMPLES must be 1 to 15"
+#endif
+#if (TERRAIN_SPEED_CONFIRM_CHECKS < 1) || (TERRAIN_SPEED_CONFIRM_CHECKS > 3)
+#error "TERRAIN_SPEED_CONFIRM_CHECKS must be 1 to 3"
+#endif
+#if (TERRAIN_SPEED_STOP_CHECKS < 1) || (TERRAIN_SPEED_STOP_CHECKS > 3)
+#error "TERRAIN_SPEED_STOP_CHECKS must be 1 to 3"
 #endif
 
 /*

@@ -1,6 +1,6 @@
 /**
  * @file terrain_detect.c
- * @brief Terrain detectors: the hump, collision and turning state
+ * @brief Terrain detectors: the hump, collision, turning and speed state
  *        machines.
  *
  * Copyright (c) 2026 10x Slackers
@@ -49,6 +49,22 @@
 #define SPEED_MM_S_PER_STEP 4.0f
 #define DG_PER_G 10.0f
 
+/* Speed word: speed state 2 | window count 4 | candidate 2 |
+ * confirm count 2 | speed at the last check 8 | spare 14. */
+#define SPEED_STATE_SHIFT 0u
+#define SPEED_STATE_BITS 2u
+#define WINDOW_SHIFT 2u
+#define WINDOW_BITS 4u
+#define CANDIDATE_SHIFT 6u
+#define CONFIRM_SHIFT 8u
+#define CONFIRM_BITS 2u
+#define LAST_SPEED_SHIFT 10u
+#define LAST_SPEED_BITS 8u
+
+/* Wheel speed in 2 mm/s steps. */
+#define WHEEL_STEPS_PER_MM_S 0.5f
+#define WHEEL_MM_S_PER_STEP 2.0f
+
 _Static_assert(TERRAIN_HUMP_DESCENDING < (1u << HUMP_BITS),
                "hump states must fit their field");
 _Static_assert(TERRAIN_DETECT_COUNT_MAX == ((1u << COUNT_BITS) - 1u),
@@ -65,6 +81,16 @@ _Static_assert(TERRAIN_TURN_TURNING < (1u << TURN_BITS),
                "turning states must fit their field");
 _Static_assert(TERRAIN_DETECT_TURN_COUNT_MAX == ((1u << TURN_COUNT_BITS) - 1u),
                "turn count limit must match the counter width");
+_Static_assert(TERRAIN_SPEED_DECELERATING < (1u << SPEED_STATE_BITS),
+               "speed states must fit their field");
+_Static_assert(TERRAIN_DETECT_WINDOW_MAX == ((1u << WINDOW_BITS) - 1u),
+               "window limit must match the window count width");
+_Static_assert(TERRAIN_DETECT_CONFIRM_MAX == ((1u << CONFIRM_BITS) - 1u),
+               "confirm limit must match the confirm count width");
+_Static_assert(((uint32_t)TERRAIN_EVENT_DECELERATING -
+                (uint32_t)TERRAIN_EVENT_STATIONARY) ==
+                   (uint32_t)TERRAIN_SPEED_DECELERATING,
+               "speed events must follow the speed states' order");
 
 /* Static data. */
 
@@ -242,6 +268,107 @@ terrain_detect_turn_state (uint32_t word)
 {
     return (terrain_turn_state_t)terrain_process_field_get(word, TURN_SHIFT,
                                                            TURN_BITS);
+}
+
+terrain_event_type_t
+terrain_detect_speed_step (uint32_t * p_word, float wheel_mm_s,
+                           terrain_speed_limits_t const * p_limits)
+{
+    if ((p_word == NULL) || (p_limits == NULL))
+    {
+        return TERRAIN_EVENT_NONE;
+    }
+
+    uint32_t word = *p_word;
+    uint32_t const counted =
+        terrain_process_field_get(word, WINDOW_SHIFT, WINDOW_BITS) + 1u;
+    if (counted < samples_capped(p_limits->window, TERRAIN_DETECT_WINDOW_MAX))
+    {
+        *p_word =
+            terrain_process_field_put(word, WINDOW_SHIFT, WINDOW_BITS, counted);
+        return TERRAIN_EVENT_NONE;
+    }
+
+    /* A check: the speed in 2 mm/s steps (NaN and negative give 0). */
+    uint32_t const code = terrain_process_encode_unsigned(
+        wheel_mm_s, WHEEL_STEPS_PER_MM_S, LAST_SPEED_BITS, false);
+    uint32_t const last =
+        terrain_process_field_get(word, LAST_SPEED_SHIFT, LAST_SPEED_BITS);
+    float const speed_mm_s = (float)code * WHEEL_MM_S_PER_STEP;
+    float const change_mm_s =
+        (float)((int32_t)code - (int32_t)last) * WHEEL_MM_S_PER_STEP;
+
+    terrain_speed_state_t answer = TERRAIN_SPEED_CRUISING;
+    if (speed_mm_s < p_limits->stop_mm_s)
+    {
+        answer = TERRAIN_SPEED_STATIONARY;
+    }
+    else if (change_mm_s >= p_limits->change_mm_s)
+    {
+        answer = TERRAIN_SPEED_ACCELERATING;
+    }
+    else if (change_mm_s <= -p_limits->change_mm_s)
+    {
+        answer = TERRAIN_SPEED_DECELERATING;
+    }
+    else
+    {
+        /* Moving at a steady speed: CRUISING. */
+    }
+
+    terrain_speed_state_t const state = terrain_detect_speed_state(word);
+    terrain_speed_state_t const held =
+        (terrain_speed_state_t)terrain_process_field_get(word, CANDIDATE_SHIFT,
+                                                         SPEED_STATE_BITS);
+    uint32_t confirm =
+        terrain_process_field_get(word, CONFIRM_SHIFT, CONFIRM_BITS);
+
+    /* Count checks in a row giving the same new answer. */
+    if (answer == state)
+    {
+        confirm = 0u;
+    }
+    else if ((answer == held) && (confirm > 0u))
+    {
+        confirm = terrain_process_count_add_sat(confirm, 1u, CONFIRM_BITS);
+    }
+    else
+    {
+        confirm = 1u;
+    }
+
+    uint8_t const checks = (answer == TERRAIN_SPEED_STATIONARY)
+                               ? p_limits->stop_checks
+                               : p_limits->confirm_checks;
+    terrain_speed_state_t next = state;
+    terrain_event_type_t event = TERRAIN_EVENT_NONE;
+    if ((confirm > 0u) &&
+        (confirm >= samples_capped(checks, TERRAIN_DETECT_CONFIRM_MAX)))
+    {
+        next = answer;
+        event = (terrain_event_type_t)((uint32_t)TERRAIN_EVENT_STATIONARY +
+                                       (uint32_t)answer);
+        confirm = 0u;
+    }
+
+    word = terrain_process_field_put(word, SPEED_STATE_SHIFT, SPEED_STATE_BITS,
+                                     (uint32_t)next);
+    word = terrain_process_field_put(word, WINDOW_SHIFT, WINDOW_BITS, 0u);
+    word = terrain_process_field_put(word, CANDIDATE_SHIFT, SPEED_STATE_BITS,
+                                     (uint32_t)answer);
+    word =
+        terrain_process_field_put(word, CONFIRM_SHIFT, CONFIRM_BITS, confirm);
+    word = terrain_process_field_put(word, LAST_SPEED_SHIFT, LAST_SPEED_BITS,
+                                     code);
+    *p_word = word;
+    return event;
+}
+
+terrain_speed_state_t
+terrain_detect_speed_state (uint32_t word)
+{
+    return (terrain_speed_state_t)terrain_process_field_get(
+        word, SPEED_STATE_SHIFT, SPEED_STATE_BITS);
 }
 
 terrain_event_type_t

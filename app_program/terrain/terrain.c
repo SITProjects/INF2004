@@ -6,11 +6,11 @@
  * retrying while the sensor is missing, then calls
  * terrain_monitor_update() every 10 ms and reports calibration and IMU
  * fault changes. It is the one reader of the event queue: it prints every
- * hump, collision and turning event as it happens (the LEVEL line carries
+ * hump, collision, turning and speed event as it happens (the LEVEL line carries
  * the hump's height, the COLLISION line the push) and any events dropped
  * from a full queue.
  * With TERRAIN_DEBUG_PRINT_MS set it also prints pitch, roll, the hump
- * state and the turn rate, or the calibration progress until calibrated.
+ * state, the turn rate and the speed state, or the calibration progress until calibrated.
  */
 
 #include "terrain.h"
@@ -160,7 +160,7 @@ print_events (void)
  * One line per event, with its time since boot in seconds (comes round
  * every 655.36 s). ASCENDING and DESCENDING carry the lean (size of roll)
  * then, LEVEL the hump's height, COLLISION the push in tenths of a g;
- * TURNING and STRAIGHT carry nothing.
+ * TURNING, STRAIGHT and the speed states carry nothing.
  */
 static void
 print_event (terrain_event_t const * p_event)
@@ -183,6 +183,11 @@ print_event (terrain_event_t const * p_event)
     {
         tm_printf((UB *)"terrain: %s", terrain_monitor_event_text(type));
     }
+    else if ((type >= TERRAIN_EVENT_STATIONARY) &&
+             (type <= TERRAIN_EVENT_DECELERATING))
+    {
+        tm_printf((UB *)"terrain: speed %s", terrain_monitor_event_text(type));
+    }
     else
     {
         tm_printf((UB *)"terrain: hump %s", terrain_monitor_event_text(type));
@@ -201,7 +206,7 @@ print_event (terrain_event_t const * p_event)
 }
 
 #if TERRAIN_DEBUG_PRINT_MS > 0
-/* One line of pitch, roll, hump state, highest hump and turning;
+/* One line of pitch, roll, hump state, highest hump, turning and speed;
  * calibration progress before. */
 static void
 print_status (void)
@@ -227,9 +232,12 @@ print_status (void)
               terrain_monitor_hump_text(terrain_monitor_data_hump_state(&data)),
               (INT)terrain_monitor_data_highest_hump_mm(&data));
     tm_printf(
-        (UB *)" turn %d deg/s %s\n",
+        (UB *)" turn %d deg/s %s",
         (INT)terrain_monitor_data_turn_rate_dps(&data),
         terrain_monitor_turn_text(terrain_monitor_data_turn_state(&data)));
+    tm_printf(
+        (UB *)" speed %s\n",
+        terrain_monitor_speed_text(terrain_monitor_data_speed_state(&data)));
 }
 
 /*
