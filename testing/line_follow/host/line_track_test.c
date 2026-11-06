@@ -1,6 +1,8 @@
 /* Drive the real line_track module with simulated digital samples. */
 #include "../../../app_program/line_follow/line_track.h"
 #include "../../../app_program/line_follow/line_follow_config.h"
+#include "../../../app_program/motion/motion_config.h"
+#include <math.h>
 #include <stdio.h>
 
 /* 120 mm/s sampled every 10 ms. */
@@ -423,6 +425,106 @@ test_pivot_overshoot (void)
               (38 == out.target_heading_deg));
 }
 
+/*
+ * LT19: the 2026-11-06 car8 failure as a model. Sensors 130 mm ahead of
+ * the axle, 20 mm apart over 18 mm tape; the car meets a left quarter
+ * circle of 200 mm radius turned 8 degrees right, as car8 did. The line
+ * task samples every 20 ms (a 10 ms delay rounds up to two ticks); motion
+ * acts on a request two samples late at MOTION_FOLLOW_KP times the error,
+ * capped, and the car's turn rate lags that by 0.25 s (the car kept
+ * turning about 0.3 s after a request ended). With a 25 degree lead, or
+ * at 120 mm/s, the model loses the curve the way the car did.
+ */
+#define SIM_AHEAD_MM 130.0
+#define SIM_HALF_GAP_MM 10.0
+#define SIM_HALF_TAPE_MM 9.0
+#define SIM_RADIUS_MM 200.0
+#define SIM_STEP_S 0.02
+#define SIM_LAG_S 0.25
+#define SIM_DELAY_SAMPLES 2u
+#define SIM_PI 3.14159265358979
+
+/* Distance from (x, y) to the tape: +x up to the origin, the arc about
+ * (0, R), then +y from (R, R). */
+static double
+tape_distance (double x, double y)
+{
+    if (x <= 0.0)
+    {
+        return fabs(y);
+    }
+    if (y >= SIM_RADIUS_MM)
+    {
+        return fabs(x - SIM_RADIUS_MM);
+    }
+    return fabs(sqrt((x * x) + ((y - SIM_RADIUS_MM) * (y - SIM_RADIUS_MM))) -
+                SIM_RADIUS_MM);
+}
+
+static void
+test_curve_model (void)
+{
+    reset();
+    double const speed = (double)MOTION_FOLLOW_SPEED_MM_S;
+    double const step_mm = speed * SIM_STEP_S;
+    /* Motion's cap: the follow limit, or where the inner wheel stops. */
+    double const cap =
+        fmin((double)MOTION_FOLLOW_MAX_DEG_S,
+             (2.0 * speed) / ((double)MOTION_TRACK_WIDTH_MM * SIM_PI / 180.0));
+    double x = -300.0 - SIM_AHEAD_MM; /* Sensors 300 mm before the arc. */
+    double y = 0.0;
+    double heading = -8.0; /* Degrees, + is left. */
+    double rate = 0.0;
+    double travel = 0.0;
+    double worst = 0.0;
+    double requests[SIM_DELAY_SAMPLES + 1u];
+    bool b_searched = false;
+    for (unsigned int k = 0u; k <= SIM_DELAY_SAMPLES; k++)
+    {
+        requests[k] = heading;
+    }
+    unsigned int const steps = (unsigned int)(1400.0 / step_mm);
+    for (unsigned int i = 0u; i < steps; i++)
+    {
+        double const rad = heading * SIM_PI / 180.0;
+        double const sx = x + (SIM_AHEAD_MM * cos(rad));
+        double const sy = y + (SIM_AHEAD_MM * sin(rad));
+        double const off = tape_distance(sx, sy);
+        worst = (off > worst) ? off : worst;
+        in.b_left_black = tape_distance(sx - (SIM_HALF_GAP_MM * sin(rad)),
+                                        sy + (SIM_HALF_GAP_MM * cos(rad))) <=
+                          SIM_HALF_TAPE_MM;
+        in.b_right_black = tape_distance(sx + (SIM_HALF_GAP_MM * sin(rad)),
+                                         sy - (SIM_HALF_GAP_MM * cos(rad))) <=
+                           SIM_HALF_TAPE_MM;
+        in.heading_deg = (int32_t)lround(heading);
+        in.distance_mm = (int32_t)travel;
+        out = line_track_update(&track, &in);
+        b_searched = b_searched || (LINE_MODE_TRACK != out.mode);
+
+        for (unsigned int k = SIM_DELAY_SAMPLES; k > 0u; k--)
+        {
+            requests[k] = requests[k - 1u];
+        }
+        requests[0] = (double)out.target_heading_deg;
+        double asked =
+            MOTION_FOLLOW_KP * (requests[SIM_DELAY_SAMPLES] - heading);
+        asked = fmin(fmax(asked, -cap), cap);
+        rate += (asked - rate) * SIM_STEP_S / SIM_LAG_S;
+        heading += rate * SIM_STEP_S;
+        x += step_mm * cos(heading * SIM_PI / 180.0);
+        y += step_mm * sin(heading * SIM_PI / 180.0);
+        travel += step_mm;
+    }
+    printf("  curve model: sensors at most %.0f mm off the tape, heading "
+           "%.0f deg, %.0f mm up the exit straight\n",
+           worst, heading, y - SIM_RADIUS_MM);
+    check("LT19 a 200 mm radius left curve, met 8 degrees off with the car's "
+          "turn lag, is followed onto the exit straight without a search",
+          (worst < 30.0) && (heading > 70.0) && (heading < 110.0) &&
+              (y > 600.0) && !b_searched);
+}
+
 int
 main (void)
 {
@@ -442,6 +544,7 @@ main (void)
     test_bend();
     test_junction_left();
     test_both_rise_together();
+    test_curve_model();
     test_junction_uturn();
     test_overshoot_across();
     printf("%u failure(s)\n", failures);

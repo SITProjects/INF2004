@@ -6,6 +6,11 @@
  * centred, and one reads black as the car drifts towards that side. Each
  * module's DO output is a comparator set by its potentiometer, so the
  * level flips at the tape edge (calibrate with IR_CALIBRATION=1).
+ *
+ * Geometry (user, 2026-11-06): the sensors are about a tape width apart,
+ * so there is little white margin each side, and about 130 mm ahead of
+ * the drive-wheel axle, so every degree the car turns swings them about
+ * 2.3 mm sideways: a 7 degree correction moves them a whole tape width.
  */
 
 #ifndef LINE_FOLLOW_CONFIG_H
@@ -44,13 +49,16 @@
 /**
  * @brief While one sensor reads black, the target heading leads the car's
  * heading by this much, in degrees, towards that side, so motion keeps
- * turning (at up to MOTION_FOLLOW_MAX_DEG_S) until the sensor reads white;
- * then the car holds the heading it reached. With MOTION_FOLLOW_KP 4,
- * 25 degrees asks for 100 deg/s, so the turn runs at the cap.
- * TODO(calibrate) on the tightest curve, then a 2 m straight: lower it if
- * the car weaves on straights, raise the cap if it runs wide on curves.
+ * turning until the sensor reads white; then the car holds the heading it
+ * reached. With MOTION_FOLLOW_KP 4, 10 degrees asks for 40 deg/s.
+ * The car keeps turning for about 0.3 s after the request changes (motor
+ * lag, 2026-11-06 car8), and with the sensors 130 mm ahead a 25 degree
+ * lead swung them past the tape and lost a 200 mm curve. In LT19's model
+ * of that lag, 10 degrees at 80 mm/s held every curve of 200 mm radius or
+ * more; 8 and 12 did worse.
+ * TODO(calibrate) on the tightest curve, then a 2 m straight.
  */
-#define LINE_LEAD_DEG 25
+#define LINE_LEAD_DEG 10
 
 /**
  * @brief Travel, in mm, over which the tracker averages how fast the
@@ -67,7 +75,8 @@
  * @brief Lead, in mm of travel, of the learned bend: the target heading is
  * the heading plus the average rate times this. The car then turns at
  * about MOTION_FOLLOW_KP x rate x this deg/s; MOTION_FOLLOW_SPEED_MM_S /
- * MOTION_FOLLOW_KP (120 / 4 = 30 mm) makes that the bend's own rate.
+ * MOTION_FOLLOW_KP (80 / 4 = 20 mm) would be the bend's own rate, but 30
+ * also covers the turn lag and did better in LT19's model.
  */
 #define LINE_CURVE_LEAD_MM 30
 
@@ -107,13 +116,12 @@
 
 /**
  * @brief Travel, in mm, from a junction's first black to the point where
- * the car turns: about the sensors' distance ahead of the wheel axle plus
- * half the tape width, so the car pivots over the crossing. A turning
- * junction drives this far on the heading it met the junction with,
- * ignoring the sensors; straight on keeps tracking.
- * TODO(calibrate): measure the sensors' distance ahead of the axle.
+ * the car turns: the sensors' distance ahead of the wheel axle (about 130
+ * mm) plus half the tape width, so the car pivots over the crossing. A
+ * turning junction drives this far on the heading it met the junction
+ * with, ignoring the sensors; straight on keeps tracking.
  */
-#define LINE_JUNCTION_CENTRE_MM 60
+#define LINE_JUNCTION_CENTRE_MM 140
 
 /**
  * @brief A junction turn pivots towards the new line (90 degrees, or 180

@@ -7,5 +7,5 @@ trap 'rm -rf "$test_tmp"' EXIT HUP INT TERM
 ${CC:-cc} -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -g \
     "$repo_root/testing/line_follow/host/line_track_test.c" \
     "$repo_root/app_program/line_follow/line_track.c" \
-    -o "$test_tmp/line-track"
+    -lm -o "$test_tmp/line-track"
 "$test_tmp/line-track"

@@ -38,8 +38,8 @@
 
 /**
  * @brief Longest white gap, or black bar, inside a scan, in us; also the
- * quiet gap before the narrowest element is known. 400 ms is 48 mm at
- * 120 mm/s.
+ * quiet gap before the narrowest element is known. 400 ms is 32 mm at
+ * the 80 mm/s follow speed.
  */
 #define BARCODE_QUIET_MAX_US 400000u
 

@@ -164,10 +164,14 @@
 /*
  * Chassis speed of line following, in mm/s. The MBF_MOTION_CMD packing
  * has no speed field, so tMotion follows at this speed.
- * TODO(calibrate) with MOT-U31: start slow; raise only once the line gains
- * hold the tightest curve of the course.
+ * 80 since 2026-11-06: the car keeps turning about 0.3 s after a turn
+ * request ends and the line sensors sit 130 mm ahead, so at 120 mm/s each
+ * correction overshot the tape and a 200 mm curve was lost (LINE-U04
+ * LT19 models it; 100 mm/s still failed there).
+ * TODO(calibrate) with MOT-U31: raise only once the line gains hold the
+ * tightest curve of the course.
  */
-#define MOTION_FOLLOW_SPEED_MM_S 120u
+#define MOTION_FOLLOW_SPEED_MM_S 80u
 
 /*
  * Heading PI loop of line following. It turns the error between the
@@ -186,11 +190,10 @@
 /*
  * Largest turn rate the heading loop asks for, in deg/s: the tightest arc
  * while a sensor reads black. Each wheel's setpoint changes by
- * rate * track / 2 (about 84 mm/s at 90 deg/s), so at
- * MOTION_FOLLOW_SPEED_MM_S the inner wheel slows to about 36 mm/s and the
- * car turns on a radius of about 76 mm. The 2026-11-06 curve (about
- * 200 mm radius) needs 34 deg/s at 120 mm/s; 30 could not hold it.
- * Following also caps the rate at 2 * speed / track (128 deg/s).
+ * rate * track / 2 (about 84 mm/s at 90 deg/s). Following also caps the
+ * rate at 2 * speed / track (82 deg/s at 80 mm/s), where the inner wheel
+ * stops. The 2026-11-06 curve (about 200 mm radius, sensors 130 mm ahead)
+ * needs about 30 deg/s at 80 mm/s.
  */
 #define MOTION_FOLLOW_MAX_DEG_S 90.0f
 
