@@ -25,8 +25,8 @@
  * @brief An edge this soon after the last one, in us, is chatter: the
  * module has no hysteresis, so DO flips for a while as a bar edge crosses
  * its threshold (1 to 3 us apart, and flickers of 6 ms, 2026-11-06). 10 ms
- * is 0.8 mm at the 80 mm/s follow speed; the narrowest real bar, on the
- * smaller barcode, reads 25 ms.
+ * is 0.5 mm at the 50 mm/s follow speed; the narrowest real gap read 12 ms
+ * at 80 mm/s, so about 19 ms at 50.
  */
 #define BARCODE_MIN_PULSE_US 10000u
 
@@ -41,13 +41,14 @@
 
 /**
  * @brief A white gap longer than this, in us, ends a scan (the quiet zone),
- * and so does a longer black, at the bar before it. 400 ms is 32 mm at the
- * 80 mm/s follow speed; wide white gaps read 240 ms. It is fixed because a
- * limit based on the narrowest element ended scans early: one flicker at
+ * and so does a longer black, at the bar before it. 640 ms is 32 mm at the
+ * 50 mm/s follow speed, so change it with MOTION_FOLLOW_SPEED_MM_S; wide
+ * white gaps are 19 mm, 384 ms here. It is fixed because a limit based on
+ * the narrowest element ended scans early: one flicker at
  * the first bar shrank it below a normal gap (2026-11-06, the first 300 ms
  * of a barcode was lost on both sizes).
  */
-#define BARCODE_QUIET_MAX_US 400000u
+#define BARCODE_QUIET_MAX_US 640000u
 
 /**
  * @brief In each character the narrowest wide bar must be at least this

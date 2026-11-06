@@ -164,12 +164,14 @@
 /*
  * Chassis speed of line following, in mm/s. The MBF_MOTION_CMD packing
  * has no speed field, so tMotion follows at this speed.
- * 80 since 2026-11-06: chosen on LINE-U04 LT19's model of the car, where
- * 100 and 120 mm/s lost a 200 mm curve. Not yet confirmed on the car.
+ * 80 held the curves on the car (2026-11-06, car13); 100 and 120 lost a
+ * 200 mm curve in LINE-U04 LT19's model. 50 since 2026-11-06, the user's
+ * choice for barcode reading; not yet run on the car.
+ * BARCODE_QUIET_MAX_US is a distance at this speed: change them together.
  * TODO(calibrate) with MOT-U31: raise only once the line gains hold the
  * tightest curve of the course.
  */
-#define MOTION_FOLLOW_SPEED_MM_S 80u
+#define MOTION_FOLLOW_SPEED_MM_S 50u
 
 /*
  * Heading PI loop of line following. It turns the error between the
@@ -177,21 +179,23 @@
  * reads black, held while both read white) and the odometry heading into
  * a turn rate for both wheels' setpoints, so the car arcs while it
  * corrects and runs straight otherwise. KP: deg/s per deg of error. KI:
- * deg/s per deg of error per second.
+ * deg/s per deg of error per second. Both scale with
+ * MOTION_FOLLOW_SPEED_MM_S, so the car turns the same amount per mm: 4 and
+ * 0.5 held the curves at 80 mm/s. Left at 4, 50 mm/s weaved in LT22's model.
  * TODO(calibrate) with MOT-U41/U42, then on a 2 m straight: raise KP until
  * a held heading settles within about 40 mm without overshoot; raise KI
  * only if the car holds a steady offset from the target.
  */
-#define MOTION_FOLLOW_KP 4.0f
-#define MOTION_FOLLOW_KI 0.5f
+#define MOTION_FOLLOW_KP 2.5f
+#define MOTION_FOLLOW_KI 0.31f
 
 /*
  * Largest turn rate the heading loop asks for, in deg/s: the tightest arc
  * while a sensor reads black. Each wheel's setpoint changes by
  * rate * track / 2 (about 84 mm/s at 90 deg/s). Following also caps the
- * rate at 2 * speed / track (82 deg/s at 80 mm/s), where the inner wheel
+ * rate at 2 * speed / track (51 deg/s at 50 mm/s), where the inner wheel
  * stops. The 2026-11-06 curve (about 200 mm radius, sensors 130 mm ahead)
- * needs about 30 deg/s at 80 mm/s.
+ * needs about 19 deg/s at 50 mm/s.
  */
 #define MOTION_FOLLOW_MAX_DEG_S 90.0f
 
