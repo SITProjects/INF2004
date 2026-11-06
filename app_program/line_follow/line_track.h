@@ -24,6 +24,10 @@
  * black one after the other is the tape crossing the sensors at an angle,
  * usually a correction that turned a little too far: tracking carries on.
  *
+ * When the barcode reader sees a barcode coming, the car brakes, backs up
+ * LINE_BARCODE_REVERSE_MM to before it, and tracks on at the slow speed until
+ * the reader is done. A bend, junction or search refuses this.
+ *
  * The module is pure: no kernel calls, so host tests can drive it. Only
  * the line task calls it.
  */
@@ -55,6 +59,15 @@ typedef enum
     LINE_TURN_UTURN         /**< Pivot round onto the route behind. */
 } line_turn_t;
 
+/** @brief Where a slow pass over a barcode has got to. */
+typedef enum
+{
+    LINE_BARCODE_NONE = 0, /**< Normal speed. */
+    LINE_BARCODE_BRAKE,    /**< Stopping. */
+    LINE_BARCODE_BACK,     /**< Backing up to before the barcode. */
+    LINE_BARCODE_CREEP     /**< Tracking slowly over it. */
+} line_barcode_phase_t;
+
 /** @brief One decision for motion (IF-04). */
 typedef struct
 {
@@ -67,6 +80,9 @@ typedef struct
                                      its detection until both sensors
                                      clear (straight on) or tracking
                                      resumes on the new line (a turn). */
+    uint16_t reverse_mm;        /**< Above 0: drive this far backward, once,
+                                     in place of the mode. */
+    bool b_slow;                /**< Track at the barcode speed. */
 } line_request_t;
 
 /** @brief One sample and the motion state it was taken in. */
@@ -79,7 +95,10 @@ typedef struct
     bool b_control;      /**< Motion follows line requests (not a queued
                               command, inhibit or bypass). */
     bool b_turning;      /**< Motion is pivoting (mode TURN). */
+    bool b_moving;       /**< Motion is on a distance move (mode MOVE). */
     line_turn_t turn;    /**< Instruction for the next junction. */
+    bool b_barcode;      /**< A barcode has just come into view. */
+    bool b_barcode_done; /**< The reader has finished with it. */
 } line_track_input_t;
 
 /** @brief Tracking state. Callers allocate it; fields are private. */
@@ -112,6 +131,10 @@ typedef struct
     uint32_t search_phase; /* 0 first side, 1 the other side. */
     uint32_t search_samples;
     bool b_search_hit; /* Search-side sensor has read black. */
+    line_barcode_phase_t barcode_phase;
+    uint32_t barcode_samples; /* Samples in this phase. */
+    bool b_back_started;      /* The reverse has begun. */
+    int32_t barcode_mm;       /* Travel when the creep began. */
 } line_track_t;
 
 /* Public function declarations. */
@@ -133,6 +156,16 @@ void line_track_init (line_track_t * p_track, line_track_input_t const * p_in);
  */
 line_request_t line_track_update (line_track_t * p_track,
                                   line_track_input_t const * p_in);
+
+/**
+ * @brief Where a slow pass over a barcode has got to.
+ * @param p_track State from line_track_init().
+ * @return The current phase.
+ */
+line_barcode_phase_t line_track_barcode_phase (line_track_t const * p_track);
+
+/** @brief Short name of @p phase for logs ("BRAKE", "BACK", ...). */
+char const * line_track_barcode_name (line_barcode_phase_t phase);
 
 /** @brief Short name of @p mode for logs ("TRACK", "SEARCH_L", ...). */
 char const * line_track_mode_name (line_mode_t mode);

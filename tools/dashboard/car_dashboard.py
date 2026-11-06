@@ -31,7 +31,7 @@ ACTIONS = ("STRAIGHT", "LEFT", "RIGHT", "UTURN")
 MAP_SIZE = 8  # REMOTE_MAP_SIZE
 BARCODE_TEXT = re.compile(r"^[0-9A-Z.$/+%-]{1,3}$")  # REMOTE_TEXT_MAX, no space
 SHOWN_EVENT = re.compile(
-    r"remote: |barcode: (FAIL|\S+ dir=)|line (JUNCTION|SEARCH|STOP)"
+    r"remote: |barcode: (FAIL|\S+ dir=)|line (JUNCTION|SEARCH|STOP|BARCODE)"
     r"|obstacle: (stopped|started|avoid |width )|mqtt: |terrain: COLLISION")
 
 EDGE_READOUT = re.compile(r"barcode: B=\d raw=\d+ kept=(\d+)")

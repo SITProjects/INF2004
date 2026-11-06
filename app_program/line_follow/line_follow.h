@@ -35,4 +35,25 @@ extern ID line_follow_tid_sense;
  */
 void line_follow_set_turn (line_turn_t turn);
 
+/**
+ * @brief Say a barcode has come into view: slow down for it.
+ * @note Any task, any core. The line task takes it on its next sample, and
+ *       ignores it unless plainly tracking. Called by the barcode subsystem.
+ */
+void line_follow_barcode_ahead (void);
+
+/**
+ * @brief Say the barcode has been read, or has passed: back to full speed.
+ * @note Any task, any core. Called by the barcode subsystem.
+ */
+void line_follow_barcode_done (void);
+
+/**
+ * @brief Where a slow pass over a barcode has got to.
+ * @return LINE_BARCODE_NONE unless a pass is under way.
+ * @note Any task, any core; never waits. Bar widths mean nothing during
+ *       BRAKE and BACK, as the car is not moving forward at a steady speed.
+ */
+line_barcode_phase_t line_follow_barcode_phase (void);
+
 #endif /* LINE_FOLLOW_H */

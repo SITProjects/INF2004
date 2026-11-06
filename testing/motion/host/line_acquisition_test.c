@@ -149,6 +149,8 @@ main (void)
     /* Heading-hold following (the stub never turns, so the error stays). */
     check("follow heading refused while not following",
           motion_move_set_follow_heading(10) == MOTION_ERR_PARAM);
+    check("follow speed refused while not following",
+          motion_move_set_follow_speed(30u) == MOTION_ERR_PARAM);
     feed(true, MOTION_LINE_SEEN_SAMPLES);
     check("follow starts on a fresh line",
           motion_move_follow(MOTION_FOLLOW_SPEED_MM_S) == MOTION_OK);
@@ -167,6 +169,40 @@ main (void)
     {
         cap_deg_s = MOTION_FOLLOW_MAX_DEG_S;
     }
+    /* Slow over a barcode: the same target, a lower cap and half the gain
+     * by speed, then back. 8 deg at KP 4 asks 32 deg/s; at 30 mm/s 12. */
+    check("follow speed refuses zero",
+          motion_move_set_follow_speed(0u) == MOTION_ERR_PARAM);
+    (void)motion_move_set_follow_heading(8);
+    check("follow speed changes while following",
+          motion_move_set_follow_speed(30u) == MOTION_OK);
+    (void)motion_move_set_line(true);
+    (void)motion_move_update();
+    motion_follow_t slow;
+    (void)motion_move_get_follow(&slow);
+    check("slow: the gain scales with speed and the target stays",
+          (slow.turn_deg_s == 12) && (slow.target_heading_deg == 8) &&
+              (((command.left_setpoint_mm_s + command.right_setpoint_mm_s) /
+                2) == 30));
+    (void)motion_move_set_follow_heading(90);
+    (void)motion_move_set_line(true);
+    (void)motion_move_update();
+    (void)motion_move_get_follow(&slow);
+    float const slow_cap =
+        (float)(int32_t)((2.0f * 30.0f) /
+                         (MOTION_TRACK_WIDTH_MM * (3.14159265f / 180.0f)));
+    check("slow: the turn cap scales with speed",
+          slow.turn_deg_s == (int16_t)slow_cap);
+    check("follow speed goes back up",
+          motion_move_set_follow_speed(MOTION_FOLLOW_SPEED_MM_S) == MOTION_OK);
+    (void)motion_move_set_follow_heading(0);
+    (void)motion_move_set_line(true);
+    (void)motion_move_update();
+    check("full speed: both wheels at follow speed again",
+          (command.left_setpoint_mm_s == (int16_t)MOTION_FOLLOW_SPEED_MM_S) &&
+              (command.right_setpoint_mm_s ==
+               (int16_t)MOTION_FOLLOW_SPEED_MM_S));
+
     (void)motion_move_set_follow_heading(30);
     (void)motion_move_set_line(true);
     (void)motion_move_update();

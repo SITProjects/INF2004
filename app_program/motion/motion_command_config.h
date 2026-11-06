@@ -18,6 +18,8 @@
 
 /** Constant tracking speed, so barcodes are read at a steady speed. */
 #define MOTION_COMMAND_FOLLOW_SPEED_MM_S MOTION_FOLLOW_SPEED_MM_S
+/** Tracking speed over a barcode (line_request_t.b_slow). */
+#define MOTION_COMMAND_SLOW_SPEED_MM_S 30u
 /** Preparation delay before continuous operation; there is no run cutoff. */
 #define MOTION_COMMAND_START_DELAY_MS 5000u
 /** A stall is cleared, and following retried, after this long. */

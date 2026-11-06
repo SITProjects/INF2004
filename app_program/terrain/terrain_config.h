@@ -457,7 +457,7 @@
  * Every TERRAIN_SPEED_WINDOW_SAMPLES samples (10 = 100 ms, the same span
  * motion averages its speeds over) the speed is compared with the
  * previous check. Below TERRAIN_SPEED_STOP_MM_S is stopped (motion's
- * slowest drive is 80 mm/s); a rise or fall of at least
+ * slowest drive is 30 mm/s, over a barcode); a rise or fall of at least
  * TERRAIN_SPEED_CHANGE_MM_S is speeding up or slowing down (15 mm/s in
  * 100 ms is 150 mm/s^2); less is cruising. The state changes once the
  * same answer comes TERRAIN_SPEED_CONFIRM_CHECKS checks in a row

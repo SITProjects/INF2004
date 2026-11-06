@@ -1,6 +1,7 @@
 /* Drive the real line_track module with simulated digital samples. */
 #include "../../../app_program/line_follow/line_track.h"
 #include "../../../app_program/line_follow/line_follow_config.h"
+#include "../../../app_program/motion/motion_command_config.h"
 #include "../../../app_program/motion/motion_config.h"
 #include <math.h>
 #include <stdio.h>
@@ -484,6 +485,8 @@ typedef struct
     double start_deg; /* Heading the odometry calls 0. */
 } sim_car_t;
 
+static double sim_speed_mm_s = (double)MOTION_FOLLOW_SPEED_MM_S;
+
 /* Sensors on the tape, the car angled across it, @p back mm before the
  * tape's bend. */
 static sim_car_t
@@ -505,7 +508,7 @@ sim_start (double back, double half_gap, double lag_s, double entry_deg)
 static double
 sim_step (sim_car_t * p_car)
 {
-    double const speed = (double)MOTION_FOLLOW_SPEED_MM_S;
+    double const speed = sim_speed_mm_s;
     double const step_mm = speed * SIM_STEP_S;
     /* Motion's cap: the follow limit, or where the inner wheel stops. */
     double const cap =
@@ -530,9 +533,11 @@ sim_step (sim_car_t * p_car)
         p_car->requests[k] = p_car->requests[k - 1u];
     }
     p_car->requests[0] = (double)out.target_heading_deg;
+    /* Motion scales the gain with speed (set_follow_gains()). */
     double const asked =
-        MOTION_FOLLOW_KP * (p_car->requests[SIM_DELAY_SAMPLES] +
-                            p_car->start_deg - p_car->heading);
+        MOTION_FOLLOW_KP * (speed / (double)MOTION_FOLLOW_SPEED_MM_S) *
+        (p_car->requests[SIM_DELAY_SAMPLES] + p_car->start_deg -
+         p_car->heading);
     p_car->rate += (fmin(fmax(asked, -cap), cap) - p_car->rate) * SIM_STEP_S /
                    p_car->lag_s;
     p_car->heading += p_car->rate * SIM_STEP_S;
@@ -619,6 +624,153 @@ test_straight_model (void)
           (swing < 4.0) && (per_m < 12.0) && (LINE_MODE_TRACK == out.mode));
 }
 
+/* The slow pass, across the worst of a real one: met 3 degrees off. */
+static void
+test_creep_model (void)
+{
+    reset();
+    sim_radius_mm = 1.0e6;
+    sim_speed_mm_s = (double)MOTION_COMMAND_SLOW_SPEED_MM_S;
+    sim_car_t car = sim_start(5000.0, 18.0, 0.25, 3.0);
+    car.start_deg = 3.0;
+    for (unsigned int k = 0u; k <= SIM_DELAY_SAMPLES; k++)
+    {
+        car.requests[k] = 0.0;
+    }
+    double swing = 0.0;
+    while (car.travel < (double)LINE_BARCODE_CREEP_MM)
+    {
+        track.barcode_phase = LINE_BARCODE_CREEP;
+        track.barcode_mm = (int32_t)car.travel;
+        (void)sim_step(&car);
+        if (car.travel > 100.0)
+        {
+            swing = fmax(swing, fabs(car.heading));
+        }
+    }
+    sim_speed_mm_s = (double)MOTION_FOLLOW_SPEED_MM_S;
+    printf("  creep model: heading within +-%.1f deg\n", swing);
+    check("LT27 the car model creeps straight at the barcode speed: swing "
+          "under 4 degrees and no search",
+          (swing < 4.0) && (LINE_MODE_TRACK == out.mode));
+}
+
+/* Step the tracker through a stop for a barcode, up to the creep. */
+static void
+start_creep (void)
+{
+    in.b_barcode = true;
+    drive(false, false, 1u);
+    in.b_barcode = false;
+    drive(false, false, LINE_BARCODE_BRAKE_SAMPLES);
+    in.b_moving = true;
+    drive(false, false, 5u);
+    in.b_moving = false;
+    drive(false, false, 1u);
+}
+
+static void
+test_barcode_stop (void)
+{
+    reset();
+    drive(false, false, 5u);
+    bool const b_quiet =
+        (0u == out.reverse_mm) && !out.b_slow && (LINE_MODE_TRACK == out.mode);
+    in.heading_deg = 7;
+    in.b_barcode = true;
+    drive(false, false, 1u);
+    in.b_barcode = false;
+    bool const b_brake = (LINE_MODE_STOP == out.mode) &&
+                         (LINE_BARCODE_BRAKE == line_track_barcode_phase(&track));
+    drive(true, true, LINE_BARCODE_BRAKE_SAMPLES);
+    /* The sensors are ignored all the way back. */
+    bool const b_back = (LINE_BARCODE_REVERSE_MM == out.reverse_mm) &&
+                        (LINE_MODE_TRACK == out.mode) &&
+                        !track.b_both_seen;
+    in.b_moving = true;
+    drive(true, false, 5u);
+    bool const b_still_back = (LINE_BARCODE_REVERSE_MM == out.reverse_mm);
+    in.b_moving = false;
+    drive(false, false, 1u);
+    check("LT23 a barcode brakes the car, backs it up once, then creeps on "
+          "the same heading",
+          b_quiet && b_brake && b_back && b_still_back && out.b_slow &&
+              (0u == out.reverse_mm) && (LINE_MODE_TRACK == out.mode) &&
+              (7 == out.target_heading_deg));
+
+    in.b_barcode_done = true;
+    drive(false, false, 1u);
+    in.b_barcode_done = false;
+    bool const b_done = !out.b_slow &&
+                        (LINE_BARCODE_NONE == line_track_barcode_phase(&track));
+    reset();
+    start_creep();
+    bool const b_creeping = out.b_slow;
+    drive(false, false, samples_for(LINE_BARCODE_CREEP_MM - 10));
+    bool const b_before = out.b_slow;
+    drive(false, false, samples_for(20));
+    check("LT24 the reader ends the creep, or else the travel limit does",
+          b_done && b_creeping && b_before && !out.b_slow);
+
+    /* A reverse that never starts must not strand the car. */
+    reset();
+    in.b_barcode = true;
+    drive(false, false, 1u);
+    in.b_barcode = false;
+    drive(false, false, LINE_BARCODE_BRAKE_SAMPLES);
+    bool const b_waiting = (LINE_BARCODE_REVERSE_MM == out.reverse_mm);
+    drive(false, false, LINE_BARCODE_BACK_SAMPLES);
+    check("LT25 a reverse that never starts gives up and creeps anyway",
+          b_waiting && out.b_slow && (0u == out.reverse_mm));
+
+    /* Only plain tracking takes it. */
+    reset();
+    drive(true, false, 3u);
+    drive(false, false, 3u);
+    drive(true, false, 3u);
+    bool const b_bend = track.b_curve;
+    in.b_barcode = true;
+    drive(true, false, 1u);
+    in.b_barcode = false;
+    bool const b_bend_refused =
+        b_bend && (LINE_BARCODE_NONE == line_track_barcode_phase(&track));
+    reset();
+    in.b_barcode = true;
+    in.b_control = false;
+    drive(false, false, 1u);
+    in.b_barcode = false;
+    bool const b_bypass_refused =
+        LINE_BARCODE_NONE == line_track_barcode_phase(&track);
+    /* The bypass or Stop takes over partway: no slow pass survives it. */
+    in.b_control = true;
+    drive(false, false, 1u);
+    start_creep();
+    bool const b_started = out.b_slow;
+    in.b_control = false;
+    drive(false, false, 1u);
+    in.b_control = true;
+    drive(false, false, 1u);
+    check("LT26 a bend or a bypass refuses a slow pass, and losing control "
+          "ends one",
+          b_bend_refused && b_bypass_refused && b_started && !out.b_slow &&
+              (0u == out.reverse_mm));
+
+    /* A slow pass spots a bend at the distance scaled for its speed. */
+    reset();
+    start_creep();
+    drive(true, false, 3u);
+    drive(false, false, samples_for(LINE_BARCODE_TOUCH_MM + 15));
+    drive(true, false, 3u);
+    bool const b_straight = !track.b_curve;
+    reset();
+    drive(true, false, 3u);
+    drive(false, false, samples_for(LINE_BARCODE_TOUCH_MM + 15));
+    drive(true, false, 3u);
+    check("LT28 touches that are a bend at full speed are a straight in a "
+          "slow pass",
+          b_straight && track.b_curve);
+}
+
 /* 2026-11-06 car9: the tape under both sensors for 143 mm. Longer than
  * LINE_EDGE_MAX_MM, the first single black looked like a held edge. */
 static void
@@ -655,6 +807,8 @@ main (void)
     test_curve_model();
     test_straight_model();
     test_long_both_black();
+    test_barcode_stop();
+    test_creep_model();
     test_junction_uturn();
     test_overshoot_across();
     printf("%u failure(s)\n", failures);

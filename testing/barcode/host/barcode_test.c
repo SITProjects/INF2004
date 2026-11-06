@@ -345,6 +345,58 @@ test_scan_assembly (void)
           scan.b_active && !scan.b_long_black && (0u == scan.count));
 }
 
+static void
+test_trigger (void)
+{
+    barcode_trigger_t trigger;
+    uint32_t const gap = BARCODE_TRIGGER_WINDOW_US / BARCODE_TRIGGER_EDGES;
+
+    /* Across the timer wrap, as a barcode at follow speed. */
+    uint32_t now = 0xFFFFFF00u;
+    unsigned int fired_at = 0u;
+    barcode_trigger_init(&trigger);
+    for (unsigned int edge = 1u; edge <= 2u * BARCODE_TRIGGER_EDGES; edge++)
+    {
+        if (barcode_trigger_edge(&trigger, now) && (0u == fired_at))
+        {
+            fired_at = edge;
+        }
+        now += gap;
+    }
+    check("BT18 edges close together are a barcode, on the last one needed",
+          BARCODE_TRIGGER_EDGES == fired_at);
+
+    /* Stray marks: as many edges, but spread out. */
+    bool b_fired = false;
+    now = 0u;
+    barcode_trigger_init(&trigger);
+    for (unsigned int edge = 0u; edge < 50u; edge++)
+    {
+        b_fired = barcode_trigger_edge(&trigger, now) || b_fired;
+        now += BARCODE_TRIGGER_WINDOW_US / 2u;
+    }
+    check("BT19 edges further apart are stray marks, however many", !b_fired);
+
+    /* A hold ignores what is left of a barcode, then ends. */
+    barcode_trigger_init(&trigger);
+    barcode_trigger_hold(&trigger, 1000000u);
+    now = 0u;
+    b_fired = false;
+    while (now < 1000000u)
+    {
+        b_fired = barcode_trigger_edge(&trigger, now) || b_fired;
+        now += gap;
+    }
+    bool b_after = false;
+    for (unsigned int edge = 0u; edge < BARCODE_TRIGGER_EDGES; edge++)
+    {
+        b_after = barcode_trigger_edge(&trigger, now) || b_after;
+        now += gap;
+    }
+    check("BT20 nothing triggers during a hold; afterwards edges count again",
+          !b_fired && b_after);
+}
+
 /* Run @p count widths through the filter and scan as the sensor would
  * give them: every transition a burst of @p burst edges 1..3 us apart,
  * the level read back at random until the last edge; the first transition
@@ -490,6 +542,7 @@ main (void)
     test_jitter();
     test_rejects();
     test_scan_assembly();
+    test_trigger();
     test_partial();
     test_chatter();
     printf("%u failure(s)\n", failures);

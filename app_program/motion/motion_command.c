@@ -48,6 +48,7 @@ static command_slot_t active_slot;
 static bool b_fault_latched;
 static uint32_t stall_updates;
 static bool b_search_active;
+static bool b_reverse_active;
 static int32_t search_target_deg;
 #endif
 
@@ -157,6 +158,7 @@ motion_command_service (bool b_control_enabled)
     if (!b_control_enabled)
     {
         b_search_active = false;
+        b_reverse_active = false;
         /* External MOVE/TURN stop-at-line still receives current visibility,
          * but no line request may replace the queued command or inhibit. */
         if (b_new && active_slot.b_valid)
@@ -257,14 +259,28 @@ apply_request (void)
     {
         return status;
     }
+    if (p_request->reverse_mm > 0u)
+    {
+        /* One move; the line task moves on when it has ended. */
+        b_search_active = false;
+        if (!b_reverse_active)
+        {
+            b_reverse_active = true;
+            status = motion_move_backward(p_request->reverse_mm);
+        }
+        return status;
+    }
+    b_reverse_active = false;
+    uint16_t const speed_mm_s = p_request->b_slow
+                                    ? MOTION_COMMAND_SLOW_SPEED_MM_S
+                                    : MOTION_COMMAND_FOLLOW_SPEED_MM_S;
     switch (p_request->mode)
     {
         case LINE_MODE_TRACK:
             b_search_active = false;
-            if (motion_move_get_state() != MOTION_STATE_FOLLOW)
-            {
-                status = motion_move_follow(MOTION_COMMAND_FOLLOW_SPEED_MM_S);
-            }
+            status = (motion_move_get_state() != MOTION_STATE_FOLLOW)
+                         ? motion_move_follow(speed_mm_s)
+                         : motion_move_set_follow_speed(speed_mm_s);
             if (status == MOTION_OK)
             {
                 status = motion_move_set_follow_heading(

@@ -30,3 +30,4 @@ Add a new row for every run. Never edit or delete old rows.
 | Date | Test ID | Commit | Tester | Result | Log / evidence | Notes |
 |---|---|---|---|---|---|---|
 | YYYY-MM-DD | LINE-U01 | `abc1234` | | PASS / FAIL | `logs/YYYY-MM-DD_….txt` | |
+| 2026-11-06 | LINE-U04 | `7edb636` + slow pass | Claude (host) | PASS | `sh testing/line_follow/host/run.sh` | LT23..LT28 added for the slow pass over a barcode. Model only, not run on the car: heading within +-3.0 deg through a creep at 30 mm/s, met 3 deg off. `motion_command.c`'s reverse has no host test. |

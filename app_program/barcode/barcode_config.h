@@ -41,13 +41,36 @@
 
 /**
  * @brief A white gap longer than this, in us, ends a scan (the quiet zone),
- * and so does a longer black, at the bar before it. 400 ms is 32 mm at the
- * 80 mm/s follow speed; wide white gaps read 240 ms. It is fixed because a
- * limit based on the narrowest element ended scans early: one flicker at
- * the first bar shrank it below a normal gap (2026-11-06, the first 300 ms
- * of a barcode was lost on both sizes).
+ * and so does a longer black, at the bar before it. 1070 ms is 32 mm at the
+ * 30 mm/s barcode speed, so change it with MOTION_COMMAND_SLOW_SPEED_MM_S;
+ * wide white gaps are 19 mm, 640 ms. It is fixed because a limit based on
+ * the narrowest element ended scans early: one flicker at the first bar
+ * shrank it below a normal gap (2026-11-06, the first 300 ms of a barcode
+ * was lost on both sizes).
  */
-#define BARCODE_QUIET_MAX_US 400000u
+#define BARCODE_QUIET_MAX_US 1070000u
+
+/**
+ * @brief This many edges within BARCODE_TRIGGER_WINDOW_US mean a barcode is
+ * under the sensor at follow speed. In the 2026-11-06 logs 4 in half a second
+ * caught 45 of 49 barcodes and 15 of 159 stray marks; a false alarm only
+ * costs a short slow stretch.
+ */
+#define BARCODE_TRIGGER_EDGES 4u
+#define BARCODE_TRIGGER_WINDOW_US 500000u
+
+/**
+ * @brief After a slow pass, edges this long, in us, cannot start another:
+ * 160 mm at follow speed, so what is left of a barcode read early cannot
+ * send the car back over it.
+ */
+#define BARCODE_TRIGGER_HOLDOFF_US 2000000u
+
+/**
+ * @brief A slow pass with no edge for this long, in us, is over: 150 mm at
+ * the barcode speed, past the reverse. It was a false alarm.
+ */
+#define BARCODE_CREEP_QUIET_US 5000000u
 
 /**
  * @brief In each character the narrowest wide bar must be at least this

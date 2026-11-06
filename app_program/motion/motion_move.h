@@ -192,6 +192,16 @@ motion_status_t motion_move_u_turn (void);
 motion_status_t motion_move_follow (uint16_t speed_mm_s);
 
 /**
+ * @brief Change the chassis speed while following, keeping the target
+ *        heading. The turn limit and heading gains follow the new speed.
+ * @param speed_mm_s New speed, in mm/s.
+ * @return MOTION_OK, MOTION_ERR_NOT_INIT, or MOTION_ERR_PARAM when not
+ *         following or out of range.
+ * Motion task only.
+ */
+motion_status_t motion_move_set_follow_speed (uint16_t speed_mm_s);
+
+/**
  * @brief Set the heading following holds.
  * @param target_deg Odometry heading (motion_odometry_t.heading_deg, not
  * wrapped, + is left). The loop turns towards it at up to the follow turn

@@ -143,6 +143,7 @@ static void update_speeds (int16_t delta_left, int16_t delta_right);
 static void correct_heading (void);
 static void reset_sync (void);
 static float heading_deg (void);
+static void set_follow_gains (uint16_t speed_mm_s);
 static void follow_heading (void);
 static void reset_follow (void);
 static int16_t round_rate (float rate);
@@ -330,18 +331,7 @@ motion_move_follow (uint16_t speed_mm_s)
         return MOTION_ERR_PARAM;
     }
 
-    /*
-     * Turn no faster than 2 * speed / track (whole deg/s, rounded down),
-     * so the inner wheel slows at most to 0 and never reverses: a reversal
-     * resets that wheel's speed loop and jerks the car.
-     */
-    float max_deg_s = (float)(int32_t)((2.0f * (float)speed_mm_s) /
-                                       (MOTION_TRACK_WIDTH_MM * DEG_TO_RAD));
-    if (max_deg_s > MOTION_FOLLOW_MAX_DEG_S)
-    {
-        max_deg_s = MOTION_FOLLOW_MAX_DEG_S;
-    }
-    motion_pid_set_limits(&follow_pid, -max_deg_s, max_deg_s);
+    set_follow_gains(speed_mm_s);
 
     /* No target or timeout: following runs until replaced or stopped. */
     begin(MOTION_STATE_FOLLOW, 0, 1, 0, 0u);
@@ -350,6 +340,28 @@ motion_move_follow (uint16_t speed_mm_s)
     follow_target_deg =
         (int32_t)((heading >= 0.0f) ? (heading + 0.5f) : (heading - 0.5f));
     (void)motion_drive_set_velocity((int16_t)speed_mm_s, 0);
+    return MOTION_OK;
+}
+
+motion_status_t
+motion_move_set_follow_speed (uint16_t speed_mm_s)
+{
+    if (!b_initialised)
+    {
+        return MOTION_ERR_NOT_INIT;
+    }
+    if ((MOTION_STATE_FOLLOW != state) || (0u == speed_mm_s) ||
+        ((float)speed_mm_s > MOTION_MAX_SPEED_MM_S))
+    {
+        return MOTION_ERR_PARAM;
+    }
+    if (speed_mm_s != follow_speed_mm_s)
+    {
+        set_follow_gains(speed_mm_s);
+        follow_speed_mm_s = speed_mm_s;
+        follow_turn_deg_s = 0;
+        (void)motion_drive_set_velocity((int16_t)speed_mm_s, 0);
+    }
     return MOTION_OK;
 }
 
@@ -772,6 +784,27 @@ heading_deg (void)
 {
     return ((float)tick_difference() * MM_PER_TICK) /
            (MOTION_TRACK_WIDTH_MM * DEG_TO_RAD);
+}
+
+/*
+ * Turn no faster than 2 * speed / track (whole deg/s, rounded down), so the
+ * inner wheel slows at most to 0 and never reverses: a reversal resets that
+ * wheel's speed loop and jerks the car. The gains scale with speed, so the
+ * car turns the same amount per mm: left alone, a slower car weaves
+ * (LINE-U04 LT22 at 50 mm/s, 2026-11-06).
+ */
+static void
+set_follow_gains (uint16_t speed_mm_s)
+{
+    float max_deg_s = (float)(int32_t)((2.0f * (float)speed_mm_s) /
+                                       (MOTION_TRACK_WIDTH_MM * DEG_TO_RAD));
+    if (max_deg_s > MOTION_FOLLOW_MAX_DEG_S)
+    {
+        max_deg_s = MOTION_FOLLOW_MAX_DEG_S;
+    }
+    float const scale = (float)speed_mm_s / (float)MOTION_FOLLOW_SPEED_MM_S;
+    motion_pid_init(&follow_pid, MOTION_FOLLOW_KP * scale,
+                    MOTION_FOLLOW_KI * scale, 0.0f, -max_deg_s, max_deg_s);
 }
 
 /*

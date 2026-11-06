@@ -47,6 +47,16 @@ typedef struct
     uint32_t narrowest_us;                 /**< Narrowest width so far. */
 } barcode_scan_t;
 
+/** @brief Spots a barcode from its edges; see barcode_trigger_edge(). */
+typedef struct
+{
+    uint32_t edges_us[BARCODE_TRIGGER_EDGES - 1u]; /**< The edges before. */
+    uint32_t next;                                 /**< Oldest, to overwrite. */
+    uint32_t count;                                /**< Edges held. */
+    uint32_t hold_until_us; /**< No trigger before this. */
+    bool b_held;            /**< hold_until_us applies. */
+} barcode_trigger_t;
+
 /* Public function declarations. */
 
 /**
@@ -73,6 +83,28 @@ void barcode_filter_init (barcode_filter_t * p_filter, bool b_black,
  */
 bool barcode_filter_edge (barcode_filter_t * p_filter, uint32_t edge_us,
                           bool b_black, bool * p_level);
+
+/**
+ * @brief Start with no edges and no hold.
+ * @param p_trigger State to reset.
+ */
+void barcode_trigger_init (barcode_trigger_t * p_trigger);
+
+/**
+ * @brief Forget the edges so far and ignore new ones for a while.
+ * @param p_trigger State.
+ * @param until_us Time the hold ends.
+ */
+void barcode_trigger_hold (barcode_trigger_t * p_trigger, uint32_t until_us);
+
+/**
+ * @brief Take one edge.
+ * @param p_trigger State.
+ * @param edge_us Time of the edge.
+ * @return True on the edge that makes BARCODE_TRIGGER_EDGES within
+ *         BARCODE_TRIGGER_WINDOW_US; counting then starts again.
+ */
+bool barcode_trigger_edge (barcode_trigger_t * p_trigger, uint32_t edge_us);
 
 /**
  * @brief Between scans, take the sensor's level as the current one.

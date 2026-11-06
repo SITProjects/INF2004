@@ -39,6 +39,53 @@ barcode_filter_edge (barcode_filter_t * p_filter, uint32_t edge_us,
 }
 
 void
+barcode_trigger_init (barcode_trigger_t * p_trigger)
+{
+    p_trigger->next = 0u;
+    p_trigger->count = 0u;
+    p_trigger->b_held = false;
+}
+
+void
+barcode_trigger_hold (barcode_trigger_t * p_trigger, uint32_t until_us)
+{
+    p_trigger->next = 0u;
+    p_trigger->count = 0u;
+    p_trigger->hold_until_us = until_us;
+    p_trigger->b_held = true;
+}
+
+bool
+barcode_trigger_edge (barcode_trigger_t * p_trigger, uint32_t edge_us)
+{
+    if (p_trigger->b_held)
+    {
+        if ((int32_t)(edge_us - p_trigger->hold_until_us) < 0)
+        {
+            return false;
+        }
+        p_trigger->b_held = false;
+    }
+    /* The ring holds the edges before this one, oldest at next. */
+    bool const b_trigger = (p_trigger->count == (BARCODE_TRIGGER_EDGES - 1u)) &&
+                           ((edge_us - p_trigger->edges_us[p_trigger->next]) <=
+                            BARCODE_TRIGGER_WINDOW_US);
+    if (b_trigger)
+    {
+        p_trigger->next = 0u;
+        p_trigger->count = 0u;
+        return true;
+    }
+    p_trigger->edges_us[p_trigger->next] = edge_us;
+    p_trigger->next = (p_trigger->next + 1u) % (BARCODE_TRIGGER_EDGES - 1u);
+    if (p_trigger->count < (BARCODE_TRIGGER_EDGES - 1u))
+    {
+        p_trigger->count++;
+    }
+    return false;
+}
+
+void
 barcode_scan_sync (barcode_scan_t * p_scan, bool b_black)
 {
     if (!p_scan->b_active)

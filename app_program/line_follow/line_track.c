@@ -65,6 +65,9 @@ static void start_junction (line_track_t * p_track,
                             line_track_input_t const * p_in);
 static void drive_junction (line_track_t * p_track,
                             line_track_input_t const * p_in);
+static void back_up (line_track_t * p_track, line_track_input_t const * p_in);
+static void watch_barcode (line_track_t * p_track,
+                           line_track_input_t const * p_in);
 static void pivot_junction (line_track_t * p_track,
                             line_track_input_t const * p_in);
 static int32_t seek_target (line_track_t const * p_track,
@@ -92,6 +95,7 @@ line_track_init (line_track_t * p_track, line_track_input_t const * p_in)
     }
     p_track->last_side = SIDE_NONE;
     p_track->junction_count = 0u;
+    p_track->barcode_phase = LINE_BARCODE_NONE;
     restart_tracking(p_track, p_in, p_in->heading_deg);
 }
 
@@ -127,7 +131,13 @@ line_track_update (line_track_t * p_track, line_track_input_t const * p_in)
     if (!p_in->b_control)
     {
         /* Someone else drives: start again from wherever it leaves us. */
+        p_track->barcode_phase = LINE_BARCODE_NONE;
         restart_tracking(p_track, p_in, p_in->heading_deg);
+    }
+    else if ((LINE_BARCODE_BRAKE == p_track->barcode_phase) ||
+             (LINE_BARCODE_BACK == p_track->barcode_phase))
+    {
+        back_up(p_track, p_in);
     }
     else if (JUNCTION_DRIVE == p_track->junction_phase)
     {
@@ -187,12 +197,39 @@ line_track_update (line_track_t * p_track, line_track_input_t const * p_in)
         search(p_track, p_in);
     }
 
+    watch_barcode(p_track, p_in);
+    line_barcode_phase_t const phase = p_track->barcode_phase;
     line_request_t const request = {
-        .mode = p_track->mode,
+        .mode = (LINE_BARCODE_BRAKE == phase) ? LINE_MODE_STOP : p_track->mode,
         .target_heading_deg = p_track->target_deg,
         .b_seen = p_in->b_left_black || p_in->b_right_black,
-        .b_junction = (p_track->junction_phase != JUNCTION_NONE)};
+        .b_junction = (p_track->junction_phase != JUNCTION_NONE),
+        .reverse_mm =
+            (LINE_BARCODE_BACK == phase) ? LINE_BARCODE_REVERSE_MM : 0u,
+        .b_slow = (LINE_BARCODE_CREEP == phase)};
     return request;
+}
+
+line_barcode_phase_t
+line_track_barcode_phase (line_track_t const * p_track)
+{
+    return p_track->barcode_phase;
+}
+
+char const *
+line_track_barcode_name (line_barcode_phase_t phase)
+{
+    switch (phase)
+    {
+        case LINE_BARCODE_BRAKE:
+            return "BRAKE";
+        case LINE_BARCODE_BACK:
+            return "BACK";
+        case LINE_BARCODE_CREEP:
+            return "CREEP";
+        default:
+            return "DONE";
+    }
 }
 
 char const *
@@ -402,6 +439,58 @@ drive_junction (line_track_t * p_track, line_track_input_t const * p_in)
     p_track->target_deg = p_in->heading_deg + (side_sign(side) * turn_deg);
 }
 
+/* Stop, then one reverse with the sensors ignored, then creep. */
+static void
+back_up (line_track_t * p_track, line_track_input_t const * p_in)
+{
+    p_track->barcode_samples++;
+    if (LINE_BARCODE_BRAKE == p_track->barcode_phase)
+    {
+        if (p_track->barcode_samples >= LINE_BARCODE_BRAKE_SAMPLES)
+        {
+            p_track->barcode_phase = LINE_BARCODE_BACK;
+            p_track->barcode_samples = 0u;
+            p_track->b_back_started = false;
+        }
+        return;
+    }
+    p_track->b_back_started = p_track->b_back_started || p_in->b_moving;
+    if ((p_track->b_back_started && !p_in->b_moving) ||
+        (p_track->barcode_samples >= LINE_BARCODE_BACK_SAMPLES))
+    {
+        p_track->barcode_phase = LINE_BARCODE_CREEP;
+        p_track->barcode_mm = p_in->distance_mm;
+        restart_tracking(p_track, p_in, p_in->heading_deg);
+    }
+}
+
+/* Start a slow pass, only on plain tracking, and end one. */
+static void
+watch_barcode (line_track_t * p_track, line_track_input_t const * p_in)
+{
+    if (LINE_BARCODE_NONE == p_track->barcode_phase)
+    {
+        if (p_in->b_barcode && p_in->b_control && !p_track->b_curve &&
+            (LINE_MODE_TRACK == p_track->mode) &&
+            (JUNCTION_NONE == p_track->junction_phase))
+        {
+            p_track->barcode_phase = LINE_BARCODE_BRAKE;
+            p_track->barcode_samples = 0u;
+        }
+    }
+    else if ((LINE_BARCODE_CREEP == p_track->barcode_phase) &&
+             (p_in->b_barcode_done ||
+              ((p_in->distance_mm - p_track->barcode_mm) >=
+               LINE_BARCODE_CREEP_MM)))
+    {
+        p_track->barcode_phase = LINE_BARCODE_NONE;
+    }
+    else
+    {
+        /* Braking, backing up, or still creeping. */
+    }
+}
+
 /*
  * Pivot to the new heading with the sensors ignored, then carry straight
  * on along it: the sensors take over when they next see tape. A pivot that
@@ -527,7 +616,10 @@ note_touch (line_track_t * p_track, line_track_input_t const * p_in,
     {
         p_track->b_curve = false;
     }
-    else if ((p_in->distance_mm - p_track->touch_mm) <= LINE_CURVE_TOUCH_MM)
+    else if ((p_in->distance_mm - p_track->touch_mm) <=
+             ((LINE_BARCODE_CREEP == p_track->barcode_phase)
+                  ? LINE_BARCODE_TOUCH_MM
+                  : LINE_CURVE_TOUCH_MM))
     {
         p_track->b_curve = true;
     }

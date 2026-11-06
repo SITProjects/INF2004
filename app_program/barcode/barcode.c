@@ -30,10 +30,15 @@
 /* Static data. */
 ID barcode_tid_read;
 static barcode_scan_t scan;
+static barcode_trigger_t trigger;
+static uint32_t last_edge_us; /* Latest edge, or start of this phase. */
 
 /* Private function declarations. */
 static void read_task (INT stacd, void * p_exinf);
 static void finish_scan (void);
+static void take_edge (barcode_edge_t const * p_edge,
+                       line_barcode_phase_t phase);
+static line_barcode_phase_t follow_phase (void);
 static void trace_widths (void);
 #if BARCODE_EDGE_REPORT
 static void calibration_report (void);
@@ -78,18 +83,15 @@ read_task (INT stacd, void * p_exinf)
     tm_printf((UB *)"barcode: Code 39 reader on GP28 started\n");
 
     barcode_scan_init(&scan, drv_barcode_black(), now_us());
+    barcode_trigger_init(&trigger);
     uint32_t overflows = drv_barcode_overflows();
     for (;;)
     {
+        line_barcode_phase_t const phase = follow_phase();
         barcode_edge_t edge;
         while (drv_barcode_pop(&edge))
         {
-            if (barcode_scan_edge(&scan, edge.time_us, edge.b_black) ==
-                BARCODE_SCAN_DONE)
-            {
-                finish_scan();
-                (void)barcode_scan_edge(&scan, edge.time_us, edge.b_black);
-            }
+            take_edge(&edge, phase);
         }
         if (drv_barcode_overflows() != overflows)
         {
@@ -107,6 +109,57 @@ read_task (INT stacd, void * p_exinf)
         calibration_report();
 #endif
         (void)tk_dly_tsk(BARCODE_POLL_MS);
+    }
+}
+
+/*
+ * Keep up with the line task's slow pass. A scan cannot span a change of
+ * phase, as the speed changes with it. After the pass, what is left of the
+ * barcode must not start another. A pass with no edges was a false alarm.
+ */
+static line_barcode_phase_t
+follow_phase (void)
+{
+    static line_barcode_phase_t last_phase = LINE_BARCODE_NONE;
+    line_barcode_phase_t const phase = line_follow_barcode_phase();
+    uint32_t const now = now_us();
+    if (phase != last_phase)
+    {
+        barcode_scan_reset(&scan);
+        last_edge_us = now;
+        if (LINE_BARCODE_NONE == phase)
+        {
+            barcode_trigger_hold(&trigger, now + BARCODE_TRIGGER_HOLDOFF_US);
+        }
+        last_phase = phase;
+    }
+    if ((LINE_BARCODE_CREEP == phase) &&
+        ((now - last_edge_us) > BARCODE_CREEP_QUIET_US))
+    {
+        line_follow_barcode_done();
+    }
+    return phase;
+}
+
+/* While stopping or backing up, widths mean nothing: drop the edge. */
+static void
+take_edge (barcode_edge_t const * p_edge, line_barcode_phase_t phase)
+{
+    if ((LINE_BARCODE_BRAKE == phase) || (LINE_BARCODE_BACK == phase))
+    {
+        return;
+    }
+    last_edge_us = p_edge->time_us;
+    if ((LINE_BARCODE_NONE == phase) &&
+        barcode_trigger_edge(&trigger, p_edge->time_us))
+    {
+        line_follow_barcode_ahead();
+    }
+    if (barcode_scan_edge(&scan, p_edge->time_us, p_edge->b_black) ==
+        BARCODE_SCAN_DONE)
+    {
+        finish_scan();
+        (void)barcode_scan_edge(&scan, p_edge->time_us, p_edge->b_black);
     }
 }
 
@@ -141,6 +194,7 @@ finish_scan (void)
         {
             line_turn_t const turn = remote_command_turn(text);
             line_follow_set_turn(turn);
+            line_follow_barcode_done();
             tm_printf((UB *)"barcode: %s dir=%s elements=%u narrow=%u us "
                             "turn=%s%s\n",
                       text, b_reversed ? "rev" : "fwd", (UINT)scan.count,
@@ -156,6 +210,11 @@ finish_scan (void)
                       barcode_code39_status_name(status), (UINT)scan.count,
                       (UINT)scan.narrowest_us);
             trace_widths();
+            if (!scan.b_long_black)
+            {
+                /* The barcode has passed; after a long black, more follows. */
+                line_follow_barcode_done();
+            }
         }
     }
     else

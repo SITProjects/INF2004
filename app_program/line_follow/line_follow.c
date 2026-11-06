@@ -39,6 +39,11 @@ static int32_t last_heading_deg;
 /* Written by any task, read and cleared by the line task. */
 static volatile line_turn_t pending_turn = LINE_JUNCTION_DEFAULT_TURN;
 static bool b_was_junction; /* Line task only. */
+/* Set by the barcode task, read and cleared by the line task. */
+static volatile bool b_barcode_ahead;
+static volatile bool b_barcode_done;
+/* Written by the line task, read by the barcode task. */
+static volatile line_barcode_phase_t barcode_phase = LINE_BARCODE_NONE;
 
 /* Private function declarations. */
 static void sense_task (INT stacd, void * p_exinf);
@@ -48,6 +53,7 @@ static void calibration_loop (void);
 #else
 static void report (line_request_t const * p_request,
                     line_track_input_t const * p_in);
+static void report_barcode (line_track_input_t const * p_in);
 #endif
 
 /* Public function definitions. */
@@ -71,6 +77,24 @@ void
 line_follow_set_turn (line_turn_t turn)
 {
     pending_turn = turn;
+}
+
+void
+line_follow_barcode_ahead (void)
+{
+    b_barcode_ahead = true;
+}
+
+void
+line_follow_barcode_done (void)
+{
+    b_barcode_done = true;
+}
+
+line_barcode_phase_t
+line_follow_barcode_phase (void)
+{
+    return barcode_phase;
 }
 
 /* Private function definitions. */
@@ -99,6 +123,7 @@ sense_task (INT stacd, void * p_exinf)
     {
         in = take_input();
         line_request_t const request = line_track_update(&track, &in);
+        barcode_phase = line_track_barcode_phase(&track);
         if (request.b_junction && !b_was_junction)
         {
             /* The junction has taken this instruction. */
@@ -111,6 +136,7 @@ sense_task (INT stacd, void * p_exinf)
             app_check(submission, "line motion submission");
         }
         report(&request, &in);
+        report_barcode(&in);
 
         /* A relative delay: late samples are never replayed. */
         (void)tk_dly_tsk(LINE_SAMPLE_MS);
@@ -123,12 +149,17 @@ static line_track_input_t
 take_input (void)
 {
     line_sensor_reading_t const reading = drv_line_sensor_read();
-    line_track_input_t in = {
-        .b_left_black = reading.b_left_black,
-        .b_right_black = reading.b_right_black,
-        .b_control = motion_line_control_active(),
-        .b_turning = (ROBOT_MOTION_MODE_TURN == motion_get_status().mode),
-        .turn = pending_turn};
+    robot_motion_mode_t const mode = motion_get_status().mode;
+    line_track_input_t in = {.b_left_black = reading.b_left_black,
+                             .b_right_black = reading.b_right_black,
+                             .b_control = motion_line_control_active(),
+                             .b_turning = (ROBOT_MOTION_MODE_TURN == mode),
+                             .b_moving = (ROBOT_MOTION_MODE_MOVE == mode),
+                             .turn = pending_turn,
+                             .b_barcode = b_barcode_ahead,
+                             .b_barcode_done = b_barcode_done};
+    b_barcode_ahead = false;
+    b_barcode_done = false;
     motion_shared_odometry_t odometry;
     if (motion_get_odometry(&odometry))
     {
@@ -204,7 +235,10 @@ report (line_request_t const * p_request, line_track_input_t const * p_in)
     (void)b_last_left;
     (void)b_last_right;
 #endif
-    bool const b_mode = (p_request->mode != last_mode);
+    /* A barcode stop reports itself: report_barcode(). */
+    bool const b_mode =
+        (p_request->mode != last_mode) &&
+        (line_track_barcode_phase(&track) != LINE_BARCODE_BRAKE);
     bool const b_junction = p_request->b_junction && !b_last_junction;
     last_mode = p_request->mode;
     b_last_junction = p_request->b_junction;
@@ -228,5 +262,20 @@ report (line_request_t const * p_request, line_track_input_t const * p_in)
     /* A full or busy queue drops it: the console line is the record. */
     (void)telemetry_queue_push(now_ms, text, &sequence);
 #endif
+}
+
+/* Print each step of a slow pass over a barcode. */
+static void
+report_barcode (line_track_input_t const * p_in)
+{
+    static line_barcode_phase_t last_phase = LINE_BARCODE_NONE;
+    line_barcode_phase_t const phase = line_track_barcode_phase(&track);
+    if (phase != last_phase)
+    {
+        tm_printf((UB *)"line BARCODE %s h=%d d=%d\n",
+                  line_track_barcode_name(phase), (INT)p_in->heading_deg,
+                  (INT)p_in->distance_mm);
+        last_phase = phase;
+    }
 }
 #endif
