@@ -27,3 +27,5 @@ Add a new row for every run. Never edit or delete old rows.
 | Date | Test ID | Commit | Tester | Result | Log / evidence | Notes |
 |---|---|---|---|---|---|---|
 | YYYY-MM-DD | BAR-U01 | `abc1234` | | PASS / FAIL | `logs/YYYY-MM-DD_….txt` | |
+| 2026-11-06 | BAR-U04 | `419d3f0` | Claude (host) | PASS | `sh testing/barcode/host/run.sh` | BT01..BT11, 0 failures |
+| 2026-11-06 | BAR-U06 | `419d3f0` + `BARCODE_EDGE_REPORT` 1 | Kitsunez | PARTIAL | `logs/2026-11-06_BAR-U06_run3_mqtt.txt` (not committed) | Two runs round the course at 80 mm/s, 3 full passes (about 30 edges each): 2 read `F dir=fwd`, both with the heading steady; the third failed (`FAIL length`, 17 elements) with the heading swinging. No wrong text. `dir=rev` not tested: the car only went one way. Small sample |
