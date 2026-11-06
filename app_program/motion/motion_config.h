@@ -286,6 +286,15 @@
 #define MOTION_STALL_TIMEOUT_MS 300u
 
 /*
+ * A wheel set slower than this, in mm/s, may rightly sit still: it cannot
+ * always overcome its own stiction. Steering at the 30 mm/s barcode speed
+ * takes the inner wheel that low, and all 5 stalls logged on 2026-11-06 were
+ * that, stopping the car partway over a barcode. The other wheel is still
+ * checked, and a straight 30 mm/s is above this.
+ */
+#define MOTION_STALL_MIN_SPEED_MM_S 25.0f
+
+/*
  * Commands MBF_MOTION_CMD holds before a sender waits; tMotion empties it
  * every update. TODO(step 9, tMission): raise it if tMission ever sees
  * E_TMOUT from tk_snd_mbf().

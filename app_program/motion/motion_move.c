@@ -42,14 +42,6 @@
 /* Time between motion_move_update() calls, in seconds. */
 #define UPDATE_PERIOD_S ((float)MOTION_UPDATE_PERIOD_MS / 1000.0f)
 
-/*
- * Slowest wheel setpoint the stall check applies to, in mm/s: it should
- * give at least two counts within the stall timeout. A slower wheel (the
- * inner wheel of a tight follow curve) may rightly show no change.
- */
-#define STALL_MIN_SPEED_MM_S                                                   \
-    ((2.0f * MM_PER_TICK * 1000.0f) / (float)MOTION_STALL_TIMEOUT_MS)
-
 /* Updates without a new line reading after which following stops. */
 #define LINE_TIMEOUT_UPDATES (MOTION_LINE_TIMEOUT_MS / MOTION_UPDATE_PERIOD_MS)
 
@@ -713,7 +705,7 @@ wheel_stalled (wheel_t wheel, int16_t delta, int16_t setpoint)
 {
     float speed = (setpoint < 0) ? -(float)setpoint : (float)setpoint;
 
-    if ((0 != delta) || (speed < STALL_MIN_SPEED_MM_S))
+    if ((0 != delta) || (speed < MOTION_STALL_MIN_SPEED_MM_S))
     {
         still_updates[wheel] = 0u;
         return false;

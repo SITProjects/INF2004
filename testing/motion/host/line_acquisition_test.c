@@ -149,6 +149,38 @@ test_turn_runaway (void)
     (void)motion_move_stop();
 }
 
+/* Hold a target @p ahead_deg from the heading, one update at a time. */
+static void
+steer (int32_t ahead_deg, int left, int right, unsigned int updates)
+{
+    for (unsigned int i = 0; i < updates; ++i)
+    {
+        motion_odometry_t odometry;
+        (void)motion_move_get_odometry(&odometry);
+        (void)motion_move_set_follow_heading(odometry.heading_deg + ahead_deg);
+        spin(left, right, 1u);
+    }
+}
+
+static void
+test_slow_wheel_stall (void)
+{
+    unsigned int const long_enough =
+        (3u * MOTION_STALL_TIMEOUT_MS) / MOTION_UPDATE_PERIOD_MS;
+
+    spin(0, 0, 2u * MOTION_SPEED_WINDOW_UPDATES);
+    (void)motion_move_follow(30u);
+    steer(10, 0, ticks_at(45.0f), long_enough);
+    check("a stuck inner wheel in a slow turn is no stall",
+          (motion_move_get_state() == MOTION_STATE_FOLLOW) &&
+              ((float)command.left_setpoint_mm_s <
+               MOTION_STALL_MIN_SPEED_MM_S));
+    steer(0, 0, ticks_at(30.0f), long_enough);
+    check("a wheel that should be driving and is not is a stall",
+          motion_move_get_state() == MOTION_STATE_STALLED);
+    (void)motion_move_stop();
+}
+
 static bool
 braked_on_line (void)
 {
@@ -310,6 +342,7 @@ main (void)
     check("stale line input ends following",
           motion_move_get_state() == MOTION_STATE_STOPPED);
     test_turn_runaway();
+    test_slow_wheel_stall();
 
     printf("%u failures\n", failures);
     return failures ? 1 : 0;
