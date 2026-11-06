@@ -147,12 +147,26 @@ calibration_loop (void)
     }
 }
 #else
-/* Print and publish mode changes and junctions. */
+/* Print and publish mode changes and junctions; trace while tracking. */
 static void
 report (line_request_t const * p_request, line_track_input_t const * p_in)
 {
     static line_mode_t last_mode = LINE_MODE_TRACK;
     static bool b_last_junction;
+    static uint32_t trace_ms;
+#if LINE_TRACE_MS > 0u
+    trace_ms += LINE_SAMPLE_MS;
+    if (p_in->b_control && (trace_ms >= LINE_TRACE_MS))
+    {
+        trace_ms = 0u;
+        tm_printf((UB *)"LT t=%d h=%d d=%d %u%u\n",
+                  (INT)p_request->target_heading_deg, (INT)p_in->heading_deg,
+                  (INT)p_in->distance_mm, (UINT)p_in->b_left_black,
+                  (UINT)p_in->b_right_black);
+    }
+#else
+    (void)trace_ms;
+#endif
     bool const b_mode = (p_request->mode != last_mode);
     bool const b_junction = p_request->b_junction && !b_last_junction;
     last_mode = p_request->mode;

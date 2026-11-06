@@ -29,6 +29,13 @@
 /** Line task period, in ms: one kernel tick (CNF_TIMER_PERIOD). */
 #define LINE_SAMPLE_MS 10u
 
+/**
+ * @brief While tracking under line control, print one trace line this
+ * often, in ms: "LT t=target h=heading d=distance LR" (console, so MQTT
+ * builds publish it too). 0 turns the trace off.
+ */
+#define LINE_TRACE_MS 200u
+
 /** Equal samples in a row before a sensor's level counts. */
 #define LINE_CONFIRM_SAMPLES 2u
 
@@ -42,6 +49,25 @@
  * the car weaves on straights, raise the cap if it runs wide on curves.
  */
 #define LINE_LEAD_DEG 25
+
+/**
+ * @brief Travel, in mm, over which the tracker averages how fast the
+ * heading turns (degrees per mm, corrections included). While no single
+ * sensor reads black the car keeps turning at that rate, so it follows a
+ * bend between corrections instead of driving straight off it; on a
+ * straight the average is about zero. Shorter adapts faster to a new bend
+ * but weaves more after each correction.
+ * TODO(calibrate) on the curve and a 2 m straight.
+ */
+#define LINE_CURVE_WINDOW_MM 100
+
+/**
+ * @brief Lead, in mm of travel, of the learned bend: the target heading is
+ * the heading plus the average rate times this. The car then turns at
+ * about MOTION_FOLLOW_KP x rate x this deg/s; MOTION_FOLLOW_SPEED_MM_S /
+ * MOTION_FOLLOW_KP (120 / 4 = 30 mm) makes that the bend's own rate.
+ */
+#define LINE_CURVE_LEAD_MM 30
 
 /**
  * @brief An edge that stays black for this travel, in mm, while the car

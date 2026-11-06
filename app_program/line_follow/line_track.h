@@ -3,13 +3,14 @@
  * @brief Digital line tracking decisions: turn while black, corners,
  *        search.
  *
- * Two sensors straddle the tape. While both read white the car holds its
- * heading. While one reads black the target heading leads the car by
- * LINE_LEAD_DEG towards it, so motion keeps turning while driving; when it
- * reads white again the car holds the heading it reached and drives
- * straight. A sensor that crosses the tape quickly (a corner), an edge
- * that stays black for LINE_EDGE_MAX_MM, or a long white run starts a
- * pivot search towards the last edge.
+ * Two sensors straddle the tape. While one reads black the target heading
+ * leads the car by LINE_LEAD_DEG towards it, so motion keeps turning
+ * while driving. Otherwise (both white, or both black: the course has no
+ * crossings) the car keeps turning at the rate it has averaged over the
+ * last LINE_CURVE_WINDOW_MM, so it follows a bend between corrections and
+ * drives straight on a straight. A sensor that crosses the tape quickly (a
+ * corner), an edge that stays black for LINE_EDGE_MAX_MM, or a long white
+ * run starts a pivot search towards the last edge.
  *
  * The module is pure: no kernel calls, so host tests can drive it. Only
  * the line task calls it.
@@ -65,8 +66,11 @@ typedef struct
     int32_t target_deg;
     int32_t black_start_mm[2]; /* Travel when each edge turned black. */
     int32_t track_start_mm;    /* Travel when tracking last restarted. */
-    uint32_t last_side;        /* Side of the last edge, for searches. */
-    int32_t white_start_mm;    /* Travel when both last read white. */
+    int32_t curve_udeg_per_mm; /* Averaged turn, udeg/mm, + is left. */
+    int32_t prev_heading_deg;  /* Last sample, for the turn rate. */
+    int32_t prev_distance_mm;
+    uint32_t last_side;     /* Side of the last edge, for searches. */
+    int32_t white_start_mm; /* Travel when both last read white. */
     uint32_t junction_count;
     bool b_crossed_both; /* Both read black since both last read white. */
     int32_t search_start_deg;

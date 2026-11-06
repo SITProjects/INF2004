@@ -29,6 +29,16 @@
 _Static_assert(LINE_LEAD_DEG > 0, "Invalid lead");
 _Static_assert(LINE_EDGE_MAX_MM > LINE_CROSS_MM,
                "A held edge must outlast a crossing");
+_Static_assert((LINE_CURVE_WINDOW_MM > 0) && (LINE_CURVE_LEAD_MM > 0),
+               "Invalid bend averaging");
+
+/* Micro-degrees, so the average decays to zero rather than sticking. */
+#define UDEG_PER_DEG 1000000
+/* A larger heading jump between samples is not a bend. */
+#define CURVE_TURN_MAX_DEG 90
+/* The learned bend never leads by more than a black edge does. */
+#define CURVE_MAX_UDEG_PER_MM                                                  \
+    ((LINE_LEAD_DEG * UDEG_PER_DEG) / LINE_CURVE_LEAD_MM)
 _Static_assert(LINE_CONFIRM_SAMPLES > 0u, "Invalid debounce");
 _Static_assert(LINE_SEARCH_DONE_DEG < LINE_SEARCH_MAX_DEG,
                "Search must turn further than its end band");
@@ -40,6 +50,10 @@ static void restart_tracking (line_track_t * p_track,
                               line_track_input_t const * p_in,
                               int32_t target_deg);
 static void track (line_track_t * p_track, line_track_input_t const * p_in);
+static void learn_curve (line_track_t * p_track,
+                         line_track_input_t const * p_in);
+static int32_t curve_target (line_track_t const * p_track,
+                             line_track_input_t const * p_in);
 static void track_edge (line_track_t * p_track, line_track_input_t const * p_in,
                         uint32_t side, bool b_was_black);
 static void start_search (line_track_t * p_track,
@@ -89,6 +103,7 @@ line_track_update (line_track_t * p_track, line_track_input_t const * p_in)
     }
     else if (LINE_MODE_TRACK == p_track->mode)
     {
+        learn_curve(p_track, p_in);
         if (!p_track->b_black[SIDE_LEFT] && !p_track->b_black[SIDE_RIGHT])
         {
             if (was_black[SIDE_LEFT] || was_black[SIDE_RIGHT])
@@ -98,12 +113,10 @@ line_track_update (line_track_t * p_track, line_track_input_t const * p_in)
         }
         if (b_both)
         {
-            /* A crossing line: hold the heading until it passes, and do
-             * not take its trailing edge for a corner. */
-            if (!p_track->b_crossed_both)
-            {
-                p_track->target_deg = p_in->heading_deg;
-            }
+            /* Both edges at once: the car is over the tape at an angle (the
+             * course has no crossings). Keep to the bend, and do not take
+             * the trailing edge for a corner. */
+            p_track->target_deg = curve_target(p_track, p_in);
             p_track->b_crossed_both = true;
         }
         else
@@ -191,6 +204,9 @@ restart_tracking (line_track_t * p_track, line_track_input_t const * p_in,
     p_track->mode = LINE_MODE_TRACK;
     p_track->target_deg = target_deg;
     p_track->track_start_mm = p_in->distance_mm;
+    p_track->curve_udeg_per_mm = 0;
+    p_track->prev_heading_deg = p_in->heading_deg;
+    p_track->prev_distance_mm = p_in->distance_mm;
     p_track->white_start_mm = p_in->distance_mm;
     for (uint32_t side = 0u; side < SIDE_COUNT; side++)
     {
@@ -210,12 +226,55 @@ track (line_track_t * p_track, line_track_input_t const * p_in)
     if (b_white)
     {
         p_track->b_crossed_both = false;
+        p_track->target_deg = curve_target(p_track, p_in);
     }
     if (b_white && (p_track->last_side != SIDE_NONE) &&
         ((p_in->distance_mm - p_track->white_start_mm) >= LINE_LOST_MM))
     {
         start_search(p_track, p_in, p_track->last_side);
     }
+}
+
+/*
+ * Average the heading change per mm over about LINE_CURVE_WINDOW_MM of
+ * forward travel (an exponential average weighted by distance). Samples
+ * without forward travel do not count.
+ */
+static void
+learn_curve (line_track_t * p_track, line_track_input_t const * p_in)
+{
+    int32_t const travel_mm = p_in->distance_mm - p_track->prev_distance_mm;
+    int32_t const turn_deg = p_in->heading_deg - p_track->prev_heading_deg;
+    if ((travel_mm > 0) && (abs_deg(turn_deg) <= CURVE_TURN_MAX_DEG))
+    {
+        int32_t curve = p_track->curve_udeg_per_mm +
+                        (((turn_deg * UDEG_PER_DEG) -
+                          (p_track->curve_udeg_per_mm * travel_mm)) /
+                         LINE_CURVE_WINDOW_MM);
+        if (curve > CURVE_MAX_UDEG_PER_MM)
+        {
+            curve = CURVE_MAX_UDEG_PER_MM;
+        }
+        else if (curve < -CURVE_MAX_UDEG_PER_MM)
+        {
+            curve = -CURVE_MAX_UDEG_PER_MM;
+        }
+        else
+        {
+            /* Within the limit. */
+        }
+        p_track->curve_udeg_per_mm = curve;
+    }
+    p_track->prev_heading_deg = p_in->heading_deg;
+    p_track->prev_distance_mm = p_in->distance_mm;
+}
+
+/* The heading to aim for while no single edge reads black. */
+static int32_t
+curve_target (line_track_t const * p_track, line_track_input_t const * p_in)
+{
+    return p_in->heading_deg +
+           ((p_track->curve_udeg_per_mm * LINE_CURVE_LEAD_MM) / UDEG_PER_DEG);
 }
 
 /* One side's edge while tracking: turn towards it, or spot a corner. */
@@ -256,8 +315,8 @@ track_edge (line_track_t * p_track, line_track_input_t const * p_in,
         }
         else
         {
-            /* The tape is back between the sensors: hold this heading. */
-            p_track->target_deg = p_in->heading_deg;
+            /* The tape is back between the sensors: keep to the bend. */
+            p_track->target_deg = curve_target(p_track, p_in);
         }
     }
     else

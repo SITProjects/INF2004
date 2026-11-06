@@ -80,19 +80,18 @@ static void
 test_edge_clears (void)
 {
     reset();
+    drive(false, false, samples_for(100));
     drive(true, false, LINE_CONFIRM_SAMPLES);
-    in.heading_deg = 12;
     drive(true, false, samples_for(LINE_CROSS_MM));
-    bool const b_leading = (12 + LINE_LEAD_DEG == out.target_heading_deg);
-    in.heading_deg = 18;
+    bool const b_leading = (LINE_LEAD_DEG == out.target_heading_deg);
     drive(false, false, LINE_CONFIRM_SAMPLES);
     bool const b_held = (LINE_MODE_TRACK == out.mode) &&
-                        (18 == out.target_heading_deg);
-    in.heading_deg = 19;
+                        (0 == out.target_heading_deg);
     drive(false, false, samples_for(100));
-    check("LT03 a slow edge turns until white, then holds that heading",
+    check("LT03 an edge leads until white; on a straight the car then "
+          "holds its heading",
           b_leading && b_held && (LINE_MODE_TRACK == out.mode) &&
-              (18 == out.target_heading_deg));
+              (0 == out.target_heading_deg));
 }
 
 static void
@@ -128,16 +127,54 @@ static void
 test_junction (void)
 {
     reset();
-    in.heading_deg = 4;
+    drive(false, false, samples_for(100));
     drive(true, true, LINE_CONFIRM_SAMPLES + LINE_JUNCTION_SAMPLES - 1u);
-    bool const b_junction =
-        out.b_junction && (4 == out.target_heading_deg);
+    bool const b_junction = out.b_junction && (0 == out.target_heading_deg);
     drive(false, true, LINE_CONFIRM_SAMPLES);
     drive(false, false, LINE_CONFIRM_SAMPLES);
-    check("LT06 both black is a junction held straight; its trailing edge "
-          "is no corner",
+    check("LT06 both black keeps to the bend (straight here); the trailing "
+          "edge is no corner",
           b_junction && !out.b_junction && (LINE_MODE_TRACK == out.mode) &&
-              (4 == out.target_heading_deg));
+              (0 == out.target_heading_deg));
+}
+
+/* Drive @p mm with both sensors white while the heading turns at
+ * @p mdeg_per_mm (the car following a bend). */
+static void
+drive_bend (int mm, int mdeg_per_mm)
+{
+    static int heading_mdeg;
+    heading_mdeg = in.heading_deg * 1000;
+    in.b_left_black = false;
+    in.b_right_black = false;
+    for (unsigned int i = 0u; i < samples_for(mm); i++)
+    {
+        travel_x10 += MM_PER_SAMPLE_X10;
+        heading_mdeg += (mdeg_per_mm * MM_PER_SAMPLE_X10) / 10;
+        in.distance_mm = travel_x10 / 10;
+        in.heading_deg = heading_mdeg / 1000;
+        out = line_track_update(&track, &in);
+    }
+}
+
+/* The 2026-11-06 curve: about 200 mm radius, 0.29 deg/mm. */
+static void
+test_bend (void)
+{
+    reset();
+    drive_bend(300, 290);
+    int const lead = out.target_heading_deg - in.heading_deg;
+    bool const b_bend = (lead >= 7) && (lead <= 10);
+    drive_bend(400, 0);
+    int const straight = out.target_heading_deg - in.heading_deg;
+    drive_bend(300, -290);
+    int const right = out.target_heading_deg - in.heading_deg;
+    printf("  bend lead %d, straight %d, right %d deg\n", lead, straight,
+           right);
+    check("LT14 between corrections the car keeps to the bend it has been "
+          "turning (0.29 deg/mm leads about 9 deg); straight again after",
+          b_bend && (0 == straight) && (right <= -7) &&
+              (right >= -10) && (LINE_MODE_TRACK == out.mode));
 }
 
 static void
@@ -281,6 +318,7 @@ main (void)
     test_search_timeout();
     test_control_off();
     test_pivot_overshoot();
+    test_bend();
     printf("%u failure(s)\n", failures);
     return (0u == failures) ? 0 : 1;
 }
