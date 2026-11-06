@@ -2,6 +2,10 @@
 """Fit the obstacle edge correction and range scale from OBS-U71 CALWIDE logs.
 
 Usage: width_fit.py <log> --width 210 --stations 150 200 250
+           [--ignore 250:55-60] [--radial 14]
+
+--ignore drops readings of something that is not the obstacle (a wire, say) at
+one station; --radial tries a value of OBSTACLE_SENSOR_RADIAL_OFFSET_MM.
 
 Replays each pass through the car's rules (obstacle_width.c, obstacle_scan.c):
 the 10 degree grid from 50 to 130, the flat-face hit limit, edges looked for
@@ -127,18 +131,31 @@ def group_stations(passes, stations):
 
 
 def main():
+    global RADIAL_OFFSET_MM
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("log")
     parser.add_argument("--width", type=float, required=True, help="true, mm")
     parser.add_argument(
         "--stations", type=float, nargs="+", required=True, help="true d, mm"
     )
+    parser.add_argument(
+        "--ignore", nargs="*", default=[], help="station:first-last, degrees"
+    )
+    parser.add_argument("--radial", type=float, default=RADIAL_OFFSET_MM)
     args = parser.parse_args()
+    RADIAL_OFFSET_MM = args.radial
 
     passes = read_passes(args.log)
     if not passes:
         sys.exit("no CALWIDE lines in " + args.log)
     grouped, empty = group_stations(passes, args.stations)
+    for item in args.ignore:
+        station, span = item.split(":")
+        first, last = map(int, span.split("-"))
+        for key in grouped[float(station)]:
+            for angle in passes[key]:
+                if first <= angle <= last:
+                    passes[key][angle] = (0, 0, 0)
     print(f"{len(passes)} passes, {len(empty)} with nothing at the station "
           "ranges")
 

@@ -159,18 +159,20 @@
 #define OBSTACLE_SERVO_SETTLE_MARGIN_MS 150u
 
 /*
- * Width geometry, provisional. Pivot offset is not measured yet (zero).
- * Pivot offset is signed, along the sensor's radial measurement axis.
+ * Width geometry from OBS-U71 (2026-11-06, 210 mm obstacle at 150, 200 and
+ * 250 mm from the servo shaft). Pivot offset is signed, along the sensor's
+ * radial measurement axis: 14 mm puts all three ranges within 1 mm.
+ * TODO(calibrate): confirm it with a ruler, servo shaft to sensor face.
  * A lateral mounting offset needs a separate coordinate transform.
  * A found edge lies half a step outside its hit; the edge correction then
- * moves it toward the obstacle centre (beam spread). The 11 degree value is
- * a single-case estimate (160 mm object at 300 mm, 2026-11-03_width_300.txt)
- * that reads 155..159 mm; refit with OBS-U33 after OBS-U28/U29/U30 and the
- * pivot measurement. Corrections above the maximum make the width
- * unavailable.
+ * moves it toward the obstacle centre. On a flat face at these ranges the
+ * echoes stop at or inside the true edge, so no correction is needed: 0
+ * gives +5, -33 and +9 mm where 11 gave -69, -115 and -91 mm. The -33 mm at
+ * 200 mm is the 10 degree grid. Corrections above the maximum make the
+ * width unavailable.
  */
-#define OBSTACLE_SENSOR_RADIAL_OFFSET_MM 0.0f
-#define OBSTACLE_EDGE_CORRECTION_DEG 11.0f
+#define OBSTACLE_SENSOR_RADIAL_OFFSET_MM 14.0f
+#define OBSTACLE_EDGE_CORRECTION_DEG 0.0f
 #define OBSTACLE_EDGE_CORRECTION_MAX_DEG 15.0f
 
 /*
