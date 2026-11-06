@@ -74,6 +74,10 @@ static int32_t seek_target (line_track_t const * p_track,
                             line_track_input_t const * p_in);
 static void track_edge (line_track_t * p_track, line_track_input_t const * p_in,
                         uint32_t side, bool b_was_black);
+static void note_heading (line_track_t * p_track,
+                          line_track_input_t const * p_in);
+static bool crossed_out (line_track_t const * p_track,
+                         line_track_input_t const * p_in, uint32_t side);
 static void note_touch (line_track_t * p_track, line_track_input_t const * p_in,
                         uint32_t side);
 static void start_search (line_track_t * p_track,
@@ -105,6 +109,7 @@ line_track_update (line_track_t * p_track, line_track_input_t const * p_in)
     bool const was_black[SIDE_COUNT] = {p_track->b_black[SIDE_LEFT],
                                         p_track->b_black[SIDE_RIGHT]};
     debounce(p_track, p_in);
+    note_heading(p_track, p_in);
 
     bool const b_both =
         p_track->b_black[SIDE_LEFT] && p_track->b_black[SIDE_RIGHT];
@@ -303,6 +308,12 @@ restart_tracking (line_track_t * p_track, line_track_input_t const * p_in,
     p_track->touch_side = SIDE_NONE;
     p_track->touch_mm = p_in->distance_mm;
     p_track->b_curve = false;
+    for (uint32_t slot = 0u; slot < LINE_TREND_SLOTS; slot++)
+    {
+        p_track->trend_deg[slot] = p_in->heading_deg;
+    }
+    p_track->trend_next = 0u;
+    p_track->trend_mm = p_in->distance_mm;
     p_track->white_start_mm = p_in->distance_mm;
     for (uint32_t side = 0u; side < SIDE_COUNT; side++)
     {
@@ -598,6 +609,13 @@ track_edge (line_track_t * p_track, line_track_input_t const * p_in,
     {
         /* However briefly it was black, this was a correction, not a
          * corner: hold what it reached, or seek in a bend. */
+        if (crossed_out(p_track, p_in, side))
+        {
+            /* A bend on this side: the other sensor still ends it. */
+            p_track->b_curve = true;
+            p_track->touch_side = side;
+            p_track->touch_mm = p_in->distance_mm;
+        }
         p_track->target_deg =
             p_track->b_curve ? seek_target(p_track, p_in) : p_in->heading_deg;
     }
@@ -605,6 +623,38 @@ track_edge (line_track_t * p_track, line_track_input_t const * p_in,
     {
         /* White and was white. */
     }
+}
+
+/* Keep the heading every LINE_TREND_STEP_MM of travel. */
+static void
+note_heading (line_track_t * p_track, line_track_input_t const * p_in)
+{
+    if ((p_in->distance_mm - p_track->trend_mm) >= LINE_TREND_STEP_MM)
+    {
+        p_track->trend_deg[p_track->trend_next] = p_in->heading_deg;
+        p_track->trend_next = (p_track->trend_next + 1u) % LINE_TREND_SLOTS;
+        p_track->trend_mm = p_in->distance_mm;
+    }
+}
+
+/*
+ * The tape has crossed from the other sensor and just left @p side, the
+ * side the car has been turning towards: it ran across a bend, and the tape
+ * is outside on that side. Both white alone cannot show this: a centred
+ * tape reads the same. The seek is safe if this is wrong: a tape that is
+ * centred after all soon reaches the other sensor and turns the car back.
+ */
+static bool
+crossed_out (line_track_t const * p_track, line_track_input_t const * p_in,
+             uint32_t side)
+{
+    uint32_t const other = (SIDE_LEFT == side) ? SIDE_RIGHT : SIDE_LEFT;
+    int32_t const turned =
+        p_in->heading_deg - p_track->trend_deg[p_track->trend_next];
+    return !p_track->b_black[other] && p_track->b_both_seen &&
+           (p_track->entry_side == other) &&
+           (JUNCTION_NONE == p_track->junction_phase) &&
+           ((side_sign(side) * turned) >= LINE_BEND_TREND_DEG);
 }
 
 /* A single-side touch begins: the same side again soon is a bend. */

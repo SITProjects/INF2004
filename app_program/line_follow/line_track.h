@@ -10,7 +10,9 @@
  * again within LINE_CURVE_TOUCH_MM means a bend: then, while both read
  * white, the car keeps turning towards the last edge (up to
  * LINE_SEEK_MAX_DEG of lead after LINE_SEEK_RAMP_MM), so a tape that
- * slipped out is caught again, until the other sensor touches. A sensor that
+ * slipped out is caught again, until the other sensor touches. So does the
+ * tape crossing both sensors and leaving on the side the car has been
+ * turning towards (LINE_BEND_TREND_DEG). A sensor that
  * reads black only briefly is a correction, never a corner: turning
  * towards it clears it quickly (2026-11-06). An edge that stays black for
  * LINE_EDGE_MAX_MM, or a long white run after an edge (LINE_LOST_MM in a
@@ -40,6 +42,9 @@
 #include <stdint.h>
 
 /* Public types, constants, and macros. */
+
+/** Headings kept to see how far the car has turned lately. */
+#define LINE_TREND_SLOTS 3u
 
 /** @brief What the line task asks motion to do. Fits 2 bits. */
 typedef enum
@@ -112,6 +117,9 @@ typedef struct
     uint32_t touch_side;       /* Side of the last single-side touch. */
     int32_t touch_mm;          /* Travel when it began. */
     bool b_curve;              /* That side touched again soon: a bend. */
+    int32_t trend_deg[LINE_TREND_SLOTS]; /* Recent headings, oldest at next. */
+    uint32_t trend_next;
+    int32_t trend_mm; /* Travel at the latest of them. */
     /* Dark episode: from a sensor turning black until both read white. */
     uint32_t entry_side;     /* First side black; 2 = both at once. */
     int32_t entry_mm;        /* Travel when the episode started. */

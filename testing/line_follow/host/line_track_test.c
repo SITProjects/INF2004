@@ -771,6 +771,80 @@ test_barcode_stop (void)
           b_straight && track.b_curve);
 }
 
+/* 2026-11-06 20:32:07: 7 to 57 degrees in the 120 mm before the crossing. */
+#define BEND_DEG 50
+
+/* Turn @p deg over the last @p mm (+ is left), then the tape crosses from
+ * the @p b_from_right sensor, leaves the other, and both read white for
+ * @p white_mm. 2026-11-06 20:32:07 read 01 11 10 00. */
+static void
+cross_bend (int deg, int mm, bool b_from_right, int white_mm)
+{
+    reset();
+    drive(false, false, samples_for(60));
+    unsigned int const samples = samples_for(mm);
+    for (unsigned int i = 1u; i <= samples; i++)
+    {
+        in.heading_deg = (deg * (int)i) / (int)samples;
+        drive(false, false, 1u);
+    }
+    drive(!b_from_right, b_from_right, samples_for(15));
+    drive(true, true, samples_for(8));
+    drive(b_from_right, !b_from_right, samples_for(4));
+    drive(false, false, samples_for(white_mm));
+}
+
+static void
+test_bend_crossing (void)
+{
+    cross_bend(BEND_DEG, 120, true, 25);
+    bool const b_left = (out.target_heading_deg - in.heading_deg) >=
+                        (LINE_SEEK_MAX_DEG - 1);
+    cross_bend(-BEND_DEG, 120, false, 25);
+    bool const b_right = (in.heading_deg - out.target_heading_deg) >=
+                         (LINE_SEEK_MAX_DEG - 1);
+    check("LT29 tape crossing out of a bend: the car keeps turning that way, "
+          "left or right",
+          b_left && b_right);
+
+    cross_bend(0, 120, true, 25);
+    bool const b_straight = out.target_heading_deg == in.heading_deg;
+    cross_bend(BEND_DEG, 120, false, 25);
+    bool const b_wrong_way = out.target_heading_deg == in.heading_deg;
+    cross_bend(LINE_BEND_TREND_DEG - 3, 120, true, 25);
+    bool const b_slight = out.target_heading_deg == in.heading_deg;
+    check("LT30 no seek on a straight, against the turn, or after a slight "
+          "turn",
+          b_straight && b_wrong_way && b_slight);
+
+    /* The seek is not forever: a tape that never returns is searched for. */
+    cross_bend(BEND_DEG, 120, true, LINE_LOST_MM + 10);
+    check("LT31 a crossing that finds no tape searches towards it, soon",
+          LINE_MODE_SEARCH_LEFT == out.mode);
+
+    /* The tape reaching the other sensor ends it, as for any bend. */
+    cross_bend(BEND_DEG, 120, true, 25);
+    drive(false, true, samples_for(4));
+    drive(false, false, samples_for(10));
+    check("LT32 a tape that was centred after all turns the car back",
+          out.target_heading_deg == in.heading_deg);
+
+    /* A pivot, or anything else turning the car, is no bend. */
+    reset();
+    drive(false, false, samples_for(120));
+    in.b_control = false;
+    in.heading_deg = 90;
+    drive(false, false, 1u);
+    in.b_control = true;
+    drive(false, false, samples_for(10));
+    drive(false, true, samples_for(15));
+    drive(true, true, samples_for(8));
+    drive(true, false, samples_for(4));
+    drive(false, false, samples_for(25));
+    check("LT33 turning before tracking resumed does not count as a bend",
+          out.target_heading_deg == in.heading_deg);
+}
+
 /* 2026-11-06 car9: the tape under both sensors for 143 mm. Longer than
  * LINE_EDGE_MAX_MM, the first single black looked like a held edge. */
 static void
@@ -807,6 +881,7 @@ main (void)
     test_curve_model();
     test_straight_model();
     test_long_both_black();
+    test_bend_crossing();
     test_barcode_stop();
     test_creep_model();
     test_junction_uturn();

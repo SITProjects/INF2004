@@ -31,3 +31,4 @@ Add a new row for every run. Never edit or delete old rows.
 |---|---|---|---|---|---|---|
 | YYYY-MM-DD | LINE-U01 | `abc1234` | | PASS / FAIL | `logs/YYYY-MM-DD_….txt` | |
 | 2026-11-06 | LINE-U04 | `7edb636` + slow pass | Claude (host) | PASS | `sh testing/line_follow/host/run.sh` | LT23..LT28 added for the slow pass over a barcode. Model only, not run on the car: heading within +-3.0 deg through a creep at 30 mm/s, met 3 deg off. `motion_command.c`'s reverse has no host test. |
+| 2026-11-06 | LINE-U04 | `8fb417e` + bend crossing | Claude (host) | PASS | `sh testing/line_follow/host/run.sh` | Not run on the car. LT29..LT33 added. A tape crossing both sensors and leaving on the side the car has turned 15 deg towards now seeks that way: 2026-11-06 logs had 13 of 16 such crossings exit left, a median 203 mm of white after them, 4 never finding the tape. Replayed over the logged crossings it fires on all 4; the model's 81 curve cases go from 62 to 65. |

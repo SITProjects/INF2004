@@ -88,6 +88,21 @@
 #define LINE_EDGE_MAX_MM 200
 
 /**
+ * @brief The tape crossing both sensors and leaving on one side, with the
+ * car turned at least LINE_BEND_TREND_DEG that way over the last
+ * LINE_TREND_SLOTS * LINE_TREND_STEP_MM of travel, means the car has run
+ * across a bend and the tape is outside on that side: seek towards it. It
+ * used to hold its heading and run off: 13 of 16 such crossings on
+ * 2026-11-06 left on the left, with a median 203 mm of white after them,
+ * and 4 never found the tape. On a straight the car has not been turning,
+ * so a crossing there changes nothing (41 on the same logs).
+ */
+#define LINE_BEND_TREND_DEG 15
+
+/** Travel, in mm, between the headings kept for the turn above. */
+#define LINE_TREND_STEP_MM 32
+
+/**
  * @brief In a bend, both sensors white for this travel, in mm, counts as
  * lost: pivot search towards the last edge. The seek has by then turned
  * the car about 120 degrees that way, so a longer run would only circle.
