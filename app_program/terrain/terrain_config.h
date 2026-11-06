@@ -407,6 +407,60 @@
 #endif
 
 /*
+ * Speed state (terrain_detect.h), from the wheel speed: the average of
+ * the sizes of motion's two wheel speeds, in mm/s, so a turn in place
+ * (wheels at +84 and -84 mm/s) counts as moving at 84 mm/s.
+ *
+ * Every TERRAIN_SPEED_WINDOW_SAMPLES samples (10 = 100 ms, the same span
+ * motion averages its speeds over) the speed is compared with the
+ * previous check. Below TERRAIN_SPEED_STOP_MM_S is stopped (motion's
+ * slowest drive is 80 mm/s); a rise or fall of at least
+ * TERRAIN_SPEED_CHANGE_MM_S is speeding up or slowing down (15 mm/s in
+ * 100 ms is 150 mm/s^2); less is cruising. The state changes once the
+ * same answer comes TERRAIN_SPEED_CONFIRM_CHECKS checks in a row
+ * (TERRAIN_SPEED_STOP_CHECKS for STATIONARY), so one noisy check does
+ * not count. TODO(car day): tune the change limit and the checks
+ * (TER-U25).
+ */
+#ifndef TERRAIN_SPEED_STOP_MM_S
+#define TERRAIN_SPEED_STOP_MM_S 20u
+#endif
+
+#ifndef TERRAIN_SPEED_CHANGE_MM_S
+#define TERRAIN_SPEED_CHANGE_MM_S 15u
+#endif
+
+#ifndef TERRAIN_SPEED_WINDOW_SAMPLES
+#define TERRAIN_SPEED_WINDOW_SAMPLES 10u
+#endif
+
+#ifndef TERRAIN_SPEED_CONFIRM_CHECKS
+#define TERRAIN_SPEED_CONFIRM_CHECKS 2u
+#endif
+
+#ifndef TERRAIN_SPEED_STOP_CHECKS
+#define TERRAIN_SPEED_STOP_CHECKS 3u
+#endif
+
+/* The speed field stops at 510 mm/s in 2 mm/s steps; the window count is
+ * 4 bits and the confirm count 2 bits. */
+#if (TERRAIN_SPEED_STOP_MM_S < 2) || (TERRAIN_SPEED_STOP_MM_S > 500)
+#error "TERRAIN_SPEED_STOP_MM_S must be 2 to 500"
+#endif
+#if (TERRAIN_SPEED_CHANGE_MM_S < 2) || (TERRAIN_SPEED_CHANGE_MM_S > 500)
+#error "TERRAIN_SPEED_CHANGE_MM_S must be 2 to 500"
+#endif
+#if (TERRAIN_SPEED_WINDOW_SAMPLES < 1) || (TERRAIN_SPEED_WINDOW_SAMPLES > 15)
+#error "TERRAIN_SPEED_WINDOW_SAMPLES must be 1 to 15"
+#endif
+#if (TERRAIN_SPEED_CONFIRM_CHECKS < 1) || (TERRAIN_SPEED_CONFIRM_CHECKS > 3)
+#error "TERRAIN_SPEED_CONFIRM_CHECKS must be 1 to 3"
+#endif
+#if (TERRAIN_SPEED_STOP_CHECKS < 1) || (TERRAIN_SPEED_STOP_CHECKS > 3)
+#error "TERRAIN_SPEED_STOP_CHECKS must be 1 to 3"
+#endif
+
+/*
  * Motion's odometry (TEAM.md IF-05) counts as stale, and its distance as
  * unknown, once its update count has not changed for this long, in ms.
  * tMotion publishes every 20 ms, so 2 s means it has stopped, not that

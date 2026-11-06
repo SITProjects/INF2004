@@ -78,6 +78,19 @@ typedef enum
 } terrain_turn_state_t;
 
 /**
+ * @brief How the wheels' speed is changing, judged from motion's two
+ *        wheel speeds. Resting value 0. The order matches the event codes
+ *        TERRAIN_EVENT_STATIONARY to TERRAIN_EVENT_DECELERATING.
+ */
+typedef enum
+{
+    TERRAIN_SPEED_STATIONARY = 0, /**< Wheels stopped, or nearly. */
+    TERRAIN_SPEED_ACCELERATING,   /**< Wheels speeding up. */
+    TERRAIN_SPEED_CRUISING,       /**< Wheels at a steady speed. */
+    TERRAIN_SPEED_DECELERATING    /**< Wheels slowing down. */
+} terrain_speed_state_t;
+
+/**
  * @brief Kind of event. The codes are fixed, because events are passed to
  *        other subsystems; new kinds take the next free code.
  */
@@ -88,10 +101,10 @@ typedef enum
     TERRAIN_EVENT_DESCENDING,   /**< A descent (or a dip) started. */
     TERRAIN_EVENT_LEVEL,        /**< Flat again after a descent. */
     TERRAIN_EVENT_COLLISION,    /**< The car hit something. */
-    TERRAIN_EVENT_STATIONARY,   /**< Reserved: speed state. */
-    TERRAIN_EVENT_ACCELERATING, /**< Reserved: speed state. */
-    TERRAIN_EVENT_CRUISING,     /**< Reserved: speed state. */
-    TERRAIN_EVENT_DECELERATING, /**< Reserved: speed state. */
+    TERRAIN_EVENT_STATIONARY,   /**< The wheels stopped. */
+    TERRAIN_EVENT_ACCELERATING, /**< The wheels started speeding up. */
+    TERRAIN_EVENT_CRUISING,     /**< The wheels reached a steady speed. */
+    TERRAIN_EVENT_DECELERATING, /**< The wheels started slowing down. */
     TERRAIN_EVENT_TURNING,      /**< The car started turning. */
     TERRAIN_EVENT_STRAIGHT      /**< The car stopped turning. */
 } terrain_event_type_t;
@@ -144,9 +157,16 @@ typedef struct
  * accelerometer, so they are given in every calibration state. While
  * motion's odometry is missing or stale the turn rate reads 0.
  *
+ * The speed state says whether the wheels are stopped, speeding up, at a
+ * steady speed or slowing down (see terrain_monitor_poll_event()). It
+ * also comes from the wheels, so it is given in every calibration state;
+ * while motion's odometry is missing or stale the wheels count as
+ * stopped.
+ *
  * The acceleration, tilt and hump state fields are 0 (and nothing is
  * held) unless the calibration state is TERRAIN_CALIB_VALID. An all-zero
- * snapshot reads as CALIBRATING, LEVEL, STRAIGHT, with everything 0.
+ * snapshot reads as CALIBRATING, LEVEL, STRAIGHT, STATIONARY, with
+ * everything 0.
  */
 typedef struct
 {
@@ -182,10 +202,10 @@ typedef struct
  *         terrain_monitor_status_text().
  * Does not wait for calibration: terrain_monitor_update() collects the
  * samples. Clears all counters. Raises the IMU fault (terrain_fault.h) if
- * setup fails and clears it if setup succeeds. Safe to call again to retry, for example
- * after plugging the sensor in, but only from the task that calls
- * terrain_monitor_update(); use terrain_monitor_recalibrate() from other
- * tasks.
+ * setup fails and clears it if setup succeeds. Safe to call again to
+ * retry, for example after plugging the sensor in, but only from the task
+ * that calls terrain_monitor_update(); use terrain_monitor_recalibrate()
+ * from other tasks.
  */
 terrain_status_t terrain_monitor_init (void);
 
@@ -290,6 +310,18 @@ terrain_status_t terrain_monitor_recalibrate (void);
  * Turns in place and line-following curves faster than the limit count;
  * each separate turn of an obstacle detour counts as its own turn.
  *
+ * Also in every calibration state, from the wheel speed: the average of
+ * the sizes of motion's two wheel speeds, so a turn in place counts as
+ * moving. Every TERRAIN_SPEED_WINDOW_SAMPLES samples it is compared with
+ * the previous check. The state changes, with an event of the same name
+ * (value 0), once the same answer comes TERRAIN_SPEED_CONFIRM_CHECKS
+ * checks in a row (TERRAIN_SPEED_STOP_CHECKS for STATIONARY):
+ * - STATIONARY: below TERRAIN_SPEED_STOP_MM_S (or no odometry).
+ * - ACCELERATING: up by at least TERRAIN_SPEED_CHANGE_MM_S since the
+ *   previous check.
+ * - DECELERATING: down by at least TERRAIN_SPEED_CHANGE_MM_S.
+ * - CRUISING: moving, and changed by less than that.
+ *
  * The queue holds TERRAIN_EVENT_QUEUE_LEN events; when it is full the
  * oldest is dropped and counted (terrain_monitor_events_dropped()). A
  * recalibration resets the hump state to LEVEL and the collision check to
@@ -381,6 +413,15 @@ int16_t terrain_monitor_data_turn_rate_dps (terrain_data_t const * p_data);
  */
 terrain_turn_state_t
 terrain_monitor_data_turn_state (terrain_data_t const * p_data);
+
+/**
+ * @brief Speed state in a snapshot.
+ * @param p_data Snapshot.
+ * @return The state, in every calibration state;
+ *         TERRAIN_SPEED_STATIONARY if @p p_data is NULL.
+ */
+terrain_speed_state_t
+terrain_monitor_data_speed_state (terrain_data_t const * p_data);
 
 /**
  * @brief Pitch in a snapshot.
@@ -537,6 +578,13 @@ char const * terrain_monitor_hump_text (terrain_hump_state_t state);
  * @return A constant string such as "TURNING"; never NULL.
  */
 char const * terrain_monitor_turn_text (terrain_turn_state_t state);
+
+/**
+ * @brief Name of a speed state, for printing.
+ * @param state Any terrain_speed_state_t value.
+ * @return A constant string such as "CRUISING"; never NULL.
+ */
+char const * terrain_monitor_speed_text (terrain_speed_state_t state);
 
 /**
  * @brief Name of an event kind, for printing.

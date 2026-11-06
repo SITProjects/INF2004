@@ -1,6 +1,6 @@
 /**
  * @file terrain_detect.h
- * @brief Terrain detectors: the hump, collision and turning state
+ * @brief Terrain detectors: the hump, collision, turning and speed state
  *        machines.
  *
  * Pure C with no kernel calls, so it can be tested on a PC. Each step
@@ -37,6 +37,17 @@
  * Cooldown and countdown are in samples (0 to 63, 0 to 15); the speed in
  * 4 mm/s steps, 0 to 1020 mm/s (stops there); the push in 0.1 g steps, 0
  * to 12.7 g (stops there; two axes of +/-8 g give at most 11.3 g).
+ *
+ * The speed state is found from the wheel speed (from motion's wheel
+ * speeds), not the accelerometer: see terrain_detect_speed_step().
+ *
+ * Speed word, masks and shifts, bit 0 first; all zero is STATIONARY with
+ * nothing counted:
+ *   speed state 2 | window count 4 | candidate 2 | confirm count 2 |
+ *   speed at the last check 8 | spare 14
+ * The window count is in samples (0 to 15); the confirm count in checks
+ * (0 to 3); the speed in 2 mm/s steps, 0 to 510 mm/s (stops there; motion
+ * drives at most 500 mm/s).
  *
  * Internal to the terrain module; other modules should use
  * terrain_monitor.h.
@@ -123,6 +134,25 @@ typedef struct
                               TERRAIN_DETECT_TURN_COUNT_MAX. */
 } terrain_turn_limits_t;
 
+/* Largest window the 4-bit window count holds, samples. */
+#define TERRAIN_DETECT_WINDOW_MAX 15u
+/* Largest confirm count the 2-bit field holds, checks. */
+#define TERRAIN_DETECT_CONFIRM_MAX 3u
+
+/** @brief Limits of the speed state machine. */
+typedef struct
+{
+    float stop_mm_s;        /**< Slower than this is stopped, mm/s. */
+    float change_mm_s;      /**< A change of at least this between two
+                                checks is speeding up or slowing down,
+                                mm/s. */
+    uint8_t window;         /**< Samples between checks, 1 to
+                                TERRAIN_DETECT_WINDOW_MAX. */
+    uint8_t confirm_checks; /**< Checks in a row to change state, 1 to
+                                 TERRAIN_DETECT_CONFIRM_MAX. */
+    uint8_t stop_checks;    /**< As confirm_checks, for STATIONARY. */
+} terrain_speed_limits_t;
+
 /* Public function declarations. */
 
 /**
@@ -191,6 +221,38 @@ terrain_detect_turn_step (uint32_t * p_word, float turn_dps,
  * @return The state.
  */
 terrain_turn_state_t terrain_detect_turn_state (uint32_t word);
+
+/**
+ * @brief Run the speed state machine on one sample.
+ * @param p_word Speed word; start from 0.
+ * @param wheel_mm_s Wheel speed for this sample, mm/s: the average of the
+ *        sizes of the two wheel speeds, so 0 or more (a negative value
+ *        counts as 0). Use 0 when it is unknown.
+ * @param p_limits Limits; counts of 0 count as 1, and counts over the
+ *        field limits are cut to them.
+ * @return The event the sample caused: STATIONARY, ACCELERATING,
+ *         CRUISING, DECELERATING or NONE. NONE, with nothing changed, if
+ *         a pointer is NULL.
+ *
+ * Every window samples the speed is checked against the speed at the
+ * previous check, and gives one answer: STATIONARY below stop_mm_s;
+ * otherwise ACCELERATING for a rise of at least change_mm_s,
+ * DECELERATING for a fall of at least change_mm_s, CRUISING for less.
+ * The state changes (event) once the same answer, different from the
+ * state, comes confirm_checks checks in a row (stop_checks for
+ * STATIONARY). An answer equal to the state, or a different answer,
+ * restarts the count. A NaN speed counts as 0.
+ */
+terrain_event_type_t
+terrain_detect_speed_step (uint32_t * p_word, float wheel_mm_s,
+                           terrain_speed_limits_t const * p_limits);
+
+/**
+ * @brief Speed state in a speed word.
+ * @param word Speed word.
+ * @return The state.
+ */
+terrain_speed_state_t terrain_detect_speed_state (uint32_t word);
 
 /**
  * @brief Run the collision state machine on one sample.

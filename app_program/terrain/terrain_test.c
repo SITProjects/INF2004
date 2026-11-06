@@ -9,11 +9,12 @@
  *
  * TER-U12 runs the hump state machine and event queue on made-up data,
  * TER-U15 the hump height on made-up one-wheel ramps, TER-U19 the
- * collision state machine on made-up pushes and speeds, and TER-U22 the
+ * collision state machine on made-up pushes and speeds, TER-U22 the
  * turn rate and turning state machine on made-up wheel speeds and turn
- * rates; they need only the Pico. The other tests need the GY-511 connected; TER-U02, TER-U04
- * and TER-U13 also need the car standing still on level ground during
- * power-up. No test waits for a person: every wait is bounded.
+ * rates, and TER-U24 the speed state machine on made-up wheel speeds;
+ * they need only the Pico. The other tests need the GY-511 connected;
+ * TER-U02, TER-U04 and TER-U13 also need the car standing still on level
+ * ground during power-up. No test waits for a person: every wait is bounded.
  *
  * The bench tests TER-U06 and TER-U07 are added only with
  * TERRAIN_TEST_BENCH set to 1 in terrain_config.h. They print what to do
@@ -83,6 +84,14 @@
 #define TURN_HUMP_BITS 0x0002ABCDu /* Made-up hump fields, bits 0-17. */
 #define TURN_HUMP_MASK 0x0003FFFFu
 
+/* TER-U24 wheel speeds (mm/s): stopped, a blip, line-following speed
+ * (120) reached in 20 mm/s steps, one noisy check, and slowing down. */
+#define SPEED_STOP_MM_S 0.0f
+#define SPEED_BLIP_MM_S 100.0f
+#define SPEED_CRUISE_MM_S 120.0f
+#define SPEED_NOISE_MM_S 140.0f
+#define SPEED_EVENTS_MAX 8u
+
 /* TER-U15 ramps under one wheel, driven at 1.2 mm a sample (120 mm/s,
  * the line-following speed). */
 #define HUMP_STEP_MM 1.2f
@@ -123,6 +132,13 @@ typedef struct
     uint32_t samples; /**< Length, samples. */
 } turn_part_t;
 
+/** @brief One stretch of a TER-U24 wheel-speed trace. */
+typedef struct
+{
+    float wheel_mm_s; /**< Wheel speed for the whole stretch. */
+    uint32_t samples; /**< Length, samples. */
+} speed_part_t;
+
 /** @brief A TER-U15 trapezoid ramp under one wheel, mm. */
 typedef struct
 {
@@ -147,6 +163,7 @@ static bool turn_rate_ok (void);
 static bool rate_near (float dps, int32_t want_x10);
 static bool turn_trace_ok (void);
 static bool turn_keeps_hump_ok (void);
+static bool speed_trace_ok (void);
 #if TERRAIN_TEST_BENCH
 static bool bench_step (char const * p_instruction,
                         terrain_calib_info_t * p_out);
@@ -231,6 +248,12 @@ terrain_test (void)
                "turn trace gives TURNING, STRAIGHT, TURNING, STRAIGHT only");
     TEST_CHECK("TER-U22", turn_keeps_hump_ok(),
                "turning and hump fields of the detector word kept apart");
+
+    /* TER-U24: speed machine on made-up wheel speeds (no IMU or motors
+     * needed). */
+    TEST_CHECK("TER-U24", speed_trace_ok(),
+               "speed trace gives ACCELERATING, CRUISING, DECELERATING, "
+               "STATIONARY only");
 
     /* TER-U13: still and level, so no hump and no events. */
     terrain_data_t still = {0};
@@ -567,6 +590,67 @@ turn_keeps_hump_ok (void)
     return b_hump_kept && ((word & TURN_HUMP_MASK) == 0u) &&
            (terrain_detect_hump_state(word) == TERRAIN_HUMP_LEVEL) &&
            (terrain_detect_turn_state(word) == TERRAIN_TURN_TURNING);
+}
+
+/*
+ * TER-U24: stopped, then a one-check blip: nothing. Speeding up 20 mm/s
+ * a check gives ACCELERATING after two checks; steady gives CRUISING;
+ * one noisy check up, then back down, gives nothing; slowing down gives
+ * DECELERATING; stopped gives STATIONARY after three checks. Nothing
+ * else, in that order. Every stretch is whole windows (10 samples), so
+ * each check sees one stretch.
+ */
+static bool
+speed_trace_ok (void)
+{
+    static speed_part_t const trace[] = {{SPEED_STOP_MM_S, 30u},
+                                         {SPEED_BLIP_MM_S, 10u},
+                                         {SPEED_STOP_MM_S, 30u},
+                                         {40.0f, 10u},
+                                         {60.0f, 10u},
+                                         {80.0f, 10u},
+                                         {100.0f, 10u},
+                                         {SPEED_CRUISE_MM_S, 50u},
+                                         {SPEED_NOISE_MM_S, 10u},
+                                         {SPEED_CRUISE_MM_S, 40u},
+                                         {100.0f, 10u},
+                                         {80.0f, 10u},
+                                         {60.0f, 10u},
+                                         {40.0f, 10u},
+                                         {SPEED_STOP_MM_S, 40u}};
+    static terrain_event_type_t const expected[] = {
+        TERRAIN_EVENT_ACCELERATING, TERRAIN_EVENT_CRUISING,
+        TERRAIN_EVENT_DECELERATING, TERRAIN_EVENT_STATIONARY};
+    terrain_speed_limits_t const limits = {
+        (float)TERRAIN_SPEED_STOP_MM_S, (float)TERRAIN_SPEED_CHANGE_MM_S,
+        TERRAIN_SPEED_WINDOW_SAMPLES, TERRAIN_SPEED_CONFIRM_CHECKS,
+        TERRAIN_SPEED_STOP_CHECKS};
+
+    terrain_event_type_t got[SPEED_EVENTS_MAX];
+    uint32_t n_got = 0u;
+    uint32_t word = 0u;
+    for (uint32_t part = 0u; part < (sizeof(trace) / sizeof(trace[0])); part++)
+    {
+        for (uint32_t i = 0u; i < trace[part].samples; i++)
+        {
+            terrain_event_type_t const type = terrain_detect_speed_step(
+                &word, trace[part].wheel_mm_s, &limits);
+            if ((type != TERRAIN_EVENT_NONE) && (n_got < SPEED_EVENTS_MAX))
+            {
+                got[n_got] = type;
+                n_got++;
+            }
+        }
+    }
+
+    uint32_t const n = sizeof(expected) / sizeof(expected[0]);
+    bool b_ok = (n_got == n) &&
+                (terrain_detect_speed_state(word) == TERRAIN_SPEED_STATIONARY);
+    for (uint32_t i = 0u; b_ok && (i < n); i++)
+    {
+        b_ok = (got[i] == expected[i]);
+    }
+    return b_ok;
 }
 
 /*
