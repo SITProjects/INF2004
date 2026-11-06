@@ -37,6 +37,7 @@ static volatile bool b_stopped = false;
 static volatile uint32_t table[REMOTE_MAP_SIZE];
 
 /* Private function declarations. */
+static bool find_entry (char const * p_text, uint32_t * p_entry);
 static uint32_t split_words (char const * p_text, uint32_t length,
                              word_t * p_words);
 static bool word_is (word_t const * p_word, char const * p_expected);
@@ -86,6 +87,24 @@ remote_command_stopped (void)
 line_turn_t
 remote_command_turn (char const * p_text)
 {
+    uint32_t entry = 0u;
+    return find_entry(p_text, &entry) ? (line_turn_t)(entry >> TURN_SHIFT)
+                                      : LINE_JUNCTION_DEFAULT_TURN;
+}
+
+bool
+remote_command_mapped (char const * p_text)
+{
+    uint32_t entry = 0u;
+    return find_entry(p_text, &entry);
+}
+
+/* Private function definitions. */
+
+/* The table entry for a barcode; false if it has none. */
+static bool
+find_entry (char const * p_text, uint32_t * p_entry)
+{
     uint32_t length = 0u;
     while ((length <= REMOTE_TEXT_MAX) && (p_text[length] != '\0'))
     {
@@ -99,14 +118,13 @@ remote_command_turn (char const * p_text)
             uint32_t const entry = table[i];
             if ((entry & TEXT_MASK) == key)
             {
-                return (line_turn_t)(entry >> TURN_SHIFT);
+                *p_entry = entry;
+                return true;
             }
         }
     }
-    return LINE_JUNCTION_DEFAULT_TURN;
+    return false;
 }
-
-/* Private function definitions. */
 
 /* Split on spaces; returns the word count, one over if there are more. */
 static uint32_t

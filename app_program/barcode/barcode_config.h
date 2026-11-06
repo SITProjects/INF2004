@@ -41,11 +41,11 @@
 
 /**
  * @brief A white gap longer than this, in us, ends a scan (the quiet zone),
- * and a longer black bar drops it. 400 ms is 32 mm at the 80 mm/s follow
- * speed; wide white gaps read 240 ms. It is fixed because a limit based on
- * the narrowest element ended scans early: one flicker at the first bar
- * shrank it below a normal gap (2026-11-06, the first 300 ms of a barcode
- * was lost on both sizes).
+ * and so does a longer black, at the bar before it. 400 ms is 32 mm at the
+ * 80 mm/s follow speed; wide white gaps read 240 ms. It is fixed because a
+ * limit based on the narrowest element ended scans early: one flicker at
+ * the first bar shrank it below a normal gap (2026-11-06, the first 300 ms
+ * of a barcode was lost on both sizes).
  */
 #define BARCODE_QUIET_MAX_US 400000u
 

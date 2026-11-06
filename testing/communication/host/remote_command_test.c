@@ -81,6 +81,17 @@ main (void)
           b_refused && remote_command_stopped() &&
               (LINE_TURN_STRAIGHT == remote_command_turn("F")));
 
+    bool const b_unknown = !remote_command_mapped("F");
+    (void)send("map F STRAIGHT");
+    (void)send("map A LEFT");
+    bool const b_known = remote_command_mapped("F") &&
+                         remote_command_mapped("A") &&
+                         !remote_command_mapped(".") &&
+                         !remote_command_mapped("FA");
+    (void)send("clear");
+    check("RC07 a barcode counts as mapped once set, STRAIGHT included",
+          b_unknown && b_known && !remote_command_mapped("A"));
+
     printf("%u failure(s)\n", failures);
     return (0u == failures) ? 0 : 1;
 }

@@ -282,17 +282,67 @@ test_scan_assembly (void)
     check("BT05 the next symbol's first bar ends the previous scan",
           b_split && b_restart);
 
-    /* Same level twice is a merged glitch; a very long bar is no barcode. */
+    /* Same level twice is a merged glitch; a very long bar ends the scan. */
     barcode_scan_init(&scan, false, 0u);
     (void)barcode_scan_edge(&scan, 1000u, true);
     (void)barcode_scan_edge(&scan, 2000u, true);
     (void)barcode_scan_edge(&scan, 1000u + NARROW_US, false);
     bool const b_glitch = (1u == scan.count) && (NARROW_US == scan.widths[0]);
     (void)barcode_scan_edge(&scan, 2000u + NARROW_US * 2u, true);
-    (void)barcode_scan_poll(&scan,
-                            2000u + NARROW_US * 2u + BARCODE_QUIET_MAX_US + 1u);
-    check("BT06 a repeated level is ignored; an over-long bar drops the scan",
-          b_glitch && !scan.b_active && (0u == scan.count));
+    bool const b_ended =
+        (BARCODE_SCAN_DONE ==
+         barcode_scan_poll(&scan, 2000u + NARROW_US * 2u +
+                                      BARCODE_QUIET_MAX_US + 1u));
+    check("BT06 a repeated level is ignored; an over-long bar ends the scan "
+          "at the last bar",
+          b_glitch && b_ended && scan.b_long_black && (1u == scan.count));
+
+    /* Bars merge partway through: the part before still has to reach the
+     * decoder, whether the black is still going or has just ended. */
+    uint32_t const all = encode("*A*", RATIO_X10, 0u);
+    uint32_t const cut = 2u * 10u; /* "*A", their gap, then the next white. */
+    bool b_poll_read = false;
+    bool b_edge_read = false;
+    for (uint32_t pass = 0u; pass < 2u; pass++)
+    {
+        barcode_scan_init(&scan, false, 0u);
+        uint32_t const start = feed_scan(&scan, cut, 1000u, &b_early);
+        uint32_t const late = start + BARCODE_QUIET_MAX_US + 1u;
+        barcode_scan_result_t const ended =
+            (0u == pass) ? barcode_scan_poll(&scan, late)
+                         : barcode_scan_edge(&scan, late, false);
+        bool const b_read =
+            (BARCODE_SCAN_DONE == ended) && scan.b_long_black &&
+            ((cut - 1u) == scan.count) &&
+            (BARCODE_CODE39_OK ==
+             barcode_code39_decode_partial(scan.widths, scan.count, text,
+                                           sizeof(text), &b_reversed)) &&
+            (0 == strcmp("A", text));
+        b_poll_read = (0u == pass) ? b_read : b_poll_read;
+        b_edge_read = (1u == pass) ? b_read : b_edge_read;
+    }
+    check("BT15 bars merging partway through keep the elements before them",
+          b_poll_read && b_edge_read);
+
+    /* The sensor runs onto the tape just after a whole barcode. */
+    barcode_scan_init(&scan, false, 0u);
+    uint32_t const after = feed_scan(&scan, all + 1u, 1000u, &b_early);
+    bool const b_whole =
+        (BARCODE_SCAN_DONE ==
+         barcode_scan_poll(&scan, after + BARCODE_QUIET_MAX_US + 1u)) &&
+        (all == scan.count) &&
+        (BARCODE_CODE39_OK ==
+         barcode_code39_decode(scan.widths, scan.count, text, sizeof(text),
+                               &b_reversed)) &&
+        (0 == strcmp("A", text));
+    check("BT16 a long black right after a barcode leaves it whole", b_whole);
+
+    /* A scan that ends on a long black starts the next one cleanly. */
+    barcode_scan_reset(&scan);
+    (void)barcode_scan_edge(&scan, after + BARCODE_QUIET_MAX_US + 2u, false);
+    (void)barcode_scan_edge(&scan, after + BARCODE_QUIET_MAX_US + 3u, true);
+    check("BT17 the next bar after a long black starts a new scan",
+          scan.b_active && !scan.b_long_black && (0u == scan.count));
 }
 
 /* Run @p count widths through the filter and scan as the sensor would

@@ -11,6 +11,7 @@
 /* Private types, constants, and macros. */
 
 /* Private function declarations. */
+static void end_scan (barcode_scan_t * p_scan);
 static void append (barcode_scan_t * p_scan, uint32_t width_us);
 
 /* Public function definitions. */
@@ -60,6 +61,7 @@ barcode_scan_reset (barcode_scan_t * p_scan)
     p_scan->count = 0u;
     p_scan->b_active = false;
     p_scan->b_overflow = false;
+    p_scan->b_long_black = false;
     p_scan->narrowest_us = UINT32_MAX;
 }
 
@@ -73,20 +75,14 @@ barcode_scan_edge (barcode_scan_t * p_scan, uint32_t edge_us, bool b_black)
     uint32_t const width = edge_us - p_scan->last_us;
     if (p_scan->b_active)
     {
-        if (!p_scan->b_black && (width > BARCODE_QUIET_MAX_US))
+        if (width > BARCODE_QUIET_MAX_US)
         {
-            /* The white before this edge was a quiet zone. */
+            /* The white before this edge was a quiet zone, or the black
+             * was too long for a bar. */
+            end_scan(p_scan);
             return BARCODE_SCAN_DONE;
         }
-        if (p_scan->b_black && (width > BARCODE_QUIET_MAX_US))
-        {
-            /* Too long for a bar: not a barcode. */
-            barcode_scan_reset(p_scan);
-        }
-        else
-        {
-            append(p_scan, width);
-        }
+        append(p_scan, width);
     }
     else if (b_black)
     {
@@ -114,19 +110,31 @@ barcode_scan_poll (barcode_scan_t * p_scan, uint32_t now_us)
         /* An edge newer than @p now_us was already taken. */
         return BARCODE_SCAN_BUSY;
     }
-    if (p_scan->b_black)
+    if (elapsed <= BARCODE_QUIET_MAX_US)
     {
-        if (elapsed > BARCODE_QUIET_MAX_US)
-        {
-            barcode_scan_reset(p_scan);
-        }
         return BARCODE_SCAN_BUSY;
     }
-    return (elapsed > BARCODE_QUIET_MAX_US) ? BARCODE_SCAN_DONE
-                                            : BARCODE_SCAN_BUSY;
+    end_scan(p_scan);
+    return BARCODE_SCAN_DONE;
 }
 
 /* Private function definitions. */
+
+/* Over-long black ends the scan at the last bar, dropping the white after it:
+ * the elements before it may still read (2026-11-06: bars merged 2 s into a
+ * barcode, and dropping the whole scan lost the 19 good elements before). */
+static void
+end_scan (barcode_scan_t * p_scan)
+{
+    if (p_scan->b_black)
+    {
+        p_scan->b_long_black = true;
+        if (p_scan->count > 0u)
+        {
+            p_scan->count--;
+        }
+    }
+}
 
 static void
 append (barcode_scan_t * p_scan, uint32_t width_us)

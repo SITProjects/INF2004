@@ -4,9 +4,9 @@
  *
  * A scan starts at the first black edge after white and collects each
  * element's width (time between edges). A white gap longer than
- * BARCODE_QUIET_MAX_US ends it; a black bar longer than that abandons it
- * (the line, or the car stopped on a bar). The module is pure: no
- * kernel calls.
+ * BARCODE_QUIET_MAX_US ends it; so does a black longer than that (bars
+ * merged, the line, or the car stopped on a bar), at the bar before it.
+ * The module is pure: no kernel calls.
  */
 
 #ifndef BARCODE_SCAN_H
@@ -42,6 +42,7 @@ typedef struct
     bool b_active;                         /**< Inside a scan. */
     bool b_black;                          /**< Level since last_us. */
     bool b_overflow;                       /**< Too many elements. */
+    bool b_long_black;                     /**< Ended by an over-long black. */
     uint32_t last_us;                      /**< Time of the last edge. */
     uint32_t narrowest_us;                 /**< Narrowest width so far. */
 } barcode_scan_t;
@@ -75,7 +76,7 @@ bool barcode_filter_edge (barcode_filter_t * p_filter, uint32_t edge_us,
 
 /**
  * @brief Between scans, take the sensor's level as the current one.
- * A scan dropped on a long black can leave a stale level, and the next
+ * A scan ended on a long black can leave a stale level, and the next
  * barcode's first bar would then look like no change. Does nothing during
  * a scan.
  * @param p_scan Scan state.
@@ -103,8 +104,8 @@ void barcode_scan_reset (barcode_scan_t * p_scan);
  * @param edge_us Time of the edge.
  * @param b_black Level after it. The same level as before is a glitch
  *        (two edges merged) and is ignored.
- * @return BARCODE_SCAN_DONE if the white gap before this edge ended a
- *         scan; the edge was NOT taken: decode, reset, then pass it again.
+ * @return BARCODE_SCAN_DONE if the white or black before this edge ended
+ *         a scan; the edge was NOT taken: decode, reset, then pass it again.
  */
 barcode_scan_result_t barcode_scan_edge (barcode_scan_t * p_scan,
                                          uint32_t edge_us, bool b_black);
@@ -114,7 +115,8 @@ barcode_scan_result_t barcode_scan_edge (barcode_scan_t * p_scan,
  * @param p_scan State.
  * @param now_us Current time. An edge already taken that is newer than
  *        it is not an error: the call then waits.
- * @return BARCODE_SCAN_DONE once the trailing white is a quiet zone.
+ * @return BARCODE_SCAN_DONE once the trailing white is a quiet zone, or
+ *         the trailing black is too long for a bar.
  */
 barcode_scan_result_t barcode_scan_poll (barcode_scan_t * p_scan,
                                          uint32_t now_us);

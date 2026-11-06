@@ -114,6 +114,11 @@ read_task (INT stacd, void * p_exinf)
 static void
 finish_scan (void)
 {
+    if (scan.b_long_black && (scan.count >= SHORT_SCAN_MIN_ELEMENTS))
+    {
+        tm_printf((UB *)"barcode: long black ended the scan, elements=%u\n",
+                  (UINT)scan.count);
+    }
     if (scan.b_overflow)
     {
         tm_printf((UB *)"barcode: FAIL too many elements\n");
@@ -124,11 +129,14 @@ finish_scan (void)
         bool b_reversed = false;
         barcode_code39_status_t const status = barcode_code39_decode(
             scan.widths, scan.count, text, sizeof(text), &b_reversed);
+        /* A partial read has one frame, not two: it can be wrong, so only
+         * a barcode the dashboard knows counts (2026-11-06: a false '.'). */
         bool const b_partial =
             (status != BARCODE_CODE39_OK) &&
             (BARCODE_CODE39_OK ==
              barcode_code39_decode_partial(scan.widths, scan.count, text,
-                                           sizeof(text), &b_reversed));
+                                           sizeof(text), &b_reversed)) &&
+            remote_command_mapped(text);
         if ((BARCODE_CODE39_OK == status) || b_partial)
         {
             line_turn_t const turn = remote_command_turn(text);

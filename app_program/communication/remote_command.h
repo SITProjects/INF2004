@@ -64,4 +64,12 @@ bool remote_command_stopped (void);
  */
 line_turn_t remote_command_turn (char const * p_text);
 
+/**
+ * @brief Whether the dashboard has set an action for a barcode.
+ * @param p_text Decoded barcode text, terminated.
+ * @return True if @p p_text is in the table, STRAIGHT included.
+ * Any task; never waits.
+ */
+bool remote_command_mapped (char const * p_text);
+
 #endif /* REMOTE_COMMAND_H */
