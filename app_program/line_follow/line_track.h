@@ -5,13 +5,19 @@
  *
  * Two sensors straddle the tape. While one reads black the target heading
  * leads the car by LINE_LEAD_DEG towards it, so motion keeps turning
- * while driving. Otherwise (both white, or both black: the course has no
- * crossings) the car keeps turning at the rate it has averaged over the
- * last LINE_CURVE_WINDOW_MM, so it follows a bend between corrections and
- * drives straight on a straight. A sensor that reads black only briefly
- * is a correction, never a corner: turning towards it clears it quickly
- * (2026-11-06). An edge that stays black for LINE_EDGE_MAX_MM, or a long
- * white run after an edge, starts a pivot search towards the last edge.
+ * while driving. Otherwise the car keeps turning at the rate it has
+ * averaged over the last LINE_CURVE_WINDOW_MM, so it follows a bend
+ * between corrections and drives straight on a straight. A sensor that
+ * reads black only briefly is a correction, never a corner: turning
+ * towards it clears it quickly (2026-11-06). An edge that stays black for
+ * LINE_EDGE_MAX_MM, or a long white run after an edge, starts a pivot
+ * search towards the last edge.
+ *
+ * Both sensors turning black together (within LINE_JUNCTION_SKEW_MM) is a
+ * cross junction: the car drives LINE_JUNCTION_CENTRE_MM on, then goes
+ * straight on or pivots onto the new line as the input's turn says. Both
+ * black one after the other is the route passing under the car at an
+ * angle: once the second clears, the car searches towards that side.
  *
  * The module is pure: no kernel calls, so host tests can drive it. Only
  * the line task calls it.
@@ -35,6 +41,15 @@ typedef enum
     LINE_MODE_STOP          /**< Line not found: brake and wait. */
 } line_mode_t;
 
+/** @brief What to do at the next cross junction (from a barcode). */
+typedef enum
+{
+    LINE_TURN_STRAIGHT = 0, /**< Drive across (the default). */
+    LINE_TURN_LEFT,         /**< Pivot left onto the crossing line. */
+    LINE_TURN_RIGHT,        /**< Pivot right onto the crossing line. */
+    LINE_TURN_UTURN         /**< Pivot round onto the route behind. */
+} line_turn_t;
+
 /** @brief One decision for motion (IF-04). */
 typedef struct
 {
@@ -43,7 +58,9 @@ typedef struct
                                      to; not wrapped, + is left. */
     bool b_seen;                /**< Either sensor black in this sample,
                                      for stop-at-line (motion debounces). */
-    bool b_junction;            /**< Both sensors black, confirmed. */
+    bool b_junction;            /**< A cross junction is being taken: from
+                                     its detection until tracking resumes
+                                     on the new line. */
 } line_request_t;
 
 /** @brief One sample and the motion state it was taken in. */
@@ -56,6 +73,7 @@ typedef struct
     bool b_control;      /**< Motion follows line requests (not a queued
                               command, inhibit or bypass). */
     bool b_turning;      /**< Motion is pivoting (mode TURN). */
+    line_turn_t turn;    /**< Instruction for the next junction. */
 } line_track_input_t;
 
 /** @brief Tracking state. Callers allocate it; fields are private. */
@@ -69,8 +87,20 @@ typedef struct
     int32_t curve_udeg_per_mm; /* Averaged turn, udeg/mm, + is left. */
     int32_t prev_heading_deg;  /* Last sample, for the turn rate. */
     int32_t prev_distance_mm;
-    uint32_t last_side;     /* Side of the last edge, for searches. */
-    int32_t white_start_mm; /* Travel when both last read white. */
+    /* Dark episode: from a sensor turning black until both read white. */
+    uint32_t entry_side;     /* First side black; 2 = both at once. */
+    int32_t entry_mm;        /* Travel when the episode started. */
+    int32_t entry_deg;       /* Heading then. */
+    uint32_t exit_side;      /* Side most recently black on its own. */
+    bool b_both_seen;        /* Both black during this episode. */
+    bool b_skew_small;       /* ... within LINE_JUNCTION_SKEW_MM. */
+    uint32_t junction_phase; /* 0 none, 1 driving to the centre, 2 pivot. */
+    line_turn_t junction_turn;
+    int32_t junction_mm;       /* Travel when the junction began. */
+    int32_t junction_deg;      /* Heading the junction was met on. */
+    int32_t search_ignore_deg; /* Pivot this far before looking. */
+    uint32_t last_side;        /* Side of the last edge, for searches. */
+    int32_t white_start_mm;    /* Travel when both last read white. */
     uint32_t junction_count;
     int32_t search_start_deg;
     uint32_t search_side;  /* Side the current pivot turns towards. */
@@ -101,5 +131,8 @@ line_request_t line_track_update (line_track_t * p_track,
 
 /** @brief Short name of @p mode for logs ("TRACK", "SEARCH_L", ...). */
 char const * line_track_mode_name (line_mode_t mode);
+
+/** @brief Short name of @p turn for logs ("STRAIGHT", "LEFT", ...). */
+char const * line_track_turn_name (line_turn_t turn);
 
 #endif /* LINE_TRACK_H */

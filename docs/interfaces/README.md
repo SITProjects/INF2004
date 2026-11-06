@@ -26,3 +26,4 @@ Functions that are already safe to call from any task:
 | `connectivity_is_connected()` | `app_program/communication/connectivity.h` | Wi-Fi joined with an IP address |
 | `obstacle_get_state()` | `app_program/obstacle/obstacle.h` | latest obstacle result, geometry, stop request and bypass state (IF-07) |
 | `motion_line_control_active()` | `app_program/motion/motion.h` | whether `tMotion` follows line requests (IF-04) |
+| `line_follow_set_turn()` | `app_program/line_follow/line_follow.h` | the turn for the next cross junction, set by the barcode reader (IF-08) |

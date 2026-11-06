@@ -128,19 +128,111 @@ test_brief_touch (void)
               (0 == out.target_heading_deg));
 }
 
+/* A cross met square: both sensors black together. */
+static void
+cross_junction (line_turn_t turn)
+{
+    reset();
+    in.turn = turn;
+    in.heading_deg = 4;
+    drive(false, false, samples_for(100));
+    drive(true, true, LINE_CONFIRM_SAMPLES + LINE_JUNCTION_SAMPLES - 1u);
+}
+
 static void
 test_junction (void)
 {
-    reset();
-    drive(false, false, samples_for(100));
-    drive(true, true, LINE_CONFIRM_SAMPLES + LINE_JUNCTION_SAMPLES - 1u);
-    bool const b_junction = out.b_junction && (0 == out.target_heading_deg);
+    cross_junction(LINE_TURN_STRAIGHT);
+    bool const b_junction = out.b_junction && (4 == out.target_heading_deg);
+    drive(true, true, samples_for(15));
+    /* Leaving the crossing tape one sensor late is no correction. */
+    drive(false, true, LINE_CONFIRM_SAMPLES + 2u);
+    bool const b_held = out.b_junction && (4 == out.target_heading_deg) &&
+                        (LINE_MODE_TRACK == out.mode);
+    drive(false, false, samples_for(LINE_JUNCTION_CENTRE_MM));
+    check("LT06 a cross is a junction: straight on (the default) holds the "
+          "heading over it, then tracks",
+          b_junction && b_held && !out.b_junction &&
+              (LINE_MODE_TRACK == out.mode) && (4 == out.target_heading_deg));
+}
+
+static void
+test_junction_left (void)
+{
+    cross_junction(LINE_TURN_LEFT);
+    drive(true, true, samples_for(15));
+    drive(false, false, samples_for(LINE_JUNCTION_CENTRE_MM));
+    bool const b_pivot = (LINE_MODE_SEARCH_LEFT == out.mode) &&
+                         (4 + 90 + LINE_JUNCTION_LOOK_DEG ==
+                          out.target_heading_deg) &&
+                         out.b_junction;
+    in.b_turning = true;
+    /* The right sensor sweeps over the route being left: ignored. */
+    in.heading_deg = 20;
     drive(false, true, LINE_CONFIRM_SAMPLES);
+    in.heading_deg = 25;
     drive(false, false, LINE_CONFIRM_SAMPLES);
-    check("LT06 both black keeps to the bend (straight here); the trailing "
-          "edge is no corner",
-          b_junction && !out.b_junction && (LINE_MODE_TRACK == out.mode) &&
-              (0 == out.target_heading_deg));
+    bool const b_ignored = (LINE_MODE_SEARCH_LEFT == out.mode);
+    in.heading_deg = 85;
+    drive(true, false, LINE_CONFIRM_SAMPLES);
+    in.heading_deg = 92;
+    drive(false, false, LINE_CONFIRM_SAMPLES);
+    check("LT15 a LEFT junction drives to the centre, pivots left past the "
+          "route it leaves, and tracks the crossing line",
+          b_pivot && b_ignored && (LINE_MODE_TRACK == out.mode) &&
+              !out.b_junction && (92 == out.target_heading_deg));
+}
+
+static void
+test_junction_uturn (void)
+{
+    cross_junction(LINE_TURN_UTURN);
+    drive(false, false, samples_for(LINE_JUNCTION_CENTRE_MM));
+    in.b_turning = true;
+    bool const b_pivot =
+        (LINE_MODE_SEARCH_LEFT == out.mode) &&
+        (4 + 180 + LINE_JUNCTION_LOOK_DEG == out.target_heading_deg);
+    /* The left branch passes under the left sensor at 90: ignored. */
+    in.heading_deg = 94;
+    drive(true, false, LINE_CONFIRM_SAMPLES);
+    in.heading_deg = 100;
+    drive(false, false, LINE_CONFIRM_SAMPLES);
+    bool const b_ignored = (LINE_MODE_SEARCH_LEFT == out.mode);
+    in.heading_deg = 178;
+    drive(true, false, LINE_CONFIRM_SAMPLES);
+    in.heading_deg = 184;
+    drive(false, false, LINE_CONFIRM_SAMPLES);
+    bool const b_found = (LINE_MODE_TRACK == out.mode) &&
+                         (184 == out.target_heading_deg);
+    cross_junction(LINE_TURN_RIGHT);
+    drive(false, false, samples_for(LINE_JUNCTION_CENTRE_MM));
+    in.b_turning = false;
+    in.heading_deg = 4 - 90 - LINE_JUNCTION_LOOK_DEG;
+    drive(false, false, 1u);
+    check("LT16 a U-turn pivots 180 past the branches; a RIGHT pivot that "
+          "finds nothing stops",
+          b_pivot && b_ignored && b_found && (LINE_MODE_STOP == out.mode) &&
+              !out.b_junction);
+}
+
+/* The route at an angle: left black, both black 25 mm later, then only
+ * the right, then white. The tape is now outside on the right. */
+static void
+test_route_under_car (void)
+{
+    reset();
+    in.heading_deg = 20;
+    drive(false, false, samples_for(100));
+    drive(true, false, LINE_CONFIRM_SAMPLES);
+    drive(true, false, samples_for(25));
+    drive(true, true, LINE_CONFIRM_SAMPLES + LINE_JUNCTION_SAMPLES + 5u);
+    bool const b_no_junction = !out.b_junction;
+    drive(false, true, LINE_CONFIRM_SAMPLES + 5u);
+    drive(false, false, LINE_CONFIRM_SAMPLES);
+    check("LT17 the route passing under the car (both black one after the "
+          "other) is no junction: search towards the side that cleared last",
+          b_no_junction && (LINE_MODE_SEARCH_RIGHT == out.mode) &&
+              (20 - LINE_SEARCH_MAX_DEG == out.target_heading_deg));
 }
 
 /* Drive @p mm with both sensors white while the heading turns at
@@ -325,6 +417,9 @@ main (void)
     test_control_off();
     test_pivot_overshoot();
     test_bend();
+    test_junction_left();
+    test_junction_uturn();
+    test_route_under_car();
     printf("%u failure(s)\n", failures);
     return (0u == failures) ? 0 : 1;
 }

@@ -24,14 +24,19 @@
 
 /* Private types, constants, and macros. */
 #define CALIBRATION_PRINT_MS 1000u
-/* "line JUNCTION t=%d h=%d d=%d" with three 11-character values fits. */
-#define REPORT_TEXT_SIZE 64u
+/* "line JUNCTION STRAIGHT t=%d h=%d d=%d" with three 11-character values
+ * fits; telemetry takes up to 63 characters, so only extreme values miss
+ * MQTT (the console line is still printed). */
+#define REPORT_TEXT_SIZE 80u
 
 /* Static data. */
 ID line_follow_tid_sense;
 static line_track_t track;
 static int32_t last_distance_mm;
 static int32_t last_heading_deg;
+/* Written by any task, read and cleared by the line task. */
+static volatile line_turn_t pending_turn = LINE_JUNCTION_DEFAULT_TURN;
+static bool b_was_junction; /* Line task only. */
 
 /* Private function declarations. */
 static void sense_task (INT stacd, void * p_exinf);
@@ -60,6 +65,12 @@ line_follow_start (void)
     return (line_follow_tid_sense < E_OK) ? line_follow_tid_sense : E_OK;
 }
 
+void
+line_follow_set_turn (line_turn_t turn)
+{
+    pending_turn = turn;
+}
+
 /* Private function definitions. */
 
 static void
@@ -77,7 +88,8 @@ sense_task (INT stacd, void * p_exinf)
     (void)tk_dly_tsk(MOTION_COMMAND_START_DELAY_MS);
 #endif
     tm_printf((UB *)"line_follow: digital IR line sensing started. "
-                    "Submitting requests to motion.\n");
+                    "Submitting requests to motion. Built " __DATE__
+                    " " __TIME__ "\n");
 
     line_track_input_t in = take_input();
     line_track_init(&track, &in);
@@ -85,6 +97,12 @@ sense_task (INT stacd, void * p_exinf)
     {
         in = take_input();
         line_request_t const request = line_track_update(&track, &in);
+        if (request.b_junction && !b_was_junction)
+        {
+            /* The junction has taken this instruction. */
+            pending_turn = LINE_JUNCTION_DEFAULT_TURN;
+        }
+        b_was_junction = request.b_junction;
         ER const submission = motion_command_submit(&request);
         if ((submission < E_OK) && (submission != E_TMOUT))
         {
@@ -107,7 +125,8 @@ take_input (void)
         .b_left_black = reading.b_left_black,
         .b_right_black = reading.b_right_black,
         .b_control = motion_line_control_active(),
-        .b_turning = (ROBOT_MOTION_MODE_TURN == motion_get_status().mode)};
+        .b_turning = (ROBOT_MOTION_MODE_TURN == motion_get_status().mode),
+        .turn = pending_turn};
     motion_shared_odometry_t odometry;
     if (motion_get_odometry(&odometry))
     {
@@ -154,9 +173,15 @@ report (line_request_t const * p_request, line_track_input_t const * p_in)
     static line_mode_t last_mode = LINE_MODE_TRACK;
     static bool b_last_junction;
     static uint32_t trace_ms;
+    static bool b_last_left;
+    static bool b_last_right;
 #if LINE_TRACE_MS > 0u
+    bool const b_sensors = (p_in->b_left_black != b_last_left) ||
+                           (p_in->b_right_black != b_last_right);
+    b_last_left = p_in->b_left_black;
+    b_last_right = p_in->b_right_black;
     trace_ms += LINE_SAMPLE_MS;
-    if (p_in->b_control && (trace_ms >= LINE_TRACE_MS))
+    if (p_in->b_control && (b_sensors || (trace_ms >= LINE_TRACE_MS)))
     {
         trace_ms = 0u;
         tm_printf((UB *)"LT t=%d h=%d d=%d %u%u\n",
@@ -166,6 +191,8 @@ report (line_request_t const * p_request, line_track_input_t const * p_in)
     }
 #else
     (void)trace_ms;
+    (void)b_last_left;
+    (void)b_last_right;
 #endif
     bool const b_mode = (p_request->mode != last_mode);
     bool const b_junction = p_request->b_junction && !b_last_junction;
@@ -177,9 +204,10 @@ report (line_request_t const * p_request, line_track_input_t const * p_in)
     }
 
     char text[REPORT_TEXT_SIZE];
-    (void)tm_sprintf((UB *)text, (const UB *)"line %s t=%d h=%d d=%d",
-                     b_junction ? "JUNCTION"
+    (void)tm_sprintf((UB *)text, (const UB *)"line %s%s t=%d h=%d d=%d",
+                     b_junction ? "JUNCTION "
                                 : line_track_mode_name(p_request->mode),
+                     b_junction ? line_track_turn_name(p_in->turn) : "",
                      (INT)p_request->target_heading_deg, (INT)p_in->heading_deg,
                      (INT)p_in->distance_mm);
     tm_printf((UB *)"%s\n", text);

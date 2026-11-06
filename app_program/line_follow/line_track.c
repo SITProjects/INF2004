@@ -11,7 +11,9 @@
  * sensor first and then sits between the sensors: black then white on the
  * search side is the line found. If the opposite sensor reads black
  * first, the tape was already between the sensors, so tracking resumes on
- * the heading the search started from.
+ * the heading the search started from. A junction pivot ignores the
+ * sensors until it nears the new line, so the line it leaves is not taken
+ * for it.
  */
 
 #include "line_track.h"
@@ -25,6 +27,12 @@
 #define SIDE_COUNT 2u
 
 #define SEARCH_TIMEOUT_SAMPLES (LINE_SEARCH_TIMEOUT_MS / LINE_SAMPLE_MS)
+
+#define JUNCTION_NONE 0u
+#define JUNCTION_DRIVE 1u /* Holding the heading to the turning point. */
+#define JUNCTION_PIVOT 2u /* Pivoting onto the new line. */
+#define JUNCTION_TURN_DEG 90
+#define JUNCTION_UTURN_DEG 180
 
 _Static_assert(LINE_LEAD_DEG > 0, "Invalid lead");
 _Static_assert(LINE_EDGE_MAX_MM > 0, "Invalid held-edge limit");
@@ -42,6 +50,11 @@ _Static_assert(LINE_CONFIRM_SAMPLES > 0u, "Invalid debounce");
 _Static_assert(LINE_SEARCH_DONE_DEG < LINE_SEARCH_MAX_DEG,
                "Search must turn further than its end band");
 _Static_assert(LINE_MODE_STOP <= 3, "Line mode must fit two bits");
+_Static_assert((LINE_JUNCTION_LOOK_DEG > 0) &&
+                   (LINE_JUNCTION_LOOK_DEG < JUNCTION_TURN_DEG),
+               "A junction pivot must look near the new line only");
+_Static_assert((LINE_JUNCTION_SKEW_MM >= 0) && (LINE_JUNCTION_CENTRE_MM > 0),
+               "Invalid junction geometry");
 
 /* Private function declarations. */
 static void debounce (line_track_t * p_track, line_track_input_t const * p_in);
@@ -49,6 +62,15 @@ static void restart_tracking (line_track_t * p_track,
                               line_track_input_t const * p_in,
                               int32_t target_deg);
 static void track (line_track_t * p_track, line_track_input_t const * p_in);
+static void follow_episode (line_track_t * p_track,
+                            line_track_input_t const * p_in,
+                            bool const * p_was_black);
+static void start_episode (line_track_t * p_track,
+                           line_track_input_t const * p_in);
+static void start_junction (line_track_t * p_track,
+                            line_track_input_t const * p_in);
+static void drive_junction (line_track_t * p_track,
+                            line_track_input_t const * p_in);
 static void learn_curve (line_track_t * p_track,
                          line_track_input_t const * p_in);
 static int32_t curve_target (line_track_t const * p_track,
@@ -100,6 +122,10 @@ line_track_update (line_track_t * p_track, line_track_input_t const * p_in)
         /* Someone else drives: start again from wherever it leaves us. */
         restart_tracking(p_track, p_in, p_in->heading_deg);
     }
+    else if (JUNCTION_DRIVE == p_track->junction_phase)
+    {
+        drive_junction(p_track, p_in);
+    }
     else if (LINE_MODE_TRACK == p_track->mode)
     {
         learn_curve(p_track, p_in);
@@ -110,10 +136,16 @@ line_track_update (line_track_t * p_track, line_track_input_t const * p_in)
                 p_track->white_start_mm = p_in->distance_mm;
             }
         }
-        if (b_both)
+        follow_episode(p_track, p_in, was_black);
+        if ((LINE_MODE_TRACK != p_track->mode) ||
+            (p_track->junction_phase != JUNCTION_NONE))
         {
-            /* Both edges at once: the car is over the tape at an angle (the
-             * course has no crossings). Keep to the bend. */
+            /* A junction or a search took over. */
+        }
+        else if (b_both)
+        {
+            /* The route passing under the car at an angle: keep to the
+             * bend until it clears. */
             p_track->target_deg = curve_target(p_track, p_in);
         }
         else
@@ -146,7 +178,7 @@ line_track_update (line_track_t * p_track, line_track_input_t const * p_in)
         .mode = p_track->mode,
         .target_heading_deg = p_track->target_deg,
         .b_seen = p_in->b_left_black || p_in->b_right_black,
-        .b_junction = (p_track->junction_count >= LINE_JUNCTION_SAMPLES)};
+        .b_junction = (p_track->junction_phase != JUNCTION_NONE)};
     return request;
 }
 
@@ -163,6 +195,24 @@ line_track_mode_name (line_mode_t mode)
             return "SEARCH_R";
         case LINE_MODE_STOP:
             return "STOP";
+        default:
+            return "?";
+    }
+}
+
+char const *
+line_track_turn_name (line_turn_t turn)
+{
+    switch (turn)
+    {
+        case LINE_TURN_STRAIGHT:
+            return "STRAIGHT";
+        case LINE_TURN_LEFT:
+            return "LEFT";
+        case LINE_TURN_RIGHT:
+            return "RIGHT";
+        case LINE_TURN_UTURN:
+            return "UTURN";
         default:
             return "?";
     }
@@ -210,6 +260,137 @@ restart_tracking (line_track_t * p_track, line_track_input_t const * p_in,
     }
     p_track->search_samples = 0u;
     p_track->b_search_hit = false;
+    p_track->search_ignore_deg = 0;
+    p_track->junction_phase = JUNCTION_NONE;
+    start_episode(p_track, p_in);
+}
+
+/*
+ * Follow one dark episode, from a sensor turning black until both read
+ * white again, and spot a junction or the route crossing under the car.
+ */
+static void
+follow_episode (line_track_t * p_track, line_track_input_t const * p_in,
+                bool const * p_was_black)
+{
+    bool const b_left = p_track->b_black[SIDE_LEFT];
+    bool const b_right = p_track->b_black[SIDE_RIGHT];
+    bool const b_any = b_left || b_right;
+    bool const b_was_any = p_was_black[SIDE_LEFT] || p_was_black[SIDE_RIGHT];
+
+    if (b_any && !b_was_any)
+    {
+        start_episode(p_track, p_in);
+    }
+    if (b_left != b_right)
+    {
+        p_track->exit_side = b_left ? SIDE_LEFT : SIDE_RIGHT;
+    }
+    if (b_left && b_right)
+    {
+        if (!p_track->b_both_seen)
+        {
+            p_track->b_both_seen = true;
+            p_track->b_skew_small = (SIDE_NONE == p_track->entry_side) ||
+                                    ((p_in->distance_mm - p_track->entry_mm) <=
+                                     LINE_JUNCTION_SKEW_MM);
+        }
+        if (p_track->b_skew_small &&
+            (p_track->junction_count >= LINE_JUNCTION_SAMPLES))
+        {
+            start_junction(p_track, p_in);
+        }
+    }
+    else if (!b_any && b_was_any && p_track->b_both_seen &&
+             !p_track->b_skew_small &&
+             (p_track->exit_side != p_track->entry_side))
+    {
+        /* The route passed under the car from one side to the other: it
+         * is now outside the side that cleared last. */
+        start_search(p_track, p_in, p_track->exit_side);
+    }
+    else
+    {
+        /* One edge, or nothing new. */
+    }
+}
+
+/* Start a dark episode from the levels now. */
+static void
+start_episode (line_track_t * p_track, line_track_input_t const * p_in)
+{
+    bool const b_left = p_track->b_black[SIDE_LEFT];
+    bool const b_right = p_track->b_black[SIDE_RIGHT];
+    if (b_left == b_right)
+    {
+        p_track->entry_side = SIDE_NONE;
+    }
+    else
+    {
+        p_track->entry_side = b_left ? SIDE_LEFT : SIDE_RIGHT;
+    }
+    p_track->exit_side = p_track->entry_side;
+    p_track->entry_mm = p_in->distance_mm;
+    p_track->entry_deg = p_in->heading_deg;
+    p_track->b_both_seen = false;
+    p_track->b_skew_small = false;
+}
+
+/* A cross junction: hold the heading it was met on to the turning point. */
+static void
+start_junction (line_track_t * p_track, line_track_input_t const * p_in)
+{
+    p_track->junction_phase = JUNCTION_DRIVE;
+    p_track->junction_turn = p_in->turn;
+    p_track->junction_mm = p_track->entry_mm;
+    p_track->junction_deg = p_track->entry_deg;
+    p_track->target_deg = p_track->entry_deg;
+    p_track->curve_udeg_per_mm = 0;
+}
+
+/*
+ * Drive over the junction on its heading, sensors ignored; at the turning
+ * point go straight on, or pivot onto the new line.
+ */
+static void
+drive_junction (line_track_t * p_track, line_track_input_t const * p_in)
+{
+    p_track->target_deg = p_track->junction_deg;
+    if ((p_in->distance_mm - p_track->junction_mm) < LINE_JUNCTION_CENTRE_MM)
+    {
+        return;
+    }
+    int32_t turn_deg = JUNCTION_TURN_DEG;
+    uint32_t side = SIDE_LEFT;
+    switch (p_track->junction_turn)
+    {
+        case LINE_TURN_LEFT:
+            break;
+        case LINE_TURN_RIGHT:
+            side = SIDE_RIGHT;
+            break;
+        case LINE_TURN_UTURN:
+            turn_deg = JUNCTION_UTURN_DEG;
+            side = (LINE_UTURN_LEFT != 0) ? SIDE_LEFT : SIDE_RIGHT;
+            break;
+        default:
+            /* Straight on: the route continues between the sensors. */
+            restart_tracking(p_track, p_in, p_track->junction_deg);
+            return;
+    }
+    p_track->junction_phase = JUNCTION_PIVOT;
+    p_track->search_start_deg = p_in->heading_deg;
+    p_track->search_phase = 1u; /* Not found: stop, no other side. */
+    p_track->search_samples = 0u;
+    p_track->search_ignore_deg = turn_deg - LINE_JUNCTION_LOOK_DEG;
+    p_track->last_side = side;
+    p_track->search_side = side;
+    p_track->b_search_hit = false;
+    p_track->mode =
+        (SIDE_LEFT == side) ? LINE_MODE_SEARCH_LEFT : LINE_MODE_SEARCH_RIGHT;
+    p_track->target_deg =
+        p_track->search_start_deg +
+        (side_sign(side) * (turn_deg + LINE_JUNCTION_LOOK_DEG));
 }
 
 /* Both white for too long: the line went away; search for it. */
@@ -316,6 +497,7 @@ start_search (line_track_t * p_track, line_track_input_t const * p_in,
     p_track->search_start_deg = p_in->heading_deg;
     p_track->search_phase = 0u;
     p_track->search_samples = 0u;
+    p_track->search_ignore_deg = 0;
     p_track->last_side = side;
     aim_search(p_track, side);
 }
@@ -339,7 +521,14 @@ search (line_track_t * p_track, line_track_input_t const * p_in)
     uint32_t const other = (SIDE_LEFT == side) ? SIDE_RIGHT : SIDE_LEFT;
 
     p_track->search_samples++;
-    if (p_track->b_black[side])
+    bool const b_looking =
+        abs_deg(p_in->heading_deg - p_track->search_start_deg) >=
+        p_track->search_ignore_deg;
+    if (!b_looking)
+    {
+        /* A junction pivot still crossing the line it is leaving. */
+    }
+    else if (p_track->b_black[side])
     {
         p_track->b_search_hit = true;
     }
@@ -354,7 +543,8 @@ search (line_track_t * p_track, line_track_input_t const * p_in)
     {
         /* Not found yet. */
     }
-    if (p_track->b_black[other] && !p_track->b_search_hit)
+    if (b_looking && (0 == p_track->search_ignore_deg) &&
+        p_track->b_black[other] && !p_track->b_search_hit)
     {
         /* The tape was between the sensors all along: go back to it. */
         restart_tracking(p_track, p_in, p_track->search_start_deg);
@@ -368,6 +558,7 @@ search (line_track_t * p_track, line_track_input_t const * p_in)
     {
         p_track->mode = LINE_MODE_STOP;
         p_track->target_deg = p_in->heading_deg;
+        p_track->junction_phase = JUNCTION_NONE;
     }
     else if (b_reached && (0u == p_track->search_phase))
     {
@@ -378,6 +569,7 @@ search (line_track_t * p_track, line_track_input_t const * p_in)
     {
         p_track->mode = LINE_MODE_STOP;
         p_track->target_deg = p_in->heading_deg;
+        p_track->junction_phase = JUNCTION_NONE;
     }
     else
     {

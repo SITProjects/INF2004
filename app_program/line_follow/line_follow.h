@@ -12,6 +12,7 @@
 
 /* Public includes. */
 #include "../app.h"
+#include "line_track.h"
 
 /* Public types, constants, and macros. */
 
@@ -22,5 +23,16 @@
 extern ID line_follow_tid_sense;
 
 /* Public function declarations. */
+
+/**
+ * @brief Set what the car does at the next cross junction.
+ * @param turn LINE_TURN_STRAIGHT (the default), LEFT, RIGHT or UTURN.
+ * @note Any task, any core (one word, read by the line task). The
+ *       instruction is used by the next junction only, then returns to
+ *       LINE_JUNCTION_DEFAULT_TURN (STRAIGHT); a later call replaces an
+ *       unused one. Called by the
+ *       barcode subsystem when it decodes a barcode.
+ */
+void line_follow_set_turn (line_turn_t turn);
 
 #endif /* LINE_FOLLOW_H */

@@ -30,9 +30,10 @@
 #define LINE_SAMPLE_MS 10u
 
 /**
- * @brief While tracking under line control, print one trace line this
- * often, in ms: "LT t=target h=heading d=distance LR" (console, so MQTT
- * builds publish it too). 0 turns the trace off.
+ * @brief While tracking under line control, print one trace line on every
+ * raw sensor change and at least this often, in ms: "LT t=target
+ * h=heading d=distance LR" (console, so MQTT builds publish it too). 0
+ * turns the trace off.
  */
 #define LINE_TRACE_MS 200u
 
@@ -91,7 +92,44 @@
 /** A search that does not end within this time, in ms, stops. */
 #define LINE_SEARCH_TIMEOUT_MS 8000u
 
-/** Both sensors black for this many samples: a junction or crossing. */
+/** Both sensors black for this many samples confirms a junction. */
 #define LINE_JUNCTION_SAMPLES 3u
+
+/**
+ * @brief Both sensors turning black within this travel, in mm, of each
+ * other is a crossing line: a cross (+) junction. A longer gap is the
+ * route itself passing under the car at an angle; once the second sensor
+ * clears, the route is outside on that side and the car searches there.
+ * TODO(calibrate): the car meets a crossing up to about 18 degrees off
+ * square with 30 mm between the sensors.
+ */
+#define LINE_JUNCTION_SKEW_MM 10
+
+/**
+ * @brief Travel, in mm, from a junction's first black to the point where
+ * the car turns: about the sensors' distance ahead of the wheel axle plus
+ * half the tape width, so the car pivots over the crossing. A straight-on
+ * junction drives this far on the heading it met the junction with,
+ * ignoring the sensors, then tracks again.
+ * TODO(calibrate): measure the sensors' distance ahead of the axle.
+ */
+#define LINE_JUNCTION_CENTRE_MM 60
+
+/**
+ * @brief A junction turn pivots towards the new line (90 degrees, or 180
+ * for a U-turn) and looks for it from this many degrees before that angle
+ * to this many after; the line being left is ignored. Not found: STOP.
+ */
+#define LINE_JUNCTION_LOOK_DEG 40
+
+/** U-turns pivot left (1) or right (0). */
+#define LINE_UTURN_LEFT 1
+
+/**
+ * @brief Turn at a junction no barcode has given an instruction for.
+ * Keep LINE_TURN_STRAIGHT; set LINE_TURN_LEFT, _RIGHT or _UTURN only
+ * locally to try a turn at every junction on the car (LINE-U08).
+ */
+#define LINE_JUNCTION_DEFAULT_TURN LINE_TURN_STRAIGHT
 
 #endif /* LINE_FOLLOW_CONFIG_H */
