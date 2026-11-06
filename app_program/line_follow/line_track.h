@@ -19,7 +19,8 @@
  *
  * Both sensors turning black together (within LINE_JUNCTION_SKEW_MM) is a
  * cross junction. Straight on, tracking simply carries on; for a turn the
- * car drives LINE_JUNCTION_CENTRE_MM on, then pivots onto the new line. Both
+ * car drives LINE_JUNCTION_CENTRE_MM on, pivots exactly 90 or 180 degrees
+ * and drives on along that heading. Both
  * black one after the other is the tape crossing the sensors at an angle,
  * usually a correction that turned a little too far: tracking carries on.
  *
@@ -101,11 +102,10 @@ typedef struct
     uint32_t junction_phase; /* 0 none, 1 driving to the centre, 2 pivot,
                                 3 crossing straight on. */
     line_turn_t junction_turn;
-    int32_t junction_mm;       /* Travel when the junction began. */
-    int32_t junction_deg;      /* Heading the junction was met on. */
-    int32_t search_ignore_deg; /* Pivot this far before looking. */
-    uint32_t last_side;        /* Side of the last edge, for searches. */
-    int32_t white_start_mm;    /* Travel when both last read white. */
+    int32_t junction_mm;    /* Travel when the junction began. */
+    int32_t junction_deg;   /* Heading the junction was met on. */
+    uint32_t last_side;     /* Side of the last edge, for searches. */
+    int32_t white_start_mm; /* Travel when both last read white. */
     uint32_t junction_count;
     int32_t search_start_deg;
     uint32_t search_side;  /* Side the current pivot turns towards. */

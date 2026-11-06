@@ -184,25 +184,30 @@ test_junction_left (void)
     cross_junction(LINE_TURN_LEFT);
     drive(true, true, samples_for(15));
     drive(false, false, samples_for(LINE_JUNCTION_CENTRE_MM));
-    bool const b_pivot =
-        (LINE_MODE_SEARCH_LEFT == out.mode) &&
-        (4 + 90 + LINE_JUNCTION_LOOK_DEG == out.target_heading_deg) &&
-        out.b_junction;
+    bool const b_pivot = (LINE_MODE_SEARCH_LEFT == out.mode) &&
+                         (4 + 90 == out.target_heading_deg) && out.b_junction;
     in.b_turning = true;
-    /* The right sensor sweeps over the route being left: ignored. */
+    /* Sensors sweep over tape on the way round: ignored. */
     in.heading_deg = 20;
     drive(false, true, LINE_CONFIRM_SAMPLES);
-    in.heading_deg = 25;
-    drive(false, false, LINE_CONFIRM_SAMPLES);
-    bool const b_ignored = (LINE_MODE_SEARCH_LEFT == out.mode);
-    in.heading_deg = 85;
+    in.heading_deg = 60;
     drive(true, false, LINE_CONFIRM_SAMPLES);
-    in.heading_deg = 92;
     drive(false, false, LINE_CONFIRM_SAMPLES);
-    check("LT15 a LEFT junction drives to the centre, pivots left past the "
-          "route it leaves, and tracks the crossing line",
-          b_pivot && b_ignored && (LINE_MODE_TRACK == out.mode) &&
-              !out.b_junction && (92 == out.target_heading_deg));
+    bool const b_ignored = (LINE_MODE_SEARCH_LEFT == out.mode) &&
+                           (4 + 90 == out.target_heading_deg);
+    in.heading_deg = 92;
+    drive(false, false, 1u);
+    bool const b_turning = (LINE_MODE_SEARCH_LEFT == out.mode);
+    in.b_turning = false;
+    drive(false, false, 1u);
+    bool const b_on = (LINE_MODE_TRACK == out.mode) && !out.b_junction &&
+                      (4 + 90 == out.target_heading_deg);
+    drive(false, false, samples_for(300));
+    check("LT15 a LEFT junction drives to the centre, pivots exactly 90 "
+          "degrees past any tape, and carries straight on with no line seen",
+          b_pivot && b_ignored && b_turning && b_on &&
+              (LINE_MODE_TRACK == out.mode) &&
+              (4 + 90 == out.target_heading_deg));
 }
 
 static void
@@ -211,30 +216,36 @@ test_junction_uturn (void)
     cross_junction(LINE_TURN_UTURN);
     drive(false, false, samples_for(LINE_JUNCTION_CENTRE_MM));
     in.b_turning = true;
-    bool const b_pivot =
-        (LINE_MODE_SEARCH_LEFT == out.mode) &&
-        (4 + 180 + LINE_JUNCTION_LOOK_DEG == out.target_heading_deg);
-    /* The left branch passes under the left sensor at 90: ignored. */
+    bool const b_pivot = (LINE_MODE_SEARCH_LEFT == out.mode) &&
+                         (4 + 180 == out.target_heading_deg);
     in.heading_deg = 94;
     drive(true, false, LINE_CONFIRM_SAMPLES);
-    in.heading_deg = 100;
     drive(false, false, LINE_CONFIRM_SAMPLES);
     bool const b_ignored = (LINE_MODE_SEARCH_LEFT == out.mode);
-    in.heading_deg = 178;
-    drive(true, false, LINE_CONFIRM_SAMPLES);
-    in.heading_deg = 184;
-    drive(false, false, LINE_CONFIRM_SAMPLES);
+    in.heading_deg = 182;
+    in.b_turning = false;
+    drive(false, false, 1u);
     bool const b_found =
         (LINE_MODE_TRACK == out.mode) && (184 == out.target_heading_deg);
+
     cross_junction(LINE_TURN_RIGHT);
     drive(false, false, samples_for(LINE_JUNCTION_CENTRE_MM));
-    in.b_turning = false;
-    in.heading_deg = 4 - 90 - LINE_JUNCTION_LOOK_DEG;
+    bool const b_right = (LINE_MODE_SEARCH_RIGHT == out.mode) &&
+                         (4 - 90 == out.target_heading_deg);
+    in.heading_deg = 4 - 90;
     drive(false, false, 1u);
-    check("LT16 a U-turn pivots 180 past the branches; a RIGHT pivot that "
-          "finds nothing stops",
-          b_pivot && b_ignored && b_found && (LINE_MODE_STOP == out.mode) &&
-              !out.b_junction);
+    bool const b_right_on = (LINE_MODE_TRACK == out.mode) && !out.b_junction &&
+                            (4 - 90 == out.target_heading_deg);
+
+    cross_junction(LINE_TURN_LEFT);
+    drive(false, false, samples_for(LINE_JUNCTION_CENTRE_MM));
+    in.b_turning = true;
+    drive(false, false, (LINE_SEARCH_TIMEOUT_MS / LINE_SAMPLE_MS) + 1u);
+    in.b_turning = false;
+    check("LT16 a U-turn pivots 180 and a RIGHT 90 and carry on; a pivot that "
+          "never ends stops",
+          b_pivot && b_ignored && b_found && b_right && b_right_on &&
+              (LINE_MODE_STOP == out.mode) && !out.b_junction);
 }
 
 /* 2026-11-06 car7 d=823..906: the right sensor black, both 34 mm later

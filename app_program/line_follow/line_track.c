@@ -12,8 +12,7 @@
  * search side is the line found. If the opposite sensor reads black
  * first, the tape was already between the sensors, so tracking resumes on
  * the heading the search started from. A junction pivot ignores the
- * sensors until it nears the new line, so the line it leaves is not taken
- * for it.
+ * sensors and turns exactly 90 or 180 degrees.
  */
 
 #include "line_track.h"
@@ -48,9 +47,6 @@ _Static_assert(LINE_CONFIRM_SAMPLES > 0u, "Invalid debounce");
 _Static_assert(LINE_SEARCH_DONE_DEG < LINE_SEARCH_MAX_DEG,
                "Search must turn further than its end band");
 _Static_assert(LINE_MODE_STOP <= 3, "Line mode must fit two bits");
-_Static_assert((LINE_JUNCTION_LOOK_DEG > 0) &&
-                   (LINE_JUNCTION_LOOK_DEG < JUNCTION_TURN_DEG),
-               "A junction pivot must look near the new line only");
 _Static_assert((LINE_JUNCTION_SKEW_MM >= 0) && (LINE_JUNCTION_CENTRE_MM > 0),
                "Invalid junction geometry");
 
@@ -68,6 +64,8 @@ static void start_episode (line_track_t * p_track,
 static void start_junction (line_track_t * p_track,
                             line_track_input_t const * p_in);
 static void drive_junction (line_track_t * p_track,
+                            line_track_input_t const * p_in);
+static void pivot_junction (line_track_t * p_track,
                             line_track_input_t const * p_in);
 static int32_t seek_target (line_track_t const * p_track,
                             line_track_input_t const * p_in);
@@ -134,6 +132,10 @@ line_track_update (line_track_t * p_track, line_track_input_t const * p_in)
     else if (JUNCTION_DRIVE == p_track->junction_phase)
     {
         drive_junction(p_track, p_in);
+    }
+    else if (JUNCTION_PIVOT == p_track->junction_phase)
+    {
+        pivot_junction(p_track, p_in);
     }
     else if (LINE_MODE_TRACK == p_track->mode)
     {
@@ -271,7 +273,6 @@ restart_tracking (line_track_t * p_track, line_track_input_t const * p_in,
     }
     p_track->search_samples = 0u;
     p_track->b_search_hit = false;
-    p_track->search_ignore_deg = 0;
     p_track->junction_phase = JUNCTION_NONE;
     start_episode(p_track, p_in);
 }
@@ -394,18 +395,37 @@ drive_junction (line_track_t * p_track, line_track_input_t const * p_in)
             return;
     }
     p_track->junction_phase = JUNCTION_PIVOT;
-    p_track->search_start_deg = p_in->heading_deg;
-    p_track->search_phase = 1u; /* Not found: stop, no other side. */
     p_track->search_samples = 0u;
-    p_track->search_ignore_deg = turn_deg - LINE_JUNCTION_LOOK_DEG;
     p_track->last_side = side;
-    p_track->search_side = side;
-    p_track->b_search_hit = false;
     p_track->mode =
         (SIDE_LEFT == side) ? LINE_MODE_SEARCH_LEFT : LINE_MODE_SEARCH_RIGHT;
-    p_track->target_deg =
-        p_track->search_start_deg +
-        (side_sign(side) * (turn_deg + LINE_JUNCTION_LOOK_DEG));
+    p_track->target_deg = p_in->heading_deg + (side_sign(side) * turn_deg);
+}
+
+/*
+ * Pivot to the new heading with the sensors ignored, then carry straight
+ * on along it: the sensors take over when they next see tape. A pivot that
+ * does not end stops.
+ */
+static void
+pivot_junction (line_track_t * p_track, line_track_input_t const * p_in)
+{
+    p_track->search_samples++;
+    if (!p_in->b_turning && (abs_deg(p_track->target_deg - p_in->heading_deg) <=
+                             LINE_SEARCH_DONE_DEG))
+    {
+        restart_tracking(p_track, p_in, p_track->target_deg);
+    }
+    else if (p_track->search_samples >= SEARCH_TIMEOUT_SAMPLES)
+    {
+        p_track->mode = LINE_MODE_STOP;
+        p_track->target_deg = p_in->heading_deg;
+        p_track->junction_phase = JUNCTION_NONE;
+    }
+    else
+    {
+        /* Still pivoting. */
+    }
 }
 
 /* Both white: in a bend, seek the last edge; for too long, search. */
@@ -526,7 +546,6 @@ start_search (line_track_t * p_track, line_track_input_t const * p_in,
     p_track->search_start_deg = p_in->heading_deg;
     p_track->search_phase = 0u;
     p_track->search_samples = 0u;
-    p_track->search_ignore_deg = 0;
     p_track->last_side = side;
     aim_search(p_track, side);
 }
@@ -550,14 +569,7 @@ search (line_track_t * p_track, line_track_input_t const * p_in)
     uint32_t const other = (SIDE_LEFT == side) ? SIDE_RIGHT : SIDE_LEFT;
 
     p_track->search_samples++;
-    bool const b_looking =
-        abs_deg(p_in->heading_deg - p_track->search_start_deg) >=
-        p_track->search_ignore_deg;
-    if (!b_looking)
-    {
-        /* A junction pivot still crossing the line it is leaving. */
-    }
-    else if (p_track->b_black[side])
+    if (p_track->b_black[side])
     {
         p_track->b_search_hit = true;
     }
@@ -572,8 +584,7 @@ search (line_track_t * p_track, line_track_input_t const * p_in)
     {
         /* Not found yet. */
     }
-    if (b_looking && (0 == p_track->search_ignore_deg) &&
-        p_track->b_black[other] && !p_track->b_search_hit)
+    if (p_track->b_black[other] && !p_track->b_search_hit)
     {
         /* The tape was between the sensors all along: go back to it. */
         restart_tracking(p_track, p_in, p_track->search_start_deg);
@@ -587,7 +598,6 @@ search (line_track_t * p_track, line_track_input_t const * p_in)
     {
         p_track->mode = LINE_MODE_STOP;
         p_track->target_deg = p_in->heading_deg;
-        p_track->junction_phase = JUNCTION_NONE;
     }
     else if (b_reached && (0u == p_track->search_phase))
     {
@@ -598,7 +608,6 @@ search (line_track_t * p_track, line_track_input_t const * p_in)
     {
         p_track->mode = LINE_MODE_STOP;
         p_track->target_deg = p_in->heading_deg;
-        p_track->junction_phase = JUNCTION_NONE;
     }
     else
     {

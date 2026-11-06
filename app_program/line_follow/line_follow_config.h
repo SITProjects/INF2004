@@ -130,13 +130,6 @@
  */
 #define LINE_JUNCTION_CENTRE_MM 140
 
-/**
- * @brief A junction turn pivots towards the new line (90 degrees, or 180
- * for a U-turn) and looks for it from this many degrees before that angle
- * to this many after; the line being left is ignored. Not found: STOP.
- */
-#define LINE_JUNCTION_LOOK_DEG 40
-
 /** U-turns pivot left (1) or right (0). */
 #define LINE_UTURN_LEFT 1
 
