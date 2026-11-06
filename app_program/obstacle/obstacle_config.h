@@ -289,7 +289,12 @@
 #define OBSTACLE_AVOID_MIN_ROOM_MM 200u
 #define OBSTACLE_AVOID_MAX_BACKOFFS 2u
 #define OBSTACLE_AVOID_BACKOFF_DELAY_MS 300u
-#define OBSTACLE_CAR_WIDTH_MM 127u        /* W, 12.7 cm, ruler. */
+/*
+ * W, as twice the wider half: 12.7 cm by ruler, and the left side sticks out
+ * 2 cm more than the right (user, 2026-11-06). The bypass treats the car as
+ * symmetrical, so both sides get the left side's clearance.
+ */
+#define OBSTACLE_CAR_WIDTH_MM 167u
 #define OBSTACLE_CAR_AXLE_TO_PIVOT_MM 60u /* Axle midpoint to servo pivot. */
 #define OBSTACLE_CAR_REAR_MM 162u         /* Axle midpoint to rear bumper. */
 #define OBSTACLE_AVOID_LINE_OVERSHOOT_MM 130u /* IR row to axle, 13 cm. */
