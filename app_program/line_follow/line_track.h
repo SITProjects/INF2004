@@ -5,14 +5,17 @@
  *
  * Two sensors straddle the tape. While one reads black the target heading
  * leads the car by LINE_LEAD_DEG towards it, so motion keeps turning
- * while driving. While both read white the car keeps turning towards the
- * last edge (up to LINE_SEEK_MAX_DEG of lead after LINE_SEEK_RAMP_MM), so
- * a tape that slipped out on a curve is caught again; on a straight the
- * other sensor soon turns it back. A sensor that
+ * while driving. Once it clears the car holds the heading it reached, so
+ * it runs straight and barcodes read cleanly. The same sensor touching
+ * again within LINE_CURVE_TOUCH_MM means a bend: then, while both read
+ * white, the car keeps turning towards the last edge (up to
+ * LINE_SEEK_MAX_DEG of lead after LINE_SEEK_RAMP_MM), so a tape that
+ * slipped out is caught again, until the other sensor touches. A sensor that
  * reads black only briefly is a correction, never a corner: turning
  * towards it clears it quickly (2026-11-06). An edge that stays black for
- * LINE_EDGE_MAX_MM, or a long white run after an edge, starts a pivot
- * search towards the last edge.
+ * LINE_EDGE_MAX_MM, or a long white run after an edge (LINE_LOST_MM in a
+ * bend, LINE_STRAIGHT_LOST_MM otherwise), starts a pivot search towards
+ * the last edge.
  *
  * Both sensors turning black together (within LINE_JUNCTION_SKEW_MM) is a
  * cross junction. Straight on, tracking simply carries on; for a turn the
@@ -86,6 +89,9 @@ typedef struct
     line_mode_t mode;
     int32_t target_deg;
     int32_t black_start_mm[2]; /* Travel when each edge turned black. */
+    uint32_t touch_side;       /* Side of the last single-side touch. */
+    int32_t touch_mm;          /* Travel when it began. */
+    bool b_curve;              /* That side touched again soon: a bend. */
     /* Dark episode: from a sensor turning black until both read white. */
     uint32_t entry_side;     /* First side black; 2 = both at once. */
     int32_t entry_mm;        /* Travel when the episode started. */

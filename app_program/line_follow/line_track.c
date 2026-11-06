@@ -40,8 +40,10 @@ _Static_assert(LINE_EDGE_MAX_MM > 0, "Invalid held-edge limit");
 _Static_assert((LINE_SEEK_MAX_DEG > 0) && (LINE_SEEK_MAX_DEG < LINE_LEAD_DEG) &&
                    (LINE_SEEK_RAMP_MM > 0),
                "The seek must turn more gently than a black edge");
-_Static_assert(LINE_LOST_MM > LINE_SEEK_RAMP_MM,
+_Static_assert((LINE_STRAIGHT_LOST_MM >= LINE_LOST_MM) &&
+                   (LINE_LOST_MM > LINE_SEEK_RAMP_MM),
                "Seek at full rate before searching");
+_Static_assert(LINE_CURVE_TOUCH_MM > 0, "Invalid bend window");
 _Static_assert(LINE_CONFIRM_SAMPLES > 0u, "Invalid debounce");
 _Static_assert(LINE_SEARCH_DONE_DEG < LINE_SEARCH_MAX_DEG,
                "Search must turn further than its end band");
@@ -71,6 +73,8 @@ static int32_t seek_target (line_track_t const * p_track,
                             line_track_input_t const * p_in);
 static void track_edge (line_track_t * p_track, line_track_input_t const * p_in,
                         uint32_t side, bool b_was_black);
+static void note_touch (line_track_t * p_track, line_track_input_t const * p_in,
+                        uint32_t side);
 static void start_search (line_track_t * p_track,
                           line_track_input_t const * p_in, uint32_t side);
 static void search (line_track_t * p_track, line_track_input_t const * p_in);
@@ -148,9 +152,12 @@ line_track_update (line_track_t * p_track, line_track_input_t const * p_in)
         }
         else if (b_both)
         {
-            /* The tape across both sensors (they are about a tape width
-             * apart): centred, hold the heading until one clears. */
-            p_track->target_deg = p_in->heading_deg;
+            /* The tape across both sensors: centred, hold until one
+             * clears. In a bend, stop turning without losing the heading. */
+            if (p_track->b_curve)
+            {
+                p_track->target_deg = p_in->heading_deg;
+            }
         }
         else
         {
@@ -254,6 +261,9 @@ restart_tracking (line_track_t * p_track, line_track_input_t const * p_in,
 {
     p_track->mode = LINE_MODE_TRACK;
     p_track->target_deg = target_deg;
+    p_track->touch_side = SIDE_NONE;
+    p_track->touch_mm = p_in->distance_mm;
+    p_track->b_curve = false;
     p_track->white_start_mm = p_in->distance_mm;
     for (uint32_t side = 0u; side < SIDE_COUNT; side++)
     {
@@ -398,26 +408,27 @@ drive_junction (line_track_t * p_track, line_track_input_t const * p_in)
         (side_sign(side) * (turn_deg + LINE_JUNCTION_LOOK_DEG));
 }
 
-/* Both white: seek towards the last edge; for too long, search. */
+/* Both white: in a bend, seek the last edge; for too long, search. */
 static void
 track (line_track_t * p_track, line_track_input_t const * p_in)
 {
     bool const b_white =
         !p_track->b_black[SIDE_LEFT] && !p_track->b_black[SIDE_RIGHT];
-    if (b_white)
+    if (b_white && p_track->b_curve)
     {
         p_track->target_deg = seek_target(p_track, p_in);
     }
     if (b_white && (p_track->last_side != SIDE_NONE) &&
-        ((p_in->distance_mm - p_track->white_start_mm) >= LINE_LOST_MM))
+        ((p_in->distance_mm - p_track->white_start_mm) >=
+         (p_track->b_curve ? LINE_LOST_MM : LINE_STRAIGHT_LOST_MM)))
     {
         start_search(p_track, p_in, p_track->last_side);
     }
 }
 
 /*
- * The heading to aim for while both sensors read white. White on both
- * means the tape is centred or has just slipped out past the last edge,
+ * The heading to aim for in a bend while both sensors read white. White
+ * on both means the tape is centred or has just slipped out past the edge,
  * and the two look the same (2026-11-06 car10: the left sensor touched a
  * left curve for 59 mm, then nothing saw the tape again). Keep turning
  * towards the last edge, harder the longer both stay white: a centred
@@ -455,6 +466,10 @@ track_edge (line_track_t * p_track, line_track_input_t const * p_in,
             uint32_t side, bool b_was_black)
 {
     bool const b_black = p_track->b_black[side];
+    if (b_black && !b_was_black)
+    {
+        note_touch(p_track, p_in, side);
+    }
     if (b_black)
     {
         p_track->last_side = side;
@@ -473,13 +488,35 @@ track_edge (line_track_t * p_track, line_track_input_t const * p_in,
     else if (b_was_black)
     {
         /* However briefly it was black, this was a correction, not a
-         * corner: seek from here. */
-        p_track->target_deg = seek_target(p_track, p_in);
+         * corner: hold what it reached, or seek in a bend. */
+        p_track->target_deg =
+            p_track->b_curve ? seek_target(p_track, p_in) : p_in->heading_deg;
     }
     else
     {
         /* White and was white. */
     }
+}
+
+/* A single-side touch begins: the same side again soon is a bend. */
+static void
+note_touch (line_track_t * p_track, line_track_input_t const * p_in,
+            uint32_t side)
+{
+    if (side != p_track->touch_side)
+    {
+        p_track->b_curve = false;
+    }
+    else if ((p_in->distance_mm - p_track->touch_mm) <= LINE_CURVE_TOUCH_MM)
+    {
+        p_track->b_curve = true;
+    }
+    else
+    {
+        /* Too long ago to be the same bend. */
+    }
+    p_track->touch_side = side;
+    p_track->touch_mm = p_in->distance_mm;
 }
 
 static void

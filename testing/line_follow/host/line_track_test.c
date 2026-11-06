@@ -89,14 +89,11 @@ test_edge_clears (void)
     drive(false, false, LINE_CONFIRM_SAMPLES);
     bool const b_held =
         (LINE_MODE_TRACK == out.mode) && (0 == out.target_heading_deg);
-    drive(false, false, samples_for(LINE_SEEK_RAMP_MM / 2));
-    bool const b_ramping = (out.target_heading_deg > 0) &&
-                           (out.target_heading_deg < LINE_SEEK_MAX_DEG);
-    drive(false, false, samples_for(LINE_SEEK_RAMP_MM));
-    check("LT03 an edge leads until white; then the car seeks towards it, "
-          "from nothing up to LINE_SEEK_MAX_DEG over LINE_SEEK_RAMP_MM",
-          b_leading && b_held && b_ramping && (LINE_MODE_TRACK == out.mode) &&
-              (LINE_SEEK_MAX_DEG == out.target_heading_deg));
+    drive(false, false, samples_for(100));
+    check("LT03 an edge leads until white; then the car holds its heading, "
+          "so it runs straight past a barcode",
+          b_leading && b_held && (LINE_MODE_TRACK == out.mode) &&
+              (0 == out.target_heading_deg));
 }
 
 static void
@@ -128,10 +125,9 @@ test_brief_touch (void)
     drive(false, true, LINE_CONFIRM_SAMPLES);
     drive(false, true, samples_for(10));
     drive(false, false, LINE_CONFIRM_SAMPLES + samples_for(100));
-    check("LT05 a brief touch of either sensor is a correction, not a "
-          "search; the seek follows the last one",
+    check("LT05 a brief touch of either sensor is a correction, not a search",
           b_tracking && (LINE_MODE_TRACK == out.mode) &&
-              (-LINE_SEEK_MAX_DEG == out.target_heading_deg));
+              (0 == out.target_heading_deg));
 }
 
 /* A cross met square: both sensors black together. */
@@ -149,12 +145,12 @@ static void
 test_junction (void)
 {
     cross_junction(LINE_TURN_STRAIGHT);
-    bool const b_junction = out.b_junction && (4 == out.target_heading_deg) &&
+    bool const b_junction = out.b_junction && (0 == out.target_heading_deg) &&
                             (LINE_MODE_TRACK == out.mode);
     in.heading_deg = 6;
     drive(true, true, samples_for(15));
-    /* Still tracking: the target follows the heading, no 4 degree hold. */
-    bool const b_tracking = out.b_junction && (6 == out.target_heading_deg);
+    /* Tracking, not a blind drive: the target is still the held heading. */
+    bool const b_tracking = out.b_junction && (0 == out.target_heading_deg);
     drive(false, true, LINE_CONFIRM_SAMPLES + 2u);
     bool const b_edge = out.b_junction &&
                         (6 - LINE_LEAD_DEG == out.target_heading_deg) &&
@@ -264,31 +260,53 @@ test_overshoot_across (void)
           b_no_junction && b_turns_back && (LINE_MODE_TRACK == out.mode));
 }
 
-/* On a straight the seek turns the car until the other sensor stops it. */
+/* One touch: hold. The same sensor again soon: a bend, so seek, and look
+ * for the line sooner. The other sensor ends the bend. */
 static void
-test_seek_flips (void)
+test_bend_seek (void)
 {
+    int const gap_mm = LINE_CURVE_TOUCH_MM / 2;
     reset();
     drive(true, false, LINE_CONFIRM_SAMPLES);
+    drive(false, false, LINE_CONFIRM_SAMPLES + samples_for(gap_mm));
+    bool const b_one = (0 == out.target_heading_deg);
+    drive(true, false, LINE_CONFIRM_SAMPLES);
     drive(false, false, LINE_CONFIRM_SAMPLES + samples_for(LINE_SEEK_RAMP_MM));
-    bool const b_left = (LINE_SEEK_MAX_DEG == out.target_heading_deg);
+    bool const b_seek = (LINE_SEEK_MAX_DEG == out.target_heading_deg);
     drive(false, true, LINE_CONFIRM_SAMPLES);
     bool const b_edge = (-LINE_LEAD_DEG == out.target_heading_deg);
     drive(false, false, LINE_CONFIRM_SAMPLES + samples_for(LINE_SEEK_RAMP_MM));
-    check("LT14 the other sensor ends a seek, and the next seek turns its way",
-          b_left && b_edge && (-LINE_SEEK_MAX_DEG == out.target_heading_deg));
+    check("LT14 a second touch of one sensor seeks that way; the other "
+          "sensor ends it",
+          b_one && b_seek && b_edge && (0 == out.target_heading_deg));
+
+    reset();
+    drive(true, false, LINE_CONFIRM_SAMPLES);
+    drive(false, false, samples_for(LINE_CURVE_TOUCH_MM + 20));
+    drive(true, false, LINE_CONFIRM_SAMPLES);
+    drive(false, false, LINE_CONFIRM_SAMPLES + samples_for(LINE_SEEK_RAMP_MM));
+    bool const b_far_apart = (0 == out.target_heading_deg);
+
+    reset();
+    drive(true, false, LINE_CONFIRM_SAMPLES);
+    drive(false, false, LINE_CONFIRM_SAMPLES + samples_for(gap_mm));
+    drive(true, false, LINE_CONFIRM_SAMPLES);
+    drive(false, false, samples_for(LINE_LOST_MM) + LINE_CONFIRM_SAMPLES + 5u);
+    check("LT21 touches far apart are no bend; in a bend the line counts as "
+          "lost sooner",
+          b_far_apart && (LINE_MODE_SEARCH_LEFT == out.mode));
 }
 
 static void
 test_lost (void)
 {
     reset();
-    drive(false, false, samples_for(LINE_LOST_MM) + 5u);
+    drive(false, false, samples_for(LINE_STRAIGHT_LOST_MM) + 5u);
     bool const b_no_edge = (LINE_MODE_TRACK == out.mode);
     drive(true, false, LINE_CONFIRM_SAMPLES);
     drive(true, false, samples_for(30));
     drive(false, false, LINE_CONFIRM_SAMPLES);
-    drive(false, false, samples_for(LINE_LOST_MM) - 5u);
+    drive(false, false, samples_for(LINE_STRAIGHT_LOST_MM) - 5u);
     bool const b_early = (LINE_MODE_TRACK == out.mode);
     drive(false, false, 5u);
     check("LT07 long white after an edge searches towards it",
@@ -304,7 +322,8 @@ start_left_search (int32_t heading)
     in.heading_deg = heading;
     drive(false, false, samples_for(100));
     drive(true, false, LINE_CONFIRM_SAMPLES);
-    drive(false, false, LINE_CONFIRM_SAMPLES + samples_for(LINE_LOST_MM));
+    drive(false, false,
+          LINE_CONFIRM_SAMPLES + samples_for(LINE_STRAIGHT_LOST_MM));
     in.b_turning = true;
 }
 
@@ -406,14 +425,14 @@ test_pivot_overshoot (void)
 }
 
 /*
- * LT19: a model of the car, fitted to the 2026-11-06 car10 run. Sensors
- * 130 mm ahead of the axle over 18 mm tape; a left quarter circle between
- * two straights. The line task samples every 20 ms (a 10 ms delay rounds
- * up to two ticks); motion acts on a request two samples late at
- * MOTION_FOLLOW_KP times the error, capped, and the car's turn rate lags
- * that. A pivot search stops the car going forward. With no seek, a
- * 100 mm radius curve with 0.5 s of lag gives car10's trace: brief touches
- * of the left sensor, then white for good.
+ * LT19, LT22: a model of the car, fitted to the 2026-11-06 car10 run.
+ * Sensors 130 mm ahead of the axle over 18 mm tape, about 20 mm of white
+ * between the touches of the two sensors (car11), so a gap near 36 mm. The
+ * line task samples every 20 ms (a 10 ms delay rounds up to two ticks);
+ * motion acts on a request two samples late at MOTION_FOLLOW_KP times the
+ * error, capped, and the car's turn rate lags that. A pivot search stops
+ * the car going forward. It does not hold with the sensors closer than the
+ * tape is wide: white then means off the tape.
  */
 #define SIM_AHEAD_MM 130.0
 #define SIM_HALF_TAPE_MM 9.0
@@ -440,6 +459,81 @@ tape_distance (double x, double y)
                 sim_radius_mm);
 }
 
+/* The modelled car. */
+typedef struct
+{
+    double x;
+    double y;
+    double heading; /* Degrees, + is left. */
+    double rate;
+    double travel;
+    double requests[SIM_DELAY_SAMPLES + 1u];
+    double half_gap;
+    double lag_s;
+    double start_deg; /* Heading the odometry calls 0. */
+} sim_car_t;
+
+/* Sensors on the tape, the car angled across it, @p back mm before the
+ * tape's bend. */
+static sim_car_t
+sim_start (double back, double half_gap, double lag_s, double entry_deg)
+{
+    sim_car_t car = {.x = -back - SIM_AHEAD_MM,
+                     .y = -SIM_AHEAD_MM * sin(entry_deg * SIM_PI / 180.0),
+                     .heading = entry_deg,
+                     .half_gap = half_gap,
+                     .lag_s = lag_s};
+    for (unsigned int k = 0u; k <= SIM_DELAY_SAMPLES; k++)
+    {
+        car.requests[k] = entry_deg;
+    }
+    return car;
+}
+
+/* One line task sample; returns how far the sensors are off the tape. */
+static double
+sim_step (sim_car_t * p_car)
+{
+    double const speed = (double)MOTION_FOLLOW_SPEED_MM_S;
+    double const step_mm = speed * SIM_STEP_S;
+    /* Motion's cap: the follow limit, or where the inner wheel stops. */
+    double const cap =
+        fmin((double)MOTION_FOLLOW_MAX_DEG_S,
+             (2.0 * speed) / ((double)MOTION_TRACK_WIDTH_MM * SIM_PI / 180.0));
+    double const rad = p_car->heading * SIM_PI / 180.0;
+    double const sx = p_car->x + (SIM_AHEAD_MM * cos(rad));
+    double const sy = p_car->y + (SIM_AHEAD_MM * sin(rad));
+    double const half_gap = p_car->half_gap;
+    in.b_left_black =
+        tape_distance(sx - (half_gap * sin(rad)), sy + (half_gap * cos(rad))) <=
+        SIM_HALF_TAPE_MM;
+    in.b_right_black =
+        tape_distance(sx + (half_gap * sin(rad)), sy - (half_gap * cos(rad))) <=
+        SIM_HALF_TAPE_MM;
+    in.heading_deg = (int32_t)lround(p_car->heading - p_car->start_deg);
+    in.distance_mm = (int32_t)p_car->travel;
+    out = line_track_update(&track, &in);
+
+    for (unsigned int k = SIM_DELAY_SAMPLES; k > 0u; k--)
+    {
+        p_car->requests[k] = p_car->requests[k - 1u];
+    }
+    p_car->requests[0] = (double)out.target_heading_deg;
+    double const asked =
+        MOTION_FOLLOW_KP * (p_car->requests[SIM_DELAY_SAMPLES] +
+                            p_car->start_deg - p_car->heading);
+    p_car->rate += (fmin(fmax(asked, -cap), cap) - p_car->rate) * SIM_STEP_S /
+                   p_car->lag_s;
+    p_car->heading += p_car->rate * SIM_STEP_S;
+    if (LINE_MODE_TRACK == out.mode)
+    {
+        p_car->x += step_mm * cos(p_car->heading * SIM_PI / 180.0);
+        p_car->y += step_mm * sin(p_car->heading * SIM_PI / 180.0);
+        p_car->travel += step_mm;
+    }
+    return tape_distance(sx, sy);
+}
+
 /* Follow a curve of @p radius mm with the sensors 2 * @p half_gap mm
  * apart, the car's turn rate lagging by @p lag_s and starting @p entry_deg
  * off the tape's direction. */
@@ -448,79 +542,70 @@ curve_model (double radius, double half_gap, double lag_s, double entry_deg)
 {
     reset();
     sim_radius_mm = radius;
-    double const speed = (double)MOTION_FOLLOW_SPEED_MM_S;
-    double const step_mm = speed * SIM_STEP_S;
-    /* Motion's cap: the follow limit, or where the inner wheel stops. */
-    double const cap =
-        fmin((double)MOTION_FOLLOW_MAX_DEG_S,
-             (2.0 * speed) / ((double)MOTION_TRACK_WIDTH_MM * SIM_PI / 180.0));
-    double x = -300.0 - SIM_AHEAD_MM; /* Sensors 300 mm before the arc. */
-    double heading = entry_deg;       /* Degrees, + is left. */
-    /* Sensors on the tape, the car angled across it. */
-    double y = -SIM_AHEAD_MM * sin(heading * SIM_PI / 180.0);
-    double rate = 0.0;
-    double travel = 0.0;
+    sim_car_t car = sim_start(300.0, half_gap, lag_s, entry_deg);
     double worst = 0.0;
-    double requests[SIM_DELAY_SAMPLES + 1u];
-    for (unsigned int k = 0u; k <= SIM_DELAY_SAMPLES; k++)
-    {
-        requests[k] = heading;
-    }
-    unsigned int const steps = (unsigned int)(1400.0 / step_mm);
+    unsigned int const steps =
+        (unsigned int)(1400.0 /
+                       ((double)MOTION_FOLLOW_SPEED_MM_S * SIM_STEP_S));
     for (unsigned int i = 0u; i < steps; i++)
     {
-        double const rad = heading * SIM_PI / 180.0;
-        double const sx = x + (SIM_AHEAD_MM * cos(rad));
-        double const sy = y + (SIM_AHEAD_MM * sin(rad));
-        double const off = tape_distance(sx, sy);
-        worst = (off > worst) ? off : worst;
-        in.b_left_black =
-            tape_distance(sx - (half_gap * sin(rad)),
-                          sy + (half_gap * cos(rad))) <= SIM_HALF_TAPE_MM;
-        in.b_right_black =
-            tape_distance(sx + (half_gap * sin(rad)),
-                          sy - (half_gap * cos(rad))) <= SIM_HALF_TAPE_MM;
-        in.heading_deg = (int32_t)lround(heading);
-        in.distance_mm = (int32_t)travel;
-        out = line_track_update(&track, &in);
-
-        for (unsigned int k = SIM_DELAY_SAMPLES; k > 0u; k--)
-        {
-            requests[k] = requests[k - 1u];
-        }
-        requests[0] = (double)out.target_heading_deg;
-        double asked =
-            MOTION_FOLLOW_KP * (requests[SIM_DELAY_SAMPLES] - heading);
-        asked = fmin(fmax(asked, -cap), cap);
-        rate += (asked - rate) * SIM_STEP_S / lag_s;
-        heading += rate * SIM_STEP_S;
-        if (LINE_MODE_TRACK == out.mode)
-        {
-            x += step_mm * cos(heading * SIM_PI / 180.0);
-            y += step_mm * sin(heading * SIM_PI / 180.0);
-            travel += step_mm;
-        }
+        worst = fmax(worst, sim_step(&car));
     }
     printf("  curve model, radius %.0f, gap %.0f, lag %.2f: sensors at most "
            "%.0f mm off the tape, heading %.0f deg, %.0f mm up the exit\n",
-           radius, 2.0 * half_gap, lag_s, worst, heading, y - radius);
-    return (worst < 40.0) && (heading > 70.0) && (heading < 110.0) &&
-           (y > radius + 300.0);
+           radius, 2.0 * half_gap, lag_s, worst, car.heading, car.y - radius);
+    return (worst < 40.0) && (car.heading > 70.0) && (car.heading < 110.0) &&
+           (car.y > radius + 300.0);
 }
 
 static void
 test_curve_model (void)
 {
-    /* The fit to car10, then wider curves, and the sensors wider and
-     * narrower than the tape: car7 and car9 started in one state each. */
+    /* The fit to car10, then wider curves, across the likely gaps. */
     bool const b_tight = curve_model(100.0, 10.0, 0.5, 0.0);
-    bool const b_gap = curve_model(100.0, 15.0, 0.7, 0.0);
+    bool const b_gap = curve_model(100.0, 18.0, 0.5, 0.0);
     bool const b_wide = curve_model(200.0, 10.0, 0.25, -8.0);
-    bool const b_narrow = curve_model(200.0, 8.0, 0.25, -8.0);
+    bool const b_entry = curve_model(200.0, 18.0, 0.25, -8.0);
     check("LT19 the car model follows a left quarter circle onto the exit "
           "straight: the 100 mm radius fitted to car10, and 200 mm met 8 "
-          "degrees off with the sensors wider or narrower than the tape",
-          b_tight && b_gap && b_wide && b_narrow);
+          "degrees off, with the sensors 20 and 36 mm apart",
+          b_tight && b_gap && b_wide && b_entry);
+}
+
+/* Heading swing on a long straight, met 3 degrees off, once settled. */
+static void
+test_straight_model (void)
+{
+    reset();
+    sim_radius_mm = 1.0e6;
+    sim_car_t car = sim_start(5000.0, 18.0, 0.25, 3.0);
+    car.start_deg = 3.0; /* The car does not know it is crooked. */
+    for (unsigned int k = 0u; k <= SIM_DELAY_SAMPLES; k++)
+    {
+        car.requests[k] = 0.0;
+    }
+    double swing = 0.0;
+    double travel_at = 0.0;
+    unsigned int touches = 0u;
+    bool b_was_touching = false;
+    while (car.travel < 2000.0)
+    {
+        (void)sim_step(&car);
+        bool const b_touching = in.b_left_black || in.b_right_black;
+        if (car.travel > 300.0)
+        {
+            swing = fmax(swing, fabs(car.heading));
+            touches += (b_touching && !b_was_touching) ? 1u : 0u;
+            travel_at = car.travel;
+        }
+        b_was_touching = b_touching;
+    }
+    double const per_m = (double)touches * 1000.0 / (travel_at - 300.0);
+    printf("  straight model: heading within +-%.1f deg, %.1f touches per m\n",
+           swing, per_m);
+    check("LT22 the car model holds a straight: swing under 4 degrees and "
+          "under 12 touches per metre",
+          (swing < 4.0) && (per_m < 12.0) && (LINE_MODE_TRACK == out.mode));
 }
 
 /* 2026-11-06 car9: the tape under both sensors for 143 mm. Longer than
@@ -553,10 +638,11 @@ main (void)
     test_search_timeout();
     test_control_off();
     test_pivot_overshoot();
-    test_seek_flips();
+    test_bend_seek();
     test_junction_left();
     test_both_rise_together();
     test_curve_model();
+    test_straight_model();
     test_long_both_black();
     test_junction_uturn();
     test_overshoot_across();

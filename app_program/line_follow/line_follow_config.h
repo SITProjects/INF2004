@@ -49,8 +49,8 @@
 /**
  * @brief While one sensor reads black, the target heading leads the car's
  * heading by this much, in degrees, towards that side, so motion keeps
- * turning until the sensor reads white; then the car seeks. With
- * MOTION_FOLLOW_KP 4, 15 degrees asks for 60 deg/s.
+ * turning until the sensor reads white. With MOTION_FOLLOW_KP 4, 15
+ * degrees asks for 60 deg/s.
  * With LINE_SEEK_MAX_DEG and LINE_SEEK_RAMP_MM, chosen on LT19's model
  * fitted to the 2026-11-06 car10 run. Not yet confirmed on the car.
  * TODO(calibrate) on the tightest curve, then a 2 m straight.
@@ -58,12 +58,19 @@
 #define LINE_LEAD_DEG 15
 
 /**
- * @brief While both sensors read white, the target heading leads the car
- * by up to this much, in degrees, towards the last edge, reached after
- * LINE_SEEK_RAMP_MM of white. White on both can mean the tape slipped out
- * on a curve, so the car must keep turning. Larger catches tighter
- * curves but weaves more on straights (about +-9 degrees in the model at
- * the worst lag), which matters for reading barcodes beside the line.
+ * @brief The same sensor touching again within this travel, in mm, means
+ * a bend rather than drift, and turns the seek on. A touch of the other
+ * sensor turns it off. On a straight touches alternate, or come far apart,
+ * so the car holds its heading and barcodes read cleanly: always seeking
+ * swung it +-8 degrees (2026-11-06 BAR-U06).
+ */
+#define LINE_CURVE_TOUCH_MM 80
+
+/**
+ * @brief In a bend, while both sensors read white, the target heading
+ * leads the car by up to this much, in degrees, towards the last edge,
+ * reached after LINE_SEEK_RAMP_MM of white. White on both can mean the
+ * tape slipped out, so the car must keep turning.
  */
 #define LINE_SEEK_MAX_DEG 12
 
@@ -81,11 +88,17 @@
 #define LINE_EDGE_MAX_MM 200
 
 /**
- * @brief Both sensors white for this travel, in mm, counts as lost: pivot
- * search towards the last edge. The seek has by then turned the car about
- * 120 degrees that way, so a longer run would only circle.
+ * @brief In a bend, both sensors white for this travel, in mm, counts as
+ * lost: pivot search towards the last edge. The seek has by then turned
+ * the car about 120 degrees that way, so a longer run would only circle.
  */
 #define LINE_LOST_MM 250
+
+/**
+ * @brief The same outside a bend, where white is normal while centred, so
+ * it must be long: the car has run 368 mm without a touch (car10).
+ */
+#define LINE_STRAIGHT_LOST_MM 600
 
 /** Largest pivot, in degrees, to either side while searching. */
 #define LINE_SEARCH_MAX_DEG 120
