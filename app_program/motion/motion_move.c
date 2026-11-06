@@ -144,6 +144,7 @@ static void correct_heading (void);
 static void reset_sync (void);
 static float heading_deg (void);
 static void set_follow_gains (uint16_t speed_mm_s);
+static void limit_turn_speed (void);
 static void follow_heading (void);
 static void reset_follow (void);
 static int16_t round_rate (float rate);
@@ -226,6 +227,10 @@ motion_move_update (void)
         {
             follow_heading();
         }
+    }
+    else if (MOTION_STATE_TURN == state)
+    {
+        limit_turn_speed();
     }
     else
     {
@@ -784,6 +789,24 @@ heading_deg (void)
 {
     return ((float)tick_difference() * MM_PER_TICK) /
            (MOTION_TRACK_WIDTH_MM * DEG_TO_RAD);
+}
+
+/* Catch a wheel running away during a turn: MOTION_TURN_OVERSPEED. */
+static void
+limit_turn_speed (void)
+{
+    float const limit_mm_s = (float)MOTION_TURN_SPEED_DEG_S * DEG_TO_RAD *
+                             MOTION_TRACK_WIDTH_MM * 0.5f *
+                             MOTION_TURN_OVERSPEED;
+    for (uint32_t wheel = 0u; wheel < WHEEL_COUNT; wheel++)
+    {
+        int32_t const speed = wheel_speed_mm_s[wheel];
+        if ((float)((speed < 0) ? -speed : speed) > limit_mm_s)
+        {
+            (void)motion_drive_reset_speed_loops();
+            return;
+        }
+    }
 }
 
 /*

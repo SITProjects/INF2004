@@ -11,11 +11,13 @@
 static motion_command_t command;
 static unsigned int stopped;
 static unsigned int failures;
+static motion_counts_t counts;
+static unsigned int loop_resets;
 
 motion_status_t
 motion_drive_get_counts (motion_counts_t * p_counts)
 {
-    *p_counts = (motion_counts_t){0};
+    *p_counts = counts;
     return MOTION_OK;
 }
 
@@ -43,6 +45,13 @@ motion_drive_get_command (motion_command_t * p_command)
 }
 
 motion_status_t
+motion_drive_reset_speed_loops (void)
+{
+    ++loop_resets;
+    return MOTION_OK;
+}
+
+motion_status_t
 motion_drive_stop (void)
 {
     memset(&command, 0, sizeof(command));
@@ -65,6 +74,79 @@ feed (bool seen, unsigned int samples)
         (void)motion_move_set_line(seen);
         (void)motion_move_update();
     }
+}
+
+/* Run @p updates updates with the wheels moving these counts per update. */
+static void
+spin (int left, int right, unsigned int updates)
+{
+    for (unsigned int i = 0; i < updates; ++i)
+    {
+        counts.left_count = (uint16_t)(counts.left_count + left);
+        counts.right_count = (uint16_t)(counts.right_count + right);
+        (void)motion_move_set_line(true);
+        (void)motion_move_update();
+    }
+}
+
+/* Counts per update at @p speed_mm_s. */
+static int
+ticks_at (float speed_mm_s)
+{
+    float const mm_per_tick =
+        (3.14159265f * MOTION_WHEEL_DIAMETER_MM) / MOTION_ENCODER_TICKS_PER_REV;
+    return (int)(speed_mm_s * ((float)MOTION_UPDATE_PERIOD_MS / 1000.0f) /
+                 mm_per_tick);
+}
+
+/* From rest, so no earlier speed is left in the window. */
+static bool
+runaway_caught (bool b_left_turn, int left, int right)
+{
+    spin(0, 0, 2u * MOTION_SPEED_WINDOW_UPDATES);
+    loop_resets = 0u;
+    (void)(b_left_turn ? motion_move_turn_left(720u)
+                       : motion_move_turn_right(720u));
+    spin(left, right, 2u * MOTION_SPEED_WINDOW_UPDATES);
+    (void)motion_move_stop();
+    return loop_resets > 0u;
+}
+
+static void
+test_turn_runaway (void)
+{
+    int const normal = ticks_at(87.0f);
+    int const runaway = ticks_at(186.0f);
+
+    (void)motion_move_turn_left(720u);
+    spin(-normal, normal, 2u * MOTION_SPEED_WINDOW_UPDATES);
+    check("a turn at its own speed keeps its speed loops",
+          (0u == loop_resets) && (motion_move_get_state() == MOTION_STATE_TURN));
+    spin(-runaway, runaway, 2u * MOTION_SPEED_WINDOW_UPDATES);
+    check("a wheel running away in a turn drops the speed loops",
+          (loop_resets > 0u) && (motion_move_get_state() == MOTION_STATE_TURN));
+    (void)motion_move_stop();
+
+    /* Each wheel alone, forward and backward. */
+    check("either wheel alone, in either direction, counts as running away",
+          runaway_caught(true, -runaway, normal) &&
+              runaway_caught(true, -normal, runaway) &&
+              runaway_caught(false, runaway, -normal) &&
+              runaway_caught(false, normal, -runaway));
+
+    /* Only turns: a move and following need their speed loops. */
+    spin(0, 0, 2u * MOTION_SPEED_WINDOW_UPDATES);
+    loop_resets = 0u;
+    (void)motion_move_forward(1000u);
+    spin(ticks_at(300.0f), ticks_at(300.0f), MOTION_SPEED_WINDOW_UPDATES);
+    bool const b_move_alone = 0u == loop_resets;
+    (void)motion_move_stop();
+    spin(0, 0, 2u * MOTION_SPEED_WINDOW_UPDATES);
+    (void)motion_move_follow(MOTION_FOLLOW_SPEED_MM_S);
+    spin(runaway, runaway, 2u * MOTION_SPEED_WINDOW_UPDATES);
+    check("moves and following keep their speed loops",
+          b_move_alone && (0u == loop_resets));
+    (void)motion_move_stop();
 }
 
 static bool
@@ -227,6 +309,8 @@ main (void)
     }
     check("stale line input ends following",
           motion_move_get_state() == MOTION_STATE_STOPPED);
+    test_turn_runaway();
+
     printf("%u failures\n", failures);
     return failures ? 1 : 0;
 }

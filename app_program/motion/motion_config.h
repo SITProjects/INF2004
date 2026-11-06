@@ -246,6 +246,15 @@
 #define MOTION_TURN_SPEED_DEG_S 90
 
 /*
+ * During a turn, a wheel faster than this many times the turn speed has
+ * run away: its wound-up speed loop is dropped. A wheel that sticks winds
+ * the loop up, then breaks free far too fast (2026-11-06 dash5: 186 mm/s
+ * for 87, turning at 195 deg/s), which slips and throws the heading off.
+ * Above any overshoot of a normal turn (under 1.2 on the same logs).
+ */
+#define MOTION_TURN_OVERSPEED 1.3f
+
+/*
  * Degrees to brake before a turn's target, for the coast after braking.
  * TODO(calibrate): leave 0 unless MOT-U13 shows every 90 degree turn off
  * by about the same amount once MOT-U11 is right; then set it to that
