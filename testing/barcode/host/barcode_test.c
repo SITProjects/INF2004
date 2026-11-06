@@ -237,9 +237,11 @@ test_scan_assembly (void)
 
 /* Run @p count widths through the filter and scan as the sensor would
  * give them: every transition a burst of @p burst edges 1..3 us apart,
- * the level read back at random until the last edge. */
+ * the level read back at random until the last edge; the first transition
+ * also flickers for @p flicker_us. */
 static barcode_scan_result_t
-chatter_scan (barcode_scan_t * p_scan, uint32_t count, uint32_t burst)
+chatter_scan (barcode_scan_t * p_scan, uint32_t count, uint32_t burst,
+              uint32_t flicker_us)
 {
     barcode_filter_t filter;
     uint32_t now_us = 1000000u;
@@ -262,6 +264,20 @@ chatter_scan (barcode_scan_t * p_scan, uint32_t count, uint32_t burst)
             }
             t += 1u + ((random_state >> 20) % 3u);
         }
+        if ((0u == i) && (flicker_us > 0u))
+        {
+            /* A short white and back, soon after the bar begins. */
+            bool b_new = false;
+            if (barcode_filter_edge(&filter, t + flicker_us, false, &b_new))
+            {
+                (void)barcode_scan_edge(p_scan, t + flicker_us, b_new);
+            }
+            if (barcode_filter_edge(&filter, t + (2u * flicker_us), true,
+                                    &b_new))
+            {
+                (void)barcode_scan_edge(p_scan, t + (2u * flicker_us), b_new);
+            }
+        }
         now_us += (i < count) ? widths[i] : 0u;
     }
     return barcode_scan_poll(p_scan, now_us + BARCODE_QUIET_MAX_US + 1u);
@@ -274,7 +290,7 @@ test_chatter (void)
     char text[BARCODE_MAX_TEXT];
     bool b_reversed = false;
     uint32_t const count = encode("*INF2004*", RATIO_X10, 0u);
-    barcode_scan_result_t const done = chatter_scan(&scan, count, 25u);
+    barcode_scan_result_t const done = chatter_scan(&scan, count, 25u, 0u);
     bool const b_count = (count == scan.count);
     barcode_code39_status_t const status = barcode_code39_decode(
         scan.widths, scan.count, text, sizeof(text), &b_reversed);
@@ -311,13 +327,25 @@ test_chatter (void)
             (((i % 2u) != 0u) && (widths[i] > widths[widest])) ? i : widest;
     }
     widths[widest] = (widths[widest] * 14u) / 10u;
-    barcode_scan_result_t const whole = chatter_scan(&scan, biased, 1u);
+    barcode_scan_result_t const whole = chatter_scan(&scan, biased, 1u, 0u);
     check("BT09 thin bars and a stretched white gap stay one scan and decode",
           (BARCODE_SCAN_DONE == whole) && (biased == scan.count) &&
               (BARCODE_CODE39_OK ==
                barcode_code39_decode(scan.widths, scan.count, text,
                                      sizeof(text), &b_reversed)) &&
               (0 == strcmp("A", text)));
+
+    /* A flicker at the first bar, as on the car: the scan must keep the
+     * whole barcode, not end at the first normal white gap. */
+    uint32_t const flickered = encode("*F*", RATIO_X10, 0u);
+    barcode_scan_result_t const kept =
+        chatter_scan(&scan, flickered, 1u, 6000u);
+    check("BT12 a flicker at the first bar does not end the scan early",
+          (BARCODE_SCAN_DONE == kept) && (flickered == scan.count) &&
+              (BARCODE_CODE39_OK ==
+               barcode_code39_decode(scan.widths, scan.count, text,
+                                     sizeof(text), &b_reversed)) &&
+              (0 == strcmp("F", text)));
 
     /* The same barcode after a dropped scan left the level black. */
     uint32_t const clean = encode("*A*", RATIO_X10, 0u);

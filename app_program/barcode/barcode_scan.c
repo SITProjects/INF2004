@@ -11,7 +11,6 @@
 /* Private types, constants, and macros. */
 
 /* Private function declarations. */
-static uint32_t quiet_us (barcode_scan_t const * p_scan);
 static void append (barcode_scan_t * p_scan, uint32_t width_us);
 
 /* Public function definitions. */
@@ -74,7 +73,7 @@ barcode_scan_edge (barcode_scan_t * p_scan, uint32_t edge_us, bool b_black)
     uint32_t const width = edge_us - p_scan->last_us;
     if (p_scan->b_active)
     {
-        if (!p_scan->b_black && (width > quiet_us(p_scan)))
+        if (!p_scan->b_black && (width > BARCODE_QUIET_MAX_US))
         {
             /* The white before this edge was a quiet zone. */
             return BARCODE_SCAN_DONE;
@@ -123,20 +122,11 @@ barcode_scan_poll (barcode_scan_t * p_scan, uint32_t now_us)
         }
         return BARCODE_SCAN_BUSY;
     }
-    return (elapsed > quiet_us(p_scan)) ? BARCODE_SCAN_DONE : BARCODE_SCAN_BUSY;
+    return (elapsed > BARCODE_QUIET_MAX_US) ? BARCODE_SCAN_DONE
+                                            : BARCODE_SCAN_BUSY;
 }
 
 /* Private function definitions. */
-
-/* White longer than this ends the scan. */
-static uint32_t
-quiet_us (barcode_scan_t const * p_scan)
-{
-    uint64_t const relative =
-        (uint64_t)p_scan->narrowest_us * BARCODE_QUIET_FACTOR;
-    return (relative < BARCODE_QUIET_MAX_US) ? (uint32_t)relative
-                                             : BARCODE_QUIET_MAX_US;
-}
 
 static void
 append (barcode_scan_t * p_scan, uint32_t width_us)

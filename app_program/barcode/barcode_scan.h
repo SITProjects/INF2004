@@ -3,9 +3,9 @@
  * @brief Turn timestamped barcode-sensor edges into one scan's widths.
  *
  * A scan starts at the first black edge after white and collects each
- * element's width (time between edges). A white gap longer than the quiet
- * limit ends it; a black bar longer than BARCODE_QUIET_MAX_US abandons
- * it (the line, or the car stopped on a bar). The module is pure: no
+ * element's width (time between edges). A white gap longer than
+ * BARCODE_QUIET_MAX_US ends it; a black bar longer than that abandons it
+ * (the line, or the car stopped on a bar). The module is pure: no
  * kernel calls.
  */
 

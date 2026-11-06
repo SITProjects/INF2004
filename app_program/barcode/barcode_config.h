@@ -24,10 +24,11 @@
 /**
  * @brief An edge this soon after the last one, in us, is chatter: the
  * module has no hysteresis, so DO flips for a while as a bar edge crosses
- * its threshold (1 to 3 us apart, 2026-11-06). 3 ms is 0.24 mm at the
- * 80 mm/s follow speed, well under any printed bar.
+ * its threshold (1 to 3 us apart, and flickers of 6 ms, 2026-11-06). 10 ms
+ * is 0.8 mm at the 80 mm/s follow speed; the narrowest real bar, on the
+ * smaller barcode, reads 25 ms.
  */
-#define BARCODE_MIN_PULSE_US 3000u
+#define BARCODE_MIN_PULSE_US 10000u
 
 /** Edges the interrupt can queue for the task; a power of two. */
 #define BARCODE_EDGE_QUEUE_SIZE 64u
@@ -39,17 +40,12 @@
 #define BARCODE_MAX_TEXT 25u
 
 /**
- * @brief A white gap this many times the narrowest element so far ends a
- * scan (the quiet zone), up to BARCODE_QUIET_MAX_US. Code 39 elements are
- * at most about 3 narrow wide, but the sensor shrinks black bars: bars of
- * 40 ms and white gaps of 240 ms on the car (2026-11-06), so 6 cut scans.
- */
-#define BARCODE_QUIET_FACTOR 16u
-
-/**
- * @brief Longest white gap, or black bar, inside a scan, in us; also the
- * quiet gap before the narrowest element is known. 400 ms is 32 mm at
- * the 80 mm/s follow speed.
+ * @brief A white gap longer than this, in us, ends a scan (the quiet zone),
+ * and a longer black bar drops it. 400 ms is 32 mm at the 80 mm/s follow
+ * speed; wide white gaps read 240 ms. It is fixed because a limit based on
+ * the narrowest element ended scans early: one flicker at the first bar
+ * shrank it below a normal gap (2026-11-06, the first 300 ms of a barcode
+ * was lost on both sizes).
  */
 #define BARCODE_QUIET_MAX_US 400000u
 
