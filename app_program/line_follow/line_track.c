@@ -106,18 +106,20 @@ line_track_update (line_track_t * p_track, line_track_input_t const * p_in)
     bool const was_black[SIDE_COUNT] = {p_track->b_black[SIDE_LEFT],
                                         p_track->b_black[SIDE_RIGHT]};
     debounce(p_track, p_in);
+
+    bool const b_both =
+        p_track->b_black[SIDE_LEFT] && p_track->b_black[SIDE_RIGHT];
     for (uint32_t side = 0u; side < SIDE_COUNT; side++)
     {
         /* Here, not in track_edge(): an edge that turns black in the same
-         * sample as the other sensor must restart its held-edge travel. */
-        if (p_track->b_black[side] && !was_black[side])
+         * sample as the other sensor must restart its held-edge travel.
+         * Only one side black on its own counts as held: the tape can sit
+         * under both for a long way (2026-11-06 car9, 143 mm). */
+        if (b_both || (p_track->b_black[side] && !was_black[side]))
         {
             p_track->black_start_mm[side] = p_in->distance_mm;
         }
     }
-
-    bool const b_both =
-        p_track->b_black[SIDE_LEFT] && p_track->b_black[SIDE_RIGHT];
     if (!b_both)
     {
         p_track->junction_count = 0u;

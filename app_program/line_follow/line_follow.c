@@ -18,6 +18,7 @@
 #include "../motion/motion.h"
 #include "../motion/motion_command.h"
 #include "../motion/motion_command_config.h"
+#include "../motion/motion_config.h"
 #include "../terrain/terrain_compass.h"
 #if TM_MQTT
 #include "../communication/telemetry_queue.h"
@@ -30,6 +31,11 @@
  * MQTT (the console line is still printed). */
 #define REPORT_TEXT_SIZE 80u
 #define DDEG_PER_DEG 10
+
+/* Above 1, the learned bend feeds itself (line_follow_config.h). */
+_Static_assert((LINE_CURVE_LEAD_MM * (int)MOTION_FOLLOW_KP) <
+                   (int)MOTION_FOLLOW_SPEED_MM_S,
+               "LINE_CURVE_LEAD_MM too long for this speed and gain");
 
 /* Static data. */
 ID line_follow_tid_sense;

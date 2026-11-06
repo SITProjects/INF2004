@@ -284,9 +284,10 @@ static void
 test_bend (void)
 {
     reset();
+    int const expected = (290 * LINE_CURVE_LEAD_MM) / 1000;
     drive_bend(300, 290);
     int const lead = out.target_heading_deg - in.heading_deg;
-    bool const b_bend = (lead >= 7) && (lead <= 10);
+    bool const b_bend = (lead >= expected - 1) && (lead <= expected + 1);
     drive_bend(400, 0);
     int const straight = out.target_heading_deg - in.heading_deg;
     drive_bend(300, -290);
@@ -294,9 +295,9 @@ test_bend (void)
     printf("  bend lead %d, straight %d, right %d deg\n", lead, straight,
            right);
     check("LT14 between corrections the car keeps to the bend it has been "
-          "turning (0.29 deg/mm leads about 9 deg); straight again after",
-          b_bend && (0 == straight) && (right <= -7) && (right >= -10) &&
-              (LINE_MODE_TRACK == out.mode));
+          "turning (0.29 deg/mm x LINE_CURVE_LEAD_MM); straight again after",
+          b_bend && (0 == straight) && (right <= 1 - expected) &&
+              (right >= -1 - expected) && (LINE_MODE_TRACK == out.mode));
 }
 
 static void
@@ -461,8 +462,9 @@ tape_distance (double x, double y)
                 SIM_RADIUS_MM);
 }
 
-static void
-test_curve_model (void)
+/* Run the model with the sensors 2 * @p half_gap mm apart. */
+static bool
+curve_model (double half_gap)
 {
     reset();
     double const speed = (double)MOTION_FOLLOW_SPEED_MM_S;
@@ -472,8 +474,9 @@ test_curve_model (void)
         fmin((double)MOTION_FOLLOW_MAX_DEG_S,
              (2.0 * speed) / ((double)MOTION_TRACK_WIDTH_MM * SIM_PI / 180.0));
     double x = -300.0 - SIM_AHEAD_MM; /* Sensors 300 mm before the arc. */
-    double y = 0.0;
-    double heading = -8.0; /* Degrees, + is left. */
+    double heading = -8.0;            /* Degrees, + is left. */
+    /* Sensors on the tape, the car angled across it. */
+    double y = -SIM_AHEAD_MM * sin(heading * SIM_PI / 180.0);
     double rate = 0.0;
     double travel = 0.0;
     double worst = 0.0;
@@ -491,12 +494,12 @@ test_curve_model (void)
         double const sy = y + (SIM_AHEAD_MM * sin(rad));
         double const off = tape_distance(sx, sy);
         worst = (off > worst) ? off : worst;
-        in.b_left_black = tape_distance(sx - (SIM_HALF_GAP_MM * sin(rad)),
-                                        sy + (SIM_HALF_GAP_MM * cos(rad))) <=
-                          SIM_HALF_TAPE_MM;
-        in.b_right_black = tape_distance(sx + (SIM_HALF_GAP_MM * sin(rad)),
-                                         sy - (SIM_HALF_GAP_MM * cos(rad))) <=
-                           SIM_HALF_TAPE_MM;
+        in.b_left_black =
+            tape_distance(sx - (half_gap * sin(rad)),
+                          sy + (half_gap * cos(rad))) <= SIM_HALF_TAPE_MM;
+        in.b_right_black =
+            tape_distance(sx + (half_gap * sin(rad)),
+                          sy - (half_gap * cos(rad))) <= SIM_HALF_TAPE_MM;
         in.heading_deg = (int32_t)lround(heading);
         in.distance_mm = (int32_t)travel;
         out = line_track_update(&track, &in);
@@ -516,13 +519,74 @@ test_curve_model (void)
         y += step_mm * sin(heading * SIM_PI / 180.0);
         travel += step_mm;
     }
-    printf("  curve model: sensors at most %.0f mm off the tape, heading "
-           "%.0f deg, %.0f mm up the exit straight\n",
-           worst, heading, y - SIM_RADIUS_MM);
+    printf("  curve model, gap %.0f mm: sensors at most %.0f mm off the "
+           "tape, heading %.0f deg, %.0f mm up the exit straight\n",
+           2.0 * half_gap, worst, heading, y - SIM_RADIUS_MM);
+    return (worst < 30.0) && (heading > 70.0) && (heading < 110.0) &&
+           (y > 600.0) && !b_searched;
+}
+
+static void
+test_curve_model (void)
+{
+    /* Wider than the 18 mm tape (white when centred) and narrower (black
+     * when centred): car7 and car9 started in one state each. */
+    bool const b_wide = curve_model(SIM_HALF_GAP_MM);
+    bool const b_narrow = curve_model(8.0);
     check("LT19 a 200 mm radius left curve, met 8 degrees off with the car's "
-          "turn lag, is followed onto the exit straight without a search",
-          (worst < 30.0) && (heading > 70.0) && (heading < 110.0) &&
-              (y > 600.0) && !b_searched);
+          "turn lag, is followed onto the exit straight without a search, "
+          "with the sensors wider or narrower than the tape",
+          b_wide && b_narrow);
+}
+
+/* 2026-11-06 car9: the tape under both sensors for 143 mm. Longer than
+ * LINE_EDGE_MAX_MM, the first single black looked like a held edge. */
+static void
+test_long_both_black (void)
+{
+    reset();
+    drive(true, true, samples_for(LINE_EDGE_MAX_MM + 100));
+    drive(true, false, LINE_CONFIRM_SAMPLES + 1u);
+    check("LT20 travel with the tape under both sensors is no held edge: "
+          "the first single black is a correction",
+          (LINE_MODE_TRACK == out.mode) &&
+              (LINE_LEAD_DEG == out.target_heading_deg));
+}
+
+/* 2026-11-06 car9: with no sensor black, the learned bend fed on the turn
+ * it caused and spun the car through 235 degrees. */
+static void
+test_bend_fades (void)
+{
+    reset();
+    drive_bend(300, 300);
+    double const speed = (double)MOTION_FOLLOW_SPEED_MM_S;
+    double const step_mm = speed * SIM_STEP_S;
+    double heading = (double)in.heading_deg;
+    double rate = 0.3 * speed;
+    double travel = (double)in.distance_mm;
+    double heading_at = heading;
+    unsigned int const steps = (unsigned int)(500.0 / step_mm);
+    unsigned int const last = (unsigned int)(100.0 / step_mm);
+    for (unsigned int i = 0u; i < steps; i++)
+    {
+        in.heading_deg = (int32_t)lround(heading);
+        in.distance_mm = (int32_t)travel;
+        out = line_track_update(&track, &in);
+        double const asked =
+            MOTION_FOLLOW_KP * ((double)out.target_heading_deg - heading);
+        rate += (asked - rate) * SIM_STEP_S / SIM_LAG_S;
+        heading += rate * SIM_STEP_S;
+        travel += step_mm;
+        if (i == (steps - last))
+        {
+            heading_at = heading;
+        }
+    }
+    double const per_mm = (heading - heading_at) / 100.0;
+    printf("  bend after 500 mm unconfirmed: %.2f deg/mm (was 0.30)\n", per_mm);
+    check("LT21 a learned bend no sensor confirms fades instead of growing",
+          (per_mm < 0.15) && (LINE_MODE_TRACK == out.mode));
 }
 
 int
@@ -545,6 +609,8 @@ main (void)
     test_junction_left();
     test_both_rise_together();
     test_curve_model();
+    test_long_both_black();
+    test_bend_fades();
     test_junction_uturn();
     test_overshoot_across();
     printf("%u failure(s)\n", failures);

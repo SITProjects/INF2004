@@ -164,10 +164,8 @@
 /*
  * Chassis speed of line following, in mm/s. The MBF_MOTION_CMD packing
  * has no speed field, so tMotion follows at this speed.
- * 80 since 2026-11-06: the car keeps turning about 0.3 s after a turn
- * request ends and the line sensors sit 130 mm ahead, so at 120 mm/s each
- * correction overshot the tape and a 200 mm curve was lost (LINE-U04
- * LT19 models it; 100 mm/s still failed there).
+ * 80 since 2026-11-06: chosen on LINE-U04 LT19's model of the car, where
+ * 100 and 120 mm/s lost a 200 mm curve. Not yet confirmed on the car.
  * TODO(calibrate) with MOT-U31: raise only once the line gains hold the
  * tightest curve of the course.
  */

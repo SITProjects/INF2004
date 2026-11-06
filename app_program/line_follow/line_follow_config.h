@@ -51,11 +51,8 @@
  * heading by this much, in degrees, towards that side, so motion keeps
  * turning until the sensor reads white; then the car holds the heading it
  * reached. With MOTION_FOLLOW_KP 4, 10 degrees asks for 40 deg/s.
- * The car keeps turning for about 0.3 s after the request changes (motor
- * lag, 2026-11-06 car8), and with the sensors 130 mm ahead a 25 degree
- * lead swung them past the tape and lost a 200 mm curve. In LT19's model
- * of that lag, 10 degrees at 80 mm/s held every curve of 200 mm radius or
- * more; 8 and 12 did worse.
+ * Chosen on LT19's model of the car (sensors 130 mm ahead, turn lag),
+ * where 8, 12 and 25 degrees did worse. Not yet confirmed on the car.
  * TODO(calibrate) on the tightest curve, then a 2 m straight.
  */
 #define LINE_LEAD_DEG 10
@@ -74,11 +71,13 @@
 /**
  * @brief Lead, in mm of travel, of the learned bend: the target heading is
  * the heading plus the average rate times this. The car then turns at
- * about MOTION_FOLLOW_KP x rate x this deg/s; MOTION_FOLLOW_SPEED_MM_S /
- * MOTION_FOLLOW_KP (80 / 4 = 20 mm) would be the bend's own rate, but 30
- * also covers the turn lag and did better in LT19's model.
+ * about MOTION_FOLLOW_KP x rate x this deg/s, which the average learns
+ * from again: a loop with gain KP x this / MOTION_FOLLOW_SPEED_MM_S. It
+ * must stay under 1, so the bend fades once no sensor confirms it; 30 at
+ * 80 mm/s (gain 1.5) fed itself and spun the car through 235 degrees off
+ * the line (2026-11-06 car9). line_follow.c checks this at compile time.
  */
-#define LINE_CURVE_LEAD_MM 30
+#define LINE_CURVE_LEAD_MM 15
 
 /**
  * @brief An edge that stays black for this travel, in mm, while the car
