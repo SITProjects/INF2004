@@ -30,3 +30,4 @@ Add a new row for every run. Never edit or delete old rows.
 | Date | Test ID | Commit | Tester | Result | Log / evidence | Notes |
 |---|---|---|---|---|---|---|
 | YYYY-MM-DD | LINE-U01 | `abc1234` | | PASS / FAIL | `logs/YYYY-MM-DD_….txt` | |
+| 2026-11-06 | LINE-U04 | `6e5bdc8` | Claude (host) | PASS | `sh testing/line_follow/host/run.sh` | Model only, not run on the car. 50 mm/s with the heading gains and `LINE_CURVE_TOUCH_MM` scaled by 50/80: heading within +-1.8 deg on a straight (+-2.2 at 80 mm/s), 79 of 81 curve cases across gap, lag, radius and entry angle (62 of 81 at 80 mm/s); every failure at a 20 mm gap. LT19's tightest case now uses a 28 mm gap and LT22 counts touches per second. |
