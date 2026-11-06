@@ -27,8 +27,7 @@
 #define SEARCH_TIMEOUT_SAMPLES (LINE_SEARCH_TIMEOUT_MS / LINE_SAMPLE_MS)
 
 _Static_assert(LINE_LEAD_DEG > 0, "Invalid lead");
-_Static_assert(LINE_EDGE_MAX_MM > LINE_CROSS_MM,
-               "A held edge must outlast a crossing");
+_Static_assert(LINE_EDGE_MAX_MM > 0, "Invalid held-edge limit");
 _Static_assert((LINE_CURVE_WINDOW_MM > 0) && (LINE_CURVE_LEAD_MM > 0),
                "Invalid bend averaging");
 
@@ -114,10 +113,8 @@ line_track_update (line_track_t * p_track, line_track_input_t const * p_in)
         if (b_both)
         {
             /* Both edges at once: the car is over the tape at an angle (the
-             * course has no crossings). Keep to the bend, and do not take
-             * the trailing edge for a corner. */
+             * course has no crossings). Keep to the bend. */
             p_track->target_deg = curve_target(p_track, p_in);
-            p_track->b_crossed_both = true;
         }
         else
         {
@@ -203,7 +200,6 @@ restart_tracking (line_track_t * p_track, line_track_input_t const * p_in,
 {
     p_track->mode = LINE_MODE_TRACK;
     p_track->target_deg = target_deg;
-    p_track->track_start_mm = p_in->distance_mm;
     p_track->curve_udeg_per_mm = 0;
     p_track->prev_heading_deg = p_in->heading_deg;
     p_track->prev_distance_mm = p_in->distance_mm;
@@ -214,7 +210,6 @@ restart_tracking (line_track_t * p_track, line_track_input_t const * p_in,
     }
     p_track->search_samples = 0u;
     p_track->b_search_hit = false;
-    p_track->b_crossed_both = false;
 }
 
 /* Both white for too long: the line went away; search for it. */
@@ -225,7 +220,6 @@ track (line_track_t * p_track, line_track_input_t const * p_in)
         !p_track->b_black[SIDE_LEFT] && !p_track->b_black[SIDE_RIGHT];
     if (b_white)
     {
-        p_track->b_crossed_both = false;
         p_track->target_deg = curve_target(p_track, p_in);
     }
     if (b_white && (p_track->last_side != SIDE_NONE) &&
@@ -277,7 +271,7 @@ curve_target (line_track_t const * p_track, line_track_input_t const * p_in)
            ((p_track->curve_udeg_per_mm * LINE_CURVE_LEAD_MM) / UDEG_PER_DEG);
 }
 
-/* One side's edge while tracking: turn towards it, or spot a corner. */
+/* One side's edge while tracking: turn towards it, or a tight bend. */
 static void
 track_edge (line_track_t * p_track, line_track_input_t const * p_in,
             uint32_t side, bool b_was_black)
@@ -304,20 +298,10 @@ track_edge (line_track_t * p_track, line_track_input_t const * p_in,
     }
     else if (b_was_black)
     {
-        bool const b_quick =
-            (p_in->distance_mm - p_track->black_start_mm[side]) < LINE_CROSS_MM;
-        bool const b_moved =
-            (p_in->distance_mm - p_track->track_start_mm) >= LINE_CROSS_MM;
-        if (!p_track->b_crossed_both && b_quick && b_moved)
-        {
-            /* Crossed the tape: it turns away towards this side. */
-            start_search(p_track, p_in, side);
-        }
-        else
-        {
-            /* The tape is back between the sensors: keep to the bend. */
-            p_track->target_deg = curve_target(p_track, p_in);
-        }
+        /* However briefly it was black, this was a correction: keep to the
+         * bend, which still turns towards this side if the tape slipped
+         * past the sensor. */
+        p_track->target_deg = curve_target(p_track, p_in);
     }
     else
     {

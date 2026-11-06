@@ -82,7 +82,7 @@ test_edge_clears (void)
     reset();
     drive(false, false, samples_for(100));
     drive(true, false, LINE_CONFIRM_SAMPLES);
-    drive(true, false, samples_for(LINE_CROSS_MM));
+    drive(true, false, samples_for(30));
     bool const b_leading = (LINE_LEAD_DEG == out.target_heading_deg);
     drive(false, false, LINE_CONFIRM_SAMPLES);
     bool const b_held = (LINE_MODE_TRACK == out.mode) &&
@@ -109,18 +109,23 @@ test_held_edge (void)
               (70 + LINE_SEARCH_MAX_DEG == out.target_heading_deg));
 }
 
+/* The 2026-11-06 run: the left sensor touched the tape, the turn cleared
+ * it within 20 mm, and that used to start a search (six in 650 mm). */
 static void
-test_crossing (void)
+test_brief_touch (void)
 {
     reset();
-    drive(false, false, samples_for(LINE_CROSS_MM));
-    in.heading_deg = -3;
-    drive(false, true, LINE_CONFIRM_SAMPLES);
-    drive(false, true, samples_for(LINE_CROSS_MM / 2));
+    drive(false, false, samples_for(200));
+    drive(true, false, LINE_CONFIRM_SAMPLES);
+    drive(true, false, samples_for(15));
     drive(false, false, LINE_CONFIRM_SAMPLES);
-    check("LT05 a quick crossing searches towards that side",
-          (LINE_MODE_SEARCH_RIGHT == out.mode) &&
-              (-3 - LINE_SEARCH_MAX_DEG == out.target_heading_deg));
+    bool const b_tracking = (LINE_MODE_TRACK == out.mode);
+    drive(false, true, LINE_CONFIRM_SAMPLES);
+    drive(false, true, samples_for(10));
+    drive(false, false, LINE_CONFIRM_SAMPLES + samples_for(100));
+    check("LT05 a brief touch of either sensor is a correction, not a search",
+          b_tracking && (LINE_MODE_TRACK == out.mode) &&
+              (0 == out.target_heading_deg));
 }
 
 static void
@@ -184,7 +189,7 @@ test_lost (void)
     drive(false, false, samples_for(LINE_LOST_MM) + 5u);
     bool const b_no_edge = (LINE_MODE_TRACK == out.mode);
     drive(true, false, LINE_CONFIRM_SAMPLES);
-    drive(true, false, samples_for(LINE_CROSS_MM));
+    drive(true, false, samples_for(30));
     drive(false, false, LINE_CONFIRM_SAMPLES);
     drive(false, false, samples_for(LINE_LOST_MM) - 5u);
     bool const b_early = (LINE_MODE_TRACK == out.mode);
@@ -193,15 +198,16 @@ test_lost (void)
           b_no_edge && b_early && (LINE_MODE_SEARCH_LEFT == out.mode));
 }
 
-/* Enter SEARCH_LEFT from heading @p heading with a quick left crossing. */
+/* Enter SEARCH_LEFT from heading @p heading: a left edge, then the line
+ * lost. */
 static void
 start_left_search (int32_t heading)
 {
     reset();
-    drive(false, false, samples_for(LINE_CROSS_MM));
     in.heading_deg = heading;
+    drive(false, false, samples_for(100));
     drive(true, false, LINE_CONFIRM_SAMPLES);
-    drive(false, false, LINE_CONFIRM_SAMPLES);
+    drive(false, false, LINE_CONFIRM_SAMPLES + samples_for(LINE_LOST_MM));
     in.b_turning = true;
 }
 
@@ -309,7 +315,7 @@ main (void)
     test_right_lead();
     test_edge_clears();
     test_held_edge();
-    test_crossing();
+    test_brief_touch();
     test_junction();
     test_lost();
     test_search_found();

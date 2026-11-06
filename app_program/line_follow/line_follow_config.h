@@ -77,16 +77,6 @@
 #define LINE_EDGE_MAX_MM 200
 
 /**
- * @brief A sensor that reads black for less than this travel, in mm, and
- * then white again crossed the tape: a corner (or overshoot) to that side.
- * A drifting edge stays black for longer while the turn takes effect.
- * Crossings within this travel of a search ending do not count: a pivot
- * covers almost no distance, so its overshoot would look quick.
- * TODO(calibrate): about 1.5 x the tape width.
- */
-#define LINE_CROSS_MM 30
-
-/**
  * @brief Both sensors white for this travel, in mm, counts as lost.
  * Straddling sensors read white while centred, so keep it long.
  */
