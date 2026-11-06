@@ -158,14 +158,15 @@ main (void)
         "on target: both wheels at follow speed",
         (command.left_setpoint_mm_s == (int16_t)MOTION_FOLLOW_SPEED_MM_S) &&
             (command.right_setpoint_mm_s == (int16_t)MOTION_FOLLOW_SPEED_MM_S));
-    (void)motion_move_set_follow_heading(20);
+    /* 30 deg x KP 4 asks for 120 deg/s, past the cap. */
+    (void)motion_move_set_follow_heading(30);
     (void)motion_move_set_line(true);
     (void)motion_move_update();
     motion_follow_t follow;
     (void)motion_move_get_follow(&follow);
     check("left target turns left, capped at the follow limit",
           (follow.turn_deg_s == (int16_t)MOTION_FOLLOW_MAX_DEG_S) &&
-              (follow.heading_error_deg == 20) &&
+              (follow.heading_error_deg == 30) &&
               (command.right_setpoint_mm_s > command.left_setpoint_mm_s));
     (void)motion_move_set_follow_heading(-1);
     (void)motion_move_set_line(true);

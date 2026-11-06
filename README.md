@@ -13,7 +13,7 @@ priorities and peripherals are in **`TEAM.md`**):
 |---|---|---|---|
 | `obstacle/` | Obstacle detection: scans left and right when blocked | ultrasonic sensor GP2/GP3, servo GP12 | `obstacle_scan_task`, core 0 |
 | `motion/` | Motion: open-loop differential drive, held braked for now | motors GP8–GP11 | none yet |
-| `line_follow/` | Line following: digital IR edges → heading steps and searches for `tMotion` | IR sensor DO GP26/GP27 | `line_follow_task` |
+| `line_follow/` | Line following: digital IR edges → target headings (turn while black) and searches for `tMotion` | IR sensor DO GP26/GP27 | `line_follow_task` |
 | `barcode/` | Code 39 barcodes beside the line, read in either direction | IR sensor DO GP28 (edge interrupt) | `tBarcode`, core 0 |
 | `terrain/` | Terrain: GY-511 accelerometer, calibration at power-up | I2C0 GP4/GP5 (Grove 3) | `terrain_task` |
 | `communication/` | Communication: Wi-Fi connection status | Pico W radio (kernel-owned) | `communication_task` |

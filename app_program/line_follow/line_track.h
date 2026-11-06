@@ -1,13 +1,15 @@
 /**
  * @file line_track.h
- * @brief Digital line tracking decisions: heading steps, corners, search.
+ * @brief Digital line tracking decisions: turn while black, corners,
+ *        search.
  *
  * Two sensors straddle the tape. While both read white the car holds its
- * heading. A confirmed black edge moves the target heading one step
- * towards that side, and motion turns by it while driving, then drives
- * straight again. A sensor that crosses the tape quickly (a corner), an
- * edge that stays black through LINE_STEP_MAX steps, or a long white run
- * starts a pivot search towards the last edge.
+ * heading. While one reads black the target heading leads the car by
+ * LINE_LEAD_DEG towards it, so motion keeps turning while driving; when it
+ * reads white again the car holds the heading it reached and drives
+ * straight. A sensor that crosses the tape quickly (a corner), an edge
+ * that stays black for LINE_EDGE_MAX_MM, or a long white run starts a
+ * pivot search towards the last edge.
  *
  * The module is pure: no kernel calls, so host tests can drive it. Only
  * the line task calls it.
@@ -62,9 +64,7 @@ typedef struct
     line_mode_t mode;
     int32_t target_deg;
     int32_t black_start_mm[2]; /* Travel when each edge turned black. */
-    int32_t step_mm;           /* Travel at the last step. */
-    uint32_t steps;            /* Steps in the current edge episode. */
-    uint32_t step_side;        /* Side of that episode; 2 = none. */
+    int32_t track_start_mm;    /* Travel when tracking last restarted. */
     uint32_t last_side;        /* Side of the last edge, for searches. */
     int32_t white_start_mm;    /* Travel when both last read white. */
     uint32_t junction_count;

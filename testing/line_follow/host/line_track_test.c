@@ -59,41 +59,21 @@ test_debounce (void)
     bool const b_one = (0 == out.target_heading_deg) && out.b_seen;
     drive(false, false, 1u);
     drive(true, false, LINE_CONFIRM_SAMPLES);
-    check("LT01 one black sample is ignored; confirmed black steps left",
-          b_one && (LINE_STEP_DEG == out.target_heading_deg) &&
+    check("LT01 one black sample is ignored; confirmed black leads left",
+          b_one && (LINE_LEAD_DEG == out.target_heading_deg) &&
               (LINE_MODE_TRACK == out.mode));
 }
 
 static void
-test_right_step (void)
+test_right_lead (void)
 {
     reset();
     drive(false, true, LINE_CONFIRM_SAMPLES);
-    check("LT02 right edge steps right",
-          -LINE_STEP_DEG == out.target_heading_deg);
-}
-
-static void
-test_cooldown_to_bend (void)
-{
-    reset();
-    drive(true, false, LINE_CONFIRM_SAMPLES);
-    drive(true, false, samples_for(LINE_COOLDOWN_MM) - 2u);
-    bool const b_held = (LINE_STEP_DEG == out.target_heading_deg);
-    drive(true, false, 2u);
-    bool const b_second = (2 * LINE_STEP_DEG == out.target_heading_deg);
-    for (unsigned int i = 2u; i < LINE_STEP_MAX; i++)
-    {
-        drive(true, false, samples_for(LINE_COOLDOWN_MM));
-    }
-    bool const b_max =
-        ((int)LINE_STEP_MAX * LINE_STEP_DEG == out.target_heading_deg) &&
-        (LINE_MODE_TRACK == out.mode);
-    in.heading_deg = 10;
-    drive(true, false, samples_for(LINE_COOLDOWN_MM));
-    check("LT03 held edge waits the cool-down, steps, then searches",
-          b_held && b_second && b_max && (LINE_MODE_SEARCH_LEFT == out.mode) &&
-              (10 + LINE_SEARCH_MAX_DEG == out.target_heading_deg));
+    bool const b_first = (-LINE_LEAD_DEG == out.target_heading_deg);
+    in.heading_deg = -10;
+    drive(false, true, 1u);
+    check("LT02 right edge leads right, and keeps leading as the car turns",
+          b_first && (-10 - LINE_LEAD_DEG == out.target_heading_deg));
 }
 
 static void
@@ -101,23 +81,40 @@ test_edge_clears (void)
 {
     reset();
     drive(true, false, LINE_CONFIRM_SAMPLES);
+    in.heading_deg = 12;
     drive(true, false, samples_for(LINE_CROSS_MM));
+    bool const b_leading = (12 + LINE_LEAD_DEG == out.target_heading_deg);
+    in.heading_deg = 18;
     drive(false, false, LINE_CONFIRM_SAMPLES);
-    bool const b_tracking = (LINE_MODE_TRACK == out.mode) &&
-                            (LINE_STEP_DEG == out.target_heading_deg);
-    /* A new episode starts counting steps from one again. */
-    for (unsigned int i = 0u; i < LINE_STEP_MAX; i++)
-    {
-        drive(true, false, samples_for(LINE_COOLDOWN_MM));
-    }
-    check("LT04 an edge that clears slowly keeps tracking, steps reset",
-          b_tracking && (LINE_MODE_TRACK == out.mode));
+    bool const b_held = (LINE_MODE_TRACK == out.mode) &&
+                        (18 == out.target_heading_deg);
+    in.heading_deg = 19;
+    drive(false, false, samples_for(100));
+    check("LT03 a slow edge turns until white, then holds that heading",
+          b_leading && b_held && (LINE_MODE_TRACK == out.mode) &&
+              (18 == out.target_heading_deg));
+}
+
+static void
+test_held_edge (void)
+{
+    reset();
+    drive(true, false, LINE_CONFIRM_SAMPLES);
+    in.heading_deg = 70;
+    drive(true, false, samples_for(LINE_EDGE_MAX_MM) - 3u);
+    bool const b_turning = (LINE_MODE_TRACK == out.mode) &&
+                           (70 + LINE_LEAD_DEG == out.target_heading_deg);
+    drive(true, false, 3u);
+    check("LT04 an edge black for LINE_EDGE_MAX_MM is a tight bend: search",
+          b_turning && (LINE_MODE_SEARCH_LEFT == out.mode) &&
+              (70 + LINE_SEARCH_MAX_DEG == out.target_heading_deg));
 }
 
 static void
 test_crossing (void)
 {
     reset();
+    drive(false, false, samples_for(LINE_CROSS_MM));
     in.heading_deg = -3;
     drive(false, true, LINE_CONFIRM_SAMPLES);
     drive(false, true, samples_for(LINE_CROSS_MM / 2));
@@ -131,13 +128,16 @@ static void
 test_junction (void)
 {
     reset();
+    in.heading_deg = 4;
     drive(true, true, LINE_CONFIRM_SAMPLES + LINE_JUNCTION_SAMPLES - 1u);
-    bool const b_junction = out.b_junction;
+    bool const b_junction =
+        out.b_junction && (4 == out.target_heading_deg);
     drive(false, true, LINE_CONFIRM_SAMPLES);
     drive(false, false, LINE_CONFIRM_SAMPLES);
-    check("LT06 both black is a junction; its trailing edge is no corner",
+    check("LT06 both black is a junction held straight; its trailing edge "
+          "is no corner",
           b_junction && !out.b_junction && (LINE_MODE_TRACK == out.mode) &&
-              (0 == out.target_heading_deg));
+              (4 == out.target_heading_deg));
 }
 
 static void
@@ -161,6 +161,7 @@ static void
 start_left_search (int32_t heading)
 {
     reset();
+    drive(false, false, samples_for(LINE_CROSS_MM));
     in.heading_deg = heading;
     drive(true, false, LINE_CONFIRM_SAMPLES);
     drive(false, false, LINE_CONFIRM_SAMPLES);
@@ -231,22 +232,46 @@ test_control_off (void)
     bool const b_anchored = (LINE_MODE_TRACK == out.mode) &&
                             (33 == out.target_heading_deg) && out.b_seen;
     in.b_control = true;
-    drive(true, false, samples_for(LINE_COOLDOWN_MM) - 2u);
-    bool const b_held = (33 == out.target_heading_deg);
-    drive(true, false, 2u);
+    drive(true, false, 1u);
     check("LT12 without line control the target follows the heading; an "
-          "edge held at hand-back steps after the cool-down",
-          b_anchored && b_held &&
-              (33 + LINE_STEP_DEG == out.target_heading_deg));
+          "edge held at hand-back turns at once",
+          b_anchored && (33 + LINE_LEAD_DEG == out.target_heading_deg));
+}
+
+/* The 2026-11-06 curve: a pivot found the tape, overshot, and the other
+ * sensor's brief black looked like a quick crossing the other way. */
+static void
+test_pivot_overshoot (void)
+{
+    start_left_search(0);
+    in.heading_deg = 30;
+    drive(true, false, LINE_CONFIRM_SAMPLES);
+    in.heading_deg = 36;
+    drive(false, false, LINE_CONFIRM_SAMPLES);
+    bool const b_found = (LINE_MODE_TRACK == out.mode);
+    in.b_turning = false;
+    in.heading_deg = 40;
+    in.b_left_black = false;
+    in.b_right_black = true;
+    for (unsigned int i = 0u; i < LINE_CONFIRM_SAMPLES; i++)
+    {
+        out = line_track_update(&track, &in); /* Still pivoting: no travel. */
+    }
+    bool const b_turns_back = (40 - LINE_LEAD_DEG == out.target_heading_deg);
+    in.heading_deg = 38;
+    drive(false, false, LINE_CONFIRM_SAMPLES);
+    check("LT13 the overshoot after a found search turns back, no search",
+          b_found && b_turns_back && (LINE_MODE_TRACK == out.mode) &&
+              (38 == out.target_heading_deg));
 }
 
 int
 main (void)
 {
     test_debounce();
-    test_right_step();
-    test_cooldown_to_bend();
+    test_right_lead();
     test_edge_clears();
+    test_held_edge();
     test_crossing();
     test_junction();
     test_lost();
@@ -255,6 +280,7 @@ main (void)
     test_search_both_sides();
     test_search_timeout();
     test_control_off();
+    test_pivot_overshoot();
     printf("%u failure(s)\n", failures);
     return (0u == failures) ? 0 : 1;
 }

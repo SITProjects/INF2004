@@ -17,7 +17,7 @@ subsystem, ask its owner or open a pull request for them to review.
 |---|---|---|---|---|---|
 | obstacle | Ultrasonic sensor on a servo scans for a clear path | | Kitsuneez | `app_program/obstacle/` | `testing/obstacle/` |
 | motion | Two H-bridge DC motors and wheel encoders: speed loop, distance moves, turns and line following in `tMotion` | | felicia-chuaxy | `app_program/motion/` | `testing/motion/` |
-| line_follow | Two digital IR sensors → heading steps and searches for `tMotion` | | kaiwenteoo | `app_program/line_follow/` | `testing/line_follow/` |
+| line_follow | Two digital IR sensors → target headings (turn while black) and searches for `tMotion` | | kaiwenteoo | `app_program/line_follow/` | `testing/line_follow/` |
 | barcode | Third digital IR sensor → Code 39 text (uses the `tBarcode` slot reserved under line_follow) | | *kaiwenteoo, to confirm* | `app_program/barcode/` | `testing/barcode/` |
 | terrain | GY-511 accelerometer, calibration and corrected readings | | ann | `app_program/terrain/` | `testing/terrain/` |
 | communication | Wi-Fi connection status | | Jerome-4469 | `app_program/communication/` | `testing/communication/` |

@@ -33,23 +33,29 @@
 #define LINE_CONFIRM_SAMPLES 2u
 
 /**
- * @brief Heading step, in degrees, for each confirmed edge. Motion turns
- * by it while driving, then holds the new heading.
- * TODO(calibrate) on a 2 m straight: small enough not to weave, large
- * enough that one or two steps bring the tape back between the sensors.
+ * @brief While one sensor reads black, the target heading leads the car's
+ * heading by this much, in degrees, towards that side, so motion keeps
+ * turning (at up to MOTION_FOLLOW_MAX_DEG_S) until the sensor reads white;
+ * then the car holds the heading it reached. With MOTION_FOLLOW_KP 4,
+ * 25 degrees asks for 100 deg/s, so the turn runs at the cap.
+ * TODO(calibrate) on the tightest curve, then a 2 m straight: lower it if
+ * the car weaves on straights, raise the cap if it runs wide on curves.
  */
-#define LINE_STEP_DEG 4
+#define LINE_LEAD_DEG 25
 
-/** Travel, in mm, after a step before the same edge may step again. */
-#define LINE_COOLDOWN_MM 40
-
-/** Steps towards one side, without the edge clearing, before a corner. */
-#define LINE_STEP_MAX 3u
+/**
+ * @brief An edge that stays black for this travel, in mm, while the car
+ * turns towards it is a bend too tight to drive round: pivot-search
+ * towards it. At the turn cap the car turns about 1 degree per mm.
+ */
+#define LINE_EDGE_MAX_MM 200
 
 /**
  * @brief A sensor that reads black for less than this travel, in mm, and
  * then white again crossed the tape: a corner (or overshoot) to that side.
- * A drifting edge stays black for longer while the step takes effect.
+ * A drifting edge stays black for longer while the turn takes effect.
+ * Crossings within this travel of a search ending do not count: a pivot
+ * covers almost no distance, so its overshoot would look quick.
  * TODO(calibrate): about 1.5 x the tape width.
  */
 #define LINE_CROSS_MM 30

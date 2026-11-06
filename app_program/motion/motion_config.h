@@ -171,25 +171,28 @@
 
 /*
  * Heading PI loop of line following. It turns the error between the
- * target heading (set by the line task one step at a time) and the
- * odometry heading into a turn rate for both wheels' setpoints, so each
- * step is a short arc and the car runs straight between steps. KP: deg/s
- * per deg of error. KI: deg/s per deg of error per second.
+ * target heading (set by the line task: leading the car while a sensor
+ * reads black, held while both read white) and the odometry heading into
+ * a turn rate for both wheels' setpoints, so the car arcs while it
+ * corrects and runs straight otherwise. KP: deg/s per deg of error. KI:
+ * deg/s per deg of error per second.
  * TODO(calibrate) with MOT-U41/U42, then on a 2 m straight: raise KP until
- * a 4 deg step settles within about 40 mm without overshoot; raise KI only
- * if the car holds a steady offset from the target.
+ * a held heading settles within about 40 mm without overshoot; raise KI
+ * only if the car holds a steady offset from the target.
  */
 #define MOTION_FOLLOW_KP 4.0f
 #define MOTION_FOLLOW_KI 0.5f
 
 /*
- * Largest turn rate the heading loop asks for, in deg/s: the arc of a
- * heading step. Each wheel's setpoint changes by rate * track / 2 (about
- * 28 mm/s at 30 deg/s), well inside MOTION_FOLLOW_SPEED_MM_S, so steps
- * never slow a wheel much and the car keeps a steady speed for barcodes.
- * Following also caps the rate at 2 * speed / track.
+ * Largest turn rate the heading loop asks for, in deg/s: the tightest arc
+ * while a sensor reads black. Each wheel's setpoint changes by
+ * rate * track / 2 (about 84 mm/s at 90 deg/s), so at
+ * MOTION_FOLLOW_SPEED_MM_S the inner wheel slows to about 36 mm/s and the
+ * car turns on a radius of about 76 mm. The 2026-11-06 curve (about
+ * 200 mm radius) needs 34 deg/s at 120 mm/s; 30 could not hold it.
+ * Following also caps the rate at 2 * speed / track (128 deg/s).
  */
-#define MOTION_FOLLOW_MAX_DEG_S 30.0f
+#define MOTION_FOLLOW_MAX_DEG_S 90.0f
 
 /*
  * Following stops (state STOPPED) when the last line reading is older

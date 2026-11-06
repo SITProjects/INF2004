@@ -775,9 +775,10 @@ heading_deg (void)
 }
 
 /*
- * One heading step while following: a + error (target to the left) needs
- * a + (left) turn, so the error goes in as it is. The turn limit makes a
- * heading step a gentle arc, after which the car runs straight.
+ * Hold the target heading while following: a + error (target to the left)
+ * needs a + (left) turn, so the error goes in as it is. The turn limit
+ * bounds the arc while the line task leads the target; once it holds the
+ * target, the car runs straight.
  */
 static void
 follow_heading (void)

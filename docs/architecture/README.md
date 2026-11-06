@@ -10,7 +10,7 @@ app_program/
     test_report.h           TEST_CHECK helpers for make TEST=1
     obstacle/               ultrasonic + servo scan      (task, core 0)
     motion/                 motors, encoders, moves      (tMotion task)
-    line_follow/            IR sensors -> heading steps  (task)
+    line_follow/            IR sensors -> target heading (task)
     barcode/                IR sensor -> Code 39 text    (task, core 0)
     terrain/                GY-511 IMU, calibration      (task)
     communication/          Wi-Fi status                 (task)

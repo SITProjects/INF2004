@@ -1,10 +1,11 @@
 /**
  * @file line_track.c
- * @brief Digital line tracking decisions: heading steps, corners, search.
+ * @brief Digital line tracking decisions: turn while black, corners,
+ *        search.
  *
  * Sides are indexed 0 (left) and 1 (right). A black left sensor means the
  * tape has moved under it, so the car drifted right and must turn left:
- * steps and searches go towards the side that read black.
+ * turns and searches go towards the side that read black.
  *
  * While pivoting towards a side, the tape sweeps across that side's
  * sensor first and then sits between the sensors: black then white on the
@@ -25,8 +26,9 @@
 
 #define SEARCH_TIMEOUT_SAMPLES (LINE_SEARCH_TIMEOUT_MS / LINE_SAMPLE_MS)
 
-_Static_assert(LINE_STEP_DEG > 0, "Invalid step");
-_Static_assert(LINE_STEP_MAX > 0u, "Invalid step limit");
+_Static_assert(LINE_LEAD_DEG > 0, "Invalid lead");
+_Static_assert(LINE_EDGE_MAX_MM > LINE_CROSS_MM,
+               "A held edge must outlast a crossing");
 _Static_assert(LINE_CONFIRM_SAMPLES > 0u, "Invalid debounce");
 _Static_assert(LINE_SEARCH_DONE_DEG < LINE_SEARCH_MAX_DEG,
                "Search must turn further than its end band");
@@ -40,8 +42,6 @@ static void restart_tracking (line_track_t * p_track,
 static void track (line_track_t * p_track, line_track_input_t const * p_in);
 static void track_edge (line_track_t * p_track, line_track_input_t const * p_in,
                         uint32_t side, bool b_was_black);
-static void step (line_track_t * p_track, line_track_input_t const * p_in,
-                  uint32_t side);
 static void start_search (line_track_t * p_track,
                           line_track_input_t const * p_in, uint32_t side);
 static void search (line_track_t * p_track, line_track_input_t const * p_in);
@@ -100,9 +100,11 @@ line_track_update (line_track_t * p_track, line_track_input_t const * p_in)
         {
             /* A crossing line: hold the heading until it passes, and do
              * not take its trailing edge for a corner. */
+            if (!p_track->b_crossed_both)
+            {
+                p_track->target_deg = p_in->heading_deg;
+            }
             p_track->b_crossed_both = true;
-            p_track->steps = 0u;
-            p_track->step_side = SIDE_NONE;
         }
         else
         {
@@ -188,9 +190,7 @@ restart_tracking (line_track_t * p_track, line_track_input_t const * p_in,
 {
     p_track->mode = LINE_MODE_TRACK;
     p_track->target_deg = target_deg;
-    p_track->steps = 0u;
-    p_track->step_side = SIDE_NONE;
-    p_track->step_mm = p_in->distance_mm;
+    p_track->track_start_mm = p_in->distance_mm;
     p_track->white_start_mm = p_in->distance_mm;
     for (uint32_t side = 0u; side < SIDE_COUNT; side++)
     {
@@ -218,7 +218,7 @@ track (line_track_t * p_track, line_track_input_t const * p_in)
     }
 }
 
-/* One side's edge while tracking: step towards it, or spot a corner. */
+/* One side's edge while tracking: turn towards it, or spot a corner. */
 static void
 track_edge (line_track_t * p_track, line_track_input_t const * p_in,
             uint32_t side, bool b_was_black)
@@ -228,61 +228,42 @@ track_edge (line_track_t * p_track, line_track_input_t const * p_in,
     {
         p_track->black_start_mm[side] = p_in->distance_mm;
         p_track->last_side = side;
-        step(p_track, p_in, side);
     }
-    else if (b_black)
+    if (b_black)
     {
-        if ((p_in->distance_mm - p_track->step_mm) >= LINE_COOLDOWN_MM)
+        if ((p_in->distance_mm - p_track->black_start_mm[side]) >=
+            LINE_EDGE_MAX_MM)
         {
-            if (p_track->steps >= LINE_STEP_MAX)
-            {
-                /* Steps are not bringing the tape back: a bend. */
-                start_search(p_track, p_in, side);
-            }
-            else
-            {
-                step(p_track, p_in, side);
-            }
+            /* Turning is not bringing the tape back: a tight bend. */
+            start_search(p_track, p_in, side);
+        }
+        else
+        {
+            p_track->target_deg =
+                p_in->heading_deg + (side_sign(side) * LINE_LEAD_DEG);
         }
     }
     else if (b_was_black)
     {
-        if (!p_track->b_crossed_both &&
-            ((p_in->distance_mm - p_track->black_start_mm[side]) <
-             LINE_CROSS_MM))
+        bool const b_quick =
+            (p_in->distance_mm - p_track->black_start_mm[side]) < LINE_CROSS_MM;
+        bool const b_moved =
+            (p_in->distance_mm - p_track->track_start_mm) >= LINE_CROSS_MM;
+        if (!p_track->b_crossed_both && b_quick && b_moved)
         {
             /* Crossed the tape: it turns away towards this side. */
             start_search(p_track, p_in, side);
         }
-        else if (p_track->step_side == side)
-        {
-            /* The step brought the tape back between the sensors. */
-            p_track->steps = 0u;
-            p_track->step_side = SIDE_NONE;
-        }
         else
         {
-            /* Nothing to undo. */
+            /* The tape is back between the sensors: hold this heading. */
+            p_track->target_deg = p_in->heading_deg;
         }
     }
     else
     {
         /* White and was white. */
     }
-}
-
-/* Step towards @p side; a new side starts a new episode. */
-static void
-step (line_track_t * p_track, line_track_input_t const * p_in, uint32_t side)
-{
-    if (p_track->step_side != side)
-    {
-        p_track->steps = 0u;
-        p_track->step_side = side;
-    }
-    p_track->target_deg += side_sign(side) * LINE_STEP_DEG;
-    p_track->step_mm = p_in->distance_mm;
-    p_track->steps++;
 }
 
 static void
