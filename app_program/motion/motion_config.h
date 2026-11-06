@@ -218,22 +218,23 @@
 #define MOTION_UPDATE_PERIOD_MS 20u
 
 /*
- * Chassis speed of distance moves, in mm/s. The MBF_MOTION_CMD packing
- * has no speed field, so every move uses this speed.
+ * Chassis speed of distance moves, in mm/s, which the obstacle bypass
+ * drives on: 300 chosen on the car from 200, 400 and 600 (2026-11-06). The
+ * MBF_MOTION_CMD packing has no speed field, so every move uses this speed.
  */
-#define MOTION_MOVE_SPEED_MM_S 200
+#define MOTION_MOVE_SPEED_MM_S 300
 
 /*
  * Millimetres to brake before a move's target, for the coast after
  * braking. The coast grows with speed, so this holds only at
  * MOTION_MOVE_SPEED_MM_S; measure again if that changes. The target is
  * checked once per update, so a move also brakes up to one update's
- * travel (4 mm at 200 mm/s) late.
- * MOT-U08/U09 (2026-11-05): with MOTION_FF_OFFSET 0.05, 9 mm ends 1 m moves
- * at 996-998 mm and 10 cm reverses at 99-102 mm by odometry; the ruler
- * agreed by eye. It depends on that offset as well as on the speed.
+ * travel (6 mm at 300 mm/s) late.
+ * MOT-U08/U09 (2026-11-05): with MOTION_FF_OFFSET 0.05, 9 mm ended moves
+ * within 4 mm at 200 mm/s. 20 mm scales that by speed squared for 300 mm/s
+ * and is not measured. It depends on that offset as well as on the speed.
  */
-#define MOTION_MOVE_STOP_EARLY_MM 9.0f
+#define MOTION_MOVE_STOP_EARLY_MM 20.0f
 
 /*
  * Turn rate of turns in place, in degrees per second; each wheel moves at
