@@ -23,6 +23,8 @@
 /* Fewer elements than one character is noise, not a failed read. */
 #define MIN_REPORT_ELEMENTS BARCODE_CODE39_ELEMENTS
 #define US_PER_TENTH_MS 100u
+#define CALIBRATION_REPORT_US 500000u
+#define SHORT_SCAN_MIN_ELEMENTS 2u
 
 /* Static data. */
 ID barcode_tid_read;
@@ -32,6 +34,9 @@ static barcode_scan_t scan;
 static void read_task (INT stacd, void * p_exinf);
 static void finish_scan (void);
 static void trace_widths (void);
+#if IR_CALIBRATION_ONLY
+static void calibration_report (void);
+#endif
 static uint32_t now_us (void);
 static line_turn_t turn_for (char const * p_text);
 #if TM_MQTT
@@ -97,6 +102,9 @@ read_task (INT stacd, void * p_exinf)
         {
             finish_scan();
         }
+#if IR_CALIBRATION_ONLY
+        calibration_report();
+#endif
         (void)tk_dly_tsk(BARCODE_POLL_MS);
     }
 }
@@ -150,6 +158,14 @@ finish_scan (void)
     else
     {
         /* Too short to be a barcode. */
+#if IR_CALIBRATION_ONLY
+        if (scan.count >= SHORT_SCAN_MIN_ELEMENTS)
+        {
+            tm_printf((UB *)"barcode: short scan elements=%u\n",
+                      (UINT)scan.count);
+            trace_widths();
+        }
+#endif
     }
     barcode_scan_reset(&scan);
 }
@@ -169,6 +185,34 @@ trace_widths (void)
     tm_printf((UB *)"\n");
 #endif
 }
+
+#if IR_CALIBRATION_ONLY
+/*
+ * For tuning the potentiometer: the level, and the edges since the last
+ * report. raw stays near 0 on plain white or black when DO is clean; a
+ * high raw with kept 0 is DO oscillating at its threshold.
+ */
+static void
+calibration_report (void)
+{
+    static uint32_t last_us;
+    static uint32_t last_raw;
+    static uint32_t last_kept;
+    uint32_t const now = now_us();
+    if ((now - last_us) < CALIBRATION_REPORT_US)
+    {
+        return;
+    }
+    uint32_t raw = 0u;
+    uint32_t kept = 0u;
+    drv_barcode_edge_counts(&raw, &kept);
+    tm_printf((UB *)"barcode: B=%u raw=%u kept=%u\n", (UINT)drv_barcode_black(),
+              (UINT)(raw - last_raw), (UINT)(kept - last_kept));
+    last_us = now;
+    last_raw = raw;
+    last_kept = kept;
+}
+#endif
 
 /* Low 32 bits of the 1 MHz TIMER, as the edge timestamps. */
 static uint32_t

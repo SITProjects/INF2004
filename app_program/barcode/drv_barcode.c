@@ -24,6 +24,7 @@ static barcode_edge_t queue[BARCODE_EDGE_QUEUE_SIZE];
 static volatile uint32_t head; /* Written by the edge handler only. */
 static volatile uint32_t tail; /* Written by the barcode task only. */
 static volatile uint32_t overflows;
+static volatile uint32_t raw_edges;
 static barcode_filter_t filter; /* Edge handler only, after init. */
 
 /* Private function declarations. */
@@ -70,6 +71,13 @@ drv_barcode_overflows (void)
     return overflows;
 }
 
+void
+drv_barcode_edge_counts (uint32_t * p_raw, uint32_t * p_kept)
+{
+    *p_raw = raw_edges;
+    *p_kept = head;
+}
+
 /* Private function definitions. */
 
 /*
@@ -82,6 +90,7 @@ static void
 sensor_edges (uint32_t events, uint32_t now_us)
 {
     (void)events;
+    raw_edges = raw_edges + 1u;
     bool b_black = false;
     if (!barcode_filter_edge(&filter, now_us, drv_barcode_black(), &b_black))
     {

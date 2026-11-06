@@ -43,4 +43,12 @@ bool drv_barcode_black (void);
 /** @brief Edges dropped because the queue was full, since start-up. */
 uint32_t drv_barcode_overflows (void);
 
+/**
+ * @brief Edges so far, for tuning the module's potentiometer.
+ * @param p_raw Receives every edge the sensor made, chatter included.
+ * @param p_kept Receives the edges the chatter filter let through.
+ * Both wrap. Any task.
+ */
+void drv_barcode_edge_counts (uint32_t * p_raw, uint32_t * p_kept);
+
 #endif /* DRV_BARCODE_H */
