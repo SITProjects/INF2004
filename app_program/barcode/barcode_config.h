@@ -21,6 +21,14 @@
 /** DO level over a black bar; as the line modules (line_follow_config.h). */
 #define BARCODE_DO_BLACK_LEVEL 1u
 
+/**
+ * @brief An edge this soon after the last one, in us, is chatter: the
+ * module has no hysteresis, so DO flips for a while as a bar edge crosses
+ * its threshold (1 to 3 us apart, 2026-11-06). 3 ms is 0.24 mm at the
+ * 80 mm/s follow speed, well under any printed bar.
+ */
+#define BARCODE_MIN_PULSE_US 3000u
+
 /** Edges the interrupt can queue for the task; a power of two. */
 #define BARCODE_EDGE_QUEUE_SIZE 64u
 
@@ -48,6 +56,12 @@
  * many tenths of the 4th-widest, or the wide/narrow split is unclear.
  */
 #define BARCODE_WIDE_RATIO_X10 14u
+
+/**
+ * @brief A failed scan prints up to this many element widths, in tenths
+ * of a ms, to show why it failed. 0 prints none.
+ */
+#define BARCODE_TRACE_WIDTHS 64u
 
 /** Barcode task period, in ms: one kernel tick. */
 #define BARCODE_POLL_MS 10u

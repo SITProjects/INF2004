@@ -17,6 +17,28 @@ static void append (barcode_scan_t * p_scan, uint32_t width_us);
 /* Public function definitions. */
 
 void
+barcode_filter_init (barcode_filter_t * p_filter, bool b_black, uint32_t now_us)
+{
+    p_filter->last_us = now_us;
+    p_filter->b_settled = b_black;
+}
+
+bool
+barcode_filter_edge (barcode_filter_t * p_filter, uint32_t edge_us,
+                     bool b_black, bool * p_level)
+{
+    bool const b_transition =
+        (edge_us - p_filter->last_us) >= BARCODE_MIN_PULSE_US;
+    if (b_transition)
+    {
+        *p_level = !p_filter->b_settled;
+    }
+    p_filter->last_us = edge_us;
+    p_filter->b_settled = b_black;
+    return b_transition;
+}
+
+void
 barcode_scan_init (barcode_scan_t * p_scan, bool b_black, uint32_t now_us)
 {
     p_scan->b_black = b_black;

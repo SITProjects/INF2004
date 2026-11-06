@@ -27,6 +27,13 @@ typedef enum
                                 decode it, then barcode_scan_reset(). */
 } barcode_scan_result_t;
 
+/** @brief Chatter filter state; see barcode_filter_edge(). */
+typedef struct
+{
+    uint32_t last_us; /**< Time of the last edge, chatter included. */
+    bool b_settled;   /**< Level read at that edge. */
+} barcode_filter_t;
+
 /** @brief Scan state; callers allocate it and read widths/count. */
 typedef struct
 {
@@ -40,6 +47,31 @@ typedef struct
 } barcode_scan_t;
 
 /* Public function declarations. */
+
+/**
+ * @brief Start the chatter filter at the current level.
+ * @param p_filter State to set.
+ * @param b_black Current level.
+ * @param now_us Current time.
+ */
+void barcode_filter_init (barcode_filter_t * p_filter, bool b_black,
+                          uint32_t now_us);
+
+/**
+ * @brief Pass one sensor edge through the chatter filter.
+ * An edge after at least BARCODE_MIN_PULSE_US of quiet starts a real
+ * transition: the level flips from the one last settled, because a level
+ * read during chatter cannot be trusted. Edges closer together than that
+ * are the same transition.
+ * @param p_filter Filter state.
+ * @param edge_us Time of the edge.
+ * @param b_black Level read at the edge.
+ * @param p_level Receives the new level when the edge is a transition.
+ * @return True for a transition; false for chatter.
+ * Runs in the edge interrupt; no kernel calls.
+ */
+bool barcode_filter_edge (barcode_filter_t * p_filter, uint32_t edge_us,
+                          bool b_black, bool * p_level);
 
 /**
  * @brief Start idle at level @p b_black.

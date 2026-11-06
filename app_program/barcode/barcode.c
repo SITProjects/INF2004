@@ -22,6 +22,7 @@
 /* Private types, constants, and macros. */
 /* Fewer elements than one character is noise, not a failed read. */
 #define MIN_REPORT_ELEMENTS BARCODE_CODE39_ELEMENTS
+#define US_PER_TENTH_MS 100u
 
 /* Static data. */
 ID barcode_tid_read;
@@ -30,6 +31,7 @@ static barcode_scan_t scan;
 /* Private function declarations. */
 static void read_task (INT stacd, void * p_exinf);
 static void finish_scan (void);
+static void trace_widths (void);
 static uint32_t now_us (void);
 static line_turn_t turn_for (char const * p_text);
 #if TM_MQTT
@@ -142,6 +144,7 @@ finish_scan (void)
             tm_printf((UB *)"barcode: FAIL %s elements=%u narrow=%u us\n",
                       barcode_code39_status_name(status), (UINT)scan.count,
                       (UINT)scan.narrowest_us);
+            trace_widths();
         }
     }
     else
@@ -149,6 +152,22 @@ finish_scan (void)
         /* Too short to be a barcode. */
     }
     barcode_scan_reset(&scan);
+}
+
+/* The failed scan's widths, tenths of a ms, black first, for the log. */
+static void
+trace_widths (void)
+{
+#if BARCODE_TRACE_WIDTHS > 0u
+    uint32_t const count =
+        (scan.count < BARCODE_TRACE_WIDTHS) ? scan.count : BARCODE_TRACE_WIDTHS;
+    tm_printf((UB *)"barcode: widths");
+    for (uint32_t i = 0u; i < count; i++)
+    {
+        tm_printf((UB *)" %u", (UINT)(scan.widths[i] / US_PER_TENTH_MS));
+    }
+    tm_printf((UB *)"\n");
+#endif
 }
 
 /* Low 32 bits of the 1 MHz TIMER, as the edge timestamps. */

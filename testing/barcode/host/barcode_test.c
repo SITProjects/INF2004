@@ -231,6 +231,71 @@ test_scan_assembly (void)
           b_glitch && !scan.b_active && (0u == scan.count));
 }
 
+/* Run @p count widths through the filter and scan as the sensor would
+ * give them: every transition a burst of @p burst edges 1..3 us apart,
+ * the level read back at random until the last edge. */
+static barcode_scan_result_t
+chatter_scan (barcode_scan_t * p_scan, uint32_t count, uint32_t burst)
+{
+    barcode_filter_t filter;
+    uint32_t now_us = 1000000u;
+    bool b_level = false;
+    barcode_filter_init(&filter, false, 0u);
+    barcode_scan_init(p_scan, false, 0u);
+    for (uint32_t i = 0u; i <= count; i++)
+    {
+        b_level = !b_level;
+        uint32_t t = now_us;
+        for (uint32_t edge = 0u; edge < burst; edge++)
+        {
+            random_state = random_state * 1103515245u + 12345u;
+            bool const b_read =
+                (edge == burst - 1u) ? b_level : ((random_state >> 16) & 1u);
+            bool b_new = false;
+            if (barcode_filter_edge(&filter, t, b_read, &b_new))
+            {
+                (void)barcode_scan_edge(p_scan, t, b_new);
+            }
+            t += 1u + ((random_state >> 20) % 3u);
+        }
+        now_us += (i < count) ? widths[i] : 0u;
+    }
+    return barcode_scan_poll(p_scan, now_us + BARCODE_QUIET_MAX_US + 1u);
+}
+
+static void
+test_chatter (void)
+{
+    static barcode_scan_t scan;
+    char text[BARCODE_MAX_TEXT];
+    bool b_reversed = false;
+    uint32_t const count = encode("*INF2004*", RATIO_X10, 0u);
+    barcode_scan_result_t const done = chatter_scan(&scan, count, 25u);
+    bool const b_count = (count == scan.count);
+    barcode_code39_status_t const status = barcode_code39_decode(
+        scan.widths, scan.count, text, sizeof(text), &b_reversed);
+    check("BT07 chatter on every edge is filtered: the same elements, and "
+          "the barcode decodes",
+          (BARCODE_SCAN_DONE == done) && b_count &&
+              (BARCODE_CODE39_OK == status) && (0 == strcmp("INF2004", text)) &&
+              (scan.narrowest_us >= NARROW_US - 100u));
+
+    /* A speck: black and back inside one burst, then a real bar. */
+    barcode_filter_t filter;
+    bool b_new = false;
+    barcode_filter_init(&filter, false, 0u);
+    bool const b_speck =
+        barcode_filter_edge(&filter, 100000u, true, &b_new) && b_new;
+    bool const b_swallowed =
+        !barcode_filter_edge(&filter, 100002u, false, &b_new);
+    bool const b_bar =
+        barcode_filter_edge(&filter, 200000u, true, &b_new) && b_new;
+    bool const b_white =
+        barcode_filter_edge(&filter, 240000u, false, &b_new) && !b_new;
+    check("BT08 after a speck the levels stay in step with the bars",
+          b_speck && b_swallowed && b_bar && b_white);
+}
+
 int
 main (void)
 {
@@ -238,6 +303,7 @@ main (void)
     test_jitter();
     test_rejects();
     test_scan_assembly();
+    test_chatter();
     printf("%u failure(s)\n", failures);
     return (0u == failures) ? 0 : 1;
 }

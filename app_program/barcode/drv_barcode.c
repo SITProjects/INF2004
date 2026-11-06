@@ -10,6 +10,7 @@
 #include "drv_barcode.h"
 #include <bsp/libbsp.h>
 #include "barcode_config.h"
+#include "barcode_scan.h"
 #include "../obstacle/drv_gpio_irq.h"
 
 /* Private types, constants, and macros. */
@@ -23,6 +24,7 @@ static barcode_edge_t queue[BARCODE_EDGE_QUEUE_SIZE];
 static volatile uint32_t head; /* Written by the edge handler only. */
 static volatile uint32_t tail; /* Written by the barcode task only. */
 static volatile uint32_t overflows;
+static barcode_filter_t filter; /* Edge handler only, after init. */
 
 /* Private function declarations. */
 static void sensor_edges (uint32_t events, uint32_t now_us);
@@ -38,6 +40,8 @@ drv_barcode_init (void)
     out_w(GPIO_CTRL(BARCODE_PIN), GPIO_CTRL_FUNCSEL_SIO);
     head = 0u;
     tail = 0u;
+    barcode_filter_init(&filter, drv_barcode_black(),
+                        (uint32_t)in_w(TIMER_TIMERAWL));
     return drv_gpio_irq_attach(BARCODE_PIN, sensor_edges);
 }
 
@@ -69,25 +73,19 @@ drv_barcode_overflows (void)
 /* Private function definitions. */
 
 /*
- * Interrupt context. One edge gives the new level directly; both edges
- * latched together are a pulse shorter than the interrupt latency, so the
- * level is read back and the scan treats an unchanged level as a glitch.
+ * Interrupt context. Only the first edge of a burst goes in the queue, so
+ * chatter can neither fill it nor reach the widths. The events do not
+ * matter: bursts are faster than the interrupt latency, and the last read
+ * of a burst is the level it settled on.
  */
 static void
 sensor_edges (uint32_t events, uint32_t now_us)
 {
-    bool b_high;
-    if (DRV_GPIO_IRQ_EDGE_RISE == events)
+    (void)events;
+    bool b_black = false;
+    if (!barcode_filter_edge(&filter, now_us, drv_barcode_black(), &b_black))
     {
-        b_high = true;
-    }
-    else if (DRV_GPIO_IRQ_EDGE_FALL == events)
-    {
-        b_high = false;
-    }
-    else
-    {
-        b_high = (gpio_get_val(BARCODE_PIN) != 0u);
+        return;
     }
 
     uint32_t const index = head;
@@ -97,7 +95,6 @@ sensor_edges (uint32_t events, uint32_t now_us)
         return;
     }
     queue[index & QUEUE_MASK] =
-        (barcode_edge_t){.time_us = now_us,
-                         .b_black = (b_high == (BARCODE_DO_BLACK_LEVEL != 0u))};
+        (barcode_edge_t){.time_us = now_us, .b_black = b_black};
     head = index + 1u;
 }
