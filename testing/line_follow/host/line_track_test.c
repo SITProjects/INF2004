@@ -143,17 +143,37 @@ static void
 test_junction (void)
 {
     cross_junction(LINE_TURN_STRAIGHT);
-    bool const b_junction = out.b_junction && (4 == out.target_heading_deg);
+    bool const b_junction = out.b_junction && (4 == out.target_heading_deg) &&
+                            (LINE_MODE_TRACK == out.mode);
+    in.heading_deg = 6;
     drive(true, true, samples_for(15));
-    /* Leaving the crossing tape one sensor late is no correction. */
+    /* Still tracking: the target follows the heading, no 4 degree hold. */
+    bool const b_tracking = out.b_junction && (6 == out.target_heading_deg);
     drive(false, true, LINE_CONFIRM_SAMPLES + 2u);
-    bool const b_held = out.b_junction && (4 == out.target_heading_deg) &&
+    bool const b_edge = out.b_junction &&
+                        (6 - LINE_LEAD_DEG == out.target_heading_deg) &&
                         (LINE_MODE_TRACK == out.mode);
-    drive(false, false, samples_for(LINE_JUNCTION_CENTRE_MM));
-    check("LT06 a cross is a junction: straight on (the default) holds the "
-          "heading over it, then tracks",
-          b_junction && b_held && !out.b_junction &&
-              (LINE_MODE_TRACK == out.mode) && (4 == out.target_heading_deg));
+    drive(false, false, LINE_CONFIRM_SAMPLES);
+    check("LT06 a cross straight on (the default) is reported as a junction "
+          "but tracking carries on over it",
+          b_junction && b_tracking && b_edge && !out.b_junction &&
+              (LINE_MODE_TRACK == out.mode));
+}
+
+/* 2026-11-06 car5: both sensors turned black in one sample, so the left
+ * edge never started its held-edge travel; a short black after a long
+ * white run then looked held and started a search. */
+static void
+test_both_rise_together (void)
+{
+    reset();
+    drive(false, false, samples_for(300));
+    drive(true, true, LINE_CONFIRM_SAMPLES + 1u);
+    drive(true, false, LINE_CONFIRM_SAMPLES + 2u);
+    check("LT18 an edge that turns black with the other sensor is a fresh "
+          "correction, not a held edge",
+          (LINE_MODE_TRACK == out.mode) &&
+              (LINE_LEAD_DEG == out.target_heading_deg));
 }
 
 static void
@@ -418,6 +438,7 @@ main (void)
     test_pivot_overshoot();
     test_bend();
     test_junction_left();
+    test_both_rise_together();
     test_junction_uturn();
     test_route_under_car();
     printf("%u failure(s)\n", failures);

@@ -31,6 +31,7 @@
 #define JUNCTION_NONE 0u
 #define JUNCTION_DRIVE 1u /* Holding the heading to the turning point. */
 #define JUNCTION_PIVOT 2u /* Pivoting onto the new line. */
+#define JUNCTION_CROSS 3u /* Straight on: tracking while crossing it. */
 #define JUNCTION_TURN_DEG 90
 #define JUNCTION_UTURN_DEG 180
 
@@ -105,6 +106,15 @@ line_track_update (line_track_t * p_track, line_track_input_t const * p_in)
     bool const was_black[SIDE_COUNT] = {p_track->b_black[SIDE_LEFT],
                                         p_track->b_black[SIDE_RIGHT]};
     debounce(p_track, p_in);
+    for (uint32_t side = 0u; side < SIDE_COUNT; side++)
+    {
+        /* Here, not in track_edge(): an edge that turns black in the same
+         * sample as the other sensor must restart its held-edge travel. */
+        if (p_track->b_black[side] && !was_black[side])
+        {
+            p_track->black_start_mm[side] = p_in->distance_mm;
+        }
+    }
 
     bool const b_both =
         p_track->b_black[SIDE_LEFT] && p_track->b_black[SIDE_RIGHT];
@@ -138,7 +148,7 @@ line_track_update (line_track_t * p_track, line_track_input_t const * p_in)
         }
         follow_episode(p_track, p_in, was_black);
         if ((LINE_MODE_TRACK != p_track->mode) ||
-            (p_track->junction_phase != JUNCTION_NONE))
+            (JUNCTION_DRIVE == p_track->junction_phase))
         {
             /* A junction or a search took over. */
         }
@@ -282,6 +292,11 @@ follow_episode (line_track_t * p_track, line_track_input_t const * p_in,
     {
         start_episode(p_track, p_in);
     }
+    if (!b_any && (JUNCTION_CROSS == p_track->junction_phase))
+    {
+        /* Over the crossing line. */
+        p_track->junction_phase = JUNCTION_NONE;
+    }
     if (b_left != b_right)
     {
         p_track->exit_side = b_left ? SIDE_LEFT : SIDE_RIGHT;
@@ -296,6 +311,7 @@ follow_episode (line_track_t * p_track, line_track_input_t const * p_in,
                                      LINE_JUNCTION_SKEW_MM);
         }
         if (p_track->b_skew_small &&
+            (JUNCTION_NONE == p_track->junction_phase) &&
             (p_track->junction_count >= LINE_JUNCTION_SAMPLES))
         {
             start_junction(p_track, p_in);
@@ -336,10 +352,22 @@ start_episode (line_track_t * p_track, line_track_input_t const * p_in)
     p_track->b_skew_small = false;
 }
 
-/* A cross junction: hold the heading it was met on to the turning point. */
+/*
+ * A cross junction. Straight on, tracking carries on: with the sensors
+ * about a tape width apart, a plain line under both reads the same, and
+ * holding a heading would leave a bend (2026-11-06). A turn holds the
+ * heading the junction was met on to the turning point.
+ */
 static void
 start_junction (line_track_t * p_track, line_track_input_t const * p_in)
 {
+    p_track->junction_turn = p_in->turn;
+    if ((LINE_TURN_LEFT != p_in->turn) && (LINE_TURN_RIGHT != p_in->turn) &&
+        (LINE_TURN_UTURN != p_in->turn))
+    {
+        p_track->junction_phase = JUNCTION_CROSS;
+        return;
+    }
     p_track->junction_phase = JUNCTION_DRIVE;
     p_track->junction_turn = p_in->turn;
     p_track->junction_mm = p_track->entry_mm;
@@ -374,7 +402,7 @@ drive_junction (line_track_t * p_track, line_track_input_t const * p_in)
             side = (LINE_UTURN_LEFT != 0) ? SIDE_LEFT : SIDE_RIGHT;
             break;
         default:
-            /* Straight on: the route continues between the sensors. */
+            /* Not reached: straight on never drives to the centre. */
             restart_tracking(p_track, p_in, p_track->junction_deg);
             return;
     }
@@ -458,13 +486,9 @@ track_edge (line_track_t * p_track, line_track_input_t const * p_in,
             uint32_t side, bool b_was_black)
 {
     bool const b_black = p_track->b_black[side];
-    if (b_black && !b_was_black)
-    {
-        p_track->black_start_mm[side] = p_in->distance_mm;
-        p_track->last_side = side;
-    }
     if (b_black)
     {
+        p_track->last_side = side;
         if ((p_in->distance_mm - p_track->black_start_mm[side]) >=
             LINE_EDGE_MAX_MM)
         {

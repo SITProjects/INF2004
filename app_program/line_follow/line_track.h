@@ -14,8 +14,8 @@
  * search towards the last edge.
  *
  * Both sensors turning black together (within LINE_JUNCTION_SKEW_MM) is a
- * cross junction: the car drives LINE_JUNCTION_CENTRE_MM on, then goes
- * straight on or pivots onto the new line as the input's turn says. Both
+ * cross junction. Straight on, tracking simply carries on; for a turn the
+ * car drives LINE_JUNCTION_CENTRE_MM on, then pivots onto the new line. Both
  * black one after the other is the route passing under the car at an
  * angle: once the second clears, the car searches towards that side.
  *
@@ -59,8 +59,9 @@ typedef struct
     bool b_seen;                /**< Either sensor black in this sample,
                                      for stop-at-line (motion debounces). */
     bool b_junction;            /**< A cross junction is being taken: from
-                                     its detection until tracking resumes
-                                     on the new line. */
+                                     its detection until both sensors
+                                     clear (straight on) or tracking
+                                     resumes on the new line (a turn). */
 } line_request_t;
 
 /** @brief One sample and the motion state it was taken in. */
@@ -94,7 +95,8 @@ typedef struct
     uint32_t exit_side;      /* Side most recently black on its own. */
     bool b_both_seen;        /* Both black during this episode. */
     bool b_skew_small;       /* ... within LINE_JUNCTION_SKEW_MM. */
-    uint32_t junction_phase; /* 0 none, 1 driving to the centre, 2 pivot. */
+    uint32_t junction_phase; /* 0 none, 1 driving to the centre, 2 pivot,
+                                3 crossing straight on. */
     line_turn_t junction_turn;
     int32_t junction_mm;       /* Travel when the junction began. */
     int32_t junction_deg;      /* Heading the junction was met on. */

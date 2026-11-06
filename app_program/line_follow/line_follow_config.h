@@ -108,9 +108,9 @@
 /**
  * @brief Travel, in mm, from a junction's first black to the point where
  * the car turns: about the sensors' distance ahead of the wheel axle plus
- * half the tape width, so the car pivots over the crossing. A straight-on
+ * half the tape width, so the car pivots over the crossing. A turning
  * junction drives this far on the heading it met the junction with,
- * ignoring the sensors, then tracks again.
+ * ignoring the sensors; straight on keeps tracking.
  * TODO(calibrate): measure the sensors' distance ahead of the axle.
  */
 #define LINE_JUNCTION_CENTRE_MM 60
