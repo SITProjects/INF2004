@@ -51,14 +51,17 @@
  * Hard-iron offset, in car axes and magnetometer counts: the field of the
  * car's own magnets (motors, speaker), which turns with the car. Measure
  * it with the calibration spin (TER-U28): the "centre" values printed
- * after two slow full turns. 0 until measured; the heading is then off
- * by up to tens of degrees, but raw X and Y are still logged.
+ * after two slow full turns. Measure it again if anything magnetic on
+ * the car moves. Current values: TER-U28, 2026-11-06, motors off (spans
+ * 956 and 904 counts, so the Earth's field is about 0.42 gauss here).
+ * With the motors running the field the compass sees changes by up to
+ * half of that (TER-U31), so the heading is not yet good for steering.
  */
 #ifndef TERRAIN_MAG_OFFSET_X
-#define TERRAIN_MAG_OFFSET_X 0
+#define TERRAIN_MAG_OFFSET_X (-347)
 #endif
 #ifndef TERRAIN_MAG_OFFSET_Y
-#define TERRAIN_MAG_OFFSET_Y 0
+#define TERRAIN_MAG_OFFSET_Y (-96)
 #endif
 
 /*

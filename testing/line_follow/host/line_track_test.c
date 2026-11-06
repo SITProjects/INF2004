@@ -85,8 +85,8 @@ test_edge_clears (void)
     drive(true, false, samples_for(30));
     bool const b_leading = (LINE_LEAD_DEG == out.target_heading_deg);
     drive(false, false, LINE_CONFIRM_SAMPLES);
-    bool const b_held = (LINE_MODE_TRACK == out.mode) &&
-                        (0 == out.target_heading_deg);
+    bool const b_held =
+        (LINE_MODE_TRACK == out.mode) && (0 == out.target_heading_deg);
     drive(false, false, samples_for(100));
     check("LT03 an edge leads until white; on a straight the car then "
           "holds its heading",
@@ -182,10 +182,10 @@ test_junction_left (void)
     cross_junction(LINE_TURN_LEFT);
     drive(true, true, samples_for(15));
     drive(false, false, samples_for(LINE_JUNCTION_CENTRE_MM));
-    bool const b_pivot = (LINE_MODE_SEARCH_LEFT == out.mode) &&
-                         (4 + 90 + LINE_JUNCTION_LOOK_DEG ==
-                          out.target_heading_deg) &&
-                         out.b_junction;
+    bool const b_pivot =
+        (LINE_MODE_SEARCH_LEFT == out.mode) &&
+        (4 + 90 + LINE_JUNCTION_LOOK_DEG == out.target_heading_deg) &&
+        out.b_junction;
     in.b_turning = true;
     /* The right sensor sweeps over the route being left: ignored. */
     in.heading_deg = 20;
@@ -222,8 +222,8 @@ test_junction_uturn (void)
     drive(true, false, LINE_CONFIRM_SAMPLES);
     in.heading_deg = 184;
     drive(false, false, LINE_CONFIRM_SAMPLES);
-    bool const b_found = (LINE_MODE_TRACK == out.mode) &&
-                         (184 == out.target_heading_deg);
+    bool const b_found =
+        (LINE_MODE_TRACK == out.mode) && (184 == out.target_heading_deg);
     cross_junction(LINE_TURN_RIGHT);
     drive(false, false, samples_for(LINE_JUNCTION_CENTRE_MM));
     in.b_turning = false;
@@ -235,24 +235,27 @@ test_junction_uturn (void)
               !out.b_junction);
 }
 
-/* The route at an angle: left black, both black 25 mm later, then only
- * the right, then white. The tape is now outside on the right. */
+/* 2026-11-06 car7 d=823..906: the right sensor black, both 34 mm later
+ * as the right turn went a little too far, then only the left, then
+ * white. The tape is back between the sensors: no search. */
 static void
-test_route_under_car (void)
+test_overshoot_across (void)
 {
     reset();
-    in.heading_deg = 20;
+    in.heading_deg = 0;
     drive(false, false, samples_for(100));
-    drive(true, false, LINE_CONFIRM_SAMPLES);
-    drive(true, false, samples_for(25));
+    drive(false, true, LINE_CONFIRM_SAMPLES + samples_for(30));
+    in.heading_deg = -23;
     drive(true, true, LINE_CONFIRM_SAMPLES + LINE_JUNCTION_SAMPLES + 5u);
     bool const b_no_junction = !out.b_junction;
-    drive(false, true, LINE_CONFIRM_SAMPLES + 5u);
-    drive(false, false, LINE_CONFIRM_SAMPLES);
-    check("LT17 the route passing under the car (both black one after the "
-          "other) is no junction: search towards the side that cleared last",
-          b_no_junction && (LINE_MODE_SEARCH_RIGHT == out.mode) &&
-              (20 - LINE_SEARCH_MAX_DEG == out.target_heading_deg));
+    in.heading_deg = -31;
+    drive(true, false, LINE_CONFIRM_SAMPLES + 5u);
+    bool const b_turns_back = (-31 + LINE_LEAD_DEG == out.target_heading_deg);
+    in.heading_deg = -22;
+    drive(false, false, LINE_CONFIRM_SAMPLES + 2u);
+    check("LT17 the tape crossing from one sensor to the other (a "
+          "correction too far) is no junction and starts no search",
+          b_no_junction && b_turns_back && (LINE_MODE_TRACK == out.mode));
 }
 
 /* Drive @p mm with both sensors white while the heading turns at
@@ -290,8 +293,8 @@ test_bend (void)
            right);
     check("LT14 between corrections the car keeps to the bend it has been "
           "turning (0.29 deg/mm leads about 9 deg); straight again after",
-          b_bend && (0 == straight) && (right <= -7) &&
-              (right >= -10) && (LINE_MODE_TRACK == out.mode));
+          b_bend && (0 == straight) && (right <= -7) && (right >= -10) &&
+              (LINE_MODE_TRACK == out.mode));
 }
 
 static void
@@ -440,7 +443,7 @@ main (void)
     test_junction_left();
     test_both_rise_together();
     test_junction_uturn();
-    test_route_under_car();
+    test_overshoot_across();
     printf("%u failure(s)\n", failures);
     return (0u == failures) ? 0 : 1;
 }

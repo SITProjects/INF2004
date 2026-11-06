@@ -49,13 +49,17 @@ check (char const * p_name, bool ok)
 }
 
 /* One update with the car turned @p deg counter-clockwise from north in a
- * 400-count horizontal field (default axes: board = car). */
+ * 400-count horizontal field plus the configured hard-iron offset
+ * (default axes: board = car). */
+#define OFF_X ((int)TERRAIN_MAG_OFFSET_X)
+#define OFF_Y ((int)TERRAIN_MAG_OFFSET_Y)
+
 static terrain_compass_t
 at (float deg)
 {
     float const rad = deg * 3.14159265f / 180.0f;
-    next.x = (int16_t)lroundf(400.0f * sinf(rad));
-    next.y = (int16_t)lroundf(400.0f * cosf(rad));
+    next.x = (int16_t)(OFF_X + lroundf(400.0f * sinf(rad)));
+    next.y = (int16_t)(OFF_Y + lroundf(400.0f * cosf(rad)));
     next.z = -300;
     terrain_compass_update();
     terrain_compass_t reading;
@@ -83,17 +87,18 @@ main (void)
     bool const b_right = near(at(-30.0f).heading_ddeg, 3300);
     bool const b_back = near(at(180.0f).heading_ddeg, 1800);
     reading = at(90.0f);
-    check("CMP02 heading turns counter-clockwise (+ is left), 0 to 3599",
+    check("CMP02 heading turns counter-clockwise (+ is left), 0 to 3599, "
+          "offset removed",
           b_north && b_left && b_right && b_back &&
               near(reading.heading_ddeg, 900) && reading.b_valid &&
-              (400 == reading.x) && (-300 == reading.z));
+              (OFF_X + 400 == reading.x) && (-300 == reading.z));
 
     (void)at(270.0f);
     terrain_compass_range_t range;
     terrain_compass_get_range(&range);
-    check("CMP03 the range spans the field seen: centre 0, span 800",
-          (-400 == range.min_x) && (400 == range.max_x) &&
-              (-400 == range.min_y) && (400 == range.max_y));
+    check("CMP03 the range spans the field seen: centre the offset, span 800",
+          (OFF_X - 400 == range.min_x) && (OFF_X + 400 == range.max_x) &&
+              (OFF_Y - 400 == range.min_y) && (OFF_Y + 400 == range.max_y));
 
     next.x = IMU_MAG_OVERFLOW;
     terrain_compass_update();

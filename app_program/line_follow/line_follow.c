@@ -186,18 +186,18 @@ report (line_request_t const * p_request, line_track_input_t const * p_in)
     if (p_in->b_control && (b_sensors || (trace_ms >= LINE_TRACE_MS)))
     {
         trace_ms = 0u;
-        /* Compass heading (whole degrees, + is left; -1 without a reading)
-         * and raw field, to compare with the wheels' h. One call, so other
-         * tasks' output cannot split the line. */
+        /* Compass heading (whole degrees, + is left; -1 without a reading),
+         * raw field and reading count, to compare with the wheels' h. One
+         * call, so other tasks' output cannot split the line. */
         terrain_compass_t compass;
         INT const compass_deg = terrain_compass_get(&compass)
                                     ? ((INT)compass.heading_ddeg / DDEG_PER_DEG)
                                     : -1;
-        tm_printf((UB *)"LT t=%d h=%d d=%d %u%u c=%d m=%d,%d\n",
+        tm_printf((UB *)"LT t=%d h=%d d=%d %u%u c=%d m=%d,%d n=%u\n",
                   (INT)p_request->target_heading_deg, (INT)p_in->heading_deg,
                   (INT)p_in->distance_mm, (UINT)p_in->b_left_black,
                   (UINT)p_in->b_right_black, compass_deg, (INT)compass.x,
-                  (INT)compass.y);
+                  (INT)compass.y, (UINT)compass.samples);
     }
 #else
     (void)trace_ms;

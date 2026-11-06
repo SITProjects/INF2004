@@ -16,8 +16,8 @@
  * Both sensors turning black together (within LINE_JUNCTION_SKEW_MM) is a
  * cross junction. Straight on, tracking simply carries on; for a turn the
  * car drives LINE_JUNCTION_CENTRE_MM on, then pivots onto the new line. Both
- * black one after the other is the route passing under the car at an
- * angle: once the second clears, the car searches towards that side.
+ * black one after the other is the tape crossing the sensors at an angle,
+ * usually a correction that turned a little too far: tracking carries on.
  *
  * The module is pure: no kernel calls, so host tests can drive it. Only
  * the line task calls it.
@@ -92,7 +92,6 @@ typedef struct
     uint32_t entry_side;     /* First side black; 2 = both at once. */
     int32_t entry_mm;        /* Travel when the episode started. */
     int32_t entry_deg;       /* Heading then. */
-    uint32_t exit_side;      /* Side most recently black on its own. */
     bool b_both_seen;        /* Both black during this episode. */
     bool b_skew_small;       /* ... within LINE_JUNCTION_SKEW_MM. */
     uint32_t junction_phase; /* 0 none, 1 driving to the centre, 2 pivot,

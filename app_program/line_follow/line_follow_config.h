@@ -32,9 +32,9 @@
 /**
  * @brief While tracking under line control, print one trace line on every
  * raw sensor change and at least this often, in ms: "LT t=target
- * h=heading d=distance LR c=compass m=fieldX,fieldY" (console, so MQTT
- * builds publish it too; c is -1 without a compass reading). 0 turns the
- * trace off.
+ * h=heading d=distance LR c=compass m=fieldX,fieldY n=readings" (console,
+ * so MQTT builds publish it too; c is -1 without a compass reading). 0
+ * turns the trace off.
  */
 #define LINE_TRACE_MS 200u
 
@@ -98,9 +98,8 @@
 
 /**
  * @brief Both sensors turning black within this travel, in mm, of each
- * other is a crossing line: a cross (+) junction. A longer gap is the
- * route itself passing under the car at an angle; once the second sensor
- * clears, the route is outside on that side and the car searches there.
+ * other is a crossing line: a cross (+) junction. A longer gap is the tape
+ * crossing the sensors at an angle, and tracking carries on.
  * TODO(calibrate): the car meets a crossing up to about 18 degrees off
  * square with 30 mm between the sensors.
  */

@@ -154,8 +154,8 @@ line_track_update (line_track_t * p_track, line_track_input_t const * p_in)
         }
         else if (b_both)
         {
-            /* The route passing under the car at an angle: keep to the
-             * bend until it clears. */
+            /* The tape across both sensors (they are about a tape width
+             * apart): keep to the bend until one clears. */
             p_track->target_deg = curve_target(p_track, p_in);
         }
         else
@@ -277,7 +277,11 @@ restart_tracking (line_track_t * p_track, line_track_input_t const * p_in,
 
 /*
  * Follow one dark episode, from a sensor turning black until both read
- * white again, and spot a junction or the route crossing under the car.
+ * white again, and spot a junction. The tape crossing from one sensor to
+ * the other is not a reason to search: with the sensors about a tape
+ * width apart, a correction that turns a little too far does that, and
+ * the tape is then back between them (2026-11-06 car7: a search towards
+ * the side that cleared last pivoted 72 degrees away from the tape).
  */
 static void
 follow_episode (line_track_t * p_track, line_track_input_t const * p_in,
@@ -297,10 +301,6 @@ follow_episode (line_track_t * p_track, line_track_input_t const * p_in,
         /* Over the crossing line. */
         p_track->junction_phase = JUNCTION_NONE;
     }
-    if (b_left != b_right)
-    {
-        p_track->exit_side = b_left ? SIDE_LEFT : SIDE_RIGHT;
-    }
     if (b_left && b_right)
     {
         if (!p_track->b_both_seen)
@@ -316,18 +316,6 @@ follow_episode (line_track_t * p_track, line_track_input_t const * p_in,
         {
             start_junction(p_track, p_in);
         }
-    }
-    else if (!b_any && b_was_any && p_track->b_both_seen &&
-             !p_track->b_skew_small &&
-             (p_track->exit_side != p_track->entry_side))
-    {
-        /* The route passed under the car from one side to the other: it
-         * is now outside the side that cleared last. */
-        start_search(p_track, p_in, p_track->exit_side);
-    }
-    else
-    {
-        /* One edge, or nothing new. */
     }
 }
 
@@ -345,7 +333,6 @@ start_episode (line_track_t * p_track, line_track_input_t const * p_in)
     {
         p_track->entry_side = b_left ? SIDE_LEFT : SIDE_RIGHT;
     }
-    p_track->exit_side = p_track->entry_side;
     p_track->entry_mm = p_in->distance_mm;
     p_track->entry_deg = p_in->heading_deg;
     p_track->b_both_seen = false;
