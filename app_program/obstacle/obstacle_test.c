@@ -222,7 +222,7 @@ obstacle_test (void)
     TEST_CHECK("OBS-U05", classify_valid(),
                "sweep classify: HIT, MISS, INVALID without echo wrap");
     TEST_CHECK("OBS-U06", width_wall_valid(),
-               "width: wall past both ends is a 346 mm lower bound");
+               "width: wall past both ends is a 168 mm lower bound");
     TEST_CHECK("OBS-U07", width_box_valid(),
                "width: centred 200 mm box at 250 mm reads 204 mm");
     TEST_CHECK("OBS-U08", width_shifted_valid(),
@@ -1111,7 +1111,7 @@ packed_obstacle_fields_valid (void)
     robot_obstacle_result_t sample = {
         .flags = robot_obstacle_pack_flags(
             ROBOT_OBSTACLE_PATH_FOUND, ROBOT_OBSTACLE_DIR_LEFT_60, true, true),
-        .edges = robot_obstacle_pack_edges(2u, 10u),
+        .edges = robot_obstacle_pack_edges(2u, 7u),
         .width_mm = ROBOT_OBSTACLE_WIDTH_UNAVAILABLE,
         .sequence = UINT8_MAX};
     for (unsigned int index = 0u;
@@ -1119,7 +1119,7 @@ packed_obstacle_fields_valid (void)
     {
         sample.width_mm = robot_obstacle_clamp_width(width_input[index]);
         if ((sample.width_mm != expected_width[index]) ||
-            (sample.flags != 0x6Au) || (sample.edges != 0xA2u) ||
+            (sample.flags != 0x6Au) || (sample.edges != 0x72u) ||
             (sample.sequence != UINT8_MAX))
         {
             return false;
@@ -1127,7 +1127,7 @@ packed_obstacle_fields_valid (void)
     }
     sample.sequence = (uint8_t)(sample.sequence + 1u);
     if ((sample.sequence != 0u) || (sample.flags != 0x6Au) ||
-        (sample.edges != 0xA2u) ||
+        (sample.edges != 0x72u) ||
         (sample.width_mm != ROBOT_OBSTACLE_WIDTH_MAX_MM))
     {
         return false;
@@ -1494,7 +1494,7 @@ path_result (robot_obstacle_direction_t dir, bool b_left_found,
     robot_obstacle_result_t result = {
         .flags = robot_obstacle_pack_flags(ROBOT_OBSTACLE_PATH_FOUND, dir,
                                            b_left_found, b_right_found),
-        .edges = robot_obstacle_pack_edges(1u, 11u),
+        .edges = robot_obstacle_pack_edges(1u, 7u),
         .width_mm = 200u,
         .sequence = 1u};
     return result;
@@ -1750,7 +1750,7 @@ sim_scan (robot_obstacle_status_t status, robot_obstacle_direction_t dir,
 {
     sim.in.scan.flags = robot_obstacle_set_critical(
         robot_obstacle_pack_flags(status, dir, true, true), b_critical);
-    sim.in.scan.edges = robot_obstacle_pack_edges(1u, 11u);
+    sim.in.scan.edges = robot_obstacle_pack_edges(1u, 7u);
     sim.in.scan.width_mm = 200u;
     sim.in.scan.sequence = (uint8_t)(sim.in.scan.sequence + 1u);
     sim.in.b_stop_requested = b_stop;
