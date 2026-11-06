@@ -128,18 +128,20 @@
  * applied, of the car standing still on a floor checked to be flat.
  * Boot calibration compares against it to decide whether the car is
  * level. Record it again whenever the sensor is remounted.
- * Current values: bench reading with the loose sensor taped flat, chip
- * up, on a flat desk (TER-U06, 2026-11-03; 1.4 degrees from the
- * 2026-11-02 reading), before the sensor was mounted on the car.
+ * Current values: the sensor mounted on the car, car still on a marked
+ * spot of a floor checked to be flat (TER-U06, 2026-11-06, single-core
+ * SMP=0 TEST=1 build; TER-U07 in the same run confirmed the axes).
+ * Readings moved by up to about 2.4 degrees between spots and with
+ * handling, so record it again on the course floor (car day).
  */
 #ifndef TERRAIN_LEVEL_REF_X
-#define TERRAIN_LEVEL_REF_X (-0.366f)
+#define TERRAIN_LEVEL_REF_X (-0.170f)
 #endif
 #ifndef TERRAIN_LEVEL_REF_Y
-#define TERRAIN_LEVEL_REF_Y (0.922f)
+#define TERRAIN_LEVEL_REF_Y (-0.239f)
 #endif
 #ifndef TERRAIN_LEVEL_REF_Z
-#define TERRAIN_LEVEL_REF_Z (8.522f)
+#define TERRAIN_LEVEL_REF_Z (8.181f)
 #endif
 
 /* Samples in one calibration attempt: 200 is 2 s at 100 Hz. */

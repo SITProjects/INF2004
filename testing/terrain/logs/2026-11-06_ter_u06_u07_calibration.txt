@@ -1,0 +1,45 @@
+TER-U06 / TER-U07 level reference, 2026-11-06, tester ann
+
+Values transcribed from the console at the time; the raw console output
+was not saved. Build: branch 118 at 8ccb630 plus the uncommitted speed
+state work, SMP=0 TEST=1, with obstacle_test(), motion_test() and
+line_follow_test() skipped locally and TERRAIN_TEST_BENCH 1 (neither
+committed). GY-511 mounted on the car, Robo Pico, USB console, Grove
+cable replaced before run 4. Units: m/s^2, car axes, gains applied.
+
+Two-core TEST=1 runs (1, 2, 4) stalled or hard-faulted terrain, so the
+level reference was recorded on single-core (SMP=0) builds.
+
+Run 5 (old desk reference)
+  TER-U06 PASS  X -0.289  Y -0.554  Z 8.393
+  TER-U07 FAIL  car not moved in time (5 s countdown)
+
+Run 6 (reference from run 5)
+  boot NOT_LEVEL
+  TER-U06 FAIL  car moved during the still reading
+  TER-U07 FAIL  flat X -0.153 Y -0.164; nose Y +1.40 (about 10 deg),
+                side X +2.32 (about 16 deg): lifts under 21 deg
+
+Run 7 (reference from run 5)  -> reference now in terrain_config.h
+  boot NOT_LEVEL
+  TER-U06 PASS  X -0.170  Y -0.239  Z 8.181
+  TER-U07 PASS  flat Z 8.210; nose up Y +3.75 (about 27 deg);
+                right side up X +7.39. Axes and signs correct.
+
+Run 8 (reference from run 7)
+  boot VALID (about 4 s after boot)
+  TER-U02 PASS, TER-U04 PASS, TER-U13 PASS
+  TER-U12, U15, U19, U22, U24 PASS
+  TER-U06 PASS  X -0.259  Y -0.253  Z 8.282 (about 0.6 deg from run 7;
+                not used)
+  TER-U07 FAIL  IMU tilted by hand on purpose to watch the readings;
+                the final recalibration "back flat" gave NOT_LEVEL on
+                the same ground
+
+Spread: run 5 is about 2.4 deg from run 7, run 8 about 0.6 deg. The
+VALID limit is 2 deg (TERRAIN_LEVEL_MAX_DEG). To check on car day: record
+the reference on the course floor at the start position, and whether the
+IMU mount shifts when handled.
+
+TER-U01 failed in every run: it runs before the IMU is set up (same as
+2026-11-03), not a sensor fault.
