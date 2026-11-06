@@ -49,35 +49,29 @@
 /**
  * @brief While one sensor reads black, the target heading leads the car's
  * heading by this much, in degrees, towards that side, so motion keeps
- * turning until the sensor reads white; then the car holds the heading it
- * reached. With MOTION_FOLLOW_KP 4, 10 degrees asks for 40 deg/s.
- * Chosen on LT19's model of the car (sensors 130 mm ahead, turn lag),
- * where 8, 12 and 25 degrees did worse. Not yet confirmed on the car.
+ * turning until the sensor reads white; then the car seeks. With
+ * MOTION_FOLLOW_KP 4, 15 degrees asks for 60 deg/s.
+ * With LINE_SEEK_MAX_DEG and LINE_SEEK_RAMP_MM, chosen on LT19's model
+ * fitted to the 2026-11-06 car10 run. Not yet confirmed on the car.
  * TODO(calibrate) on the tightest curve, then a 2 m straight.
  */
-#define LINE_LEAD_DEG 10
+#define LINE_LEAD_DEG 15
 
 /**
- * @brief Travel, in mm, over which the tracker averages how fast the
- * heading turns (degrees per mm, corrections included). While no single
- * sensor reads black the car keeps turning at that rate, so it follows a
- * bend between corrections instead of driving straight off it; on a
- * straight the average is about zero. Shorter adapts faster to a new bend
- * but weaves more after each correction.
- * TODO(calibrate) on the curve and a 2 m straight.
+ * @brief While both sensors read white, the target heading leads the car
+ * by up to this much, in degrees, towards the last edge, reached after
+ * LINE_SEEK_RAMP_MM of white. White on both can mean the tape slipped out
+ * on a curve, so the car must keep turning. Larger catches tighter
+ * curves but weaves more on straights (about +-9 degrees in the model at
+ * the worst lag), which matters for reading barcodes beside the line.
  */
-#define LINE_CURVE_WINDOW_MM 100
+#define LINE_SEEK_MAX_DEG 12
 
 /**
- * @brief Lead, in mm of travel, of the learned bend: the target heading is
- * the heading plus the average rate times this. The car then turns at
- * about MOTION_FOLLOW_KP x rate x this deg/s, which the average learns
- * from again: a loop with gain KP x this / MOTION_FOLLOW_SPEED_MM_S. It
- * must stay under 1, so the bend fades once no sensor confirms it; 30 at
- * 80 mm/s (gain 1.5) fed itself and spun the car through 235 degrees off
- * the line (2026-11-06 car9). line_follow.c checks this at compile time.
+ * @brief White travel, in mm, over which the seek grows from nothing to
+ * LINE_SEEK_MAX_DEG.
  */
-#define LINE_CURVE_LEAD_MM 15
+#define LINE_SEEK_RAMP_MM 20
 
 /**
  * @brief An edge that stays black for this travel, in mm, while the car
@@ -87,10 +81,11 @@
 #define LINE_EDGE_MAX_MM 200
 
 /**
- * @brief Both sensors white for this travel, in mm, counts as lost.
- * Straddling sensors read white while centred, so keep it long.
+ * @brief Both sensors white for this travel, in mm, counts as lost: pivot
+ * search towards the last edge. The seek has by then turned the car about
+ * 120 degrees that way, so a longer run would only circle.
  */
-#define LINE_LOST_MM 600
+#define LINE_LOST_MM 250
 
 /** Largest pivot, in degrees, to either side while searching. */
 #define LINE_SEARCH_MAX_DEG 120

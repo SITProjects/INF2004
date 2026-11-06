@@ -5,9 +5,10 @@
  *
  * Two sensors straddle the tape. While one reads black the target heading
  * leads the car by LINE_LEAD_DEG towards it, so motion keeps turning
- * while driving. Otherwise the car keeps turning at the rate it has
- * averaged over the last LINE_CURVE_WINDOW_MM, so it follows a bend
- * between corrections and drives straight on a straight. A sensor that
+ * while driving. While both read white the car keeps turning towards the
+ * last edge (up to LINE_SEEK_MAX_DEG of lead after LINE_SEEK_RAMP_MM), so
+ * a tape that slipped out on a curve is caught again; on a straight the
+ * other sensor soon turns it back. A sensor that
  * reads black only briefly is a correction, never a corner: turning
  * towards it clears it quickly (2026-11-06). An edge that stays black for
  * LINE_EDGE_MAX_MM, or a long white run after an edge, starts a pivot
@@ -85,9 +86,6 @@ typedef struct
     line_mode_t mode;
     int32_t target_deg;
     int32_t black_start_mm[2]; /* Travel when each edge turned black. */
-    int32_t curve_udeg_per_mm; /* Averaged turn, udeg/mm, + is left. */
-    int32_t prev_heading_deg;  /* Last sample, for the turn rate. */
-    int32_t prev_distance_mm;
     /* Dark episode: from a sensor turning black until both read white. */
     uint32_t entry_side;     /* First side black; 2 = both at once. */
     int32_t entry_mm;        /* Travel when the episode started. */
