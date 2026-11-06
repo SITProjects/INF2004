@@ -49,6 +49,16 @@
 #define EVT_LEVELS                                                             \
     (OBSTACLE_EVT_STOP | OBSTACLE_EVT_CRITICAL | OBSTACLE_EVT_FAULT)
 
+#if AVOID_ACTIVE
+/** @brief Where a dashboard reverse has got to. */
+typedef enum
+{
+    REVERSE_IDLE = 0,  /**< Motors held, nothing asked for. */
+    REVERSE_RELEASING, /**< INHIBIT cleared, waiting for motion to see it. */
+    REVERSE_DRIVING    /**< The move is sent. */
+} reverse_phase_t;
+#endif
+
 /* Static data. */
 
 #if OBSTACLE_CALIBRATION_MODE == OBSTACLE_CAL_MODE_OFF
@@ -127,6 +137,9 @@ static uint32_t log_time_ms (void);
 #endif
 #if AVOID_ACTIVE
 static bool remote_hold (void);
+static void remote_reverse (bool b_held);
+static bool reverse_send (void);
+static bool reverse_finished (void);
 static void avoid_loop (robot_obstacle_result_t scan, bool b_stop);
 static void apply_actions (obstacle_avoid_action_t const * p_act);
 #if TM_MQTT
@@ -484,6 +497,7 @@ remote_hold (void)
 {
     static bool b_held = false;
     bool const b_stopped = remote_command_stopped();
+    remote_reverse(b_held);
     if (b_stopped && !b_held)
     {
         app_check(tk_set_flg(motion_flg_ctrl, MOTION_FLG_INHIBIT),
@@ -509,6 +523,102 @@ remote_hold (void)
     }
     b_held = b_stopped;
     return b_stopped;
+}
+
+/*
+ * Temporary, to bring the car back between test passes: the dashboard's
+ * Reverse backs a stopped car up. INHIBIT is released for that one move and
+ * set again as soon as it ends, or on Stop, Start or the time limit. Motion
+ * discards commands until it has seen the release, so the move waits for
+ * that. Nothing watches behind the car.
+ */
+static void
+remote_reverse (bool b_held)
+{
+    static reverse_phase_t phase = REVERSE_IDLE;
+    static uint32_t started_ms = 0u;
+    bool const b_wanted = remote_command_reversing();
+    uint32_t const now_ms = log_time_ms();
+    bool b_end = !b_wanted;
+
+    switch (phase)
+    {
+        case REVERSE_IDLE:
+            if (b_wanted && b_held && (avoid.state == OBSTACLE_AVOID_FAULT))
+            {
+                remote_command_reverse_done();
+                tm_printf((UB *)"[%lu ms]obstacle: reverse refused, fault "
+                                "latched\n",
+                          (unsigned long)now_ms);
+            }
+            else if (b_wanted && b_held)
+            {
+                app_check(tk_clr_flg(motion_flg_ctrl, ~MOTION_FLG_INHIBIT),
+                          "obstacle reverse release");
+                started_ms = now_ms;
+                phase = REVERSE_RELEASING;
+                tm_printf((UB *)"[%lu ms]obstacle: reversing %u mm\n",
+                          (unsigned long)now_ms,
+                          (unsigned int)OBSTACLE_REMOTE_REVERSE_MM);
+            }
+            else
+            {
+                /* Nothing asked for yet. */
+            }
+            break;
+
+        case REVERSE_RELEASING:
+            if (motion_get_status().mode != ROBOT_MOTION_MODE_INHIBITED)
+            {
+                b_end = b_end || !reverse_send();
+                phase = REVERSE_DRIVING;
+            }
+            break;
+
+        case REVERSE_DRIVING:
+            b_end = b_end || reverse_finished();
+            break;
+
+        default:
+            b_end = true;
+            break;
+    }
+
+    if ((phase != REVERSE_IDLE) &&
+        (b_end || ((now_ms - started_ms) > OBSTACLE_REMOTE_REVERSE_LIMIT_MS)))
+    {
+        app_check(tk_set_flg(motion_flg_ctrl, MOTION_FLG_INHIBIT),
+                  "obstacle reverse hold");
+        remote_command_reverse_done();
+        phase = REVERSE_IDLE;
+        tm_printf((UB *)"[%lu ms]obstacle: reverse ended\n",
+                  (unsigned long)log_time_ms());
+    }
+}
+
+/* Clear old events first: only then is the next MOVE_DONE this move's. */
+static bool
+reverse_send (void)
+{
+    uint32_t cmd =
+        robot_motion_cmd_move(OBSTACLE_REMOTE_REVERSE_MM, true, false);
+    ER er = tk_clr_flg(motion_flg_event, ~(UINT)MOTION_EVT_ALL);
+    if (er >= E_OK)
+    {
+        er = tk_snd_mbf(motion_mbf_cmd, &cmd, (INT)sizeof(cmd), TMO_POL);
+    }
+    app_check(er, "obstacle reverse command");
+    return er >= E_OK;
+}
+
+/* The move ended by itself, one way or another. */
+static bool
+reverse_finished (void)
+{
+    T_RFLG events = {0};
+    ER const read = tk_ref_flg(motion_flg_event, &events);
+    app_check(read, "obstacle reverse events");
+    return (read < E_OK) || ((events.flgptn & MOTION_EVT_ALL) != 0u);
 }
 
 /* Carry out the actions in their documented order and keep each result

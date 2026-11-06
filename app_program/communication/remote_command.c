@@ -34,6 +34,7 @@ static volatile bool b_stopped = true;
 #else
 static volatile bool b_stopped = false;
 #endif
+static volatile bool b_reversing = false;
 static volatile uint32_t table[REMOTE_MAP_SIZE];
 
 /* Private function declarations. */
@@ -56,11 +57,22 @@ remote_command_handle (char const * p_text, uint32_t length)
     if ((1u == count) && word_is(&words[0], "start"))
     {
         b_stopped = false;
+        b_reversing = false;
         return REMOTE_COMMAND_OK;
     }
     if ((1u == count) && word_is(&words[0], "stop"))
     {
         b_stopped = true;
+        b_reversing = false;
+        return REMOTE_COMMAND_OK;
+    }
+    if ((1u == count) && word_is(&words[0], "reverse"))
+    {
+        if (!b_stopped)
+        {
+            return REMOTE_COMMAND_BAD;
+        }
+        b_reversing = true;
         return REMOTE_COMMAND_OK;
     }
     if ((1u == count) && word_is(&words[0], "clear"))
@@ -82,6 +94,18 @@ bool
 remote_command_stopped (void)
 {
     return b_stopped;
+}
+
+bool
+remote_command_reversing (void)
+{
+    return b_reversing;
+}
+
+void
+remote_command_reverse_done (void)
+{
+    b_reversing = false;
 }
 
 line_turn_t

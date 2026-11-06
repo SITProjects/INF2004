@@ -317,6 +317,15 @@
  * blocked bypass may re-sweep the corridor, so its wait exceeds one sweep.
  */
 #define OBSTACLE_AVOID_SEND_TIMEOUT_MS 200u
+
+/*
+ * Temporary: the dashboard's Reverse backs the stopped car up this far per
+ * press, to bring it back between test passes. The limit is a backstop: the
+ * move takes under 1 s at MOTION_MOVE_SPEED_MM_S.
+ */
+#define OBSTACLE_REMOTE_REVERSE_MM 200u
+#define OBSTACLE_REMOTE_REVERSE_LIMIT_MS 3000u
+
 #define OBSTACLE_AVOID_PREPARE_TIMEOUT_MS                                      \
     (OBSTACLE_SCAN_TIMEOUT_MS +                                                \
      OBSTACLE_SETTLE_MS(OBSTACLE_SWEEP_LAST_DEG - OBSTACLE_SWEEP_FIRST_DEG))

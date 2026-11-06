@@ -92,6 +92,27 @@ main (void)
     check("RC07 a barcode counts as mapped once set, STRAIGHT included",
           b_unknown && b_known && !remote_command_mapped("A"));
 
+    /* RC06 left the car stopped. */
+    bool const b_idle = !remote_command_reversing();
+    bool const b_asked = (REMOTE_COMMAND_OK == send("reverse")) &&
+                         remote_command_reversing() &&
+                         remote_command_stopped();
+    remote_command_reverse_done();
+    bool const b_done = !remote_command_reversing();
+    (void)send("reverse");
+    (void)send("stop");
+    bool const b_stop_ends = !remote_command_reversing();
+    (void)send("reverse");
+    (void)send("start");
+    bool const b_start_ends = !remote_command_reversing();
+    bool const b_running_refused = (REMOTE_COMMAND_BAD == send("reverse")) &&
+                                   !remote_command_reversing() &&
+                                   !remote_command_stopped();
+    (void)send("stop");
+    check("RC08 only a stopped car reverses; done, Stop and Start end it",
+          b_idle && b_asked && b_done && b_stop_ends && b_start_ends &&
+              b_running_refused);
+
     printf("%u failure(s)\n", failures);
     return (0u == failures) ? 0 : 1;
 }

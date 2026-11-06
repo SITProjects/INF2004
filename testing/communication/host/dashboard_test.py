@@ -161,6 +161,12 @@ def run(folder):
     check("D06 Stop reaches the car and the page shows it stopped",
           car.stopped and get_state()["run"] == "stopped")
 
+    post("/command", {"command": "reverse"})
+    settle(car)
+    check("D19 Reverse reaches the car and it stays stopped",
+          ("reverse" in [m for _, m in car.received])
+          and get_state()["run"] == "stopped")
+
     car.console("barcode: F dir=fwd elements=29 narrow=3 us turn=LEFT")
     car.console("line JUNCTION LEFT t=1 h=2 d=3")
     settle(car)

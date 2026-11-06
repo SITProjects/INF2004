@@ -6,8 +6,10 @@
  * remote_command_handle(), and other tasks read the results lock-free:
  * the run state is one flag and each table entry one aligned word, so no
  * reader ever waits and no lwIP callback takes a kernel object. Messages
- * are text: "start", "stop", "clear", or "map <barcode> <action>", with an
- * action of STRAIGHT, LEFT, RIGHT or UTURN.
+ * are text: "start", "stop", "reverse", "clear", or
+ * "map <barcode> <action>", with an action of STRAIGHT, LEFT, RIGHT or
+ * UTURN. "reverse" is temporary, to bring the car back between test passes;
+ * only a stopped car takes it.
  *
  * The module is pure: no kernel calls, so host tests can drive it.
  */
@@ -55,6 +57,20 @@ remote_command_result_t remote_command_handle (char const * p_text,
  * Any task; never waits.
  */
 bool remote_command_stopped (void);
+
+/**
+ * @brief Whether the dashboard wants the stopped car backed up.
+ * @return True from "reverse" until "stop", "start" or
+ *         remote_command_reverse_done().
+ * Any task; never waits.
+ */
+bool remote_command_reversing (void);
+
+/**
+ * @brief Mark the reverse finished, so the next "reverse" is a new one.
+ * Obstacle task only; never waits.
+ */
+void remote_command_reverse_done (void);
 
 /**
  * @brief The action set for a barcode.

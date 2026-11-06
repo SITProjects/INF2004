@@ -314,7 +314,7 @@ class Page(BaseHTTPRequestHandler):
             return
         if self.path == "/command":
             command = request.get("command")
-            if command not in ("start", "stop"):
+            if command not in ("start", "stop", "reverse"):
                 self.reply_json(400, {"error": "Unknown command"})
             elif send_to_car(command):
                 self.reply_json(200, {"sent": True})
