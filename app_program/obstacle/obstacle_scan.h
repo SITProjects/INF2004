@@ -40,8 +40,8 @@ typedef struct
 } obstacle_scan_geometry_t;
 
 /**
- * One stationary corridor sweep: every grid position from 30 to 150
- * degrees, index 0 at 30 degrees (left). Echoes are medians in
+ * One stationary corridor sweep: every grid position from 50 to 130
+ * degrees, index 0 at 50 degrees (left). Echoes are medians in
  * microseconds; 0 is no echo. A position whose faults exhausted its retries
  * has its valid bit clear; a timed-out or cancelled sweep has none set.
  */
@@ -115,7 +115,7 @@ typedef struct
  * Any coarse or fine position whose faults exhaust its retries makes the
  * width unavailable (width 0, edges EDGE_NONE, both flags false) while the
  * direction is still published. Edges are the first hit from outside, valid
- * for one contiguous obstacle in the 30..150 degree arc; a found edge is
+ * for one contiguous obstacle in the 50..130 degree arc; a found edge is
  * accurate to about half a step before calibration. Results assume the car
  * is stationary throughout the sweep. See obstacle_width.h for the geometry
  * and robot_types.h for the bit layout.
@@ -205,8 +205,8 @@ obstacle_scan_watch_t obstacle_scan_watch (void);
 /**
  * @brief Start a corridor sweep for bypass verification.
  *
- * Latches the stop request, then measures every grid position from 30 to
- * 150 degrees with the side-position ping count, retries and median. When
+ * Latches the stop request, then measures every grid position from 50 to
+ * 130 degrees with the side-position ping count, retries and median. When
  * done, or after OBSTACLE_CORRIDOR_TIMEOUT_MS, the sweep is published for
  * obstacle_scan_corridor() and obstacle_scan_rearm() runs. Assumes the car
  * is stationary throughout.

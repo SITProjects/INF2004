@@ -197,7 +197,7 @@ index_angle_deg (uint8_t index)
                    (OBSTACLE_SWEEP_STEP_DEG * index));
 }
 
-/* Boundary angles lie within the sweep, 30..150 degrees, so this fits. */
+/* Boundary angles lie within the sweep, 50..130 degrees, so this fits. */
 static uint16_t
 angle_ddeg (float angle_deg)
 {

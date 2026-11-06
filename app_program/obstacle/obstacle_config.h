@@ -40,7 +40,7 @@
     ((OBSTACLE_CENTRE_DEG - OBSTACLE_SWEEP_FIRST_DEG) / OBSTACLE_SWEEP_STEP_DEG)
 
 /* Scan angles the sensor holds to watch the obstacle side while passing:
- * 30 degrees off the heading, as before the sweep was widened. */
+ * 30 degrees off the heading, inside the 50..130 degree sweep. */
 #define OBSTACLE_WATCH_LEFT_DEG 60u
 #define OBSTACLE_WATCH_RIGHT_DEG 120u
 
@@ -144,8 +144,8 @@
  * Width sweep: a VALID reading is on the obstacle (HIT) when it is nearer
  * than a flat face square to the heading at the centre range would read at
  * that angle (centre echo / cos of the angle off centre) plus this margin,
- * 466 us (about 80 mm). Without the cosine a wide wall 250 mm ahead would
- * read 1458 us farther at the 30 and 150 degree ends and look clear.
+ * 466 us (about 80 mm). Without the cosine a wide wall 300 mm ahead would
+ * read 534 us farther at the 50 and 130 degree ends and look clear.
  */
 #define OBSTACLE_EDGE_JUMP_US 466u
 
@@ -218,8 +218,8 @@
 
 /*
  * Worst case for both fine walks: every index between an end and the
- * centre (5 per side), plus the longest cross move, from 150 degrees to the
- * first left index: 10 * 415 + 370 = 4520 ms today.
+ * centre (3 per side), plus the longest cross move, from 130 degrees to the
+ * first left index: 6 * 415 + 290 = 2780 ms today.
  */
 #define OBSTACLE_FINE_SCAN_WORST_MS                                            \
     ((2u * (OBSTACLE_CENTRE_INDEX - 1u) * OBSTACLE_FINE_POSITION_WORST_MS) +   \
@@ -230,7 +230,7 @@
  * Worst case for a side scan: centre-to-left move, left position,
  * left-to-right move, right position, then both fine walks. The return to
  * centre happens after the result is published.
- * Today: 270 + 390 + 2 * 385 + 4520 = 5950 ms.
+ * Today: 230 + 310 + 2 * 385 + 2780 = 4090 ms.
  */
 #define OBSTACLE_SIDE_SCAN_WORST_MS                                            \
     (OBSTACLE_SETTLE_MS(OBSTACLE_CENTRE_DEG - OBSTACLE_SWEEP_FIRST_DEG) +      \
@@ -239,9 +239,9 @@
 
 /*
  * Worst case for a corridor sweep (bypass verification): the move from
- * centre to 30 degrees, then every grid position as a side position, with
+ * centre to 50 degrees, then every grid position as a side position, with
  * a one-step move before each after the first.
- * Today: 270 + 12 * 170 + 13 * 385 = 7315 ms.
+ * Today: 230 + 8 * 170 + 9 * 385 = 5055 ms.
  */
 #define OBSTACLE_CORRIDOR_WORST_MS                                             \
     (OBSTACLE_SETTLE_MS(OBSTACLE_CENTRE_DEG - OBSTACLE_SWEEP_FIRST_DEG) +      \
@@ -252,7 +252,7 @@
 /*
  * Watchdog limits. The stop acknowledgement timeout belongs to the motion
  * handshake (integration). The side-scan timeout is twice the worst case,
- * 11900 ms today. It is a fail-safe bound, not a performance target.
+ * 8180 ms today. It is a fail-safe bound, not a performance target.
  */
 #define OBSTACLE_STOP_ACK_TIMEOUT_MS 500u
 #define OBSTACLE_SCAN_TIMEOUT_MS (2u * OBSTACLE_SIDE_SCAN_WORST_MS)
@@ -271,7 +271,7 @@
  * at a servo command at or below SELF_MAX_DEG or at or above SELF_MIN_DEG,
  * count as no echo; every other reading is used as measured. Centre
  * readings, and so CRITICAL, are not affected. Refit both angles with
- * calibration mode 5 (TODO(calibrate): the 30-150 sweep sees more of the
+ * calibration mode 5 (TODO(calibrate): check the 50-130 sweep against the
  * car); 181 turns the upper range off. */
 #define OBSTACLE_SIDE_SELF_DISTANCE_MM 60u
 #define OBSTACLE_SIDE_SELF_MAX_DEG 70
@@ -333,7 +333,7 @@
 #define OBSTACLE_CAL_MODE_TRIM_SWEEP 2u /* 80..100 degrees, one degree steps. */
 #define OBSTACLE_CAL_MODE_SETTLE 3u /* Settling trials in either direction. */
 #define OBSTACLE_CAL_MODE_ANGLES 4u /* Holds, including 60 to 120 moves. */
-#define OBSTACLE_CAL_MODE_WIDE 5u   /* 30..150 degrees, five degree steps. */
+#define OBSTACLE_CAL_MODE_WIDE 5u   /* The sweep, five degree steps. */
 
 #define OBSTACLE_CALIBRATION_MODE OBSTACLE_CAL_MODE_OFF
 #define OBSTACLE_CAL_PINGS 20u

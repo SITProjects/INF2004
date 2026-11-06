@@ -1032,7 +1032,7 @@ record_hit (bool b_right, uint8_t index, uint16_t echo_us)
     }
 }
 
-/* The right walk runs first because the servo is already at 150 degrees. */
+/* The right walk runs first because the servo is already at 130 degrees. */
 static void
 next_fine_side (bool b_right)
 {

@@ -6,8 +6,8 @@
  * shared state. They may run on either core and are exercised directly by
  * obstacle_test.c. Echo values are durations in microseconds; zero means no
  * echo was returned. Angles use the shared grid in robot_types.h: index 0 is
- * 30 degrees (left), the centre index is 90 degrees and the last index is
- * 150 degrees (right).
+ * 50 degrees (left), the centre index is 90 degrees and the last index is
+ * 130 degrees (right).
  */
 
 #ifndef OBSTACLE_WIDTH_H
