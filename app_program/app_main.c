@@ -123,7 +123,8 @@ usermain (void)
 #if !IR_MOTOR_TEST
     app_check(barcode_init(), "barcode_init");
 #endif
-#if !IR_CALIBRATION_ONLY && !IR_MOTOR_TEST
+#if !IR_MOTOR_TEST
+    /* Also with IR_CALIBRATION, for the compass calibration spin. */
     app_check(terrain_init(), "terrain_init");
 #endif
     /* Every image, so MQTT builds can run without a USB console. */
@@ -141,16 +142,17 @@ usermain (void)
     app_check(barcode_start(), "barcode_start");
 #endif
     app_check(communication_start(), "communication_start");
-#if !IR_CALIBRATION_ONLY && !IR_MOTOR_TEST
+#if !IR_MOTOR_TEST
     app_check(terrain_start(), "terrain_start");
-
+#endif
+#if !IR_CALIBRATION_ONLY && !IR_MOTOR_TEST
     tm_printf((UB *)"all subsystems started\n\n");
 #elif IR_MOTOR_TEST
     tm_printf(
         (UB *)"IR MOTOR TEST: continuous line following; no run cutoff\n\n");
 #else
     tm_printf((UB *)"IR calibration only: DO on GP26 left, GP27 right, "
-                    "GP28 barcode\n\n");
+                    "GP28 barcode; compass printed for the spin\n\n");
 #endif
 
 #if APP_TEST && !IR_CALIBRATION_ONLY && !IR_MOTOR_TEST

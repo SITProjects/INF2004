@@ -13,9 +13,12 @@
  * With TERRAIN_DEBUG_PRINT_MS set it also prints pitch, roll, the hump
  * state, the turn rate and the speed state, or the calibration progress
  * until calibrated.
+ * It also reads the magnetometer (terrain_compass.h) on every update and,
+ * with TERRAIN_COMPASS_PRINT_MS set, prints it for the calibration spin.
  */
 
 #include "terrain.h"
+#include "terrain_compass.h"
 #include "terrain_config.h"
 #include "terrain_fault.h"
 #include "terrain_monitor.h"
@@ -36,6 +39,9 @@ static void monitor_task (INT stacd, void * p_exinf);
 static bool print_events (void);
 static void print_event (terrain_event_t const * p_event);
 static void print_summary (void);
+#if TERRAIN_COMPASS_PRINT_MS > 0
+static void print_compass (void);
+#endif
 #if TERRAIN_DEBUG_PRINT_MS > 0
 static void print_status (void);
 static void print_calibrating (terrain_data_t const * p_data);
@@ -84,6 +90,10 @@ monitor_task (INT stacd, void * p_exinf)
     }
     tm_printf((UB *)"terrain: IMU ready; calibrating, keep the car still "
                     "on level ground\n");
+    terrain_status_t const compass = terrain_compass_init();
+    tm_printf((UB *)"terrain: compass %s\n",
+              (TERRAIN_OK == compass) ? "ready"
+                                      : terrain_monitor_status_text(compass));
 
     terrain_calib_state_t last_state = TERRAIN_CALIB_CALIBRATING;
     bool b_last_fault = false;
@@ -92,9 +102,13 @@ monitor_task (INT stacd, void * p_exinf)
     /* Real time, not loop passes: a pass can take longer than 10 ms. */
     uint64_t last_print_us = terrain_platform_time_us();
 #endif
+#if TERRAIN_COMPASS_PRINT_MS > 0
+    uint64_t last_compass_us = terrain_platform_time_us();
+#endif
     for (;;)
     {
         (void)terrain_monitor_update();
+        terrain_compass_update();
 
         terrain_calib_info_t info;
         if (terrain_monitor_get_calibration(&info) == TERRAIN_OK)
@@ -136,6 +150,15 @@ monitor_task (INT stacd, void * p_exinf)
         {
             last_print_us = now_us;
             print_status();
+        }
+#endif
+#if TERRAIN_COMPASS_PRINT_MS > 0
+        uint64_t const compass_us = terrain_platform_time_us();
+        if ((compass_us - last_compass_us) >=
+            ((uint64_t)TERRAIN_COMPASS_PRINT_MS * US_PER_MS))
+        {
+            last_compass_us = compass_us;
+            print_compass();
         }
 #endif
         (void)tk_dly_tsk(UPDATE_PERIOD_MS);
@@ -257,6 +280,34 @@ print_event (terrain_event_t const * p_event)
     tm_printf((UB *)" t %d.%02d s\n", time_10ms / HUNDREDTHS_PER_UNIT,
               time_10ms % HUNDREDTHS_PER_UNIT);
 }
+
+#if TERRAIN_COMPASS_PRINT_MS > 0
+/*
+ * Raw car-axis field, heading in tenths of a degree, and the X/Y centre
+ * (the offset to set) and span seen so far.
+ */
+static void
+print_compass (void)
+{
+    terrain_compass_t reading;
+    if (!terrain_compass_get(&reading))
+    {
+        tm_printf((UB *)"terrain: compass no reading (%d samples)\n",
+                  (INT)reading.samples);
+        return;
+    }
+    terrain_compass_range_t range;
+    terrain_compass_get_range(&range);
+    tm_printf((UB *)"terrain: compass x %d y %d z %d heading %d ddeg "
+                    "centre %d %d span %d %d\n",
+              (INT)reading.x, (INT)reading.y, (INT)reading.z,
+              (INT)reading.heading_ddeg,
+              ((INT)range.min_x + (INT)range.max_x) / 2,
+              ((INT)range.min_y + (INT)range.max_y) / 2,
+              (INT)range.max_x - (INT)range.min_x,
+              (INT)range.max_y - (INT)range.min_y);
+}
+#endif
 
 #if TERRAIN_DEBUG_PRINT_MS > 0
 /* One line of pitch, roll, hump state, highest hump, turning and speed;

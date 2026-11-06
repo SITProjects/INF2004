@@ -19,7 +19,7 @@ subsystem, ask its owner or open a pull request for them to review.
 | motion | Two H-bridge DC motors and wheel encoders: speed loop, distance moves, turns and line following in `tMotion` | | felicia-chuaxy | `app_program/motion/` | `testing/motion/` |
 | line_follow | Two digital IR sensors → target headings (turn while black) and searches for `tMotion` | | kaiwenteoo | `app_program/line_follow/` | `testing/line_follow/` |
 | barcode | Third digital IR sensor → Code 39 text (uses the `tBarcode` slot reserved under line_follow) | | *kaiwenteoo, to confirm* | `app_program/barcode/` | `testing/barcode/` |
-| terrain | GY-511 accelerometer, calibration and corrected readings | | ann | `app_program/terrain/` | `testing/terrain/` |
+| terrain | GY-511 accelerometer, calibration and corrected readings; magnetometer as a compass | | ann | `app_program/terrain/` | `testing/terrain/` |
 | communication | Wi-Fi connection status | | Jerome-4469 | `app_program/communication/` | `testing/communication/` |
 
 Shared files (`app_program/app_main.c`, `app_program/app.h`,
@@ -205,6 +205,7 @@ Rows marked *proposed* or *interim* are not agreed yet.
 | IF-06 | obstacle → motion | Uses IF-01, IF-02, IF-03 | `motion_mbf_cmd`, `motion_flg_ctrl` (`MOTION_FLG_INHIBIT`), `motion_flg_event` | interim tMission/tSafety for obstacles, only while `OBSTACLE_AVOID_ENABLED`: INHIBIT from start-up until a confirmed clear path and on every stop; box-bypass commands; FOLLOW to resume; a latched FAULT keeps INHIBIT until reboot. The only task that sets or clears INHIBIT and the only consumer of MOVE_DONE (clears every `MOTION_EVT_` bit before each command); hands both to tSafety/tMission when they exist | proposed by obstacle; felicia-chuaxy to agree |
 | IF-08 | barcode → line_follow | One word, latest value (no lock, never waits) | `line_follow_set_turn()` | `line_turn_t` for the next cross junction: STRAIGHT (default), LEFT, RIGHT, UTURN; set on each decoded barcode, used by one junction then STRAIGHT again. The barcode-to-turn mapping is still to be set (`barcode.c`, `turn_for()`) | *proposed* (2026-11-06) |
 | IF-07 | obstacle → any | Event flag + shared copy, sequence-checked (no lock, never waits) | `obstacle_flg_event` (FLG_OBSTACLE), `obstacle_get_state()` | STOP, CRITICAL and FAULT levels; RESULT edge on a new result sequence (one consumer clears it); `obstacle_shared_state_t`: packed result, its geometry (mm from the servo pivot), stop request, bypass state and fault reason | proposed by obstacle |
+| IF-09 | terrain → any | Shared copy under the terrain spin lock (held for a struct copy, never waits) | `terrain_compass_get()` (`app_program/terrain/terrain_compass.h`) | `terrain_compass_t`: valid flag, raw field on the car's X, Y, Z (counts), heading in tenths of a degree counter-clockwise from magnetic north (+ is left, like IF-05), sample count; updated every 10 ms by `terrain_task`. Read by line_follow for its trace only (not steering) | *proposed* (2026-11-06) |
 
 Each interface is tested by at least one integration test
 (`testing/integration/TEST_LOG.md`).

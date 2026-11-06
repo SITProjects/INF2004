@@ -25,6 +25,7 @@
 
 #include "terrain.h"
 #include "../test_report.h"
+#include "terrain_compass.h"
 #include "terrain_config.h"
 #include "terrain_detect.h"
 #include "terrain_event.h"
@@ -219,6 +220,17 @@ terrain_test (void)
                                terrain_monitor_data_sample_count(&before)) >=
                     MIN_SAMPLES),
                "IMU delivers samples at about 100 Hz");
+
+    /* TER-U29: the compass is set up and reads once per update. */
+    terrain_compass_t compass_before = {0};
+    terrain_compass_t compass_after = {0};
+    (void)terrain_compass_get(&compass_before);
+    (void)tk_dly_tsk(SAMPLE_WINDOW_MS);
+    bool const b_compass = terrain_compass_get(&compass_after);
+    TEST_CHECK("TER-U29",
+               b_compass && ((uint16_t)(compass_after.samples -
+                                        compass_before.samples) >= MIN_SAMPLES),
+               "compass delivers readings at about 100 Hz");
 
     /* TER-U02: calibration becomes VALID within 5 s of power-up. */
     terrain_calib_info_t info = {0};

@@ -32,8 +32,9 @@
 /**
  * @brief While tracking under line control, print one trace line on every
  * raw sensor change and at least this often, in ms: "LT t=target
- * h=heading d=distance LR" (console, so MQTT builds publish it too). 0
- * turns the trace off.
+ * h=heading d=distance LR c=compass m=fieldX,fieldY" (console, so MQTT
+ * builds publish it too; c is -1 without a compass reading). 0 turns the
+ * trace off.
  */
 #define LINE_TRACE_MS 200u
 

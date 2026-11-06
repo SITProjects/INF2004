@@ -18,6 +18,7 @@
 #include "../motion/motion.h"
 #include "../motion/motion_command.h"
 #include "../motion/motion_command_config.h"
+#include "../terrain/terrain_compass.h"
 #if TM_MQTT
 #include "../communication/telemetry_queue.h"
 #endif
@@ -28,6 +29,7 @@
  * fits; telemetry takes up to 63 characters, so only extreme values miss
  * MQTT (the console line is still printed). */
 #define REPORT_TEXT_SIZE 80u
+#define DDEG_PER_DEG 10
 
 /* Static data. */
 ID line_follow_tid_sense;
@@ -184,10 +186,18 @@ report (line_request_t const * p_request, line_track_input_t const * p_in)
     if (p_in->b_control && (b_sensors || (trace_ms >= LINE_TRACE_MS)))
     {
         trace_ms = 0u;
-        tm_printf((UB *)"LT t=%d h=%d d=%d %u%u\n",
+        /* Compass heading (whole degrees, + is left; -1 without a reading)
+         * and raw field, to compare with the wheels' h. One call, so other
+         * tasks' output cannot split the line. */
+        terrain_compass_t compass;
+        INT const compass_deg = terrain_compass_get(&compass)
+                                    ? ((INT)compass.heading_ddeg / DDEG_PER_DEG)
+                                    : -1;
+        tm_printf((UB *)"LT t=%d h=%d d=%d %u%u c=%d m=%d,%d\n",
                   (INT)p_request->target_heading_deg, (INT)p_in->heading_deg,
                   (INT)p_in->distance_mm, (UINT)p_in->b_left_black,
-                  (UINT)p_in->b_right_black);
+                  (UINT)p_in->b_right_black, compass_deg, (INT)compass.x,
+                  (INT)compass.y);
     }
 #else
     (void)trace_ms;

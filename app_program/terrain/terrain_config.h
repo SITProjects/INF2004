@@ -35,6 +35,46 @@
 #endif
 
 /*
+ * Magnetometer (compass) rate and range, as imu_mag_odr_t and
+ * imu_mag_gain_t values from drv_imu.h. 75 Hz gives most 10 ms updates a
+ * fresh sample. +/-1.3 gauss covers the Earth's field (0.25 to 0.65
+ * gauss) with room for the car's own; raise it if readings overflow.
+ */
+#ifndef TERRAIN_MAG_ODR
+#define TERRAIN_MAG_ODR IMU_MAG_ODR_75HZ
+#endif
+#ifndef TERRAIN_MAG_GAIN
+#define TERRAIN_MAG_GAIN IMU_MAG_GAIN_1_3_GAUSS
+#endif
+
+/*
+ * Hard-iron offset, in car axes and magnetometer counts: the field of the
+ * car's own magnets (motors, speaker), which turns with the car. Measure
+ * it with the calibration spin (TER-U28): the "centre" values printed
+ * after two slow full turns. 0 until measured; the heading is then off
+ * by up to tens of degrees, but raw X and Y are still logged.
+ */
+#ifndef TERRAIN_MAG_OFFSET_X
+#define TERRAIN_MAG_OFFSET_X 0
+#endif
+#ifndef TERRAIN_MAG_OFFSET_Y
+#define TERRAIN_MAG_OFFSET_Y 0
+#endif
+
+/*
+ * Print the compass (raw X, Y, Z, heading and the X/Y centre and span
+ * seen so far) this often, in ms; 0 never. On in the IR_CALIBRATION=1
+ * image, where the motors stay off, for the calibration spin.
+ */
+#ifndef TERRAIN_COMPASS_PRINT_MS
+#if IR_CALIBRATION_ONLY
+#define TERRAIN_COMPASS_PRINT_MS 250
+#else
+#define TERRAIN_COMPASS_PRINT_MS 0
+#endif
+#endif
+
+/*
  * Accelerometer data rate, as an imu_accel_odr_t value from drv_imu.h.
  * Matches the 100 Hz update rate.
  */
