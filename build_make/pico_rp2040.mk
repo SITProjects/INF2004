@@ -485,6 +485,11 @@ MQTT_CORE_OBJS := ./mtkernel_3/lwip/apps/mqtt/mqtt.o
 # Leave the old mqtt_utk.c demo unlinked; keep the upstream protocol client.
 
 CFLAGS += -DTM_MQTT=1
+# console_mirror: every console write also goes to MQTT (topic /console);
+# the larger lwIP output buffer holds a 512-byte console batch beside a
+# telemetry record.
+LFLAGS += -Wl,--wrap=tm_snd_dat
+CFLAGS += -DMQTT_OUTPUT_RINGBUF_SIZE=1024
 
 OBJS += $(MQTT_CORE_OBJS)
 C_DEPS += $(MQTT_CORE_OBJS:.o=.d)

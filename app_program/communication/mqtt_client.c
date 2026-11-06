@@ -10,6 +10,7 @@
 #if TM_MQTT
 #include <stdint.h>
 #include "telemetry_queue.h"
+#include "../console_mirror/console_mirror_mqtt.h"
 #include "lwip/apps/mqtt.h"
 #include "lwip/ip_addr.h"
 #include "lwip/sys.h"
@@ -49,6 +50,7 @@ mqtt_client_service (bool b_network_up)
 {
     uint32_t now_ms = sys_now();
     telemetry_complete();
+    console_mirror_mqtt_service(client);
 
     if (!b_network_up)
     {

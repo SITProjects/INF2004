@@ -34,10 +34,12 @@
  */
 
 #include "app.h"
+#include "console_mirror/console_mirror.h"
 
 /* Private types, constants, and macros. */
 #define WATCHDOG_TICK 0x4005802Cu
 #define WATCHDOG_TICK_ENABLE 0x200u
+#define TEST_MQTT_WAIT_MS 20000u
 
 /* Static data. */
 
@@ -123,8 +125,9 @@ usermain (void)
 #endif
 #if !IR_CALIBRATION_ONLY && !IR_MOTOR_TEST
     app_check(terrain_init(), "terrain_init");
-    app_check(communication_init(), "communication_init");
 #endif
+    /* Every image, so MQTT builds can run without a USB console. */
+    app_check(communication_init(), "communication_init");
 
     /* Phase 2: every subsystem starts its tasks. */
 #if !IR_CALIBRATION_ONLY
@@ -137,9 +140,9 @@ usermain (void)
 #if !IR_MOTOR_TEST
     app_check(barcode_start(), "barcode_start");
 #endif
+    app_check(communication_start(), "communication_start");
 #if !IR_CALIBRATION_ONLY && !IR_MOTOR_TEST
     app_check(terrain_start(), "terrain_start");
-    app_check(communication_start(), "communication_start");
 
     tm_printf((UB *)"all subsystems started\n\n");
 #elif IR_MOTOR_TEST
@@ -156,6 +159,13 @@ usermain (void)
      * the initial task, while the system is running. Tests may call
      * tk_dly_tsk() to let the other tasks work for a while.
      */
+#if TM_MQTT
+    /* Start once the console reaches MQTT, so no result waits in RAM. */
+    if (!console_mirror_wait_online(TEST_MQTT_WAIT_MS))
+    {
+        tm_printf((UB *)"[TEST] MQTT not connected; running anyway\n");
+    }
+#endif
     tm_printf((UB *)"[TEST] === test run start ===\n");
     obstacle_test();
     motion_test();

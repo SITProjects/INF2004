@@ -299,7 +299,11 @@ Each option goes through the same steps:
 
 The makefile also has `MQTT=1` (MQTT over the `NET=lwip` stack). It reads the
 broker address and topic from the same `config/wifi_secrets.h`. This guide
-does not cover it.
+does not cover it, except for one thing: with `MQTT=1`, everything printed
+on the console is also published, line by line with the uptime in ms, to
+`<topic>/console` (`app_program/console_mirror/`), so a run needs no USB
+cable. Every image then joins Wi-Fi, calibration images included, and a
+`TEST=1` image waits up to 20 s for the broker before its tests start.
 
 ---
 
