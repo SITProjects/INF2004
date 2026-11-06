@@ -8,6 +8,8 @@
 #define NARROW_US 33000u
 #define RATIO_X10 25u
 #define MAX_WIDTHS 300u
+/* The 2026-11-06 car read black 30 ms short of a 75 ms narrow element. */
+#define BAR_BIAS_US 13000u
 
 static unsigned int failures;
 static uint32_t widths[MAX_WIDTHS];
@@ -191,7 +193,8 @@ test_scan_assembly (void)
     bool const b_waiting =
         (BARCODE_SCAN_BUSY == barcode_scan_poll(&scan, end + NARROW_US * 3u));
     bool const b_done =
-        (BARCODE_SCAN_DONE == barcode_scan_poll(&scan, end + NARROW_US * 7u));
+        (BARCODE_SCAN_DONE ==
+         barcode_scan_poll(&scan, end + BARCODE_QUIET_MAX_US + 1u));
     bool const b_widths =
         (scan.count == count) &&
         (0 == memcmp(scan.widths, sent, count * sizeof(uint32_t)));
@@ -207,13 +210,14 @@ test_scan_assembly (void)
     barcode_scan_reset(&scan);
     barcode_scan_init(&scan, false, 0u);
     uint32_t const first_end = feed_scan(&scan, count, 1000u, &b_early);
-    barcode_scan_result_t const next =
-        barcode_scan_edge(&scan, first_end + NARROW_US * 8u, true);
+    barcode_scan_result_t const next = barcode_scan_edge(
+        &scan, first_end + BARCODE_QUIET_MAX_US + 1000u, true);
     bool const b_split = (BARCODE_SCAN_DONE == next) && (scan.count == count);
     barcode_scan_reset(&scan);
     bool const b_restart =
         (BARCODE_SCAN_BUSY ==
-         barcode_scan_edge(&scan, first_end + NARROW_US * 8u, true)) &&
+         barcode_scan_edge(&scan, first_end + BARCODE_QUIET_MAX_US + 1000u,
+                           true)) &&
         scan.b_active && (0u == scan.count);
     check("BT05 the next symbol's first bar ends the previous scan",
           b_split && b_restart);
@@ -294,6 +298,26 @@ test_chatter (void)
         barcode_filter_edge(&filter, 240000u, false, &b_new) && !b_new;
     check("BT08 after a speck the levels stay in step with the bars",
           b_speck && b_swallowed && b_bar && b_white);
+
+    /* As on the car: black reads thin, white wide, and one white gap
+     * stretches as the speed changes. It must stay one scan. */
+    uint32_t const biased = encode("*A*", RATIO_X10, 0u);
+    uint32_t widest = 1u;
+    for (uint32_t i = 0u; i < biased; i++)
+    {
+        widths[i] = ((i % 2u) == 0u) ? widths[i] - BAR_BIAS_US
+                                     : widths[i] + BAR_BIAS_US;
+        widest =
+            (((i % 2u) != 0u) && (widths[i] > widths[widest])) ? i : widest;
+    }
+    widths[widest] = (widths[widest] * 14u) / 10u;
+    barcode_scan_result_t const whole = chatter_scan(&scan, biased, 1u);
+    check("BT09 thin bars and a stretched white gap stay one scan and decode",
+          (BARCODE_SCAN_DONE == whole) && (biased == scan.count) &&
+              (BARCODE_CODE39_OK ==
+               barcode_code39_decode(scan.widths, scan.count, text,
+                                     sizeof(text), &b_reversed)) &&
+              (0 == strcmp("A", text)));
 }
 
 int

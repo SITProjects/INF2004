@@ -40,9 +40,11 @@
 
 /**
  * @brief A white gap this many times the narrowest element so far ends a
- * scan (the quiet zone). Code 39 elements are at most about 3 narrow wide.
+ * scan (the quiet zone), up to BARCODE_QUIET_MAX_US. Code 39 elements are
+ * at most about 3 narrow wide, but the sensor shrinks black bars: bars of
+ * 40 ms and white gaps of 240 ms on the car (2026-11-06), so 6 cut scans.
  */
-#define BARCODE_QUIET_FACTOR 6u
+#define BARCODE_QUIET_FACTOR 16u
 
 /**
  * @brief Longest white gap, or black bar, inside a scan, in us; also the
