@@ -34,8 +34,15 @@ SHOWN_EVENT = re.compile(
     r"remote: |barcode: (FAIL|\S+ dir=)|line (JUNCTION|SEARCH|STOP)"
     r"|obstacle: (stopped|started|avoid |width )|mqtt: |terrain: COLLISION")
 
+EDGE_READOUT = re.compile(r"barcode: B=\d raw=\d+ kept=(\d+)")
+READOUT_S = 0.5  # The car prints edge counts this often.
+PASS_END_READOUTS = 3  # This many in a row with no edges end a pass.
+PASS_MIN_EDGES = 5  # Fewer is a stray mark, not a barcode.
+FULL_BARCODE_EDGES = 30  # "*X*" has 29 elements between 30 edges.
+
 lock = threading.Lock()
 subscribers = []  # (connection, topic filter)
+pass_edges = []  # Edges per readout in this pass, quiet readouts included.
 state = {
     "car_connected": False,
     "run": "unknown",
@@ -75,6 +82,22 @@ def note_car(message):
                                       "range_mm": values["od"]}
 
 
+def note_edges(kept):
+    """Add one edge readout; a finished pass goes in the events. Hold lock."""
+    if kept or pass_edges:
+        pass_edges.append(kept)
+    if (len(pass_edges) < PASS_END_READOUTS
+            or any(pass_edges[-PASS_END_READOUTS:])):
+        return
+    edges = sum(pass_edges)
+    seconds = (len(pass_edges) - PASS_END_READOUTS - 1) * READOUT_S
+    pass_edges.clear()
+    if edges >= PASS_MIN_EDGES:
+        state["events"].appendleft(
+            f"{time.strftime('%H:%M:%S')} barcode pass: {edges} edges in "
+            f"{seconds:.1f} s (a full read needs {FULL_BARCODE_EDGES})")
+
+
 def note_console(text):
     """Update the dashboard state from one console line."""
     message = text.split(" ", 1)[-1]
@@ -91,6 +114,9 @@ def note_console(text):
         match = re.search(r"barcode: (\S+) dir=\w+ .*turn=(\w+)", message)
         if match:
             state["barcode"], state["barcode_action"] = match.groups()
+        match = EDGE_READOUT.search(message)
+        if match:
+            note_edges(int(match.group(1)))
         match = re.search(r"line JUNCTION (\w+)", message)
         if match:
             state["junction"] = match.group(1)

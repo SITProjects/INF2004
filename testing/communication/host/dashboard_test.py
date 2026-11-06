@@ -167,6 +167,21 @@ def run(folder):
           ("reverse" in [m for _, m in car.received])
           and get_state()["run"] == "stopped")
 
+    # A real pass from 2026-11-06: one quiet readout inside it, then stray.
+    for kept in (2, 4, 6, 0, 3, 2, 0, 0, 0, 1, 0, 0, 0):
+        car.console(f"barcode: B=1 raw=9 kept={kept}")
+    settle(car)
+    passes = [e for e in get_state()["events"] if "barcode pass" in e]
+    check("D20 a pass shows its edges and time once, stray edges do not",
+          len(passes) == 1 and "17 edges in 2.5 s" in passes[0])
+    car.console("barcode: B=1 raw=9 kept=4")
+    settle(car)
+    check("D21 a pass still going is not shown yet",
+          len([e for e in get_state()["events"]
+               if "barcode pass" in e]) == 1)
+    for kept in (0, 0, 0):
+        car.console(f"barcode: B=0 raw=0 kept={kept}")
+
     car.console("barcode: F dir=fwd elements=29 narrow=3 us turn=LEFT")
     car.console("line JUNCTION LEFT t=1 h=2 d=3")
     settle(car)
