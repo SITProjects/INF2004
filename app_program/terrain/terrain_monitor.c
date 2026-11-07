@@ -1024,10 +1024,20 @@ static void
 detect_sample (terrain_vec3_t const * p_accel, terrain_hint_t const * p_hint,
                uint32_t now_10ms)
 {
+    /* Moves, pivots and hands all fake a lean: drop any hump so far. */
+    if (!p_hint->b_following)
+    {
+        detect_word = terrain_detect_hump_clear(detect_word);
+        terrain_height_clear_hump(&height);
+    }
     /* A held roll is an old value, not news: pause the humps with it. */
-    if ((tilt.flags & TERRAIN_TILT_ROLL_HELD) == 0u)
+    else if ((tilt.flags & TERRAIN_TILT_ROLL_HELD) == 0u)
     {
         detect_hump(p_accel, now_10ms);
+    }
+    else
+    {
+        /* Paused. */
     }
     detect_collision(p_accel, p_hint, now_10ms);
 }

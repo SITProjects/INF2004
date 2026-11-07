@@ -171,18 +171,18 @@
  * applied, of the car standing still on a floor checked to be flat.
  * Boot calibration compares against it to decide whether the car is
  * level. Record it again whenever the sensor is remounted.
- * Current values: bench reading with the loose sensor taped flat, chip
- * up, on a flat desk (TER-U06, 2026-11-03; 1.4 degrees from the
- * 2026-11-02 reading), before the sensor was mounted on the car.
+ * Current values: the mean of three boots with the sensor mounted, on the
+ * floor (2026-11-07, all within 0.9 degrees of the mean), from the
+ * `terrain: calibration` line.
  */
 #ifndef TERRAIN_LEVEL_REF_X
-#define TERRAIN_LEVEL_REF_X (-0.366f)
+#define TERRAIN_LEVEL_REF_X (-0.285f)
 #endif
 #ifndef TERRAIN_LEVEL_REF_Y
-#define TERRAIN_LEVEL_REF_Y (0.922f)
+#define TERRAIN_LEVEL_REF_Y (-0.930f)
 #endif
 #ifndef TERRAIN_LEVEL_REF_Z
-#define TERRAIN_LEVEL_REF_Z (8.522f)
+#define TERRAIN_LEVEL_REF_Z (8.330f)
 #endif
 
 /* Samples in one calibration attempt: 200 is 2 s at 100 Hz. */
@@ -226,14 +226,13 @@
  * Largest allowed angle, in degrees, between the measured gravity
  * direction and the level reference. Above it the car is not on level
  * ground and calibration stops with NOT_LEVEL.
- * 30 for now: the reference above is from before the sensor was mounted, so
- * every boot ended NOT_LEVEL and tilt and humps never ran (to 2026-11-07).
- * Calibration still zeroes on the car as it stands, so power it up level.
- * TODO(calibrate): record the reference from the `terrain: calibration`
- * line, then bring this back to a few degrees.
+ * Calibration zeroes on the car as it stands, so this is what stops a car
+ * powered up on a slope from reading tilted for the whole run. Boots on the
+ * floor agree within 1 degree; 2 degrees left little room for a floor that
+ * is not quite flat, and NOT_LEVEL turns tilt and humps off.
  */
 #ifndef TERRAIN_LEVEL_MAX_DEG
-#define TERRAIN_LEVEL_MAX_DEG 30.0f
+#define TERRAIN_LEVEL_MAX_DEG 5.0f
 #endif
 
 /*
@@ -295,6 +294,15 @@
  * 2 mm). */
 #ifndef TERRAIN_HUMP_LEVEL_DEG
 #define TERRAIN_HUMP_LEVEL_DEG 1.1f
+#endif
+
+/*
+ * Humps are looked for only while following the line at this speed or more,
+ * in mm/s. 15 of 17 false humps on 2026-11-07 came from moves at 300 mm/s,
+ * pivots and the car being handled, and one more from pulling away.
+ */
+#ifndef TERRAIN_HUMP_MIN_SPEED_MM_S
+#define TERRAIN_HUMP_MIN_SPEED_MM_S 20
 #endif
 
 /* Samples in a row to start a climb or a descent: 5 = 50 ms. */
