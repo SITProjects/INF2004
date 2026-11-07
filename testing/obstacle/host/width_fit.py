@@ -23,6 +23,7 @@ SCALE_MM_PER_US = 0.1700  # OBSTACLE_SOUND_MM_PER_10K_US / 10000
 ECHO_OFFSET_MM = -18.0  # OBSTACLE_ECHO_OFFSET_MM
 RADIAL_OFFSET_MM = 0.0  # OBSTACLE_SENSOR_RADIAL_OFFSET_MM
 EDGE_JUMP_US = 466  # OBSTACLE_EDGE_JUMP_US
+END_BEHIND_US = 100  # OBSTACLE_END_BEHIND_US
 GRID_FIRST, GRID_LAST, GRID_STEP, CENTRE = 50, 130, 10, 90
 MIN_VALID_PINGS = 3
 STATION_TOLERANCE_MM = 40.0
@@ -73,11 +74,21 @@ def is_hit(one_pass, angle, centre_us):
     return reading[1] < centre_us / math.cos(off) + EDGE_JUMP_US
 
 
+def end_is_edge(one_pass, centre_us, end, other):
+    """As obstacle_width_end_is_edge(): False for an end behind the face."""
+    off = math.radians(abs(end - CENTRE))
+    behind_us = centre_us / math.cos(off) + END_BEHIND_US
+    return is_hit(one_pass, other, centre_us) or one_pass[end][1] < behind_us
+
+
 def edge(one_pass, centre_us, side):
     """Return (hit angle, edge found) for side -1 (left) or +1 (right)."""
     end = GRID_FIRST if side < 0 else GRID_LAST
+    other = GRID_LAST if side < 0 else GRID_FIRST
     for angle in range(end, CENTRE, -side * GRID_STEP):
-        if is_hit(one_pass, angle, centre_us):
+        if is_hit(one_pass, angle, centre_us) and (
+            angle != end or end_is_edge(one_pass, centre_us, end, other)
+        ):
             return angle, angle != end
     return CENTRE, True
 

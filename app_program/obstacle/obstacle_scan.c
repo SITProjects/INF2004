@@ -948,8 +948,10 @@ static void
 start_fine_side (bool b_right, ultrasonic_result_t end, uint16_t end_echo_us)
 {
     uint8_t end_index = b_right ? LAST_INDEX : 0u;
-    if (obstacle_width_classify(end, end_echo_us, centre_echo_us, end_index) ==
-        OBSTACLE_WIDTH_HIT)
+    if ((obstacle_width_classify(end, end_echo_us, centre_echo_us, end_index) ==
+         OBSTACLE_WIDTH_HIT) &&
+        obstacle_width_end_is_edge(end_echo_us, centre_echo_us, end_index,
+                                   b_right ? b_left_clear : b_right_clear))
     {
         record_hit(b_right, end_index, end_echo_us);
         next_fine_side(b_right);

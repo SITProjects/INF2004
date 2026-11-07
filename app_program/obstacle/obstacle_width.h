@@ -73,6 +73,20 @@ typedef struct
 uint32_t obstacle_width_hit_limit_us (uint16_t centre_echo_us, uint8_t index);
 
 /**
+ * @brief Whether an end that hit is the obstacle's outermost hit.
+ * @param echo_us The end's echo, from a HIT.
+ * @param centre_echo_us Median near-vote echo of the confirming centre group.
+ * @param index Grid index of the end.
+ * @param b_other_clear The other end is clear, so the car goes that way.
+ * @return False only with the other end clear and the echo at least
+ *         OBSTACLE_END_BEHIND_US behind a flat face: the width then walks
+ *         inward. With no clear end the edges decide which way the car goes,
+ *         so a blocked side must not gain one.
+ */
+bool obstacle_width_end_is_edge (uint16_t echo_us, uint16_t centre_echo_us,
+                                 uint8_t index, bool b_other_clear);
+
+/**
  * @brief Classify one completed sweep position against the centre echo.
  * @param measurement Position result after retries: VALID, NO_ECHO or a
  *        fault. PENDING is not a completed result and classifies INVALID.

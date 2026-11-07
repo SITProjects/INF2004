@@ -153,6 +153,15 @@
 #define OBSTACLE_EDGE_JUMP_US 466u
 
 /*
+ * An end hit this far behind that flat face, with the other end clear, is
+ * something beside the obstacle: on 2026-11-07 ends 125 and 157 us behind it
+ * read a 16 cm obstacle as 256 and 259 mm. The width walks on inward, and the
+ * end stays blocked for choosing a side. Ends on the obstacle read 30 to
+ * 245 us in front of it.
+ */
+#define OBSTACLE_END_BEHIND_US 100u
+
+/*
  * Servo timing: preserve the existing uncalibrated one-second wait.
  * Replace these after measuring travel and settling under actual load.
  *

@@ -179,6 +179,7 @@ static uint16_t close_up_width (uint8_t left, uint8_t right, uint16_t left_us,
                                 uint16_t right_us, uint16_t centre_us,
                                 uint16_t * p_estimate);
 static bool width_close_up_valid (void);
+static bool width_end_is_edge_valid (void);
 static bool avoid_fault_valid (void);
 static bool avoid_obstacles_valid (void);
 static bool avoid_angle_valid (void);
@@ -300,6 +301,8 @@ obstacle_test (void)
                "avoid: black far from the line is not the line");
     TEST_CHECK("OBS-U74", width_close_up_valid(),
                "width: close up, the corners' range sets the width");
+    TEST_CHECK("OBS-U75", width_end_is_edge_valid(),
+               "width: an end behind the face is not the obstacle");
 
     TEST_CHECK("OBS-U10", packed_obstacle_fields_valid(),
                "packed obstacle fields clamp without changing neighbours");
@@ -3113,6 +3116,28 @@ width_close_up_valid (void)
     ok = ok && (close_up_width(1u, 6u, 1116u, 946u, 929u, &grid) == grid);
     ok = ok && (close_up_width(2u, 7u, 1033u, 1034u, 954u, &grid) == grid);
     return ok && (close_up_width(0u, 7u, 1185u, 1009u, 945u, &grid) == grid);
+}
+
+/* OBS-U75: ends logged on 2026-11-07. A flat face at 958 us reads 1251 us at
+ * the 130 degree end, so 1351 us is the first echo behind it. */
+static bool
+width_end_is_edge_valid (void)
+{
+    /* Beside a 16 cm obstacle, the other end clear. */
+    bool ok = !obstacle_width_end_is_edge(1408u, 958u, 8u, true);
+    ok = ok && !obstacle_width_end_is_edge(1377u, 959u, 0u, true);
+
+    /* In front of the face: on the obstacle, or what blocks that side. */
+    ok = ok && obstacle_width_end_is_edge(1148u, 948u, 0u, true);
+    ok = ok && obstacle_width_end_is_edge(1168u, 918u, 0u, true);
+    ok = ok && obstacle_width_end_is_edge(883u, 864u, 8u, true);
+
+    /* The limit itself. */
+    ok = ok && obstacle_width_end_is_edge(1350u, 958u, 8u, true);
+    ok = ok && !obstacle_width_end_is_edge(1351u, 958u, 8u, true);
+
+    /* With no clear end, a blocked side must not gain an edge. */
+    return ok && obstacle_width_end_is_edge(1408u, 958u, 8u, false);
 }
 
 /* OBS-U69: the car stopped on heading 0. A pass that drifted 7 degrees

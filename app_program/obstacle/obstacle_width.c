@@ -44,6 +44,17 @@ obstacle_width_hit_limit_us (uint16_t centre_echo_us, uint8_t index)
     return (uint32_t)(flat_us + 0.5f) + OBSTACLE_EDGE_JUMP_US;
 }
 
+bool
+obstacle_width_end_is_edge (uint16_t echo_us, uint16_t centre_echo_us,
+                            uint8_t index, bool b_other_clear)
+{
+    uint32_t const behind_us =
+        (obstacle_width_hit_limit_us(centre_echo_us, index) -
+         OBSTACLE_EDGE_JUMP_US) +
+        OBSTACLE_END_BEHIND_US;
+    return !b_other_clear || ((uint32_t)echo_us < behind_us);
+}
+
 obstacle_width_class_t
 obstacle_width_classify (ultrasonic_result_t measurement, uint16_t echo_us,
                          uint16_t centre_echo_us, uint8_t index)
