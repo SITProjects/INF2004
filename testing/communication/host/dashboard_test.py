@@ -241,6 +241,18 @@ def run(folder):
     check("D18 status lines stay out of the events",
           not any("CAR" in event for event in state["events"]))
 
+    car.console("terrain: calibration VALID tilt 7.3 deg "
+                "reading 10 20 9800 mm/s2")
+    car.console("terrain: hump LEVEL height 10 mm")
+    car.console("terrain: hump ASCENDING")
+    settle(car)
+    events = get_state()["events"]
+    check("D26 calibration and each finished hump show as events, not the "
+          "steps of a hump",
+          any("terrain: calibration VALID" in e for e in events)
+          and any("hump LEVEL height 10" in e for e in events)
+          and not any("hump ASCENDING" in e for e in events))
+
     # The console stopped after a stall on 2026-11-07: telemetry still came.
     car.telemetry("seq=716 captured_ms=689470 barcode A rev")
     settle(car)
@@ -269,17 +281,6 @@ def run(folder):
     car.close()
     time.sleep(0.3)
     state = get_state()
-    car.console("terrain: calibration VALID tilt 7.3 deg "
-                "reading 10 20 9800 mm/s2")
-    car.console("terrain: hump LEVEL height 10 mm")
-    car.console("terrain: hump ASCENDING")
-    settle(car)
-    events = get_state()["events"]
-    check("D26 calibration and each finished hump show as events, not the "
-          "steps of a hump",
-          any("terrain: calibration VALID" in e for e in events)
-          and any("hump LEVEL height 10" in e for e in events)
-          and not any("hump ASCENDING" in e for e in events))
     check("D14 a lost car shows as offline with its state unknown",
           not state["car_connected"] and state["run"] == "unknown")
     car = FakeCar()
