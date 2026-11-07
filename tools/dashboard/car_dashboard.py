@@ -32,7 +32,8 @@ MAP_SIZE = 8  # REMOTE_MAP_SIZE
 BARCODE_TEXT = re.compile(r"^[0-9A-Z.$/+%-]{1,3}$")  # REMOTE_TEXT_MAX, no space
 SHOWN_EVENT = re.compile(
     r"remote: |barcode: FAIL|line (JUNCTION|SEARCH|STOP|BARCODE)"
-    r"|obstacle: (stopped|started|avoid |width )|mqtt: |terrain: COLLISION")
+    r"|obstacle: (stopped|started|avoid |width )|mqtt: "
+    r"|terrain: (COLLISION|calibration|hump LEVEL)")
 
 EDGE_READOUT = re.compile(r"barcode: B=\d raw=\d+ kept=(\d+)")
 READOUT_S = 0.5  # The car prints edge counts this often.

@@ -26,6 +26,7 @@
 
 /* Private types, constants, and macros. */
 #define UPDATE_PERIOD_MS 10
+#define MM_PER_M 1000.0f
 #define INIT_RETRY_MS 1000
 #define TENTHS_PER_UNIT 10
 #define US_PER_MS 1000u
@@ -39,6 +40,7 @@ static void monitor_task (INT stacd, void * p_exinf);
 static bool print_events (void);
 static void print_event (terrain_event_t const * p_event);
 static void print_summary (void);
+static void print_calibration (terrain_calib_info_t const * p_info);
 #if TERRAIN_COMPASS_PRINT_MS > 0
 static void print_compass (void);
 #endif
@@ -117,8 +119,7 @@ monitor_task (INT stacd, void * p_exinf)
                 terrain_monitor_calib_state(&info);
             if (state != last_state)
             {
-                tm_printf((UB *)"terrain: calibration %s\n",
-                          terrain_monitor_calib_text(state));
+                print_calibration(&info);
                 last_state = state;
             }
         }
@@ -308,6 +309,31 @@ print_compass (void)
               (INT)range.max_y - (INT)range.min_y);
 }
 #endif
+
+/*
+ * The state and, once an attempt has decided it, the tilt from the level
+ * reference and the average reading: what TERRAIN_LEVEL_REF_* would be, in
+ * mm/s^2 as tm_printf has no %f.
+ */
+static void
+print_calibration (terrain_calib_info_t const * p_info)
+{
+    terrain_calib_state_t const state = terrain_monitor_calib_state(p_info);
+    if (TERRAIN_CALIB_CALIBRATING == state)
+    {
+        tm_printf((UB *)"terrain: calibration %s\n",
+                  terrain_monitor_calib_text(state));
+        return;
+    }
+    INT const tilt_ddeg = (INT)terrain_monitor_calib_tilt_ddeg(p_info);
+    tm_printf((UB *)"terrain: calibration %s tilt %d.%d deg "
+                    "reading %d %d %d mm/s2\n",
+              terrain_monitor_calib_text(state), tilt_ddeg / TENTHS_PER_UNIT,
+              tilt_ddeg % TENTHS_PER_UNIT,
+              (INT)(p_info->gravity_x_mps2 * MM_PER_M),
+              (INT)(p_info->gravity_y_mps2 * MM_PER_M),
+              (INT)(p_info->gravity_z_mps2 * MM_PER_M));
+}
 
 #if TERRAIN_DEBUG_PRINT_MS > 0
 /* One line of pitch, roll, hump state, highest hump, turning and speed;

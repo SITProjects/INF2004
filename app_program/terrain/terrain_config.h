@@ -226,9 +226,14 @@
  * Largest allowed angle, in degrees, between the measured gravity
  * direction and the level reference. Above it the car is not on level
  * ground and calibration stops with NOT_LEVEL.
+ * 30 for now: the reference above is from before the sensor was mounted, so
+ * every boot ended NOT_LEVEL and tilt and humps never ran (to 2026-11-07).
+ * Calibration still zeroes on the car as it stands, so power it up level.
+ * TODO(calibrate): record the reference from the `terrain: calibration`
+ * line, then bring this back to a few degrees.
  */
 #ifndef TERRAIN_LEVEL_MAX_DEG
-#define TERRAIN_LEVEL_MAX_DEG 2.0f
+#define TERRAIN_LEVEL_MAX_DEG 30.0f
 #endif
 
 /*

@@ -145,6 +145,8 @@ const MAX_ROWS = 8;
 const STALE_S = 2;
 const MODES = ["Stopped", "Moving", "Stalled", "Turning", "Timed out", "Following",
                "Held"];
+const CALIBRATION = ["Calibrating, keep still", "Not level"];
+const CALIBRATED = 2;
 const OBSTACLE = ["Scanning", "Clear", "Path found", "Blocked", "Unknown"];
 const $ = (id) => document.getElementById(id);
 let loaded = false;
@@ -231,9 +233,13 @@ function showCar(state) {
   $("mode").textContent = MODES[car.m] || `Mode ${car.m}`;
   $("obstacle").textContent = OBSTACLE[car.os] || `Status ${car.os}`;
   $("bypass").textContent = car.av;
-  $("tilt").textContent = `${(car.p / 10).toFixed(1)}°, ${(car.ro / 10).toFixed(1)}°`;
+  /* Tilt and humps run only once calibrated: 0 would look like a reading. */
+  const b_calibrated = car.cs === CALIBRATED;
+  $("tilt").textContent = b_calibrated
+    ? `${(car.p / 10).toFixed(1)}°, ${(car.ro / 10).toFixed(1)}°`
+    : CALIBRATION[car.cs] || "Not calibrated";
   $("turn").textContent = `${car.tr}°/s`;
-  $("humps").textContent = car.hu;
+  $("humps").textContent = b_calibrated ? car.hu : "Not running";
   $("collisions").textContent = car.co;
 }
 

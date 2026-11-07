@@ -40,7 +40,7 @@ car_status_print (void)
 
     tm_printf(
         (UB *)"CAR v=%d l=%d r=%d d=%d h=%d m=%u os=%u ow=%u od=%u "
-              "av=%s p=%d ro=%d tr=%d hu=%u co=%u rq=%u rt=%u\n",
+              "av=%s p=%d ro=%d tr=%d hu=%u co=%u rq=%u rt=%u cs=%u\n",
         (INT)odometry.speed_mm_s, (INT)odometry.left_speed_mm_s,
         (INT)odometry.right_speed_mm_s, (INT)odometry.distance_mm,
         (INT)odometry.heading_deg, (UINT)motion.mode,
@@ -52,5 +52,5 @@ car_status_print (void)
         (INT)terrain_monitor_data_turn_rate_dps(&terrain),
         (UINT)terrain_monitor_summary_hump_count(&summary),
         (UINT)terrain_monitor_summary_collisions(&summary), (UINT)requests,
-        (UINT)taken);
+        (UINT)taken, (UINT)terrain_monitor_data_calib_state(&terrain));
 }
