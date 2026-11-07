@@ -72,6 +72,8 @@ static void watch_barcode (line_track_t * p_track,
                            line_track_input_t const * p_in);
 static void watch_hump (line_track_t * p_track,
                         line_track_input_t const * p_in);
+static void watch_loop (line_track_t * p_track,
+                        line_track_input_t const * p_in);
 static void note_pivot (line_track_t * p_track,
                         line_track_input_t const * p_in);
 static bool line_seen (line_track_t const * p_track,
@@ -118,6 +120,8 @@ line_track_init (line_track_t * p_track, line_track_input_t const * p_in)
     p_track->last_side = SIDE_NONE;
     p_track->pivot_side = SIDE_NONE;
     p_track->last_heading_deg = p_in->heading_deg;
+    p_track->b_rejoin = false;
+    p_track->rejoin_mm = p_in->distance_mm - LINE_REJOIN_MM;
     p_track->junction_count = 0u;
     p_track->barcode_phase = LINE_BARCODE_NONE;
     p_track->b_hump_slow = false;
@@ -165,7 +169,18 @@ line_track_update (line_track_t * p_track, line_track_input_t const * p_in)
     {
         /* Someone else drives: start again from wherever it leaves us. */
         p_track->barcode_phase = LINE_BARCODE_NONE;
+        p_track->b_rejoin = p_track->b_rejoin || p_in->b_turning;
         restart_tracking(p_track, p_in, p_in->heading_deg);
+    }
+    else if (p_track->b_rejoin)
+    {
+        /* The last pivot turned the car back along the line, away from it
+         * if it stopped short. */
+        p_track->b_rejoin = false;
+        p_track->rejoin_mm = p_in->distance_mm;
+        start_search(p_track, p_in,
+                     (SIDE_LEFT == p_track->pivot_side) ? SIDE_RIGHT
+                                                        : SIDE_LEFT);
     }
     else if ((LINE_BARCODE_BRAKE == p_track->barcode_phase) ||
              (LINE_BARCODE_BACK == p_track->barcode_phase))
@@ -187,6 +202,11 @@ line_track_update (line_track_t * p_track, line_track_input_t const * p_in)
             if (was_black[SIDE_LEFT] || was_black[SIDE_RIGHT])
             {
                 p_track->white_start_mm = p_in->distance_mm;
+                if (p_track->junction_phase != JUNCTION_CROSS)
+                {
+                    /* A crossing tape is no sign of being on the line. */
+                    p_track->lost_start_mm = p_in->distance_mm;
+                }
             }
         }
         follow_episode(p_track, p_in, was_black);
@@ -389,6 +409,9 @@ restart_tracking (line_track_t * p_track, line_track_input_t const * p_in,
     p_track->trend_next = 0u;
     p_track->trend_mm = p_in->distance_mm;
     p_track->white_start_mm = p_in->distance_mm;
+    p_track->lost_start_mm = p_in->distance_mm;
+    p_track->loop_mm = p_in->distance_mm;
+    p_track->loop_deg = p_in->heading_deg;
     for (uint32_t side = 0u; side < SIDE_COUNT; side++)
     {
         p_track->black_start_mm[side] = p_in->distance_mm;
@@ -700,10 +723,32 @@ track (line_track_t * p_track, line_track_input_t const * p_in)
         p_track->target_deg = seek_target(p_track, p_in);
     }
     if (b_white && (p_track->last_side != SIDE_NONE) &&
-        ((p_in->distance_mm - p_track->white_start_mm) >=
+        ((p_in->distance_mm - p_track->lost_start_mm) >=
          (p_track->b_curve ? LINE_LOST_MM : LINE_STRAIGHT_LOST_MM)))
     {
         start_search(p_track, p_in, p_track->last_side);
+    }
+    watch_loop(p_track, p_in);
+}
+
+/* Going round in circles: look for the line, and take the first stretch of it
+ * as straight, or the same touches start the circle again. */
+static void
+watch_loop (line_track_t * p_track, line_track_input_t const * p_in)
+{
+    if ((p_in->distance_mm - p_track->loop_mm) >= LINE_LOOP_MM)
+    {
+        p_track->loop_mm = p_in->distance_mm;
+        p_track->loop_deg = p_in->heading_deg;
+    }
+    else if (abs_deg(p_in->heading_deg - p_track->loop_deg) >= LINE_LOOP_DEG)
+    {
+        p_track->rejoin_mm = p_in->distance_mm;
+        start_search(p_track, p_in, p_track->last_side);
+    }
+    else
+    {
+        /* Nothing unusual. */
     }
 }
 
@@ -893,11 +938,12 @@ note_touch (line_track_t * p_track, line_track_input_t const * p_in,
     {
         p_track->b_curve = false;
     }
-    else if ((p_in->distance_mm - p_track->touch_mm) <=
-             (((LINE_BARCODE_CREEP == p_track->barcode_phase) ||
-               p_track->b_hump_slow)
-                  ? LINE_BARCODE_TOUCH_MM
-                  : LINE_CURVE_TOUCH_MM))
+    else if (((p_in->distance_mm - p_track->rejoin_mm) >= LINE_REJOIN_MM) &&
+             ((p_in->distance_mm - p_track->touch_mm) <=
+              (((LINE_BARCODE_CREEP == p_track->barcode_phase) ||
+                p_track->b_hump_slow)
+                   ? LINE_BARCODE_TOUCH_MM
+                   : LINE_CURVE_TOUCH_MM)))
     {
         p_track->b_curve = true;
     }

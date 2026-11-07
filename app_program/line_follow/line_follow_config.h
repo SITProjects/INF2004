@@ -146,6 +146,25 @@
 /** Largest pivot, in degrees, to either side while searching. */
 #define LINE_SEARCH_MAX_DEG 120
 
+/**
+ * @brief After a bypass the car looks for the line before it follows it, and
+ * for this travel, in mm, takes no touch for a bend: the obstacle stands on a
+ * straight. On 2026-11-07 two touches just after rejoining read as a bend, and
+ * the car seeking it drove in circles until stopped.
+ */
+#define LINE_REJOIN_MM 300
+
+/**
+ * @brief Turning this far, in degrees, within LINE_LOOP_MM of travel is a car
+ * going round in circles, not a bend: search. Each lap crosses tape, so the
+ * car is never long enough without a touch to look for the line. That circle
+ * took 730 mm a lap, and the course's tightest U-turn is 180 degrees.
+ */
+#define LINE_LOOP_DEG 300
+
+/** @brief See LINE_LOOP_DEG. */
+#define LINE_LOOP_MM 900
+
 /** A search pivot this close to its target heading, in degrees, ended. */
 #define LINE_SEARCH_DONE_DEG 10
 

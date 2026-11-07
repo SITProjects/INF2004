@@ -142,6 +142,11 @@ typedef struct
     bool b_old_line_seen;     /* That pivot has swept the old line. */
     uint32_t pivot_side;      /* Way the car last pivoted, for b_seen. */
     int32_t last_heading_deg; /* Heading in the last sample. */
+    bool b_rejoin;            /* A bypass took the car off: find the line. */
+    int32_t rejoin_mm;        /* Travel when it last set out to rejoin. */
+    int32_t lost_start_mm;    /* Travel when it last saw the line itself. */
+    int32_t loop_mm;          /* Travel at the start of this loop check. */
+    int32_t loop_deg;         /* Heading then. */
     uint32_t last_side;       /* Side of the last edge, for searches. */
     int32_t white_start_mm;   /* Travel when both last read white. */
     uint32_t junction_count;

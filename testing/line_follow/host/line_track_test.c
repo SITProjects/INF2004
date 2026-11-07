@@ -1194,6 +1194,144 @@ test_return_sensor (void)
     check("LT78 the last pivot decides", !b_older && out.b_seen);
 }
 
+/* A bypass ending with a pivot of @p deg, and control back. */
+static void
+end_of_bypass (int deg)
+{
+    reset();
+    in.b_control = false;
+    in.b_turning = true;
+    in.heading_deg = deg;
+    out = line_track_update(&track, &in);
+    in.heading_deg = 0;
+    out = line_track_update(&track, &in);
+    in.b_turning = false;
+    in.b_control = true;
+    in.heading_deg = 0;
+    drive(false, false, 1u);
+}
+
+/* Touch the right sensor twice, close together. */
+static void
+touch_twice (void)
+{
+    drive(false, true, LINE_CONFIRM_SAMPLES + samples_for(5));
+    drive(false, false, LINE_CONFIRM_SAMPLES + samples_for(20));
+    drive(false, true, LINE_CONFIRM_SAMPLES + samples_for(5));
+}
+
+/* Finding the line again, as on 2026-11-07. */
+static void
+test_rejoin (void)
+{
+    end_of_bypass(60); /* A pivot right, back along the line. */
+    bool const b_left = (LINE_MODE_SEARCH_LEFT == out.mode);
+    end_of_bypass(-60);
+    bool const b_right = (LINE_MODE_SEARCH_RIGHT == out.mode);
+    check("LT79 a bypass ends by looking for the line, towards where it came "
+          "from",
+          b_left && b_right);
+
+    end_of_bypass(60);
+    drive(false, true, LINE_CONFIRM_SAMPLES);
+    check("LT80 with the tape between the sensors, it carries on along it",
+          (LINE_MODE_TRACK == out.mode) && (0 == out.target_heading_deg));
+
+    reset();
+    in.b_control = false;
+    in.b_moving = true;
+    drive(false, false, 2u);
+    in.b_moving = false;
+    in.b_control = true;
+    drive(false, false, 1u);
+    check("LT81 a move with no pivot, the Reverse button, needs no search",
+          LINE_MODE_TRACK == out.mode);
+
+    end_of_bypass(60);
+    drive(false, true, LINE_CONFIRM_SAMPLES);
+    touch_twice();
+    drive(false, false, LINE_CONFIRM_SAMPLES + samples_for(40));
+    bool const b_held = (out.target_heading_deg == in.heading_deg) ||
+                        (0 == out.target_heading_deg);
+    drive(false, false, samples_for(LINE_REJOIN_MM));
+    touch_twice();
+    drive(false, false, LINE_CONFIRM_SAMPLES + samples_for(40));
+    check("LT82 just after rejoining two touches are no bend; further on they "
+          "are",
+          b_held && (out.target_heading_deg ==
+                     (in.heading_deg - LINE_SEEK_MAX_DEG)));
+
+    /* A lap of 730 mm, touching tape every 100 mm. */
+    reset();
+    drive(true, false, LINE_CONFIRM_SAMPLES);
+    drive(false, false, LINE_CONFIRM_SAMPLES);
+    bool b_search = false;
+    int mm = 0;
+    for (; (mm < (2 * LINE_LOOP_MM)) && !b_search; mm += 10)
+    {
+        in.heading_deg = (mm * 360) / 730;
+        drive((mm % 100) < 20, false, samples_for(10));
+        b_search = LINE_MODE_TRACK != out.mode;
+    }
+    printf("  circling: search after %d mm\n", mm);
+    check("LT83 going round in circles over tape ends in a search",
+          b_search && (mm < (2 * LINE_LOOP_MM)));
+
+    /* That search finds the tape: the same touches must not start it again.
+     * It pivots left, so the left sensor sweeps over it. */
+    drive(true, false, LINE_CONFIRM_SAMPLES);
+    drive(false, false, LINE_CONFIRM_SAMPLES);
+    bool const b_found = (LINE_MODE_TRACK == out.mode);
+    touch_twice();
+    drive(false, false, LINE_CONFIRM_SAMPLES + samples_for(40));
+    check("LT86 and the first stretch after it is taken as straight",
+          b_found &&
+              (out.target_heading_deg != (in.heading_deg - LINE_SEEK_MAX_DEG)));
+
+    /* A U-turn at a junction, then a bend the same way. */
+    reset();
+    in.b_control = false;
+    drive(false, false, 1u);
+    in.heading_deg = 180;
+    drive(false, false, 1u);
+    in.b_control = true;
+    drive(true, false, LINE_CONFIRM_SAMPLES);
+    drive(false, false, LINE_CONFIRM_SAMPLES);
+    bool b_tracks = true;
+    for (mm = 0; mm < 400; mm += 10)
+    {
+        in.heading_deg = 180 + ((mm * 130) / 400);
+        drive((mm % 60) < 20, false, samples_for(10));
+        b_tracks = b_tracks && (LINE_MODE_TRACK == out.mode);
+    }
+    check("LT87 a pivot does not count towards circling", b_tracks);
+
+    /* A real U-turn: 180 degrees in 500 mm. */
+    reset();
+    drive(true, false, LINE_CONFIRM_SAMPLES);
+    drive(false, false, LINE_CONFIRM_SAMPLES);
+    bool b_stays = true;
+    for (mm = 0; mm < 500; mm += 10)
+    {
+        in.heading_deg = (mm * 180) / 500;
+        drive((mm % 60) < 20, false, samples_for(10));
+        b_stays = b_stays && (LINE_MODE_TRACK == out.mode);
+    }
+    check("LT84 a U-turn in the line is not circling", b_stays);
+
+    /* Running alongside the line, over crossing tapes only. */
+    reset();
+    drive(true, false, LINE_CONFIRM_SAMPLES);
+    drive(false, false, LINE_CONFIRM_SAMPLES);
+    drive(false, false, samples_for(LINE_STRAIGHT_LOST_MM - 150));
+    drive(true, true, LINE_CONFIRM_SAMPLES + samples_for(15));
+    drive(false, false, LINE_CONFIRM_SAMPLES);
+    bool const b_on = (LINE_MODE_TRACK == out.mode);
+    drive(false, false, samples_for(150));
+    check("LT85 a crossing tape does not count as seeing the line",
+          b_on && (LINE_MODE_SEARCH_LEFT == out.mode));
+}
+
 /* Left black, then right @p gap_mm later as left clears: the least overlap
  * the debounce lets through. */
 static bool
@@ -1424,6 +1562,7 @@ main (void)
     test_hump_slow();
     test_pivot_aim();
     test_return_sensor();
+    test_rejoin();
     test_barcode_stop();
     test_creep_model();
     test_junction_uturn();
