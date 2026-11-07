@@ -99,15 +99,6 @@
  */
 #define LINE_BEND_TREND_DEG 15
 
-/**
- * @brief The same when the car has swung this many degrees away from that
- * side since the tape first touched: its own correction swept the tape
- * across and out. That is how it met the start of the wide U on 2026-11-06
- * 21:47: the right sensor touched, it steered right, and the tape left on
- * the left before any bend had been seen.
- */
-#define LINE_CROSS_SWING_DEG 8
-
 /** Travel, in mm, between the headings kept for the turn above. */
 #define LINE_TREND_STEP_MM 32
 
@@ -172,6 +163,15 @@
  * square with 30 mm between the sensors.
  */
 #define LINE_JUNCTION_SKEW_MM 10
+
+/**
+ * @brief Going straight over a junction, hold the heading it was met on for
+ * this travel, in mm, so the crossing tape cannot steer the car: on
+ * 2026-11-07 it turned the car 19 degrees right and off the line. Only when
+ * the car has not been turning: a false junction in a bend must not stop it
+ * steering, so LINE_BEND_TREND_DEG of recent turn skips this.
+ */
+#define LINE_JUNCTION_HOLD_MM 45
 
 /**
  * @brief Travel, in mm, from a junction's first black to the point where

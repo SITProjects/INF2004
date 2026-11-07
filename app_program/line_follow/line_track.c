@@ -65,6 +65,8 @@ static void start_junction (line_track_t * p_track,
                             line_track_input_t const * p_in);
 static void drive_junction (line_track_t * p_track,
                             line_track_input_t const * p_in);
+static bool hold_crossing (line_track_t * p_track,
+                           line_track_input_t const * p_in);
 static void back_up (line_track_t * p_track, line_track_input_t const * p_in);
 static void watch_barcode (line_track_t * p_track,
                            line_track_input_t const * p_in);
@@ -168,6 +170,10 @@ line_track_update (line_track_t * p_track, line_track_input_t const * p_in)
             (JUNCTION_DRIVE == p_track->junction_phase))
         {
             /* A junction or a search took over. */
+        }
+        else if (hold_crossing(p_track, p_in))
+        {
+            /* Over the crossing tape: the sensors say nothing useful. */
         }
         else if (b_both)
         {
@@ -310,6 +316,7 @@ restart_tracking (line_track_t * p_track, line_track_input_t const * p_in,
     p_track->touch_side = SIDE_NONE;
     p_track->touch_mm = p_in->distance_mm;
     p_track->b_curve = false;
+    p_track->b_cross_hold = false;
     for (uint32_t slot = 0u; slot < LINE_TREND_SLOTS; slot++)
     {
         p_track->trend_deg[slot] = p_in->heading_deg;
@@ -405,6 +412,10 @@ start_junction (line_track_t * p_track, line_track_input_t const * p_in)
         (LINE_TURN_UTURN != p_in->turn))
     {
         p_track->junction_phase = JUNCTION_CROSS;
+        p_track->junction_mm = p_in->distance_mm;
+        p_track->junction_deg = p_track->entry_deg;
+        p_track->b_cross_hold =
+            abs_deg(recent_turn(p_track, p_in)) < LINE_BEND_TREND_DEG;
         return;
     }
     p_track->junction_phase = JUNCTION_DRIVE;
@@ -450,6 +461,20 @@ drive_junction (line_track_t * p_track, line_track_input_t const * p_in)
     p_track->mode =
         (SIDE_LEFT == side) ? LINE_MODE_SEARCH_LEFT : LINE_MODE_SEARCH_RIGHT;
     p_track->target_deg = p_in->heading_deg + (side_sign(side) * turn_deg);
+}
+
+/* Keep the heading the junction was met on until past the crossing tape. */
+static bool
+hold_crossing (line_track_t * p_track, line_track_input_t const * p_in)
+{
+    if (p_track->b_cross_hold && (JUNCTION_CROSS == p_track->junction_phase) &&
+        ((p_in->distance_mm - p_track->junction_mm) < LINE_JUNCTION_HOLD_MM))
+    {
+        p_track->target_deg = p_track->junction_deg;
+        return true;
+    }
+    p_track->b_cross_hold = false;
+    return false;
 }
 
 /* Stop, then one reverse with the sensors ignored, then creep. */
@@ -667,10 +692,8 @@ crossed_out (line_track_t const * p_track, line_track_input_t const * p_in,
     return !p_track->b_black[other] && p_track->b_both_seen &&
            (p_track->entry_side == other) &&
            (JUNCTION_NONE == p_track->junction_phase) &&
-           (((side_sign(side) * recent_turn(p_track, p_in)) >=
-             LINE_BEND_TREND_DEG) ||
-            ((side_sign(side) * (p_track->entry_deg - p_in->heading_deg)) >=
-             LINE_CROSS_SWING_DEG));
+           ((side_sign(side) * recent_turn(p_track, p_in)) >=
+            LINE_BEND_TREND_DEG);
 }
 
 /* A single-side touch begins: the same side again soon is a bend. */

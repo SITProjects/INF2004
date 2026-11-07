@@ -146,19 +146,21 @@ static void
 test_junction (void)
 {
     cross_junction(LINE_TURN_STRAIGHT);
-    bool const b_junction = out.b_junction && (0 == out.target_heading_deg) &&
+    /* Held on the heading it was met on, 4 degrees in cross_junction(). */
+    bool const b_junction = out.b_junction && (4 == out.target_heading_deg) &&
                             (LINE_MODE_TRACK == out.mode);
     in.heading_deg = 6;
     drive(true, true, samples_for(15));
-    /* Tracking, not a blind drive: the target is still the held heading. */
-    bool const b_tracking = out.b_junction && (0 == out.target_heading_deg);
-    drive(false, true, LINE_CONFIRM_SAMPLES + 2u);
+    /* The crossing tape cannot steer it: the target is the held heading. */
+    bool const b_tracking = out.b_junction && (4 == out.target_heading_deg);
+    /* Past the crossing, tracking carries on, not a blind drive. */
+    drive(false, true, samples_for(LINE_JUNCTION_HOLD_MM));
     bool const b_edge = out.b_junction &&
                         (6 - LINE_LEAD_DEG == out.target_heading_deg) &&
                         (LINE_MODE_TRACK == out.mode);
     drive(false, false, LINE_CONFIRM_SAMPLES);
-    check("LT06 a cross straight on (the default) is reported as a junction "
-          "but tracking carries on over it",
+    check("LT06 a cross straight on (the default) is reported as a junction, "
+          "held over the crossing tape, and tracking carries on after it",
           b_junction && b_tracking && b_edge && !out.b_junction &&
               (LINE_MODE_TRACK == out.mode));
 }
@@ -172,7 +174,7 @@ test_both_rise_together (void)
     reset();
     drive(false, false, samples_for(300));
     drive(true, true, LINE_CONFIRM_SAMPLES + 1u);
-    drive(true, false, LINE_CONFIRM_SAMPLES + 2u);
+    drive(true, false, samples_for(LINE_JUNCTION_HOLD_MM));
     check("LT18 an edge that turns black with the other sensor is a fresh "
           "correction, not a held edge",
           (LINE_MODE_TRACK == out.mode) &&
@@ -821,25 +823,40 @@ cross_bend (int deg, int mm, bool b_from_right, int white_mm)
     drive(false, false, samples_for(white_mm));
 }
 
-/* 2026-11-06 21:47, the start of the wide U: on a straight the tape touches
- * one sensor, the car swings @p swing_deg towards it, and the tape crosses
- * and leaves on the other side, touching it once more on the way. */
 static void
-cross_swing (int swing_deg, bool b_from_right)
+test_crossing_hold (void)
 {
+    /* 2026-11-07 run 2: 11, then 01, 11, 01 over the crossing tape. */
     reset();
+    in.heading_deg = -23;
     drive(false, false, samples_for(150));
-    unsigned int const samples = samples_for(25);
+    drive(true, true, samples_for(10));
+    bool const b_seen = out.b_junction;
+    drive(false, true, samples_for(12));
+    drive(true, true, samples_for(5));
+    drive(false, true, samples_for(8));
+    check("LT36 straight over a junction, the crossing tape cannot steer it",
+          b_seen && (-23 == out.target_heading_deg));
+
+    drive(false, true, samples_for(LINE_JUNCTION_HOLD_MM));
+    check("LT37 past the crossing, a sensor still black steers again",
+          (-23 - LINE_LEAD_DEG) == out.target_heading_deg);
+
+    /* A false junction in a bend: both black at once while turning. */
+    reset();
+    drive(false, false, samples_for(60));
+    unsigned int const samples = samples_for(96);
     for (unsigned int i = 1u; i <= samples; i++)
     {
-        in.heading_deg = (swing_deg * (int)i) / (int)samples;
-        drive(!b_from_right, b_from_right, 1u);
+        in.heading_deg = (40 * (int)i) / (int)samples;
+        drive(false, false, 1u);
     }
-    drive(true, true, samples_for(6));
-    drive(b_from_right, !b_from_right, samples_for(5));
-    drive(false, false, samples_for(6));
-    drive(b_from_right, !b_from_right, samples_for(4));
-    drive(false, false, samples_for(30));
+    drive(true, true, samples_for(10));
+    bool const b_junction = out.b_junction;
+    drive(true, false, samples_for(6));
+    check("LT38 a false junction while turning keeps steering",
+          b_junction && ((in.heading_deg + LINE_LEAD_DEG) ==
+                         out.target_heading_deg));
 }
 
 static void
@@ -865,23 +882,22 @@ test_bend_crossing (void)
           "turn",
           b_straight && b_wrong_way && b_slight);
 
-    cross_swing(-15, true);
-    bool const b_swing_left = (out.target_heading_deg - in.heading_deg) >=
-                              (LINE_SEEK_MAX_DEG - 1);
-    cross_swing(15, false);
-    bool const b_swing_right = (in.heading_deg - out.target_heading_deg) >=
-                               (LINE_SEEK_MAX_DEG - 1);
-    check("LT35 a car that swung the tape out, left or right, turns back for "
-          "it, and keeps going through a second short touch",
-          b_swing_left && b_swing_right);
-
-    cross_swing(-(LINE_CROSS_SWING_DEG - 3), true);
-    bool const b_small = out.target_heading_deg == in.heading_deg;
-    /* Under LINE_BEND_TREND_DEG, which would rightly count as a bend. */
-    cross_swing(LINE_BEND_TREND_DEG - 5, true);
-    bool const b_towards = out.target_heading_deg == in.heading_deg;
-    check("LT36 no seek after a small swing, or a swing towards the exit",
-          b_small && b_towards);
+    /* 2026-11-07 run 2 and the first run's swing: a correction that sweeps
+     * the tape across on a straight is not a bend. Seeking there fed the next
+     * crossing and the car wobbled +-11 degrees all along the straight. */
+    reset();
+    drive(false, false, samples_for(150));
+    unsigned int const swung = samples_for(25);
+    for (unsigned int i = 1u; i <= swung; i++)
+    {
+        in.heading_deg = (-15 * (int)i) / (int)swung;
+        drive(false, true, 1u);
+    }
+    drive(true, true, samples_for(6));
+    drive(true, false, samples_for(5));
+    drive(false, false, samples_for(30));
+    check("LT35 a correction sweeping the tape across a straight is no bend",
+          (out.target_heading_deg == in.heading_deg) && !track.b_curve);
 
     /* The seek is not forever: a tape that never returns is searched for. */
     cross_bend(BEND_DEG, 120, true, LINE_LOST_MM + 10);
@@ -948,6 +964,7 @@ main (void)
     test_straight_model();
     test_long_both_black();
     test_bend_crossing();
+    test_crossing_hold();
     test_barcode_stop();
     test_creep_model();
     test_junction_uturn();

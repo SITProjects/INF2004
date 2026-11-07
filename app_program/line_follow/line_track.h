@@ -20,7 +20,8 @@
  * the last edge.
  *
  * Both sensors turning black together (within LINE_JUNCTION_SKEW_MM) is a
- * cross junction. Straight on, tracking simply carries on; for a turn the
+ * cross junction. Straight on, the car holds its heading over the crossing
+ * tape (LINE_JUNCTION_HOLD_MM), then tracking carries on; for a turn the
  * car drives LINE_JUNCTION_CENTRE_MM on, pivots exactly 90 or 180 degrees
  * and drives on along that heading. Both
  * black one after the other is the tape crossing the sensors at an angle,
@@ -117,6 +118,7 @@ typedef struct
     uint32_t touch_side;       /* Side of the last single-side touch. */
     int32_t touch_mm;          /* Travel when it began. */
     bool b_curve;              /* That side touched again soon: a bend. */
+    bool b_cross_hold;         /* Holding the heading over a crossing. */
     int32_t trend_deg[LINE_TREND_SLOTS]; /* Recent headings, oldest at next. */
     uint32_t trend_next;
     int32_t trend_mm; /* Travel at the latest of them. */
