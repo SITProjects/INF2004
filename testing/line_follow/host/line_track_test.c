@@ -823,6 +823,73 @@ cross_bend (int deg, int mm, bool b_from_right, int white_mm)
     drive(false, false, samples_for(white_mm));
 }
 
+/* In a left bend (right if @p sign is -1): two touches of the bend's sensor,
+ * the car turning that way, seeking on white. */
+static void
+in_bend (int sign)
+{
+    bool const b_left = sign > 0;
+    reset();
+    drive(false, false, samples_for(100));
+    drive(b_left, !b_left, samples_for(8));
+    drive(false, false, samples_for(30));
+    drive(b_left, !b_left, samples_for(8));
+    unsigned int const samples = samples_for(100);
+    for (unsigned int i = 1u; i <= samples; i++)
+    {
+        in.heading_deg = (sign * 40 * (int)i) / (int)samples;
+        drive(false, false, 1u);
+    }
+}
+
+static void
+test_counter_touch (void)
+{
+    bool b_gentle = true;
+    bool b_seeks_on = true;
+    for (int sign = -1; sign <= 1; sign += 2)
+    {
+        in_bend(sign);
+        bool const b_in_bend = track.b_curve;
+        drive(sign < 0, sign > 0, samples_for(10));
+        b_gentle = b_gentle && b_in_bend &&
+                   ((in.heading_deg - (sign * LINE_COUNTER_LEAD_DEG)) ==
+                    out.target_heading_deg);
+        drive(false, false, samples_for(30));
+        b_seeks_on = b_seeks_on && track.b_curve &&
+                     ((sign * (out.target_heading_deg - in.heading_deg)) >=
+                      (LINE_SEEK_MAX_DEG - 1));
+    }
+    check("LT39 the other sensor touching in a bend, left or right, steers "
+          "back gently and the bend carries on",
+          b_gentle && b_seeks_on);
+
+    /* Still turning the bend's way all the while, so only the limit ends it. */
+    in_bend(1);
+    unsigned int const long_touch = samples_for(LINE_COUNTER_MM + 5);
+    for (unsigned int i = 1u; i <= long_touch; i++)
+    {
+        in.heading_deg = 40 + ((20 * (int)i) / (int)long_touch);
+        drive(false, true, 1u);
+    }
+    check("LT40 black for longer than that is a real turn: full lead, bend off",
+          ((in.heading_deg - LINE_LEAD_DEG) == out.target_heading_deg) &&
+              !track.b_curve);
+
+    /* Turning, but no bend: a correction too far gets full lead back. */
+    reset();
+    drive(false, false, samples_for(60));
+    unsigned int const samples = samples_for(90);
+    for (unsigned int i = 1u; i <= samples; i++)
+    {
+        in.heading_deg = (-30 * (int)i) / (int)samples;
+        drive(false, false, 1u);
+    }
+    drive(true, false, samples_for(10));
+    check("LT41 with no bend, a sensor always steers at full lead",
+          (in.heading_deg + LINE_LEAD_DEG) == out.target_heading_deg);
+}
+
 static void
 test_crossing_hold (void)
 {
@@ -965,6 +1032,7 @@ main (void)
     test_long_both_black();
     test_bend_crossing();
     test_crossing_hold();
+    test_counter_touch();
     test_barcode_stop();
     test_creep_model();
     test_junction_uturn();

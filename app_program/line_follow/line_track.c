@@ -80,6 +80,8 @@ static void note_heading (line_track_t * p_track,
                           line_track_input_t const * p_in);
 static int32_t recent_turn (line_track_t const * p_track,
                             line_track_input_t const * p_in);
+static bool counters_bend (line_track_t const * p_track,
+                           line_track_input_t const * p_in, uint32_t side);
 static bool crossed_out (line_track_t const * p_track,
                          line_track_input_t const * p_in, uint32_t side);
 static void note_touch (line_track_t * p_track, line_track_input_t const * p_in,
@@ -619,12 +621,25 @@ track_edge (line_track_t * p_track, line_track_input_t const * p_in,
             uint32_t side, bool b_was_black)
 {
     bool const b_black = p_track->b_black[side];
-    if (b_black && !b_was_black)
+    bool const b_counter = b_black && counters_bend(p_track, p_in, side);
+    if (b_black && !b_was_black && !b_counter)
     {
         note_touch(p_track, p_in, side);
     }
-    if (b_black)
+    if (b_counter)
     {
+        /* Keep last_side and the bend: the tape is still curving that way. */
+        p_track->target_deg =
+            p_in->heading_deg + (side_sign(side) * LINE_COUNTER_LEAD_DEG);
+    }
+    else if (b_black)
+    {
+        if (p_track->touch_side != side)
+        {
+            /* Black too long to be the car ahead of a bend. */
+            p_track->b_curve = false;
+            p_track->touch_side = side;
+        }
         p_track->last_side = side;
         if ((p_in->distance_mm - p_track->black_start_mm[side]) >=
             LINE_EDGE_MAX_MM)
@@ -675,6 +690,22 @@ static int32_t
 recent_turn (line_track_t const * p_track, line_track_input_t const * p_in)
 {
     return p_in->heading_deg - p_track->trend_deg[p_track->trend_next];
+}
+
+/*
+ * Black on @p side, briefly, in a bend the other way. Turning alone is not
+ * enough: after a correction too far, the sensor it swung towards must still
+ * steer at full lead (LT17).
+ */
+static bool
+counters_bend (line_track_t const * p_track, line_track_input_t const * p_in,
+               uint32_t side)
+{
+    return p_track->b_curve && (side != p_track->touch_side) &&
+           ((p_in->distance_mm - p_track->black_start_mm[side]) <
+            LINE_COUNTER_MM) &&
+           ((-side_sign(side) * recent_turn(p_track, p_in)) >=
+            LINE_BEND_TREND_DEG);
 }
 
 /*

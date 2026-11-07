@@ -99,6 +99,18 @@
  */
 #define LINE_BEND_TREND_DEG 15
 
+/**
+ * @brief In a bend, the other sensor touching while the car has turned
+ * LINE_BEND_TREND_DEG the bend's way is the car a little ahead of the bend,
+ * not a reason to leave it: for this travel, in mm, it steers back only
+ * LINE_COUNTER_LEAD_DEG and the bend stays on. Steering back at full lead
+ * jerked it off left bends: 15 to 28 degrees against the bend per touch on
+ * 2026-11-07. Black for longer is a real turn the other way, so it steers as
+ * usual.
+ */
+#define LINE_COUNTER_MM 40
+#define LINE_COUNTER_LEAD_DEG 5
+
 /** Travel, in mm, between the headings kept for the turn above. */
 #define LINE_TREND_STEP_MM 32
 
