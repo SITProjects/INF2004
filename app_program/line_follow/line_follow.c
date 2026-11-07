@@ -214,7 +214,10 @@ report (line_request_t const * p_request, line_track_input_t const * p_in)
     b_last_left = p_in->b_left_black;
     b_last_right = p_in->b_right_black;
     trace_ms += LINE_SAMPLE_MS;
-    if (p_in->b_control && (b_sensors || (trace_ms >= LINE_TRACE_MS)))
+    /* On a bypass every change shows what the car took for the line. */
+    bool const b_bypass = p_in->b_moving || p_in->b_turning;
+    if ((p_in->b_control && (b_sensors || (trace_ms >= LINE_TRACE_MS))) ||
+        (b_sensors && b_bypass))
     {
         trace_ms = 0u;
         /* Compass heading (whole degrees, + is left; -1 without a reading),
