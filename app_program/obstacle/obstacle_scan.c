@@ -105,6 +105,8 @@ static obstacle_scan_watch_t watch;
 static obstacle_scan_geometry_t published_geometry;
 
 /* Corridor sweep: published copy, working copy and next grid index. */
+_Static_assert(OBSTACLE_SWEEP_POINTS == 9u, "finish_corridor() prints nine");
+
 static obstacle_scan_corridor_t corridor;
 static obstacle_scan_corridor_t corridor_work;
 static uint8_t corridor_index;
@@ -1399,6 +1401,18 @@ finish_corridor (bool b_complete)
               (unsigned long)done_ms, b_complete ? "completed" : "cancelled",
               (unsigned int)corridor.valid_mask,
               (unsigned long)(uint32_t)(done_ms - corridor_start_ms));
+    /* From about 200 mm: the second distance, to compare obstacle widths. */
+    if (b_complete)
+    {
+        uint16_t const * const p_us = corridor.echo_us;
+        tm_printf((UB *)"obstacle: corridor echoes %u %u %u %u %u %u %u %u %u "
+                        "us\n",
+                  (unsigned int)p_us[0], (unsigned int)p_us[1],
+                  (unsigned int)p_us[2], (unsigned int)p_us[3],
+                  (unsigned int)p_us[4], (unsigned int)p_us[5],
+                  (unsigned int)p_us[6], (unsigned int)p_us[7],
+                  (unsigned int)p_us[8]);
+    }
 }
 
 #if APP_TEST
