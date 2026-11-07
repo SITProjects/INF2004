@@ -299,6 +299,28 @@ main (void)
           motion_move_get_state() == MOTION_STATE_MOVE);
     (void)motion_move_stop();
 
+    /* The return of 2026-11-07, riding a cross tape as it began to look. */
+    feed(true, MOTION_LINE_SEEN_SAMPLES);
+    (void)motion_move_forward(1000u);
+    (void)motion_move_watch_line();
+    feed(true, 3u);
+    check("a return does not stop on black it began on",
+          motion_move_get_state() == MOTION_STATE_MOVE);
+    feed(false, MOTION_LINE_SEEN_SAMPLES);
+    check("nor when that black ends",
+          motion_move_get_state() == MOTION_STATE_MOVE);
+    feed(true, MOTION_LINE_SEEN_SAMPLES);
+    check("it stops on the next fresh black", braked_on_line());
+    (void)motion_move_stop();
+
+    feed(true, MOTION_LINE_SEEN_SAMPLES);
+    (void)motion_move_turn_right(90u);
+    (void)motion_move_watch_line();
+    (void)motion_move_update();
+    check("a turn in still takes a line already under the sensors",
+          braked_on_line());
+    (void)motion_move_stop();
+
     /* Heading-hold following (the stub never turns, so the error stays). */
     check("follow heading refused while not following",
           motion_move_set_follow_heading(10) == MOTION_ERR_PARAM);

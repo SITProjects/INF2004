@@ -250,6 +250,15 @@ motion_status_t motion_move_stop_at_line (void);
 motion_status_t motion_move_acquire_line (void);
 
 /**
+ * @brief Watch for the line as a queued command asks: a turn takes one
+ *        already under the sensors, a move needs a fresh edge.
+ * @return As motion_move_stop_at_line(). Only the motion owner may call.
+ * @note A move does not stop on black it starts on: on 2026-11-07 the return
+ *       to the line began riding a cross tape and stopped on that.
+ */
+motion_status_t motion_move_watch_line (void);
+
+/**
  * @brief Brake both wheels, end any move, turn or following, and clear a
  * stall or timeout.
  * @return MOTION_OK or MOTION_ERR_NOT_INIT.

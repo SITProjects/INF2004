@@ -442,6 +442,13 @@ motion_move_acquire_line (void)
 }
 
 motion_status_t
+motion_move_watch_line (void)
+{
+    return (MOTION_STATE_TURN == state) ? motion_move_acquire_line()
+                                        : motion_move_stop_at_line();
+}
+
+motion_status_t
 motion_move_stop (void)
 {
     if (!b_initialised)
