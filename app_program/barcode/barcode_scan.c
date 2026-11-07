@@ -44,6 +44,8 @@ barcode_trigger_init (barcode_trigger_t * p_trigger)
     p_trigger->next = 0u;
     p_trigger->count = 0u;
     p_trigger->b_held = false;
+    p_trigger->b_hump = false;
+    p_trigger->hump_start_us = 0u;
 }
 
 void
@@ -53,6 +55,27 @@ barcode_trigger_hold (barcode_trigger_t * p_trigger, uint32_t until_us)
     p_trigger->count = 0u;
     p_trigger->hold_until_us = until_us;
     p_trigger->b_held = true;
+}
+
+void
+barcode_trigger_hump (barcode_trigger_t * p_trigger, bool b_hump,
+                      uint32_t now_us)
+{
+    if (b_hump && !p_trigger->b_hump)
+    {
+        p_trigger->hump_start_us = now_us;
+    }
+    p_trigger->b_hump = b_hump;
+    if (b_hump &&
+        ((now_us - p_trigger->hump_start_us) < BARCODE_TRIGGER_HUMP_MAX_US))
+    {
+        uint32_t const until_us = now_us + BARCODE_TRIGGER_HUMP_US;
+        if (!p_trigger->b_held ||
+            ((int32_t)(until_us - p_trigger->hold_until_us) > 0))
+        {
+            barcode_trigger_hold(p_trigger, until_us);
+        }
+    }
 }
 
 bool

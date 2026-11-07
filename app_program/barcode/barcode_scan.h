@@ -55,6 +55,8 @@ typedef struct
     uint32_t count;                                /**< Edges held. */
     uint32_t hold_until_us; /**< No trigger before this. */
     bool b_held;            /**< hold_until_us applies. */
+    bool b_hump;            /* On a hump at the last poll. */
+    uint32_t hump_start_us; /* When that hump began. */
 } barcode_trigger_t;
 
 /* Public function declarations. */
@@ -96,6 +98,18 @@ void barcode_trigger_init (barcode_trigger_t * p_trigger);
  * @param until_us Time the hold ends.
  */
 void barcode_trigger_hold (barcode_trigger_t * p_trigger, uint32_t until_us);
+
+/**
+ * @brief Say whether the car is on a hump, to hold the trigger meanwhile.
+ * @param p_trigger State.
+ * @param b_hump True while on a hump.
+ * @param now_us Time now.
+ * @note Call on every poll. Holds until BARCODE_TRIGGER_HUMP_US after the
+ *       hump, for at most BARCODE_TRIGGER_HUMP_MAX_US per hump, and never
+ *       shortens a longer hold.
+ */
+void barcode_trigger_hump (barcode_trigger_t * p_trigger, bool b_hump,
+                           uint32_t now_us);
 
 /**
  * @brief Take one edge.

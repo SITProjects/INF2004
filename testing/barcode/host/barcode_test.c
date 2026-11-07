@@ -395,6 +395,88 @@ test_trigger (void)
     }
     check("BT20 nothing triggers during a hold; afterwards edges count again",
           !b_fired && b_after);
+
+    /* Edges 10 ms apart, as a barcode would give at full speed. */
+    uint32_t const step = 10000u;
+    barcode_trigger_init(&trigger);
+    uint32_t t = 10000000u;
+    barcode_trigger_hump(&trigger, true, t);
+    bool b_any = false;
+    for (uint32_t i = 0u; i < 8u; i++)
+    {
+        t += step;
+        barcode_trigger_hump(&trigger, true, t);
+        b_any = barcode_trigger_edge(&trigger, t) || b_any;
+    }
+    check("BT21 edges on a hump do not trigger", !b_any);
+
+    /* Off the hump: still held for BARCODE_TRIGGER_HUMP_US, then free. */
+    barcode_trigger_hump(&trigger, false, t);
+    uint32_t const flat = t;
+    b_any = false;
+    for (uint32_t i = 0u; i < 4u; i++)
+    {
+        t += step;
+        barcode_trigger_hump(&trigger, false, t);
+        b_any = barcode_trigger_edge(&trigger, t) || b_any;
+    }
+    check("BT22 nor just after it", !b_any);
+    t = flat + BARCODE_TRIGGER_HUMP_US + step;
+    bool b_fires = false;
+    for (uint32_t i = 0u; i < BARCODE_TRIGGER_EDGES; i++)
+    {
+        t += step;
+        barcode_trigger_hump(&trigger, false, t);
+        b_fires = barcode_trigger_edge(&trigger, t) || b_fires;
+    }
+    check("BT23 once past that, a barcode triggers as usual", b_fires);
+
+    /* A hump must not cut short the hold after a slow pass. */
+    barcode_trigger_init(&trigger);
+    t = 20000000u;
+    barcode_trigger_hold(&trigger, t + BARCODE_TRIGGER_HOLDOFF_US);
+    barcode_trigger_hump(&trigger, true, t);
+    barcode_trigger_hump(&trigger, false, t + step);
+    t += BARCODE_TRIGGER_HUMP_US + step;
+    b_any = false;
+    for (uint32_t i = 0u; i < BARCODE_TRIGGER_EDGES; i++)
+    {
+        t += step;
+        b_any = barcode_trigger_edge(&trigger, t) || b_any;
+    }
+    check("BT24 a hump never shortens a longer hold", !b_any);
+
+    /* Leaning for good, as if calibrated on a slope: barcodes come back. */
+    barcode_trigger_init(&trigger);
+    t = 30000000u;
+    uint32_t const leaning = t;
+    while ((t - leaning) <
+           (BARCODE_TRIGGER_HUMP_MAX_US + BARCODE_TRIGGER_HUMP_US + step))
+    {
+        t += step;
+        barcode_trigger_hump(&trigger, true, t);
+    }
+    b_fires = false;
+    for (uint32_t i = 0u; i < BARCODE_TRIGGER_EDGES; i++)
+    {
+        t += step;
+        barcode_trigger_hump(&trigger, true, t);
+        b_fires = barcode_trigger_edge(&trigger, t) || b_fires;
+    }
+    check("BT25 one hump cannot hold the trigger for ever", b_fires);
+
+    /* Level again, then a new hump holds again. */
+    barcode_trigger_hump(&trigger, false, t);
+    t += step;
+    barcode_trigger_hump(&trigger, true, t);
+    b_any = false;
+    for (uint32_t i = 0u; i < BARCODE_TRIGGER_EDGES; i++)
+    {
+        t += step;
+        barcode_trigger_hump(&trigger, true, t);
+        b_any = barcode_trigger_edge(&trigger, t) || b_any;
+    }
+    check("BT26 the next hump holds it again", !b_any);
 }
 
 /* Run @p count widths through the filter and scan as the sensor would

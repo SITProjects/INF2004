@@ -67,6 +67,20 @@
 #define BARCODE_TRIGGER_HOLDOFF_US 2000000u
 
 /**
+ * @brief On a hump the sensor sits too close to the floor to trust, so edges
+ * must not slow the car: they cannot trigger until this long, in us, after the
+ * hump ends. The hump state can end 0.4 s early at low speed.
+ */
+#define BARCODE_TRIGGER_HUMP_US 500000u
+
+/**
+ * @brief The most, in us, one hump can hold the trigger. The course's hump
+ * takes 2.4 s at 80 mm/s. A car calibrated on a slope leans for good and reads
+ * as on a hump, and that must not stop every barcode for the run.
+ */
+#define BARCODE_TRIGGER_HUMP_MAX_US 4000000u
+
+/**
  * @brief A slow pass with no edge for this long, in us, is over: 150 mm at
  * the barcode speed, past the reverse. It was a false alarm.
  */

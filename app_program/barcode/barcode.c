@@ -16,6 +16,7 @@
 #include "drv_barcode.h"
 #include "../communication/remote_command.h"
 #include "../line_follow/line_follow.h"
+#include "../terrain/terrain_monitor.h"
 #if TM_MQTT
 #include "../communication/telemetry_queue.h"
 #endif
@@ -39,6 +40,7 @@ static void finish_scan (void);
 static void take_edge (barcode_edge_t const * p_edge,
                        line_barcode_phase_t phase);
 static line_barcode_phase_t follow_phase (void);
+static bool on_hump (void);
 static void trace_widths (void);
 #if BARCODE_EDGE_REPORT
 static void calibration_report (void);
@@ -88,6 +90,7 @@ read_task (INT stacd, void * p_exinf)
     for (;;)
     {
         line_barcode_phase_t const phase = follow_phase();
+        barcode_trigger_hump(&trigger, on_hump(), now_us());
         barcode_edge_t edge;
         while (drv_barcode_pop(&edge))
         {
@@ -139,6 +142,15 @@ follow_phase (void)
         line_follow_barcode_done();
     }
     return phase;
+}
+
+/* Level until calibrated: the terrain task sees humps only then. */
+static bool
+on_hump (void)
+{
+    terrain_data_t data = {{0u}};
+    (void)terrain_monitor_get_latest(&data);
+    return terrain_monitor_data_hump_state(&data) != TERRAIN_HUMP_LEVEL;
 }
 
 /* While stopping or backing up, widths mean nothing: drop the edge. */
