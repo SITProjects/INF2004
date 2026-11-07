@@ -316,8 +316,9 @@ terrain_status_t terrain_monitor_recalibrate (void);
  *   push (forward/back and sideways) of at least
  *   TERRAIN_COLLISION_LIMIT_DG, after which motion's ground speed
  *   dropped to half or less within TERRAIN_COLLISION_CHECK_SAMPLES. It
- *   counts at once for a push of at least TERRAIN_COLLISION_SURE_DG, or
- *   when the speed is unknown or below TERRAIN_COLLISION_MIN_SPEED_MM_S.
+ *   counts at once for a push of at least TERRAIN_COLLISION_SURE_DG. Only
+ *   pushes driving forward at TERRAIN_COLLISION_DRIVING_MM_S or more and
+ *   leaning under TERRAIN_COLLISION_MAX_LEAN_DEG are judged.
  *   Then none for TERRAIN_COLLISION_COOLDOWN_SAMPLES. Value: the biggest
  *   push of the hit, tenths of a g, 0 to 127 (stops at 12.7 g).
  *
