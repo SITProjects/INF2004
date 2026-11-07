@@ -8,6 +8,7 @@
 #include "car_status.h"
 #include "../app.h"
 #include "../motion/motion.h"
+#include "../motion/motion_command.h"
 #include "../obstacle/obstacle.h"
 #include "../obstacle/obstacle_avoid.h"
 #include "../terrain/terrain_monitor.h"
@@ -33,9 +34,13 @@ car_status_print (void)
     terrain_summary_t summary = {{0u}};
     (void)terrain_monitor_get_summary(&summary);
 
+    uint32_t requests = 0u;
+    uint32_t taken = 0u;
+    motion_command_get_counts(&requests, &taken);
+
     tm_printf(
         (UB *)"CAR v=%d l=%d r=%d d=%d h=%d m=%u os=%u ow=%u od=%u "
-              "av=%s p=%d ro=%d tr=%d hu=%u co=%u\n",
+              "av=%s p=%d ro=%d tr=%d hu=%u co=%u rq=%u rt=%u\n",
         (INT)odometry.speed_mm_s, (INT)odometry.left_speed_mm_s,
         (INT)odometry.right_speed_mm_s, (INT)odometry.distance_mm,
         (INT)odometry.heading_deg, (UINT)motion.mode,
@@ -46,5 +51,6 @@ car_status_print (void)
         b_level ? (INT)terrain_monitor_data_roll_ddeg(&terrain) : 0,
         (INT)terrain_monitor_data_turn_rate_dps(&terrain),
         (UINT)terrain_monitor_summary_hump_count(&summary),
-        (UINT)terrain_monitor_summary_collisions(&summary));
+        (UINT)terrain_monitor_summary_collisions(&summary), (UINT)requests,
+        (UINT)taken);
 }

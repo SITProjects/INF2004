@@ -2,7 +2,11 @@
  * @file motion_command.c
  * @brief Pass the line task's requests to the motion module.
  *
- * A mutex protects a latest-value slot. tMotion services this adapter once
+ * Two slots pass the latest request with no lock: the line task fills the one
+ * tMotion is not reading, then publishes it. A lock both sides only polled
+ * could lose every request when the two 20 ms tasks kept meeting at it: the
+ * likely cause of the crawl of 2026-11-07, one request a second, so the car
+ * drove for one 100 ms timeout at a time. tMotion services this adapter once
  * per update before its single motion_move_update() call. This module creates
  * no task. Dry-run and APP_TEST builds never call motion APIs from it.
  *
@@ -18,6 +22,7 @@
 
 /* Private types, constants, and macros. */
 #define ACTUATION_ACTIVE (MOTION_COMMAND_ACTUATION_ENABLED && !APP_TEST)
+#define SLOT_COUNT 2u
 #define STALL_RETRY_UPDATES                                                    \
     (MOTION_COMMAND_STALL_RETRY_MS / MOTION_UPDATE_PERIOD_MS)
 
@@ -30,20 +35,26 @@ typedef struct
     uint32_t received_ms;
     line_request_t request;
     bool b_valid;
-    bool b_pending;
 } command_slot_t;
 
 /* Static data. */
-static ID command_mutex;
+static bool b_ready;
 static bool b_started;
 #if ACTUATION_ACTIVE
 static uint32_t startup_ms;
 static bool b_control_previous;
 #endif
-/* Shared only under command_mutex. */
-static command_slot_t latest_slot;
+/*
+ * The line task writes the slot after the published one, then publishes it.
+ * The next write to the published slot is two requests away, 40 ms, and
+ * tMotion's copy takes microseconds at the top priority of its core.
+ */
+static command_slot_t slots[SLOT_COUNT];
+static uint32_t published; /* Requests published; picks the slot. */
 /* The following state belongs exclusively to the motion task. */
 static command_slot_t active_slot;
+static uint32_t taken; /* The last request published that was copied. */
+static volatile uint32_t taken_count;
 #if ACTUATION_ACTIVE
 static bool b_fault_latched;
 static uint32_t stall_updates;
@@ -53,7 +64,7 @@ static int32_t search_target_deg;
 #endif
 
 /* Private function declarations. */
-static ER take_request (bool * p_new);
+static bool take_request (void);
 #if ACTUATION_ACTIVE
 static void update_controller (bool b_new);
 static motion_status_t apply_request (void);
@@ -68,19 +79,18 @@ static void report_request (void);
 ER
 motion_command_init (void)
 {
-    T_CMTX const config = {.mtxatr = TA_INHERIT};
-    if (command_mutex > 0)
+    if (b_ready)
     {
         return E_OBJ;
     }
-    command_mutex = tk_cre_mtx(&config);
-    return (command_mutex < E_OK) ? command_mutex : E_OK;
+    b_ready = true;
+    return E_OK;
 }
 
 ER
 motion_command_start (void)
 {
-    if ((command_mutex <= 0) || b_started)
+    if (!b_ready || b_started)
     {
         return E_OBJ;
     }
@@ -117,38 +127,37 @@ motion_command_submit (line_request_t const * p_request)
         slot.request = *p_request;
         slot.b_valid = true;
     }
-    if (command_mutex <= 0)
+    if (!b_ready)
     {
         return E_OBJ;
     }
-    ER result = tk_loc_mtx(command_mutex, TMO_POL);
-    if (result < E_OK)
-    {
-        return result;
-    }
-    result = tk_get_otm(&now);
+    ER const result = tk_get_otm(&now);
     if (result == E_OK)
     {
+        uint32_t const next = published + 1u;
         slot.received_ms = (uint32_t)now.lo;
-        slot.b_pending = true;
-        latest_slot = slot;
+        slots[next % SLOT_COUNT] = slot;
+        __atomic_store_n(&published, next, __ATOMIC_RELEASE);
     }
-    (void)tk_unl_mtx(command_mutex);
     return (result < E_OK) ? result : (b_mode_valid ? E_OK : E_PAR);
+}
+
+void
+motion_command_get_counts (uint32_t * p_published, uint32_t * p_taken)
+{
+    *p_published = __atomic_load_n(&published, __ATOMIC_RELAXED);
+    *p_taken = taken_count;
 }
 
 /* Public owner hook: tMotion remains the sole caller of motion APIs. */
 void
 motion_command_service (bool b_control_enabled)
 {
-    bool b_new;
     SYSTIM now;
-    ER const result = take_request(&b_new);
+    bool const b_new = take_request();
     bool const b_clock = (tk_get_otm(&now) == E_OK);
-    /* Contention skips this poll; the cached timestamp still expires. */
-    if (((result < E_OK) && (result != E_TMOUT)) || !b_clock ||
-        ((uint32_t)((uint32_t)now.lo - active_slot.received_ms) >=
-         MOTION_LINE_TIMEOUT_MS))
+    if (!b_clock || ((uint32_t)((uint32_t)now.lo - active_slot.received_ms) >=
+                     MOTION_LINE_TIMEOUT_MS))
     {
         active_slot.b_valid = false;
     }
@@ -187,23 +196,19 @@ motion_command_service (bool b_control_enabled)
 
 /* Private function definitions. */
 
-static ER
-take_request (bool * p_new)
+/* Copy the latest request, if there is a new one. */
+static bool
+take_request (void)
 {
-    *p_new = false;
-    ER const result = tk_loc_mtx(command_mutex, TMO_POL);
-    if (result < E_OK)
+    uint32_t const latest = __atomic_load_n(&published, __ATOMIC_ACQUIRE);
+    bool const b_new = latest != taken;
+    if (b_new)
     {
-        return result;
+        active_slot = slots[latest % SLOT_COUNT];
+        taken = latest;
+        taken_count++;
     }
-    *p_new = latest_slot.b_pending;
-    if (*p_new)
-    {
-        active_slot = latest_slot;
-        latest_slot.b_pending = false;
-    }
-    (void)tk_unl_mtx(command_mutex);
-    return E_OK;
+    return b_new;
 }
 
 #if ACTUATION_ACTIVE
@@ -236,6 +241,8 @@ update_controller (bool b_new)
             b_search_active = false;
             if (motion_move_is_busy())
             {
+                tm_printf((UB *)"motion: no line request for %u ms, braking\n",
+                          (UINT)MOTION_LINE_TIMEOUT_MS);
                 status = motion_move_stop();
             }
         }
