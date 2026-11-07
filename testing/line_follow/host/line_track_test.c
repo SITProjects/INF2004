@@ -942,6 +942,28 @@ test_counter_touch (void)
           "the car holds its heading, no seek",
           b_ends);
 
+    /* The end of the right turn on 2026-11-07, and a touch in mid U. */
+    bool b_exit_ends = true;
+    bool b_mid_stays = true;
+    for (int sign = -1; sign <= 1; sign += 2)
+    {
+        in_bend(sign);
+        drive(sign < 0, sign > 0, samples_for(52));
+        drive(false, false, samples_for(30));
+        b_exit_ends = b_exit_ends && !track.b_curve &&
+                      (in.heading_deg == out.target_heading_deg) &&
+                      (track.last_side == ((sign < 0) ? 0u : 1u));
+        in_bend(sign);
+        drive(sign < 0, sign > 0, samples_for(37));
+        drive(false, false, samples_for(30));
+        b_mid_stays = b_mid_stays && track.b_curve;
+    }
+    check("LT46 the 52 mm touch that ended a right turn ends the bend, and "
+          "the tape counts as last seen on that side",
+          b_exit_ends);
+    check("LT47 the 37 mm touch in the middle of a U leaves the bend on",
+          b_mid_stays);
+
     /* Someone else drives for a moment, the sensor still black. */
     in_bend(1);
     drive(false, true, samples_for(10));

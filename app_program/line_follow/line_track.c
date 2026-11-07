@@ -671,7 +671,9 @@ track_edge (line_track_t * p_track, line_track_input_t const * p_in,
             if ((p_in->distance_mm - p_track->counter_mm) >=
                 LINE_COUNTER_END_MM)
             {
+                /* The tape was last on this side, not the bend's. */
                 p_track->b_curve = false;
+                p_track->last_side = side;
             }
             p_track->counter_side = SIDE_NONE;
         }

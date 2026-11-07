@@ -105,22 +105,27 @@
  * not a reason to leave it: for this travel, in mm, it steers back only
  * LINE_COUNTER_LEAD_DEG and the bend stays on. Steering back at full lead
  * jerked it off left bends: 15 to 28 degrees against the bend per touch on
- * 2026-11-07. The turn is judged as the touch begins, because steering back
- * soon takes it below the limit. The travel covers a touch at the end of a U,
- * 95 mm on 2026-11-07: at full lead from 40 mm the car swung 16 degrees and
- * the tape went out on the far side, twice in two. Black for longer is a real
- * turn the other way, so it steers as usual.
+ * 2026-11-07, with the right sensor slow to let go. The turn is judged as the
+ * touch begins, because steering back soon takes it below the limit. The
+ * travel covers a touch at the end of a U, 95 mm on 2026-11-07: at full lead
+ * from 40 mm the car swung 16 degrees and the tape went out on the far side,
+ * twice in two. Black for longer is a real turn the other way, so it steers as
+ * usual. In the car model, stronger passes more S bends with healthy sensors,
+ * but from 7 degrees a U fails with a sensor as slow as that one was (LT44).
  */
 #define LINE_COUNTER_MM 100
-#define LINE_COUNTER_LEAD_DEG 5
+#define LINE_COUNTER_LEAD_DEG 6
 
 /**
  * @brief Such a touch that clears after at least this travel, in mm, was the
  * straight after the bend, so the bend ends and the car holds its heading.
- * Seeking back the bend's way would only bring the tape to that sensor again.
- * A shorter touch leaves the bend on.
+ * Seeking back the bend's way would turn it further off: a 52 mm touch at the
+ * end of a right turn left the bend on with this at 60, and the car spun past
+ * the straight on white (2026-11-07). A touch in the middle of a U read 37 mm
+ * on the same run, so this has little room to go lower. A shorter touch
+ * leaves the bend on.
  */
-#define LINE_COUNTER_END_MM 60
+#define LINE_COUNTER_END_MM 40
 
 /** Travel, in mm, between the headings kept for the turn above. */
 #define LINE_TREND_STEP_MM 32
