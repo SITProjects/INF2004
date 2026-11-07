@@ -81,10 +81,11 @@
 #define BARCODE_TRIGGER_HUMP_MAX_US 4000000u
 
 /**
- * @brief A slow pass with no edge for this long, in us, is over: 150 mm at
- * the barcode speed, past the reverse. It was a false alarm.
+ * @brief A slow pass with no edge for this long, in us, is over: 210 mm at
+ * the barcode speed, past the 145 mm back to the barcode. It was a false
+ * alarm.
  */
-#define BARCODE_CREEP_QUIET_US 5000000u
+#define BARCODE_CREEP_QUIET_US 7000000u
 
 /**
  * @brief In each character the narrowest wide bar must be at least this

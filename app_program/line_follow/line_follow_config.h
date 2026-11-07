@@ -153,12 +153,14 @@
 #define LINE_SEARCH_TIMEOUT_MS 8000u
 
 /**
- * @brief How far the car backs up for a barcode, in mm. The reader needs
- * up to 40 mm of barcode at follow speed to recognise one, the car coasts on
- * a little, and a short reverse has fallen 15 to 25 mm short (MOT-U09), so
- * this leaves the sensor before the first bar.
+ * @brief How far the car backs up for a barcode, in mm. The reverse falls
+ * about 26 mm short at 120 mm/s, counting the coasting before it, so 100
+ * ended 74 mm back from the braking point. Most passes brake within 14 mm of
+ * the first bar, but a late trigger braked about 125 mm in, and the creep
+ * then began inside the barcode and read 23 of its 29 elements (2026-11-07).
+ * 170 ends about 145 mm back.
  */
-#define LINE_BARCODE_REVERSE_MM 100u
+#define LINE_BARCODE_REVERSE_MM 170u
 
 /** Line samples to brake for before reversing: about 200 ms on the car. */
 #define LINE_BARCODE_BRAKE_SAMPLES 10u
@@ -167,10 +169,11 @@
 #define LINE_BARCODE_BACK_SAMPLES 150u
 
 /**
- * @brief Longest slow pass, in mm: the reverse, the normal barcode's 290 mm,
- * and some margin. A backstop; the reader normally ends it first.
+ * @brief Longest slow pass, in mm: about 145 mm back to the barcode, the
+ * normal barcode's 290 mm, and some margin. A backstop; the reader normally
+ * ends it first.
  */
-#define LINE_BARCODE_CREEP_MM 450
+#define LINE_BARCODE_CREEP_MM 520
 
 /**
  * @brief On a hump the car follows at the barcode speed, to spare the sensors
