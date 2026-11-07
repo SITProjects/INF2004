@@ -33,6 +33,7 @@
 #define JUNCTION_CROSS 3u /* Straight on: tracking while crossing it. */
 #define JUNCTION_TURN_DEG 90
 #define JUNCTION_UTURN_DEG 180
+#define DEG_PER_RAD 57
 
 _Static_assert(LINE_LEAD_DEG > 0, "Invalid lead");
 _Static_assert(LINE_EDGE_MAX_MM > 0, "Invalid held-edge limit");
@@ -61,6 +62,7 @@ static void follow_episode (line_track_t * p_track,
                             bool const * p_was_black);
 static void start_episode (line_track_t * p_track,
                            line_track_input_t const * p_in);
+static int32_t entry_skew_deg (line_track_t const * p_track);
 static void start_junction (line_track_t * p_track,
                             line_track_input_t const * p_in);
 static void drive_junction (line_track_t * p_track,
@@ -386,9 +388,10 @@ follow_episode (line_track_t * p_track, line_track_input_t const * p_in,
         if (!p_track->b_both_seen)
         {
             p_track->b_both_seen = true;
-            p_track->b_skew_small = (SIDE_NONE == p_track->entry_side) ||
-                                    ((p_in->distance_mm - p_track->entry_mm) <=
-                                     LINE_JUNCTION_SKEW_MM);
+            p_track->entry_skew_mm = p_in->distance_mm - p_track->entry_mm;
+            p_track->b_skew_small =
+                (SIDE_NONE == p_track->entry_side) ||
+                (p_track->entry_skew_mm <= LINE_JUNCTION_SKEW_MM);
         }
         if (p_track->b_skew_small &&
             (JUNCTION_NONE == p_track->junction_phase) &&
@@ -420,6 +423,22 @@ start_episode (line_track_t * p_track, line_track_input_t const * p_in)
 }
 
 /*
+ * How far left of the car's heading the line runs, from the crossing tape:
+ * the side that met it first is the side the car points away from.
+ */
+static int32_t
+entry_skew_deg (line_track_t const * p_track)
+{
+    if (SIDE_NONE == p_track->entry_side)
+    {
+        return 0;
+    }
+    return (side_sign(p_track->entry_side) * p_track->entry_skew_mm *
+            DEG_PER_RAD) /
+           LINE_SENSOR_GAP_MM;
+}
+
+/*
  * A cross junction. Straight on, tracking carries on: with the sensors
  * about a tape width apart, a plain line under both reads the same, and
  * holding a heading would leave a bend (2026-11-06). A turn holds the
@@ -441,6 +460,7 @@ start_junction (line_track_t * p_track, line_track_input_t const * p_in)
     }
     p_track->junction_phase = JUNCTION_DRIVE;
     p_track->junction_turn = p_in->turn;
+    p_track->junction_skew_deg = entry_skew_deg(p_track);
     p_track->junction_mm = p_track->entry_mm;
     p_track->junction_deg = p_track->entry_deg;
     p_track->target_deg = p_track->entry_deg;
@@ -481,7 +501,8 @@ drive_junction (line_track_t * p_track, line_track_input_t const * p_in)
     p_track->last_side = side;
     p_track->mode =
         (SIDE_LEFT == side) ? LINE_MODE_SEARCH_LEFT : LINE_MODE_SEARCH_RIGHT;
-    p_track->target_deg = p_in->heading_deg + (side_sign(side) * turn_deg);
+    p_track->target_deg = p_in->heading_deg + p_track->junction_skew_deg +
+                          (side_sign(side) * turn_deg);
 }
 
 /* Keep the heading the junction was met on until past the crossing tape. */

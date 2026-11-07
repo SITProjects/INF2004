@@ -129,15 +129,17 @@ typedef struct
     uint32_t entry_side;     /* First side black; 2 = both at once. */
     int32_t entry_mm;        /* Travel when the episode started. */
     int32_t entry_deg;       /* Heading then. */
+    int32_t entry_skew_mm;   /* Travel from then until both were black. */
     bool b_both_seen;        /* Both black during this episode. */
     bool b_skew_small;       /* ... within LINE_JUNCTION_SKEW_MM. */
     uint32_t junction_phase; /* 0 none, 1 driving to the centre, 2 pivot,
                                 3 crossing straight on. */
     line_turn_t junction_turn;
-    int32_t junction_mm;    /* Travel when the junction began. */
-    int32_t junction_deg;   /* Heading the junction was met on. */
-    uint32_t last_side;     /* Side of the last edge, for searches. */
-    int32_t white_start_mm; /* Travel when both last read white. */
+    int32_t junction_mm;       /* Travel when the junction began. */
+    int32_t junction_deg;      /* Heading the junction was met on. */
+    int32_t junction_skew_deg; /* The line is this far left of the heading. */
+    uint32_t last_side;        /* Side of the last edge, for searches. */
+    int32_t white_start_mm;    /* Travel when both last read white. */
     uint32_t junction_count;
     int32_t search_start_deg;
     uint32_t search_side;  /* Side the current pivot turns towards. */

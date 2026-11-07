@@ -225,6 +225,16 @@
  */
 #define LINE_JUNCTION_CENTRE_MM 130
 
+/**
+ * @brief The line sensors' spacing, in mm. Meeting a crossing tape one sensor
+ * before the other shows how far the car is off square to it: asin(skew /
+ * spacing), so 7 mm is 13 degrees. A turn allows for that, or the pivot
+ * carries the error onto the new line: of 4 turns on 2026-11-07 that met the
+ * tape 4 mm or more askew, away from the new line, none saw the tape as the
+ * pivot ended, and 3 ran over 150 mm without a touch.
+ */
+#define LINE_SENSOR_GAP_MM 30
+
 /** U-turns pivot left (1) or right (0). */
 #define LINE_UTURN_LEFT 1
 

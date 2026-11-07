@@ -1091,6 +1091,51 @@ test_hump_slow (void)
     in.b_hump = false;
 }
 
+/* Meet a crossing tape with @p first black @p skew_mm before the other,
+ * take @p turn, and return the pivot's target. */
+static int32_t
+askew_turn_target (line_turn_t turn, bool b_left_first, int skew_mm)
+{
+    reset();
+    in.turn = turn;
+    drive(false, false, samples_for(150));
+    if (skew_mm > 0)
+    {
+        drive(b_left_first, !b_left_first, samples_for(skew_mm));
+    }
+    drive(true, true, samples_for(12));
+    drive(false, false, samples_for(LINE_JUNCTION_CENTRE_MM));
+    int32_t const target = out.target_heading_deg;
+    in.turn = LINE_TURN_STRAIGHT;
+    return target;
+}
+
+static void
+test_askew_turn (void)
+{
+    /* The car's heading stays 0 here: only the skew moves the target. */
+    int32_t const square = askew_turn_target(LINE_TURN_LEFT, true, 0);
+    check("LT60 met square, a left turn is 90 degrees", 90 == square);
+
+    /* Sampling rounds the skew up to whole samples of 1.2 mm. */
+    int32_t const away = askew_turn_target(LINE_TURN_LEFT, true, 7);
+    check("LT61 left sensor first: the line runs left of the heading, so a "
+          "left turn goes further",
+          (away >= 100) && (away <= 108));
+    int32_t const towards = askew_turn_target(LINE_TURN_LEFT, false, 7);
+    check("LT62 right sensor first: a left turn goes less",
+          (towards <= 80) && (towards >= 72));
+    int32_t const right_away = askew_turn_target(LINE_TURN_RIGHT, false, 7);
+    check("LT63 right sensor first: a right turn goes further",
+          (right_away <= -100) && (right_away >= -108));
+    int32_t const right_towards = askew_turn_target(LINE_TURN_RIGHT, true, 7);
+    check("LT64 left sensor first: a right turn goes less",
+          (right_towards >= -80) && (right_towards <= -72));
+    int32_t const uturn = askew_turn_target(LINE_TURN_UTURN, true, 7);
+    int32_t const uturn_square = askew_turn_target(LINE_TURN_UTURN, true, 0);
+    check("LT65 a U-turn allows for it too", uturn > uturn_square);
+}
+
 static void
 test_crossing_hold (void)
 {
@@ -1236,6 +1281,7 @@ main (void)
     test_crossing_hold();
     test_counter_touch();
     test_hump_slow();
+    test_askew_turn();
     test_barcode_stop();
     test_creep_model();
     test_junction_uturn();
