@@ -36,6 +36,17 @@ cc -std=c11 -Wall -Wextra -Werror -DTM_MQTT=1 \
 
 cc -std=c11 -Wall -Wextra -Werror -DTM_MQTT=1 \
     -fsanitize=address,undefined -g \
+    -I"$repo_root/testing/communication/host/include" \
+    -I"$repo_root/lib/liblwip/sysdepend/pico_rp2040" \
+    -I"$repo_root/lib/liblwip/sysdepend/pico_rp2040/include" \
+    -I"$sdk_path/lib/lwip/src/include" \
+    "$repo_root/testing/communication/host/console_mirror_test.c" \
+    "$repo_root/app_program/console_mirror/console_mirror_mqtt.c" \
+    -o "$test_dir/console_mirror_test"
+"$test_dir/console_mirror_test"
+
+cc -std=c11 -Wall -Wextra -Werror -DTM_MQTT=1 \
+    -fsanitize=address,undefined -g \
     "$repo_root/testing/communication/host/remote_command_test.c" \
     "$repo_root/app_program/communication/remote_command.c" \
     "$repo_root/app_program/line_follow/line_track.c" \

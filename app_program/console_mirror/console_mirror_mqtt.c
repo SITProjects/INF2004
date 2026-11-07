@@ -76,13 +76,27 @@ console_mirror_mqtt_service (struct mqtt_client_s * p_client)
 
 /* Private function definitions. */
 
-/* lwIP core context (radio task): the batch has gone out over TCP. */
+/*
+ * lwIP core context (radio task): the batch has gone out over TCP, or lwIP
+ * gave up waiting after MQTT_REQ_TIMEOUT of a stalled link. Its bytes are
+ * still in lwIP's output buffer and go out when the link returns, so drop it
+ * and move on: sending it again would repeat it, and waiting for a callback
+ * that will not come stopped the console for good (2026-11-07).
+ */
 static void
 sent_cb (void * p_arg, err_t result)
 {
-    if (((uintptr_t)p_arg == token) && (ERR_OK == result))
+    if ((uintptr_t)p_arg == token)
     {
-        b_sent = true;
+        if (ERR_OK == result)
+        {
+            b_sent = true;
+        }
+        else
+        {
+            b_in_flight = false;
+            batch_len = 0u;
+        }
     }
 }
 #endif /* TM_MQTT */
