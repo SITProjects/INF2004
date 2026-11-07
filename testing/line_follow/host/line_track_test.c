@@ -1110,6 +1110,44 @@ askew_turn_target (line_turn_t turn, bool b_left_first, int skew_mm)
     return target;
 }
 
+/* Left black, then right @p gap_mm later as left clears: the least overlap
+ * the debounce lets through. */
+static bool
+thin_crossing (int gap_mm)
+{
+    reset();
+    drive(false, false, samples_for(150));
+    drive(true, false, samples_for(gap_mm));
+    drive(true, true, 1u);
+    drive(false, true, 1u);
+    return out.b_junction;
+}
+
+/* The logged misses of 2026-11-07, and the sweeps that must stay out. */
+static void
+test_thin_crossing (void)
+{
+    check("LT66 a crossing read 11 mm askew with one sample of overlap is a "
+          "junction",
+          thin_crossing(11));
+    check("LT67 the tape sweeping across the sensors, 17 mm apart, is not",
+          !thin_crossing(17));
+
+    /* Straight and clean for so long that the car looks for the line, just
+     * as it reaches a crossing. */
+    reset();
+    drive(true, false, LINE_CONFIRM_SAMPLES + samples_for(5));
+    drive(false, false, LINE_CONFIRM_SAMPLES + 1u +
+                            samples_for(LINE_STRAIGHT_LOST_MM));
+    bool const b_search = (LINE_MODE_SEARCH_LEFT == out.mode);
+    drive(false, true, LINE_CONFIRM_SAMPLES);
+    bool const b_back = (LINE_MODE_TRACK == out.mode);
+    drive(false, true, samples_for(8));
+    drive(true, true, LINE_CONFIRM_SAMPLES);
+    check("LT68 a crossing met as a search finds the tape is still a junction",
+          b_search && b_back && out.b_junction);
+}
+
 static void
 test_askew_turn (void)
 {
@@ -1263,6 +1301,7 @@ main (void)
     test_held_edge();
     test_brief_touch();
     test_junction();
+    test_thin_crossing();
     test_lost();
     test_search_found();
     test_search_between();

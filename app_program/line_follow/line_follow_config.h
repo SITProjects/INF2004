@@ -191,17 +191,22 @@
  */
 #define LINE_BARCODE_TOUCH_MM 30
 
-/** Both sensors black for this many samples confirms a junction. */
-#define LINE_JUNCTION_SAMPLES 3u
+/**
+ * @brief Both sensors black for this many samples confirms a junction. Each
+ * sensor's level is confirmed already, so one will do: at 120 mm/s a skewed
+ * tape left a single sample of overlap on 2026-11-07.
+ */
+#define LINE_JUNCTION_SAMPLES 1u
 
 /**
  * @brief Both sensors turning black within this travel, in mm, of each
  * other is a crossing line: a cross (+) junction. A longer gap is the tape
- * crossing the sensors at an angle, and tracking carries on.
- * TODO(calibrate): the car meets a crossing up to about 18 degrees off
- * square with 30 mm between the sensors.
+ * crossing the sensors at an angle, and tracking carries on. A sample is
+ * 2.4 mm at 120 mm/s: at 10 a crossing read 11 and was missed (2026-11-07).
+ * Replaying the logs, 12 and 14 add the same four crossings and nothing else;
+ * 16 fires in a bend.
  */
-#define LINE_JUNCTION_SKEW_MM 10
+#define LINE_JUNCTION_SKEW_MM 14
 
 /**
  * @brief Going straight over a junction, hold the heading it was met on for
