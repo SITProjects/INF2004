@@ -118,6 +118,28 @@ obstacle_width_estimate (obstacle_width_edge_t left,
                          obstacle_width_config_t const * p_config);
 
 /**
+ * @brief The width to report for a scan close up: lower than the grid gives,
+ *        if the edge ranges say so.
+ *
+ * With the centre at range c and a corner at range r, the corner lies
+ * sqrt(r^2 - c^2) off centre. Applies only with both edges found, at least
+ * OBSTACLE_WIDTH_CLOSE_STEPS off centre, and c within
+ * OBSTACLE_WIDTH_CLOSE_MAX_MM. Never raises the width. The bypass plans from
+ * the left and right offsets, which this leaves alone.
+ *
+ * @param p_result From obstacle_width_estimate().
+ * @param left_echo_us Echo at the left edge.
+ * @param right_echo_us Echo at the right edge.
+ * @param centre_echo_us Echo straight ahead.
+ * @param p_config Corrections, as for the estimate.
+ * @return The width in mm; @p p_result's own if the rule does not apply.
+ */
+uint16_t obstacle_width_close_up (obstacle_width_result_t const * p_result,
+                                  uint16_t left_echo_us, uint16_t right_echo_us,
+                                  uint16_t centre_echo_us,
+                                  obstacle_width_config_t const * p_config);
+
+/**
  * @brief Result for a sweep whose width cannot be measured.
  * @return Width ROBOT_OBSTACLE_WIDTH_UNAVAILABLE, both edges
  *         ROBOT_OBSTACLE_EDGE_NONE, every flag false and both offsets 0.

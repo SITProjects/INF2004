@@ -1065,6 +1065,9 @@ finish_sweep (obstacle_width_result_t const * p_width)
         obstacle_width_edge_t right = {.index = edge_index(true),
                                        .echo_us = right_edge_echo_us};
         width = obstacle_width_estimate(left, right, &width_config);
+        width.width_mm = obstacle_width_close_up(&width, left_edge_echo_us,
+                                                 right_edge_echo_us,
+                                                 centre_echo_us, &width_config);
     }
     uint32_t complete_ms = now_ms();
     /* Build the geometry before reset_sweep() clears the centre echo. */

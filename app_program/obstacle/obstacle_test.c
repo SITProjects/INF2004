@@ -175,6 +175,10 @@ static bool avoid_rejoin_valid (void);
 static bool sim_in_sidestep (void);
 static bool plan_short_pass_valid (void);
 static bool avoid_line_gate_valid (void);
+static uint16_t close_up_width (uint8_t left, uint8_t right, uint16_t left_us,
+                                uint16_t right_us, uint16_t centre_us,
+                                uint16_t * p_estimate);
+static bool width_close_up_valid (void);
 static bool avoid_fault_valid (void);
 static bool avoid_obstacles_valid (void);
 static bool avoid_angle_valid (void);
@@ -294,6 +298,8 @@ obstacle_test (void)
                "plan: stop short of the rear bumper when the edge is known");
     TEST_CHECK("OBS-U73", avoid_line_gate_valid(),
                "avoid: black far from the line is not the line");
+    TEST_CHECK("OBS-U74", width_close_up_valid(),
+               "width: close up, the corners' range sets the width");
 
     TEST_CHECK("OBS-U10", packed_obstacle_fields_valid(),
                "packed obstacle fields clamp without changing neighbours");
@@ -3065,6 +3071,48 @@ avoid_line_gate_valid (void)
     return ok &&
            sim_until(OBSTACLE_AVOID_SEND, OBSTACLE_AVOID_LEG_TURN_IN, 100u) &&
            robot_motion_cmd_get_stop_at_line(sim.act.cmd);
+}
+
+/* The production corrections on one logged scan. */
+static uint16_t
+close_up_width (uint8_t left, uint8_t right, uint16_t left_us,
+                uint16_t right_us, uint16_t centre_us, uint16_t * p_estimate)
+{
+    obstacle_width_config_t const config = {
+        .scale_mm_per_10k = OBSTACLE_SOUND_MM_PER_10K_US,
+        .echo_offset_mm = OBSTACLE_ECHO_OFFSET_MM,
+        .radial_offset_mm = OBSTACLE_SENSOR_RADIAL_OFFSET_MM,
+        .edge_correction_deg = OBSTACLE_EDGE_CORRECTION_DEG};
+    obstacle_width_edge_t const left_edge = {.index = left, .echo_us = left_us};
+    obstacle_width_edge_t const right_edge = {.index = right,
+                                              .echo_us = right_us};
+    obstacle_width_result_t const result =
+        obstacle_width_estimate(left_edge, right_edge, &config);
+    *p_estimate = result.width_mm;
+    return obstacle_width_close_up(&result, left_us, right_us, centre_us,
+                                   &config);
+}
+
+/* OBS-U74: scans logged on 2026-11-07, hits 60 to 120 unless stated. */
+static bool
+width_close_up_valid (void)
+{
+    uint16_t grid = 0u;
+    uint16_t const small = close_up_width(1u, 7u, 1185u, 1009u, 945u, &grid);
+    bool ok = (grid > 200u) && (small > 170u) && (small < 190u);
+    uint16_t const large = close_up_width(1u, 7u, 1170u, 1159u, 977u, &grid);
+    ok = ok && (large > 205u) && (large < 220u) && (large < grid);
+
+    /* A stray long echo must not raise it: the grid's width stands. */
+    ok = ok && (close_up_width(1u, 7u, 1158u, 1302u, 948u, &grid) == grid);
+
+    /* Further off, the outer hits are the face. */
+    ok = ok && (close_up_width(1u, 7u, 1400u, 1400u, 1300u, &grid) == grid);
+
+    /* One edge short of the limit, and an edge not found. */
+    ok = ok && (close_up_width(1u, 6u, 1116u, 946u, 929u, &grid) == grid);
+    ok = ok && (close_up_width(2u, 7u, 1033u, 1034u, 954u, &grid) == grid);
+    return ok && (close_up_width(0u, 7u, 1185u, 1009u, 945u, &grid) == grid);
 }
 
 /* OBS-U69: the car stopped on heading 0. A pass that drifted 7 degrees

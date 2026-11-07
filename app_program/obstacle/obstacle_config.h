@@ -174,6 +174,16 @@
  */
 #define OBSTACLE_SENSOR_RADIAL_OFFSET_MM 14.0f
 #define OBSTACLE_EDGE_CORRECTION_DEG 0.0f
+/*
+ * Close up, both edges echo out to the same grid angle whatever the width: 16
+ * and 21 cm both hit 60 and 120 degrees at the 150 mm stop and read 211 mm
+ * (2026-11-07). The echo there comes from the corner, so the range gives its
+ * place: obstacle_width_close_up(). Only within this range, in mm, and with
+ * both edges this far off centre, in grid steps: further away the outer hits
+ * are the face, not the corners, and it read a 210 mm obstacle as 117.
+ */
+#define OBSTACLE_WIDTH_CLOSE_MAX_MM 200.0f
+#define OBSTACLE_WIDTH_CLOSE_STEPS 3u
 #define OBSTACLE_EDGE_CORRECTION_MAX_DEG 15.0f
 
 /*
