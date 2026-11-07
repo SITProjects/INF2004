@@ -120,14 +120,12 @@
  * Candidate thresholds, pending stopping-distance tests. Edit only the
  * millimetre values; the echo equivalents are derived.
  *
- * Detection: 250 mm -> 1576 us. A nearer centre reading requests a stop.
- * At 150 mm a flat face stops echoing before its edges, so 16 and 21 cm read
- * alike and with scatter: 200 to 259 and 173 to 211 mm on 2026-11-07. At
- * 250 mm the edges are within the echo and it is past the room a bypass
- * needs, so there is no reverse and second sweep. Parked, 21 cm read within
- * 2 mm of itself. Not yet run on the car, and 16 cm not measured there.
+ * Detection: 150 mm -> 989 us. A nearer centre reading requests a stop.
+ * 250 mm was tried on 2026-11-07: the beam reaches well past the obstacle's
+ * edges from there, and the width read 267 and 328 mm, against 161 to 219 at
+ * 150 mm. The bypass was quicker, needing no reverse and second sweep.
  */
-#define OBSTACLE_DETECT_DISTANCE_MM 250u
+#define OBSTACLE_DETECT_DISTANCE_MM 150u
 #define OBSTACLE_DETECT_ECHO_US                                                \
     OBSTACLE_MM_TO_ECHO_US(OBSTACLE_DETECT_DISTANCE_MM)
 
