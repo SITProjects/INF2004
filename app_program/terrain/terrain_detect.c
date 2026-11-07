@@ -17,7 +17,6 @@
 
 /* Detector word: hump state 2 | climb counter 4 | other counter 4 |
  * peak lean 8 | turning state 1 | turn counter 5 | spare 8. */
-#define MS_PER_10MS 10u
 #define HUMP_SHIFT 0u
 #define HUMP_BITS 2u
 #define CLIMB_SHIFT 2u
@@ -213,10 +212,17 @@ terrain_detect_hump_clear (uint32_t word)
 }
 
 bool
-terrain_detect_hump_lasted (uint32_t start_10ms, uint32_t end_10ms,
-                            uint32_t min_ms)
+terrain_detect_hump_lasted (int32_t start_mm, int32_t end_mm, int32_t min_mm)
 {
-    return ((end_10ms - start_10ms) * MS_PER_10MS) >= min_ms;
+    return (int32_t)((uint32_t)end_mm - (uint32_t)start_mm) >= min_mm;
+}
+
+float
+terrain_detect_collision_push (float push_g, int32_t speed_mm_s, float lean_deg,
+                               int32_t driving_mm_s, float max_lean_deg)
+{
+    return ((speed_mm_s >= driving_mm_s) && (lean_deg < max_lean_deg)) ? push_g
+                                                                       : 0.0f;
 }
 
 terrain_event_type_t

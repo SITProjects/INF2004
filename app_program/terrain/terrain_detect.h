@@ -196,14 +196,29 @@ terrain_hump_state_t terrain_detect_hump_state (uint32_t word);
 uint32_t terrain_detect_hump_clear (uint32_t word);
 
 /**
- * @brief Whether a hump lasted long enough to count.
- * @param start_10ms Time the climb began, in 10 ms steps.
- * @param end_10ms Time it was level again.
- * @param min_ms TERRAIN_HUMP_MIN_MS.
- * @return True if it counts. Times may wrap.
+ * @brief Whether a hump was long enough to count.
+ * @param start_mm Odometry distance as the climb began.
+ * @param end_mm Odometry distance when level again.
+ * @param min_mm TERRAIN_HUMP_MIN_MM.
+ * @return True if it counts. Distances may wrap; reversing never counts.
  */
-bool terrain_detect_hump_lasted (uint32_t start_10ms, uint32_t end_10ms,
-                                 uint32_t min_ms);
+bool terrain_detect_hump_lasted (int32_t start_mm, int32_t end_mm,
+                                 int32_t min_mm);
+
+/**
+ * @brief The push to judge: none unless driving forward and not lifted.
+ * @param push_g Horizontal push, in g.
+ * @param speed_mm_s Ground speed; + is forward.
+ * @param lean_deg Size of the roll, in degrees.
+ * @param driving_mm_s TERRAIN_COLLISION_DRIVING_MM_S.
+ * @param max_lean_deg TERRAIN_COLLISION_MAX_LEAN_DEG.
+ * @return @p push_g, or 0.
+ * @note A hit under way still counts as the car slows through the limit: its
+ *       check needs only the speed.
+ */
+float terrain_detect_collision_push (float push_g, int32_t speed_mm_s,
+                                     float lean_deg, int32_t driving_mm_s,
+                                     float max_lean_deg);
 
 /**
  * @brief Run the turning state machine on one sample.

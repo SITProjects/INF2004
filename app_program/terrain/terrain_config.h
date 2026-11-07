@@ -306,12 +306,13 @@
 #endif
 
 /*
- * A hump shorter than this, in ms, is not counted. The course's hump took
- * 2.3 s at 120 mm/s on 2026-11-07, and 1.2 s at the least in the model; the
- * lean of steering in bends lasted 0.2 to 0.6 s.
+ * A hump shorter than this, in mm of travel, is not counted. The course's
+ * 192 mm hump took 188 mm from climb to level on 2026-11-07, and at least 135
+ * in the model; the lean of steering took 34 to 122 mm. Travel, as time lets
+ * in leans of a slow car.
  */
-#ifndef TERRAIN_HUMP_MIN_MS
-#define TERRAIN_HUMP_MIN_MS 800u
+#ifndef TERRAIN_HUMP_MIN_MM
+#define TERRAIN_HUMP_MIN_MM 130
 #endif
 
 /* Samples in a row to start a climb or a descent: 5 = 50 ms. */
@@ -383,6 +384,19 @@
 #endif
 
 /*
+ * A push counts only driving forward at this speed or more, in mm/s, and
+ * leaning less than this, in degrees. All 5 pushes of 1 g or more on
+ * 2026-11-07 were false: starts, reversing and a slow pass restarting, a hand
+ * on the stopped car, and the car lifted at a 24 degree lean.
+ */
+#ifndef TERRAIN_COLLISION_DRIVING_MM_S
+#define TERRAIN_COLLISION_DRIVING_MM_S 60
+#endif
+#ifndef TERRAIN_COLLISION_MAX_LEAN_DEG
+#define TERRAIN_COLLISION_MAX_LEAN_DEG 8.0f
+#endif
+
+/*
  * Samples to wait for the speed to halve: 12 = 120 ms, motion's 100 ms
  * speed average (5 x 20 ms updates) plus one update.
  */
@@ -397,9 +411,9 @@
 #endif
 
 /*
- * Below this speed, in mm/s, there is nothing to drop from (or the car
- * is standing and was hit): the push alone decides. Line following is
- * about 120 mm/s.
+ * Below this speed, in mm/s, there is nothing to drop from, so the collision
+ * step lets the push alone decide. On the car such pushes never reach it:
+ * see TERRAIN_COLLISION_DRIVING_MM_S. Line following is about 120 mm/s.
  */
 #ifndef TERRAIN_COLLISION_MIN_SPEED_MM_S
 #define TERRAIN_COLLISION_MIN_SPEED_MM_S 40u

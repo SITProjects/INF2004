@@ -110,16 +110,34 @@ main (void)
     check("TH03 a hump dropped half way never counts, back on the line after",
           (1u == climbs) && (0u == humps));
 
-    /* The logged run: 2.3 s for the hump, 0.2 to 0.6 s for steering. */
-    check("TH04 a real hump lasts long enough to count",
-          terrain_detect_hump_lasted(1000u, 1230u, TERRAIN_HUMP_MIN_MS));
-    check("TH05 the lean of a steering correction does not",
-          !terrain_detect_hump_lasted(1000u, 1060u, TERRAIN_HUMP_MIN_MS));
-    check("TH06 nor does the clock wrapping change that",
-          terrain_detect_hump_lasted(UINT32_MAX - 100u, 130u,
-                                     TERRAIN_HUMP_MIN_MS) &&
-              !terrain_detect_hump_lasted(UINT32_MAX - 10u, 30u,
-                                          TERRAIN_HUMP_MIN_MS));
+    /* The logged run: travel from climb to level. */
+    check("TH04 the real hump, 188 mm, counts",
+          terrain_detect_hump_lasted(3482, 3670, TERRAIN_HUMP_MIN_MM));
+    check("TH05 the leans of steering, 34, 67 and 122 mm, do not",
+          !terrain_detect_hump_lasted(7719, 7753, TERRAIN_HUMP_MIN_MM) &&
+              !terrain_detect_hump_lasted(9821, 9888, TERRAIN_HUMP_MIN_MM) &&
+              !terrain_detect_hump_lasted(8934, 9056, TERRAIN_HUMP_MIN_MM));
+    check("TH06 reversing never counts, and the distance may wrap",
+          !terrain_detect_hump_lasted(1000, 700, TERRAIN_HUMP_MIN_MM) &&
+              terrain_detect_hump_lasted(INT32_MAX - 50, INT32_MIN + 150,
+                                         TERRAIN_HUMP_MIN_MM));
+
+    /* The five false pushes of 2026-11-07: g, speed, lean. */
+    float const limit = TERRAIN_COLLISION_MAX_LEAN_DEG;
+    int32_t const driving = TERRAIN_COLLISION_DRIVING_MM_S;
+    check("TH07 pushes while stopped, creeping or reversing are ignored",
+          (0.0f == terrain_detect_collision_push(1.3f, 0, 0.5f, driving,
+                                                 limit)) &&
+              (0.0f == terrain_detect_collision_push(1.2f, 33, 0.5f, driving,
+                                                     limit)) &&
+              (0.0f == terrain_detect_collision_push(1.9f, -236, 0.5f, driving,
+                                                     limit)));
+    check("TH08 so is a push with the car lifted",
+          0.0f == terrain_detect_collision_push(3.0f, 129, 23.8f, driving,
+                                                limit));
+    check("TH09 a push driving forward is judged",
+          1.5f == terrain_detect_collision_push(1.5f, 120, 1.0f, driving,
+                                                limit));
 
     printf("%u failure(s)\n", failures);
     return (0u == failures) ? 0 : 1;

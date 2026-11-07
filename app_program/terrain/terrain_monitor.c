@@ -195,10 +195,10 @@ static uint32_t own_state = 0u; /* OWN_* fields. */
 static terrain_calib_acc_t calib_acc;
 static terrain_vec3_t bias;
 static terrain_tilt_t tilt;
-static uint32_t detect_word = 0u;     /* terrain_detect.h layout. */
-static uint32_t hump_start_10ms = 0u; /* When the latest climb began. */
-static uint32_t collide_word = 0u;    /* terrain_detect.h layout. */
-static uint32_t speed_word = 0u;      /* terrain_detect.h layout. */
+static uint32_t detect_word = 0u;  /* terrain_detect.h layout. */
+static int32_t hump_start_mm = 0;  /* Where the latest climb began. */
+static uint32_t collide_word = 0u; /* terrain_detect.h layout. */
+static uint32_t speed_word = 0u;   /* terrain_detect.h layout. */
 static terrain_height_t height;
 
 /* Worked out when building, so it lives in flash. */
@@ -215,7 +215,8 @@ static void calib_add (terrain_vec3_t const * p_sample);
 static void handle_fault (void);
 static void detect_sample (terrain_vec3_t const * p_accel,
                            terrain_hint_t const * p_hint, uint32_t now_10ms);
-static void detect_hump (terrain_vec3_t const * p_accel, uint32_t now_10ms);
+static void detect_hump (terrain_vec3_t const * p_accel,
+                         terrain_hint_t const * p_hint, uint32_t now_10ms);
 static void detect_collision (terrain_vec3_t const * p_accel,
                               terrain_hint_t const * p_hint, uint32_t now_10ms);
 static void detect_turn (float turn_dps, uint32_t now_10ms);
@@ -1034,7 +1035,7 @@ detect_sample (terrain_vec3_t const * p_accel, terrain_hint_t const * p_hint,
     /* A held roll is an old value, not news: pause the humps with it. */
     else if ((tilt.flags & TERRAIN_TILT_ROLL_HELD) == 0u)
     {
-        detect_hump(p_accel, now_10ms);
+        detect_hump(p_accel, p_hint, now_10ms);
     }
     else
     {
@@ -1049,7 +1050,8 @@ detect_sample (terrain_vec3_t const * p_accel, terrain_hint_t const * p_hint,
  * lighter smoothing of this sample's roll.
  */
 static void
-detect_hump (terrain_vec3_t const * p_accel, uint32_t now_10ms)
+detect_hump (terrain_vec3_t const * p_accel, terrain_hint_t const * p_hint,
+             uint32_t now_10ms)
 {
     /* Height first: it needs the state before this sample's step. */
     terrain_height_step(&height, terrain_detect_hump_state(detect_word),
@@ -1064,7 +1066,7 @@ detect_hump (terrain_vec3_t const * p_accel, uint32_t now_10ms)
 
     if (type == TERRAIN_EVENT_ASCENDING)
     {
-        hump_start_10ms = now_10ms;
+        hump_start_mm = p_hint->distance_mm;
     }
 
     /* ASCENDING and DESCENDING carry the lean; LEVEL the hump height. */
@@ -1078,8 +1080,8 @@ detect_hump (terrain_vec3_t const * p_accel, uint32_t now_10ms)
     {
         value = terrain_height_mm(&height);
         terrain_height_clear_hump(&height);
-        if (!terrain_detect_hump_lasted(hump_start_10ms, now_10ms,
-                                        TERRAIN_HUMP_MIN_MS))
+        if (!terrain_detect_hump_lasted(hump_start_mm, p_hint->distance_mm,
+                                        TERRAIN_HUMP_MIN_MM))
         {
             return; /* The lean of a steering correction: not counted. */
         }
@@ -1132,9 +1134,14 @@ static void
 detect_collision (terrain_vec3_t const * p_accel, terrain_hint_t const * p_hint,
                   uint32_t now_10ms)
 {
-    terrain_collision_input_t const in = {
+    float const push_g =
         sqrtf((p_accel->x * p_accel->x) + (p_accel->y * p_accel->y)) /
-            TERRAIN_GRAVITY_MPS2,
+        TERRAIN_GRAVITY_MPS2;
+    terrain_collision_input_t const in = {
+        terrain_detect_collision_push(
+            push_g, p_hint->b_distance_known ? (int32_t)p_hint->speed_mm_s : 0,
+            fabsf(tilt.roll_deg), TERRAIN_COLLISION_DRIVING_MM_S,
+            TERRAIN_COLLISION_MAX_LEAN_DEG),
         terrain_detect_hump_state(detect_word), p_hint->b_distance_known,
         (int32_t)p_hint->speed_mm_s};
     uint32_t value = 0u;
