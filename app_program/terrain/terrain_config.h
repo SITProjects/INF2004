@@ -299,7 +299,9 @@
 /*
  * Humps are looked for only while following the line at this speed or more,
  * in mm/s. 15 of 17 false humps on 2026-11-07 came from moves at 300 mm/s,
- * pivots and the car being handled, and one more from pulling away.
+ * pivots and the car being handled, and one more from pulling away. A slower
+ * car only pauses the search: braking for a hump dips below this, and ending
+ * the hump there cut every pass into short leans that never counted.
  */
 #ifndef TERRAIN_HUMP_MIN_SPEED_MM_S
 #define TERRAIN_HUMP_MIN_SPEED_MM_S 20
@@ -313,6 +315,21 @@
  */
 #ifndef TERRAIN_HUMP_MIN_MM
 #define TERRAIN_HUMP_MIN_MM 130
+#endif
+
+/*
+ * A car at this speed or less as a hump ends slowed for it, in mm/s, and the
+ * hump needs only TERRAIN_HUMP_SLOW_MIN_MM of travel. Slow, the lean ends with
+ * little smoothing lag: the 192 mm hump takes 119 to 149 mm in the model, by
+ * its shape, against 150 or more at speed. A false lean is braked at once, so
+ * it covers far less than at speed.
+ */
+#ifndef TERRAIN_HUMP_SLOW_MM_S
+#define TERRAIN_HUMP_SLOW_MM_S 60
+#endif
+
+#ifndef TERRAIN_HUMP_SLOW_MIN_MM
+#define TERRAIN_HUMP_SLOW_MIN_MM 90
 #endif
 
 /* Samples in a row to start a climb or a descent: 5 = 50 ms. */

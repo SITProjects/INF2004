@@ -76,8 +76,7 @@ terrain_hint_read (terrain_hint_t * p_out)
         hint.left_mm_s = odometry.left_speed_mm_s;
         hint.right_mm_s = odometry.right_speed_mm_s;
         hint.b_following =
-            (ROBOT_MOTION_MODE_FOLLOW == motion_get_status().mode) &&
-            (odometry.speed_mm_s >= TERRAIN_HUMP_MIN_SPEED_MM_S);
+            (ROBOT_MOTION_MODE_FOLLOW == motion_get_status().mode);
     }
 
     *p_out = hint;

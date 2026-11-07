@@ -55,8 +55,8 @@ typedef struct
                                 Valid while b_distance_known (same
                                 reading). For the turn rate. */
     int16_t right_mm_s;    /**< Right wheel speed, as left_mm_s. */
-    bool b_following;      /**< Following the line, and moving: the only
-                                time to look for humps. */
+    bool b_following;      /**< Following the line: the only time to look
+                                for humps. */
 } terrain_hint_t;
 
 /* Public function declarations. */

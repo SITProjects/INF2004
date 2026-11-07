@@ -1034,14 +1034,15 @@ static void
 detect_sample (terrain_vec3_t const * p_accel, terrain_hint_t const * p_hint,
                uint32_t now_10ms)
 {
-    /* Moves, pivots and hands all fake a lean: drop any hump so far. */
-    if (!p_hint->b_following)
+    terrain_hump_sample_t const sample = terrain_detect_hump_sample(
+        p_hint->b_following, (tilt.flags & TERRAIN_TILT_ROLL_HELD) != 0u,
+        p_hint->speed_mm_s, TERRAIN_HUMP_MIN_SPEED_MM_S);
+    if (TERRAIN_HUMP_SAMPLE_DROP == sample)
     {
         detect_word = terrain_detect_hump_clear(detect_word);
         terrain_height_clear_hump(&height);
     }
-    /* A held roll is an old value, not news: pause the humps with it. */
-    else if ((tilt.flags & TERRAIN_TILT_ROLL_HELD) == 0u)
+    else if (TERRAIN_HUMP_SAMPLE_USE == sample)
     {
         detect_hump(p_accel, p_hint, now_10ms);
     }
@@ -1088,8 +1089,11 @@ detect_hump (terrain_vec3_t const * p_accel, terrain_hint_t const * p_hint,
     {
         value = terrain_height_mm(&height);
         terrain_height_clear_hump(&height);
-        if (!terrain_detect_hump_lasted(hump_start_mm, p_hint->distance_mm,
-                                        TERRAIN_HUMP_MIN_MM))
+        if (!terrain_detect_hump_lasted(
+                hump_start_mm, p_hint->distance_mm,
+                terrain_detect_hump_min_mm(
+                    p_hint->speed_mm_s, TERRAIN_HUMP_SLOW_MM_S,
+                    TERRAIN_HUMP_SLOW_MIN_MM, TERRAIN_HUMP_MIN_MM)))
         {
             return; /* The lean of a steering correction: not counted. */
         }

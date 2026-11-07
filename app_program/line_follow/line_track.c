@@ -547,8 +547,8 @@ back_up (line_track_t * p_track, line_track_input_t const * p_in)
 /*
  * Follow slowly over a hump. It starts only on a straight: most false leans
  * are steering in bends. Once started it holds until level ground, as the car
- * wobbles on the hump, and stopping ends the hump, so a car stalled on the
- * ramp tries again at full speed.
+ * wobbles on the hump, and a stall ends the hump, so a car stalled on the ramp
+ * tries again at full speed.
  */
 static void
 watch_hump (line_track_t * p_track, line_track_input_t const * p_in)

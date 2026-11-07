@@ -217,6 +217,26 @@ terrain_detect_hump_lasted (int32_t start_mm, int32_t end_mm, int32_t min_mm)
     return (int32_t)((uint32_t)end_mm - (uint32_t)start_mm) >= min_mm;
 }
 
+int32_t
+terrain_detect_hump_min_mm (int32_t speed_mm_s, int32_t slow_mm_s,
+                            int32_t slow_min_mm, int32_t min_mm)
+{
+    return (speed_mm_s <= slow_mm_s) ? slow_min_mm : min_mm;
+}
+
+terrain_hump_sample_t
+terrain_detect_hump_sample (bool b_following, bool b_roll_held,
+                            int32_t speed_mm_s, int32_t min_speed_mm_s)
+{
+    if (!b_following)
+    {
+        return TERRAIN_HUMP_SAMPLE_DROP;
+    }
+    return (b_roll_held || (speed_mm_s < min_speed_mm_s))
+               ? TERRAIN_HUMP_SAMPLE_PAUSE
+               : TERRAIN_HUMP_SAMPLE_USE;
+}
+
 float
 terrain_detect_collision_push (float push_g, int32_t speed_mm_s, float lean_deg,
                                int32_t driving_mm_s, float max_lean_deg)

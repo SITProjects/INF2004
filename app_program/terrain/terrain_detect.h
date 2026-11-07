@@ -206,6 +206,39 @@ bool terrain_detect_hump_lasted (int32_t start_mm, int32_t end_mm,
                                  int32_t min_mm);
 
 /**
+ * @brief The travel a hump needs to count.
+ * @param speed_mm_s Ground speed as the hump ended.
+ * @param slow_mm_s TERRAIN_HUMP_SLOW_MM_S.
+ * @param slow_min_mm TERRAIN_HUMP_SLOW_MIN_MM.
+ * @param min_mm TERRAIN_HUMP_MIN_MM.
+ * @return @p slow_min_mm for a car that slowed for it, else @p min_mm.
+ */
+int32_t terrain_detect_hump_min_mm (int32_t speed_mm_s, int32_t slow_mm_s,
+                                    int32_t slow_min_mm, int32_t min_mm);
+
+/** @brief What a sample means to the hump machine. */
+typedef enum
+{
+    TERRAIN_HUMP_SAMPLE_USE,   /**< Step the machine. */
+    TERRAIN_HUMP_SAMPLE_PAUSE, /**< Skip it, keeping any hump so far. */
+    TERRAIN_HUMP_SAMPLE_DROP   /**< Drop any hump so far. */
+} terrain_hump_sample_t;
+
+/**
+ * @brief Whether a sample can say anything about a hump.
+ * @param b_following Following the line: moves, pivots and hands fake a lean.
+ * @param b_roll_held The roll is an old value, not news.
+ * @param speed_mm_s Ground speed; + is forward.
+ * @param min_speed_mm_s TERRAIN_HUMP_MIN_SPEED_MM_S.
+ * @return What to do with it. Too slow only pauses: the car brakes for a hump,
+ *         almost to a stop, and that must not end the hump.
+ */
+terrain_hump_sample_t terrain_detect_hump_sample (bool b_following,
+                                                  bool b_roll_held,
+                                                  int32_t speed_mm_s,
+                                                  int32_t min_speed_mm_s);
+
+/**
  * @brief The push to judge: none unless driving forward and not lifted.
  * @param push_g Horizontal push, in g.
  * @param speed_mm_s Ground speed; + is forward.
