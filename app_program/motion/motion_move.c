@@ -118,6 +118,7 @@ static bool b_line_seen_last = false;
 static uint16_t follow_speed_mm_s = 0u;
 static motion_pid_t follow_pid;
 static int32_t follow_target_deg = 0;
+static int32_t follow_right_start = 0; /* Right count when it last changed. */
 static int16_t follow_error_deg = 0;
 static int16_t follow_turn_deg_s = 0;
 
@@ -334,6 +335,7 @@ motion_move_follow (uint16_t speed_mm_s)
     begin(MOTION_STATE_FOLLOW, 0, 1, 0, 0u);
     follow_speed_mm_s = speed_mm_s;
     float const heading = heading_deg();
+    follow_right_start = total_ticks[WHEEL_RIGHT];
     follow_target_deg =
         (int32_t)((heading >= 0.0f) ? (heading + 0.5f) : (heading - 0.5f));
     (void)motion_drive_set_velocity((int16_t)speed_mm_s, 0);
@@ -374,6 +376,10 @@ motion_move_set_follow_heading (int32_t target_deg)
         return MOTION_ERR_PARAM;
     }
 
+    if (target_deg != follow_target_deg)
+    {
+        follow_right_start = total_ticks[WHEEL_RIGHT];
+    }
     follow_target_deg = target_deg;
     return MOTION_OK;
 }
@@ -831,7 +837,12 @@ set_follow_gains (uint16_t speed_mm_s)
 static void
 follow_heading (void)
 {
-    float const error = (float)follow_target_deg - heading_deg();
+    /* Held on counts alone the car curves left: MOTION_SYNC_RIGHT_SCALE. */
+    float const extra_deg =
+        ((float)(total_ticks[WHEEL_RIGHT] - follow_right_start) *
+         MOTION_SYNC_RIGHT_SCALE * MM_PER_TICK) /
+        (MOTION_TRACK_WIDTH_MM * DEG_TO_RAD);
+    float const error = (float)follow_target_deg - heading_deg() - extra_deg;
     follow_error_deg = round_rate(error);
     int16_t rate =
         round_rate(motion_pid_update(&follow_pid, error, UPDATE_PERIOD_S));

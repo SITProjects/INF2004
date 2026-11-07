@@ -162,6 +162,45 @@ steer (int32_t ahead_deg, int left, int right, unsigned int updates)
     }
 }
 
+/* Follow from rest with the wheels moving these counts per update. */
+static motion_follow_t
+hold_heading (int left, int right, unsigned int updates)
+{
+    motion_follow_t follow;
+    spin(0, 0, 2u * MOTION_SPEED_WINDOW_UPDATES);
+    (void)motion_move_follow(MOTION_FOLLOW_SPEED_MM_S);
+    spin(left, right, updates);
+    (void)motion_move_get_follow(&follow);
+    return follow;
+}
+
+static void
+test_follow_drift (void)
+{
+    /* The right wheel goes MOTION_SYNC_RIGHT_SCALE further per count, so
+     * equal counts are really a curve to the left, 13 degrees a metre. */
+    motion_follow_t follow = hold_heading(20, 20, 800u);
+    check("equal counts are a left curve, so a held heading steers right",
+          (follow.heading_error_deg <= -15) && (follow.turn_deg_s < 0));
+    (void)motion_move_stop();
+
+    follow = hold_heading(41, 40, 400u);
+    check("a really straight run needs no correction",
+          (follow.heading_error_deg >= -1) && (follow.heading_error_deg <= 1));
+    (void)motion_move_stop();
+
+    (void)hold_heading(20, 20, 800u);
+    motion_odometry_t odometry;
+    (void)motion_move_get_odometry(&odometry);
+    (void)motion_move_set_follow_heading(odometry.heading_deg + 5);
+    spin(20, 20, 1u);
+    motion_follow_t fresh;
+    (void)motion_move_get_follow(&fresh);
+    check("a new target starts from the heading it was given",
+          (fresh.heading_error_deg >= 4) && (fresh.heading_error_deg <= 6));
+    (void)motion_move_stop();
+}
+
 static void
 test_slow_wheel_stall (void)
 {
@@ -343,6 +382,7 @@ main (void)
           motion_move_get_state() == MOTION_STATE_STOPPED);
     test_turn_runaway();
     test_slow_wheel_stall();
+    test_follow_drift();
 
     printf("%u failures\n", failures);
     return failures ? 1 : 0;
