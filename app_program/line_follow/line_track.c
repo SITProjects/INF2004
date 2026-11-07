@@ -692,24 +692,26 @@ pivot_junction (line_track_t * p_track, line_track_input_t const * p_in,
 }
 
 /*
- * Early in a left pivot the right sensor leaves the line carrying on past the
+ * Early in a pivot the far sensor leaves the line carrying on past the
  * junction: move the target by how far that line is off the car's heading.
- * Motion takes the new target on without stopping. A right pivot sweeps a
- * negative angle, so it never gets this far.
+ * Motion takes the new target on without stopping.
  */
 static void
 aim_by_old_line (line_track_t * p_track, line_track_input_t const * p_in,
                  bool const * p_was_black)
 {
-    int32_t const swept = p_in->heading_deg - p_track->pivot_start_deg;
-    if (p_track->b_old_line_seen || !p_was_black[SIDE_RIGHT] ||
-        p_track->b_black[SIDE_RIGHT] || (swept < LINE_OLD_LINE_MIN_DEG) ||
+    uint32_t const far =
+        (SIDE_LEFT == p_track->last_side) ? SIDE_RIGHT : SIDE_LEFT;
+    int32_t const sign = side_sign(p_track->last_side);
+    int32_t const swept = sign * (p_in->heading_deg - p_track->pivot_start_deg);
+    if (p_track->b_old_line_seen || !p_was_black[far] ||
+        p_track->b_black[far] || (swept < LINE_OLD_LINE_MIN_DEG) ||
         (swept > LINE_OLD_LINE_MAX_DEG))
     {
         return;
     }
     p_track->b_old_line_seen = true;
-    p_track->target_deg += swept - LINE_OLD_LINE_DEG;
+    p_track->target_deg += sign * (swept - LINE_OLD_LINE_DEG);
 }
 
 /* Both white: in a bend, seek the last edge; for too long, search. */

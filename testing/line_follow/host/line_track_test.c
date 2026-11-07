@@ -1109,11 +1109,12 @@ reach_pivot (line_turn_t turn, int skew_mm)
 }
 
 /* The pivot, 2 degrees a sample up to @p last_deg off the start, with the
- * right sensor black from @p black_deg until @p white_deg; below 0 is before
- * the car starts to turn. Its level changes one sample late, so a white_deg
- * of 20 counts at 22. */
+ * sensor on the far side, or the near one, black from @p black_deg until
+ * @p white_deg; below 0 is before the car starts to turn. Its level changes one
+ * sample late, so a white_deg of 20 counts at 22. */
 static int32_t
-pivot_target (line_turn_t turn, int black_deg, int white_deg, int last_deg)
+pivot_sensor (line_turn_t turn, bool b_far, int black_deg, int white_deg,
+              int last_deg)
 {
     reach_pivot(turn, 0);
     bool const b_left = (LINE_MODE_SEARCH_LEFT == out.mode);
@@ -1121,13 +1122,21 @@ pivot_target (line_turn_t turn, int black_deg, int white_deg, int last_deg)
     for (int deg = -4; deg <= last_deg; deg += 2)
     {
         int const turned = (deg > 0) ? deg : 0;
+        bool const b_black = (deg >= black_deg) && (deg < white_deg);
         in.heading_deg = b_left ? turned : -turned;
-        in.b_right_black = (deg >= black_deg) && (deg < white_deg);
+        in.b_left_black = b_black && (b_left != b_far);
+        in.b_right_black = b_black && (b_left == b_far);
         out = line_track_update(&track, &in);
     }
     in.b_turning = false;
     in.heading_deg = 0;
     return out.target_heading_deg;
+}
+
+static int32_t
+pivot_target (line_turn_t turn, int black_deg, int white_deg, int last_deg)
+{
+    return pivot_sensor(turn, true, black_deg, white_deg, last_deg);
 }
 
 /* A bypass: a pivot of @p deg under motion's own control, then a move. */
@@ -1378,8 +1387,8 @@ test_pivot_aim (void)
           90 == pivot_target(LINE_TURN_LEFT, 200, 200, 60));
     check("LT61 the car right of the line: a left turn goes further",
           98 == pivot_target(LINE_TURN_LEFT, 12, 20, 60));
-    check("LT62 a right turn is always 90 degrees",
-          -90 == pivot_target(LINE_TURN_RIGHT, 12, 20, 60));
+    check("LT62 the car left of the line: a right turn goes further",
+          -98 == pivot_target(LINE_TURN_RIGHT, 12, 20, 60));
     check("LT63 the car left of the line: a left turn goes less",
           84 == pivot_target(LINE_TURN_LEFT, 0, 6, 60));
     check("LT64 a square car turns exactly 90",
@@ -1392,6 +1401,13 @@ test_pivot_aim (void)
           90 == pivot_target(LINE_TURN_LEFT, -4, 2, 60));
     check("LT71 a sensor black from the start still counts as it leaves",
           92 == pivot_target(LINE_TURN_LEFT, -4, 14, 60));
+    check("LT88 the car right of the line: a right turn goes less",
+          -84 == pivot_target(LINE_TURN_RIGHT, 0, 6, 60));
+    check("LT89 2026-11-07: leaving at 32, a right turn goes 18 further",
+          -108 == pivot_target(LINE_TURN_RIGHT, 22, 30, 60));
+    check("LT90 the near sensor leaving a tape changes nothing, either way",
+          (90 == pivot_sensor(LINE_TURN_LEFT, false, 12, 20, 60)) &&
+              (-90 == pivot_sensor(LINE_TURN_RIGHT, false, 12, 20, 60)));
 
     /* Sweeping on over something else after the line. */
     reach_pivot(LINE_TURN_LEFT, 0);

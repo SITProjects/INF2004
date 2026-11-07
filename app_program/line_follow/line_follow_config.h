@@ -250,19 +250,18 @@
 #define LINE_JUNCTION_CENTRE_MM 130
 
 /**
- * @brief A left pivot starts with the sensors over the line carrying on past
- * the junction, so the right sensor leaving that tape shows where the line
- * runs: this many degrees behind that heading. Three left turns on 2026-11-06
- * and 07 that lost the line stopped 8 to 10 degrees short by the next crossing
- * tape, and this read the same to within about 2. It is half the sensors'
- * spacing and half the tape seen 130 mm from the axle, 11 degrees, plus the
- * debounce and lag at 90 degrees/s.
+ * @brief A junction's pivot starts with the sensors over the line carrying on
+ * past it, so the far sensor leaving that tape shows where the line runs: this
+ * many degrees behind that heading. Three left turns on 2026-11-06 and 07 that
+ * lost the line stopped 8 to 10 degrees short by the next crossing tape, and
+ * this read the same to within about 2. It is half the sensors' spacing and
+ * half the tape seen 130 mm from the axle, 11 degrees, plus the debounce and
+ * lag at 90 degrees/s.
  *
- * The car's heading is no guide: it stopped up to 11 degrees right of the
- * line. Nor is the gap between the sensors on the way in: a sensor already on
- * the line reads as skew, and took 19 degrees off one left turn. Right pivots
- * are left at 90: they work, as a short one drifts onto the tape, and nothing
- * independent shows this reading is right for them.
+ * The car's heading is no guide: it stopped up to 18 degrees off the line, and
+ * a right turn ending that short ran past the curve beyond. Nor is the gap
+ * between the sensors on the way in: a sensor already on the line reads as
+ * skew, and took 19 degrees off one left turn.
  */
 #define LINE_OLD_LINE_DEG 14
 
