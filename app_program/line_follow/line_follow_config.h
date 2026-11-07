@@ -99,6 +99,15 @@
  */
 #define LINE_BEND_TREND_DEG 15
 
+/**
+ * @brief The same when the car has swung this many degrees away from that
+ * side since the tape first touched: its own correction swept the tape
+ * across and out. That is how it met the start of the wide U on 2026-11-06
+ * 21:47: the right sensor touched, it steered right, and the tape left on
+ * the left before any bend had been seen.
+ */
+#define LINE_CROSS_SWING_DEG 8
+
 /** Travel, in mm, between the headings kept for the turn above. */
 #define LINE_TREND_STEP_MM 32
 

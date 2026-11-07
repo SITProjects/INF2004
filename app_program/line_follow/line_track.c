@@ -667,8 +667,10 @@ crossed_out (line_track_t const * p_track, line_track_input_t const * p_in,
     return !p_track->b_black[other] && p_track->b_both_seen &&
            (p_track->entry_side == other) &&
            (JUNCTION_NONE == p_track->junction_phase) &&
-           ((side_sign(side) * recent_turn(p_track, p_in)) >=
-            LINE_BEND_TREND_DEG);
+           (((side_sign(side) * recent_turn(p_track, p_in)) >=
+             LINE_BEND_TREND_DEG) ||
+            ((side_sign(side) * (p_track->entry_deg - p_in->heading_deg)) >=
+             LINE_CROSS_SWING_DEG));
 }
 
 /* A single-side touch begins: the same side again soon is a bend. */

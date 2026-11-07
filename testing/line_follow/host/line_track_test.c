@@ -821,6 +821,27 @@ cross_bend (int deg, int mm, bool b_from_right, int white_mm)
     drive(false, false, samples_for(white_mm));
 }
 
+/* 2026-11-06 21:47, the start of the wide U: on a straight the tape touches
+ * one sensor, the car swings @p swing_deg towards it, and the tape crosses
+ * and leaves on the other side, touching it once more on the way. */
+static void
+cross_swing (int swing_deg, bool b_from_right)
+{
+    reset();
+    drive(false, false, samples_for(150));
+    unsigned int const samples = samples_for(25);
+    for (unsigned int i = 1u; i <= samples; i++)
+    {
+        in.heading_deg = (swing_deg * (int)i) / (int)samples;
+        drive(!b_from_right, b_from_right, 1u);
+    }
+    drive(true, true, samples_for(6));
+    drive(b_from_right, !b_from_right, samples_for(5));
+    drive(false, false, samples_for(6));
+    drive(b_from_right, !b_from_right, samples_for(4));
+    drive(false, false, samples_for(30));
+}
+
 static void
 test_bend_crossing (void)
 {
@@ -843,6 +864,24 @@ test_bend_crossing (void)
     check("LT30 no seek on a straight, against the turn, or after a slight "
           "turn",
           b_straight && b_wrong_way && b_slight);
+
+    cross_swing(-15, true);
+    bool const b_swing_left = (out.target_heading_deg - in.heading_deg) >=
+                              (LINE_SEEK_MAX_DEG - 1);
+    cross_swing(15, false);
+    bool const b_swing_right = (in.heading_deg - out.target_heading_deg) >=
+                               (LINE_SEEK_MAX_DEG - 1);
+    check("LT35 a car that swung the tape out, left or right, turns back for "
+          "it, and keeps going through a second short touch",
+          b_swing_left && b_swing_right);
+
+    cross_swing(-(LINE_CROSS_SWING_DEG - 3), true);
+    bool const b_small = out.target_heading_deg == in.heading_deg;
+    /* Under LINE_BEND_TREND_DEG, which would rightly count as a bend. */
+    cross_swing(LINE_BEND_TREND_DEG - 5, true);
+    bool const b_towards = out.target_heading_deg == in.heading_deg;
+    check("LT36 no seek after a small swing, or a swing towards the exit",
+          b_small && b_towards);
 
     /* The seek is not forever: a tape that never returns is searched for. */
     cross_bend(BEND_DEG, 120, true, LINE_LOST_MM + 10);
