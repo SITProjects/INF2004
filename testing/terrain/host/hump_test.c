@@ -110,6 +110,17 @@ main (void)
     check("TH03 a hump dropped half way never counts, back on the line after",
           (1u == climbs) && (0u == humps));
 
+    /* The logged run: 2.3 s for the hump, 0.2 to 0.6 s for steering. */
+    check("TH04 a real hump lasts long enough to count",
+          terrain_detect_hump_lasted(1000u, 1230u, TERRAIN_HUMP_MIN_MS));
+    check("TH05 the lean of a steering correction does not",
+          !terrain_detect_hump_lasted(1000u, 1060u, TERRAIN_HUMP_MIN_MS));
+    check("TH06 nor does the clock wrapping change that",
+          terrain_detect_hump_lasted(UINT32_MAX - 100u, 130u,
+                                     TERRAIN_HUMP_MIN_MS) &&
+              !terrain_detect_hump_lasted(UINT32_MAX - 10u, 30u,
+                                          TERRAIN_HUMP_MIN_MS));
+
     printf("%u failure(s)\n", failures);
     return (0u == failures) ? 0 : 1;
 }

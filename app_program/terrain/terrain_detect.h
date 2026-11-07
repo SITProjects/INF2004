@@ -196,6 +196,16 @@ terrain_hump_state_t terrain_detect_hump_state (uint32_t word);
 uint32_t terrain_detect_hump_clear (uint32_t word);
 
 /**
+ * @brief Whether a hump lasted long enough to count.
+ * @param start_10ms Time the climb began, in 10 ms steps.
+ * @param end_10ms Time it was level again.
+ * @param min_ms TERRAIN_HUMP_MIN_MS.
+ * @return True if it counts. Times may wrap.
+ */
+bool terrain_detect_hump_lasted (uint32_t start_10ms, uint32_t end_10ms,
+                                 uint32_t min_ms);
+
+/**
  * @brief Run the turning state machine on one sample.
  * @param p_word Detector word; start from 0.
  * @param turn_dps Turn rate for this sample, deg/s; either sign. Only its

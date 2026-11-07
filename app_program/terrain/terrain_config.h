@@ -305,6 +305,15 @@
 #define TERRAIN_HUMP_MIN_SPEED_MM_S 20
 #endif
 
+/*
+ * A hump shorter than this, in ms, is not counted. The course's hump took
+ * 2.3 s at 120 mm/s on 2026-11-07, and 1.2 s at the least in the model; the
+ * lean of steering in bends lasted 0.2 to 0.6 s.
+ */
+#ifndef TERRAIN_HUMP_MIN_MS
+#define TERRAIN_HUMP_MIN_MS 800u
+#endif
+
 /* Samples in a row to start a climb or a descent: 5 = 50 ms. */
 #ifndef TERRAIN_HUMP_ENTER_SAMPLES
 #define TERRAIN_HUMP_ENTER_SAMPLES 5u
@@ -344,13 +353,13 @@
 #endif
 
 /*
- * Roll smoothing for the hump height only, in seconds: lighter than
- * TERRAIN_TILT_TAU_S, whose 0.15 s can cut the short lean of a short ramp
- * and read it low. Lighter lets more motor vibration through, which can
- * read high. TODO(car day): tune over a measured ramp at race speed.
+ * Roll smoothing for the hump height only, in seconds. Lighter lets more
+ * motor vibration through, which reads high: 0.05 read the course's 10 mm hump
+ * as 16 mm at 120 mm/s on 2026-11-07. Its ramp is long enough for the tilt's
+ * 0.15 s, where the model reads 9 to 10 mm.
  */
 #ifndef TERRAIN_HUMP_HEIGHT_TAU_S
-#define TERRAIN_HUMP_HEIGHT_TAU_S 0.05f
+#define TERRAIN_HUMP_HEIGHT_TAU_S 0.15f
 #endif
 
 /*

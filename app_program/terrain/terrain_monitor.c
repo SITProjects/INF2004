@@ -195,9 +195,10 @@ static uint32_t own_state = 0u; /* OWN_* fields. */
 static terrain_calib_acc_t calib_acc;
 static terrain_vec3_t bias;
 static terrain_tilt_t tilt;
-static uint32_t detect_word = 0u;  /* terrain_detect.h layout. */
-static uint32_t collide_word = 0u; /* terrain_detect.h layout. */
-static uint32_t speed_word = 0u;   /* terrain_detect.h layout. */
+static uint32_t detect_word = 0u;     /* terrain_detect.h layout. */
+static uint32_t hump_start_10ms = 0u; /* When the latest climb began. */
+static uint32_t collide_word = 0u;    /* terrain_detect.h layout. */
+static uint32_t speed_word = 0u;      /* terrain_detect.h layout. */
 static terrain_height_t height;
 
 /* Worked out when building, so it lives in flash. */
@@ -1061,6 +1062,11 @@ detect_hump (terrain_vec3_t const * p_accel, uint32_t now_10ms)
         return;
     }
 
+    if (type == TERRAIN_EVENT_ASCENDING)
+    {
+        hump_start_10ms = now_10ms;
+    }
+
     /* ASCENDING and DESCENDING carry the lean; LEVEL the hump height. */
     uint32_t value = 0u;
     if ((type == TERRAIN_EVENT_ASCENDING) || (type == TERRAIN_EVENT_DESCENDING))
@@ -1072,6 +1078,11 @@ detect_hump (terrain_vec3_t const * p_accel, uint32_t now_10ms)
     {
         value = terrain_height_mm(&height);
         terrain_height_clear_hump(&height);
+        if (!terrain_detect_hump_lasted(hump_start_10ms, now_10ms,
+                                        TERRAIN_HUMP_MIN_MS))
+        {
+            return; /* The lean of a steering correction: not counted. */
+        }
     }
     else
     {
