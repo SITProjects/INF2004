@@ -382,7 +382,7 @@
 /*
  * Below this speed, in mm/s, there is nothing to drop from (or the car
  * is standing and was hit): the push alone decides. Line following is
- * about 80 mm/s.
+ * about 120 mm/s.
  */
 #ifndef TERRAIN_COLLISION_MIN_SPEED_MM_S
 #define TERRAIN_COLLISION_MIN_SPEED_MM_S 40u

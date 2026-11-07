@@ -25,7 +25,7 @@
  * @brief An edge this soon after the last one, in us, is chatter: the
  * module has no hysteresis, so DO flips for a while as a bar edge crosses
  * its threshold (1 to 3 us apart, and flickers of 6 ms, 2026-11-06). 10 ms
- * is 0.8 mm at the 80 mm/s follow speed; the narrowest real bar, on the
+ * is 1.2 mm at the 120 mm/s follow speed; the narrowest real bar, on the
  * smaller barcode, reads 25 ms.
  */
 #define BARCODE_MIN_PULSE_US 10000u
@@ -61,7 +61,7 @@
 
 /**
  * @brief After a slow pass, edges this long, in us, cannot start another:
- * 160 mm at follow speed, so what is left of a barcode read early cannot
+ * 240 mm at follow speed, so what is left of a barcode read early cannot
  * send the car back over it.
  */
 #define BARCODE_TRIGGER_HOLDOFF_US 2000000u
@@ -75,8 +75,8 @@
 
 /**
  * @brief The most, in us, one hump can hold the trigger. The course's hump
- * takes 2.4 s at 80 mm/s. A car calibrated on a slope leans for good and reads
- * as on a hump, and that must not stop every barcode for the run.
+ * takes 1.6 s at follow speed. A car calibrated on a slope leans for good and
+ * reads as on a hump, and that must not stop every barcode for the run.
  */
 #define BARCODE_TRIGGER_HUMP_MAX_US 4000000u
 

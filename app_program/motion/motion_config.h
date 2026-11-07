@@ -166,12 +166,12 @@
 /*
  * Chassis speed of line following, in mm/s. The MBF_MOTION_CMD packing
  * has no speed field, so tMotion follows at this speed.
- * 80 since 2026-11-06: chosen on LINE-U04 LT19's model of the car, where
- * 100 and 120 mm/s lost a 200 mm curve. Not yet confirmed on the car.
- * TODO(calibrate) with MOT-U31: raise only once the line gains hold the
- * tightest curve of the course.
+ * 120 since 2026-11-07, the user's choice after driving it, back from 80.
+ * The car model rates bends lower here: with healthy sensors a left U passes
+ * 85 of 324 cases against 259 at 80, and fails from 0.35 s of turn lag.
+ * TODO(calibrate) with MOT-U31: confirm on the tightest curve of the course.
  */
-#define MOTION_FOLLOW_SPEED_MM_S 80u
+#define MOTION_FOLLOW_SPEED_MM_S 120u
 
 /*
  * Heading PI loop of line following. It turns the error between the
@@ -183,9 +183,12 @@
  * TODO(calibrate) with MOT-U41/U42, then on a 2 m straight: raise KP until
  * a held heading settles within about 40 mm without overshoot; raise KI
  * only if the car holds a steady offset from the target.
+ * These apply at MOTION_FOLLOW_SPEED_MM_S and scale with speed, so they
+ * change with it: tuned as 4.0 and 0.5 at 80 mm/s. That keeps the steering
+ * per mm of travel, and the 30 mm/s barcode pass, as tuned.
  */
-#define MOTION_FOLLOW_KP 4.0f
-#define MOTION_FOLLOW_KI 0.5f
+#define MOTION_FOLLOW_KP 6.0f
+#define MOTION_FOLLOW_KI 0.75f
 
 /*
  * Largest turn rate the heading loop asks for, in deg/s: the tightest arc

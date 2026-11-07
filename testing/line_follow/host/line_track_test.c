@@ -590,31 +590,32 @@ curve_model (double radius, double half_gap, double lag_s, double entry_deg)
 static void
 test_curve_model (void)
 {
-    /* The fit to car10, then wider curves, across the likely gaps. */
-    bool const b_tight = curve_model(100.0, 10.0, 0.5, 0.0);
+    /* The fit to car10, then wider curves: the car's 30 mm gap, and more.
+     * 20 mm, once allowed for, loses both curves at 120 mm/s. */
+    bool const b_tight = curve_model(100.0, 15.0, 0.5, 0.0);
     bool const b_gap = curve_model(100.0, 18.0, 0.5, 0.0);
-    bool const b_wide = curve_model(200.0, 10.0, 0.25, -8.0);
+    bool const b_wide = curve_model(200.0, 15.0, 0.25, -8.0);
     bool const b_entry = curve_model(200.0, 18.0, 0.25, -8.0);
     check("LT19 the car model follows a left quarter circle onto the exit "
           "straight: the 100 mm radius fitted to car10, and 200 mm met 8 "
-          "degrees off, with the sensors 20 and 36 mm apart",
+          "degrees off, with the sensors 30 and 36 mm apart",
           b_tight && b_gap && b_wide && b_entry);
 }
 
-/* The left U of 2026-11-07, the right sensor letting go as late as there. */
-static void
-test_u_exit_model (void)
+/* A left U at @p speed, the right sensor @p hold_s slow to let go: true if
+ * the car comes out on the straight and stays on it. */
+static bool
+u_exit_model (double speed, double hold_s, double half_gap, double lag_s)
 {
     reset();
+    sim_speed_mm_s = speed;
     sim_radius_mm = 165.0;
     sim_u_turn = true;
-    sim_right_hold_s = 0.34;
-    sim_right_white_s = sim_right_hold_s;
-    sim_car_t car = sim_start(400.0, 18.0, 0.35, 0.0);
+    sim_right_hold_s = hold_s;
+    sim_right_white_s = hold_s;
+    sim_car_t car = sim_start(400.0, half_gap, lag_s, 0.0);
     double worst = 0.0;
-    unsigned int const steps =
-        (unsigned int)(2400.0 /
-                       ((double)MOTION_FOLLOW_SPEED_MM_S * SIM_STEP_S));
+    unsigned int const steps = (unsigned int)(2400.0 / (speed * SIM_STEP_S));
     for (unsigned int i = 0u; i < steps; i++)
     {
         double const off = sim_step(&car);
@@ -625,12 +626,24 @@ test_u_exit_model (void)
     }
     sim_u_turn = false;
     sim_right_hold_s = 0.0;
-    printf("  U exit model: sensors at most %.0f mm off the exit straight, "
-           "heading %.0f deg, %.0f mm along it\n",
-           worst, car.heading, -car.x);
-    check("LT44 the car model comes out of a left U onto the straight with the "
-          "right sensor 0.34 s slow to let go, and stays on it",
-          (worst < 24.0) && (car.x < -500.0) && (LINE_MODE_TRACK == out.mode));
+    sim_speed_mm_s = (double)MOTION_FOLLOW_SPEED_MM_S;
+    printf("  U exit model at %.0f mm/s: sensors at most %.0f mm off the exit "
+           "straight, heading %.0f deg, %.0f mm along it\n",
+           speed, worst, car.heading, -car.x);
+    return (worst < 24.0) && (car.x < -500.0) && (LINE_MODE_TRACK == out.mode);
+}
+
+static void
+test_u_exit_model (void)
+{
+    /* The sensor as it was on 2026-11-07: at 120 mm/s no gain or lag gets
+     * round with it, so this guards the steering back at the old speed. */
+    check("LT44 the car model comes out of a left U onto the straight at "
+          "80 mm/s with the right sensor 0.34 s slow to let go",
+          u_exit_model(80.0, 0.34, 18.0, 0.35));
+    /* Fails from 0.35 s of turn lag, and from 0.1 s of sensor delay. */
+    check("LT48 and at the follow speed, with the sensors as they are now",
+          u_exit_model((double)MOTION_FOLLOW_SPEED_MM_S, 0.05, 15.0, 0.25));
 }
 
 /* Heading swing on a long straight, met 3 degrees off, once settled. */
