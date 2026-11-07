@@ -31,12 +31,13 @@ ACTIONS = ("STRAIGHT", "LEFT", "RIGHT", "UTURN")
 MAP_SIZE = 8  # REMOTE_MAP_SIZE
 BARCODE_TEXT = re.compile(r"^[0-9A-Z.$/+%-]{1,3}$")  # REMOTE_TEXT_MAX, no space
 SHOWN_EVENT = re.compile(
-    r"remote: |barcode: (FAIL|\S+ dir=)|line (JUNCTION|SEARCH|STOP|BARCODE)"
+    r"remote: |barcode: FAIL|line (JUNCTION|SEARCH|STOP|BARCODE)"
     r"|obstacle: (stopped|started|avoid |width )|mqtt: |terrain: COLLISION")
 
 EDGE_READOUT = re.compile(r"barcode: B=\d raw=\d+ kept=(\d+)")
 READOUT_S = 0.5  # The car prints edge counts this often.
 PASS_END_READOUTS = 3  # This many in a row with no edges end a pass.
+SCAN_REPEAT_S = 3.0  # Console and telemetry each report a read within this.
 PASS_MIN_EDGES = 5  # Fewer is a stray mark, not a barcode.
 FULL_BARCODE_EDGES = 30  # "*X*" has 29 elements between 30 edges.
 
@@ -56,6 +57,7 @@ state = {
     "last_obstacle": None,  # Width and range of the last obstacle measured.
 }
 car_seen = 0.0  # time.monotonic() of the latest CAR line.
+last_scan = {"barcode": None, "at": 0.0}  # The latest read, for note_scan().
 car = {"conn": None, "topic": None}
 log_path = "car.log"
 
@@ -98,6 +100,27 @@ def note_edges(kept):
             f"{seconds:.1f} s (a full read needs {FULL_BARCODE_EDGES})")
 
 
+def note_scan(barcode, action, message):
+    """Show a read once: the console and telemetry both report it. Holds lock."""
+    now = time.monotonic()
+    state["barcode"], state["barcode_action"] = barcode, action
+    if (barcode != last_scan["barcode"]
+            or now - last_scan["at"] > SCAN_REPEAT_S):
+        state["events"].appendleft(f"{time.strftime('%H:%M:%S')} {message}")
+    last_scan.update(barcode=barcode, at=now)
+
+
+def note_telemetry(payload):
+    """Take reads from telemetry too: it carries on if the console stops."""
+    match = re.search(r" barcode (\S+) (fwd|rev)$", payload)
+    if match:
+        barcode, direction = match.groups()
+        with lock:
+            action = next((row["action"] for row in state["map"]
+                           if row["barcode"] == barcode), "STRAIGHT")
+            note_scan(barcode, action, f"barcode: {barcode} dir={direction}")
+
+
 def note_console(text):
     """Update the dashboard state from one console line."""
     message = text.split(" ", 1)[-1]
@@ -113,7 +136,7 @@ def note_console(text):
             state["run"] = match.group(1)
         match = re.search(r"barcode: (\S+) dir=\w+ .*turn=(\w+)", message)
         if match:
-            state["barcode"], state["barcode_action"] = match.groups()
+            note_scan(*match.groups(), message)
         match = EDGE_READOUT.search(message)
         if match:
             note_edges(int(match.group(1)))
@@ -206,6 +229,7 @@ def handle_publish(conn, header, body):
             note_console(text)
     else:
         log(f"{topic} {payload}")
+        note_telemetry(payload)
     if qos == 1:
         conn.sendall(b"\x40\x02" + packet_id)
     packet = publish_packet(topic, payload)

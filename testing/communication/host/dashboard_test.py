@@ -63,6 +63,11 @@ class FakeCar:
                 + f"1000 {text}\n".encode())
         self.sock.sendall(b"\x30" + length_bytes(len(body)) + body)
 
+    def telemetry(self, text):
+        topic = f"{TOPIC}/telemetry".encode()
+        body = len(topic).to_bytes(2, "big") + topic + text.encode()
+        self.sock.sendall(b"\x30" + length_bytes(len(body)) + body)
+
     def pump(self):
         """Read what the broker sent, answering as the firmware would."""
         try:
@@ -235,6 +240,31 @@ def run(folder):
           and state["car"]["ow"] == 0 and state["car"]["v"] == 80)
     check("D18 status lines stay out of the events",
           not any("CAR" in event for event in state["events"]))
+
+    # The console stopped after a stall on 2026-11-07: telemetry still came.
+    car.telemetry("seq=716 captured_ms=689470 barcode A rev")
+    settle(car)
+    state = get_state()
+    check("D22 with no console, telemetry shows a read and its mapped action",
+          state["barcode"] == "A" and state["barcode_action"] == "RIGHT"
+          and len([e for e in state["events"] if "barcode: A" in e]) == 1)
+    car.console("barcode: A dir=rev elements=29 narrow=3 us turn=LEFT")
+    settle(car)
+    state = get_state()
+    check("D23 the console's report of the same read adds no second event, "
+          "and its action stands",
+          state["barcode_action"] == "LEFT"
+          and len([e for e in state["events"] if "barcode: A" in e]) == 1)
+    car.telemetry("seq=717 captured_ms=689470 barcode Q fwd")
+    settle(car)
+    state = get_state()
+    check("D24 a barcode not listed goes straight on",
+          state["barcode"] == "Q" and state["barcode_action"] == "STRAIGHT")
+    car.console("barcode: Q dir=fwd elements=29 narrow=3 us turn=STRAIGHT")
+    car.console("barcode: FAIL bad width ratio")
+    settle(car)
+    check("D25 a failed read still shows as an event",
+          any("barcode: FAIL" in e for e in get_state()["events"]))
 
     car.close()
     time.sleep(0.3)
