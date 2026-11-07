@@ -52,6 +52,8 @@ typedef struct
     uint16_t pass_max_mm;      /**< Largest pass distance accepted. */
     uint16_t return_extra_mm;  /**< Drive past the offset to find the line. */
     uint16_t overshoot_mm;     /**< IR row to axle; 0 skips that leg. */
+    uint16_t line_gate_mm;     /**< Accept a line only with the IR row
+                                    planned this close to it; 0 anywhere. */
     uint8_t angle_min_deg;     /**< Shallowest turn, 5..90 degrees. */
     uint16_t backoff_mm;       /**< Reverse when CRITICAL holds a move. */
     uint8_t max_backoffs;      /**< Back-offs per bypass; 0 never. */

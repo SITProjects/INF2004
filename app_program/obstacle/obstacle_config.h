@@ -298,6 +298,14 @@
 #define OBSTACLE_CAR_AXLE_TO_PIVOT_MM 60u /* Axle midpoint to servo pivot. */
 #define OBSTACLE_CAR_REAR_MM 162u         /* Axle midpoint to rear bumper. */
 #define OBSTACLE_AVOID_LINE_OVERSHOOT_MM 130u /* IR row to axle, 13 cm. */
+/*
+ * Coming back, black under the IR row counts as the line only once the row
+ * is planned to be this close to it. On 2026-11-07 both bypasses stopped for
+ * black with the row planned 140 to 200 mm short of the line, probably a
+ * cross tape. The pass can drift toward the line, 70 mm in one of those runs,
+ * so this must stay above that or the row crosses the line unseen.
+ */
+#define OBSTACLE_AVOID_LINE_GATE_MM 100u
 #define OBSTACLE_AVOID_MARGIN_MM 60u
 #define OBSTACLE_AVOID_DEPTH_MM 200u /* Largest test obstacle's depth. */
 #define OBSTACLE_AVOID_SIDESTEP_MIN_MM 100u

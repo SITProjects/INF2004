@@ -53,6 +53,9 @@ static uint8_t plan_angle (uint16_t sidestep_mm, uint16_t centre_mm,
                            obstacle_avoid_geometry_t const * p_geometry);
 static uint32_t along_diagonal (uint32_t lateral_mm, uint8_t angle_deg);
 static uint32_t diagonal_forward (uint32_t lateral_mm, uint8_t angle_deg);
+static uint32_t tail_clearance_mm (uint32_t clearance_mm, uint8_t angle_deg);
+static uint32_t return_blind_mm (obstacle_avoid_t const * p_ctx);
+static bool line_near_turn_in (obstacle_avoid_t const * p_ctx);
 static uint32_t pass_left (obstacle_avoid_t const * p_ctx);
 static bool elapsed (uint32_t now_ms, uint32_t since_ms, uint32_t limit_ms);
 static bool sequence_newer (uint8_t sequence, uint8_t reference);
@@ -283,6 +286,18 @@ obstacle_avoid_plan (robot_obstacle_result_t result,
                            : (uint16_t)need_mm;
     plan.pass_mm = (uint16_t)pass_mm;
     plan.angle_deg = plan_angle(plan.sidestep_mm, room_mm, p_geometry);
+    if (!plan.b_edge_unknown && !plan.b_limited)
+    {
+        /* The edge is known, so the tail need not clear the obstacle. */
+        uint32_t const tail_pass_mm =
+            (uint32_t)room_mm + p_geometry->axle_to_pivot_mm +
+            p_geometry->depth_mm +
+            tail_clearance_mm((uint32_t)clearance_mm, plan.angle_deg);
+        if (tail_pass_mm < pass_mm)
+        {
+            plan.pass_mm = (uint16_t)tail_pass_mm;
+        }
+    }
     plan.status = OBSTACLE_AVOID_PLAN_OK;
     return plan;
 }
@@ -1046,10 +1061,16 @@ send_part (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
                     ? (int16_t)OBSTACLE_WATCH_RIGHT_DEG
                     : (int16_t)OBSTACLE_WATCH_LEFT_DEG;
         }
+        uint32_t const blind_mm =
+            (leg == OBSTACLE_AVOID_LEG_RETURN) ? return_blind_mm(p_ctx) : 0u;
         p_ctx->part = obstacle_avoid_next_part(p_ctx->remaining);
-        p_ctx->cmd = robot_motion_cmd_move(p_ctx->part,
-                                           leg == OBSTACLE_AVOID_LEG_REVERSE,
-                                           leg == OBSTACLE_AVOID_LEG_RETURN);
+        if ((blind_mm > 0u) && (p_ctx->part > blind_mm))
+        {
+            p_ctx->part = blind_mm;
+        }
+        p_ctx->cmd = robot_motion_cmd_move(
+            p_ctx->part, leg == OBSTACLE_AVOID_LEG_REVERSE,
+            (leg == OBSTACLE_AVOID_LEG_RETURN) && (blind_mm == 0u));
         expected_ms = (p_ctx->part * 1000u) / p_timing->move_speed_mm_s;
     }
     else
@@ -1064,14 +1085,16 @@ send_part (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
         p_ctx->part = p_ctx->remaining;
         /* Reacquisition starts halfway through the turn in: a line found
          * on the second half is as usable as one found on the return, but
-         * one seen sooner is a mark beside the obstacle, not the line. */
+         * one seen sooner is a mark beside the obstacle, not the line. Too
+         * far out for the row to reach the line, none of the turn looks. */
         bool b_line = leg == OBSTACLE_AVOID_LEG_TURN_IN;
         if (b_line)
         {
             uint32_t const angle = p_ctx->plan.angle_deg;
             uint32_t const turned =
                 (p_ctx->remaining < angle) ? (angle - p_ctx->remaining) : 0u;
-            uint32_t const blind = angle / 2u;
+            uint32_t const blind =
+                line_near_turn_in(p_ctx) ? (angle / 2u) : angle;
             if (turned < blind)
             {
                 p_ctx->part = blind - turned;
@@ -1642,6 +1665,57 @@ diagonal_forward (uint32_t lateral_mm, uint8_t angle_deg)
         return 0u;
     }
     return (uint32_t)((float)lateral_mm / tanf((float)angle_deg * DEG_TO_RAD));
+}
+
+/*
+ * Axle travel past the obstacle's far face before the turn in. The turn
+ * swings the tail away from the obstacle, and the return leaves at the
+ * plan's angle, so the car's side passes the far corner at the full margin
+ * from here: with the axle @p clearance_mm out from that corner, this is
+ * clearance x tan(angle / 2). Clearing the rear bumper first ran about
+ * 130 mm further on 2026-11-07.
+ */
+static uint32_t
+tail_clearance_mm (uint32_t clearance_mm, uint8_t angle_deg)
+{
+    return (uint32_t)ceilf((float)clearance_mm *
+                           tanf(((float)angle_deg * DEG_TO_RAD) / 2.0f));
+}
+
+/*
+ * Return travel left before the IR row is planned within line_gate_mm of
+ * the line: the row leads the axle by overshoot_mm along the diagonal.
+ */
+static uint32_t
+return_blind_mm (obstacle_avoid_t const * p_ctx)
+{
+    obstacle_avoid_geometry_t const * const p_geometry =
+        &p_ctx->p_config->geometry;
+    if (0u == p_geometry->line_gate_mm)
+    {
+        return 0u;
+    }
+    uint32_t const armed_mm =
+        along_diagonal((uint32_t)p_geometry->return_extra_mm +
+                           p_geometry->line_gate_mm,
+                       p_ctx->plan.angle_deg) +
+        p_geometry->overshoot_mm;
+    uint32_t const blind_mm =
+        (p_ctx->remaining > armed_mm) ? (p_ctx->remaining - armed_mm) : 0u;
+    return (blind_mm > p_ctx->p_config->timing.resume_min_mm) ? blind_mm : 0u;
+}
+
+/* The turn in swings the IR row toward the line: can it get near enough? */
+static bool
+line_near_turn_in (obstacle_avoid_t const * p_ctx)
+{
+    obstacle_avoid_geometry_t const * const p_geometry =
+        &p_ctx->p_config->geometry;
+    float const reach_mm = (float)p_geometry->overshoot_mm *
+                           sinf((float)p_ctx->plan.angle_deg * DEG_TO_RAD);
+    return (0u == p_geometry->line_gate_mm) ||
+           ((float)p_ctx->lateral_mm <=
+            ((float)p_geometry->line_gate_mm + reach_mm));
 }
 
 /* Pass distance still to drive after the diagonals' forward progress. */

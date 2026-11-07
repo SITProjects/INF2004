@@ -173,6 +173,8 @@ static bool avoid_verify_valid (void);
 static bool avoid_line_valid (void);
 static bool avoid_rejoin_valid (void);
 static bool sim_in_sidestep (void);
+static bool plan_short_pass_valid (void);
+static bool avoid_line_gate_valid (void);
 static bool avoid_fault_valid (void);
 static bool avoid_obstacles_valid (void);
 static bool avoid_angle_valid (void);
@@ -288,6 +290,10 @@ obstacle_test (void)
                "avoid: watch the obstacle side and widen while driving");
     TEST_CHECK("OBS-U69", avoid_home_valid(),
                "avoid: turn back to the heading the car stopped on");
+    TEST_CHECK("OBS-U72", plan_short_pass_valid(),
+               "plan: stop short of the rear bumper when the edge is known");
+    TEST_CHECK("OBS-U73", avoid_line_gate_valid(),
+               "avoid: black far from the line is not the line");
 
     TEST_CHECK("OBS-U10", packed_obstacle_fields_valid(),
                "packed obstacle fields clamp without changing neighbours");
@@ -1806,8 +1812,9 @@ sim_step (void)
         }
         else if (sim.ctx.state == OBSTACLE_AVOID_RUN_LEG)
         {
-            /* The return leg finds the line; every other leg its target.
-             * A finished turn moves the odometry heading (+ left). */
+            /* A return leg looking for the line finds it; every other leg
+             * its target. A finished turn moves the odometry heading
+             * (+ left). */
             if (robot_motion_cmd_get_type(sim.ctx.cmd) == ROBOT_MOTION_CMD_TURN)
             {
                 int32_t const angle =
@@ -1816,9 +1823,11 @@ sim_step (void)
                     robot_motion_cmd_get_reverse(sim.ctx.cmd) ? -angle : angle;
             }
             sim.in.b_move_done = true;
-            sim.in.motion_done = (sim.ctx.leg == OBSTACLE_AVOID_LEG_RETURN)
-                                     ? ROBOT_MOTION_DONE_LINE
-                                     : ROBOT_MOTION_DONE_DIST;
+            sim.in.motion_done =
+                ((sim.ctx.leg == OBSTACLE_AVOID_LEG_RETURN) &&
+                 robot_motion_cmd_get_stop_at_line(sim.ctx.cmd))
+                    ? ROBOT_MOTION_DONE_LINE
+                    : ROBOT_MOTION_DONE_DIST;
         }
         else if (((sim.ctx.state == OBSTACLE_AVOID_VERIFY) ||
                   (sim.ctx.state == OBSTACLE_AVOID_REPLAN)) &&
@@ -2308,7 +2317,7 @@ avoid_angle_valid (void)
     uint32_t const expected[] = {robot_motion_cmd_turn(30u, false, false),
                                  robot_motion_cmd_move(470u, false, false),
                                  robot_motion_cmd_turn(30u, true, false),
-                                 robot_motion_cmd_move(593u, false, false),
+                                 robot_motion_cmd_move(510u, false, false),
                                  robot_motion_cmd_turn(15u, true, false),
                                  robot_motion_cmd_turn(15u, true, true),
                                  robot_motion_cmd_move(770u, false, true),
@@ -2978,6 +2987,84 @@ sim_home_from (int32_t heading_deg, bool b_odometry_valid)
     sim.in.b_move_done = true;
     sim.in.motion_done = ROBOT_MOTION_DONE_DIST;
     return ok && sim_step().b_send;
+}
+
+/* OBS-U72: the real car's tail is longer than the fixture's, so the pass
+ * ends at the far face plus (half width + margin) x tan(angle / 2). */
+static bool
+plan_short_pass_valid (void)
+{
+    obstacle_avoid_geometry_t geometry = avoid_fixture();
+    geometry.half_width_mm = 84u;
+    geometry.rear_mm = 162u;
+    geometry.angle_min_deg = 60u;
+    obstacle_scan_geometry_t scan = geometry_at(200u, 98, -98);
+    scan.b_left_clear = true;
+    scan.b_right_clear = true;
+    obstacle_avoid_plan_t const known = obstacle_avoid_plan(
+        path_result(ROBOT_OBSTACLE_DIR_LEFT_60, true, true), scan, &geometry);
+    /* 200 room + 80 pivot + 200 depth + 144 tan(30), rounded up. */
+    bool ok = (known.status == OBSTACLE_AVOID_PLAN_OK) &&
+              (known.angle_deg == 60u) && (known.pass_mm == 564u);
+
+    /* With only the far edge seen, the side taken has none: keep it all. */
+    obstacle_avoid_plan_t const unknown = obstacle_avoid_plan(
+        path_result(ROBOT_OBSTACLE_DIR_LEFT_60, false, true), scan, &geometry);
+    ok = ok && (unknown.status == OBSTACLE_AVOID_PLAN_OK) &&
+         unknown.b_edge_unknown && (unknown.pass_mm == 702u);
+
+    /* A short tail never lengthens the pass. */
+    obstacle_avoid_geometry_t const fixture = avoid_fixture();
+    obstacle_avoid_plan_t const small = obstacle_avoid_plan(
+        path_result(ROBOT_OBSTACLE_DIR_LEFT_60, true, true), scan, &fixture);
+    return ok && (small.pass_mm == 600u);
+}
+
+/* OBS-U73: both sides. Too far out, the turn in and the first part of the
+ * return ignore black; the last part, ending past the line, looks for it. */
+static bool
+avoid_line_gate_valid (void)
+{
+    for (uint32_t right = 0u; right < 2u; ++right)
+    {
+        bool ok = sim_detect_path();
+        sim.config.timing.b_recheck = false;
+        sim.config.geometry.line_gate_mm = 100u;
+        if (right != 0u)
+        {
+            sim_scan(ROBOT_OBSTACLE_PATH_FOUND, ROBOT_OBSTACLE_DIR_RIGHT_120,
+                     true, false);
+        }
+        ok = ok &&
+             sim_until(OBSTACLE_AVOID_SEND, OBSTACLE_AVOID_LEG_TURN_IN, 100u) &&
+             (sim.act.cmd == robot_motion_cmd_turn(90u, right == 0u, false));
+        ok = ok &&
+             sim_until(OBSTACLE_AVOID_SEND, OBSTACLE_AVOID_LEG_RETURN, 100u);
+        /* Lateral + 150 extra, less 150 + 100 gate + 40 IR row to axle. */
+        uint32_t const blind = sim.ctx.lateral_mm - 140u;
+        ok = ok && (sim.ctx.lateral_mm > 150u) &&
+             !robot_motion_cmd_get_stop_at_line(sim.act.cmd) &&
+             (robot_motion_cmd_get_distance(sim.act.cmd) == blind);
+        ok = ok &&
+             sim_until(OBSTACLE_AVOID_SEND, OBSTACLE_AVOID_LEG_RETURN, 100u) &&
+             robot_motion_cmd_get_stop_at_line(sim.act.cmd) &&
+             (robot_motion_cmd_get_distance(sim.act.cmd) == 290u);
+        if (!ok)
+        {
+            return false;
+        }
+    }
+
+    /* Close enough for the row to reach it: the turn in looks again. */
+    bool ok = sim_detect_path();
+    sim.config.timing.b_recheck = false;
+    sim.config.geometry.line_gate_mm = 1000u;
+    ok = ok &&
+         sim_until(OBSTACLE_AVOID_SEND, OBSTACLE_AVOID_LEG_TURN_IN, 100u) &&
+         !robot_motion_cmd_get_stop_at_line(sim.act.cmd);
+    return ok &&
+           sim_until(OBSTACLE_AVOID_SEND, OBSTACLE_AVOID_LEG_TURN_IN, 100u) &&
+           robot_motion_cmd_get_stop_at_line(sim.act.cmd);
 }
 
 /* OBS-U69: the car stopped on heading 0. A pass that drifted 7 degrees
