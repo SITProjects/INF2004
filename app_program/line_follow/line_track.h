@@ -118,6 +118,8 @@ typedef struct
     uint32_t touch_side;       /* Side of the last single-side touch. */
     int32_t touch_mm;          /* Travel when it began. */
     bool b_curve;              /* That side touched again soon: a bend. */
+    uint32_t counter_side;     /* Side steering back against a bend. */
+    int32_t counter_mm;        /* Travel when that touch began. */
     bool b_cross_hold;         /* Holding the heading over a crossing. */
     int32_t trend_deg[LINE_TREND_SLOTS]; /* Recent headings, oldest at next. */
     uint32_t trend_next;

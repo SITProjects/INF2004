@@ -80,6 +80,8 @@ static void note_heading (line_track_t * p_track,
                           line_track_input_t const * p_in);
 static int32_t recent_turn (line_track_t const * p_track,
                             line_track_input_t const * p_in);
+static void note_counter (line_track_t * p_track,
+                          line_track_input_t const * p_in, uint32_t side);
 static bool counters_bend (line_track_t const * p_track,
                            line_track_input_t const * p_in, uint32_t side);
 static bool crossed_out (line_track_t const * p_track,
@@ -128,6 +130,10 @@ line_track_update (line_track_t * p_track, line_track_input_t const * p_in)
         if (b_both || (p_track->b_black[side] && !was_black[side]))
         {
             p_track->black_start_mm[side] = p_in->distance_mm;
+        }
+        if (p_track->b_black[side] && !was_black[side])
+        {
+            note_counter(p_track, p_in, side);
         }
     }
     if (!b_both)
@@ -318,6 +324,7 @@ restart_tracking (line_track_t * p_track, line_track_input_t const * p_in,
     p_track->touch_side = SIDE_NONE;
     p_track->touch_mm = p_in->distance_mm;
     p_track->b_curve = false;
+    p_track->counter_side = SIDE_NONE;
     p_track->b_cross_hold = false;
     for (uint32_t slot = 0u; slot < LINE_TREND_SLOTS; slot++)
     {
@@ -621,7 +628,9 @@ track_edge (line_track_t * p_track, line_track_input_t const * p_in,
             uint32_t side, bool b_was_black)
 {
     bool const b_black = p_track->b_black[side];
-    bool const b_counter = b_black && counters_bend(p_track, p_in, side);
+    bool const b_counter =
+        b_black && (side == p_track->counter_side) &&
+        ((p_in->distance_mm - p_track->counter_mm) < LINE_COUNTER_MM);
     if (b_black && !b_was_black && !b_counter)
     {
         note_touch(p_track, p_in, side);
@@ -657,6 +666,15 @@ track_edge (line_track_t * p_track, line_track_input_t const * p_in,
     {
         /* However briefly it was black, this was a correction, not a
          * corner: hold what it reached, or seek in a bend. */
+        if (side == p_track->counter_side)
+        {
+            if ((p_in->distance_mm - p_track->counter_mm) >=
+                LINE_COUNTER_END_MM)
+            {
+                p_track->b_curve = false;
+            }
+            p_track->counter_side = SIDE_NONE;
+        }
         if (crossed_out(p_track, p_in, side))
         {
             /* A bend on this side: the other sensor still ends it. */
@@ -692,18 +710,36 @@ recent_turn (line_track_t const * p_track, line_track_input_t const * p_in)
     return p_in->heading_deg - p_track->trend_deg[p_track->trend_next];
 }
 
+/* A touch begins: judge now whether it steers back against a bend. */
+static void
+note_counter (line_track_t * p_track, line_track_input_t const * p_in,
+              uint32_t side)
+{
+    if (counters_bend(p_track, p_in, side))
+    {
+        p_track->counter_side = side;
+        p_track->counter_mm = p_in->distance_mm;
+    }
+    else if (side == p_track->counter_side)
+    {
+        p_track->counter_side = SIDE_NONE;
+    }
+    else
+    {
+        /* The other side's touch carries on. */
+    }
+}
+
 /*
- * Black on @p side, briefly, in a bend the other way. Turning alone is not
- * enough: after a correction too far, the sensor it swung towards must still
- * steer at full lead (LT17).
+ * Black on @p side in a bend the other way. Turning alone is not enough:
+ * after a correction too far, the sensor it swung towards must still steer
+ * at full lead (LT17).
  */
 static bool
 counters_bend (line_track_t const * p_track, line_track_input_t const * p_in,
                uint32_t side)
 {
     return p_track->b_curve && (side != p_track->touch_side) &&
-           ((p_in->distance_mm - p_track->black_start_mm[side]) <
-            LINE_COUNTER_MM) &&
            ((-side_sign(side) * recent_turn(p_track, p_in)) >=
             LINE_BEND_TREND_DEG);
 }

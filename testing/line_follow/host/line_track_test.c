@@ -455,12 +455,20 @@ test_pivot_overshoot (void)
 #define SIM_PI 3.14159265358979
 
 static double sim_radius_mm;
+static bool sim_u_turn;         /* The arc goes on round, back along y = 2R. */
+static double sim_right_hold_s; /* The right sensor stays black this long. */
+static double sim_right_white_s;
 
 /* Distance from (x, y) to the tape: +x up to the origin, the arc about
  * (0, R), then +y from (R, R). */
 static double
 tape_distance (double x, double y)
 {
+    if (sim_u_turn)
+    {
+        return (x <= 0.0) ? fmin(fabs(y), fabs(y - (2.0 * sim_radius_mm)))
+                          : fabs(hypot(x, y - sim_radius_mm) - sim_radius_mm);
+    }
     if (x <= 0.0)
     {
         return fabs(y);
@@ -526,6 +534,9 @@ sim_step (sim_car_t * p_car)
     in.b_right_black =
         tape_distance(sx + (half_gap * sin(rad)), sy - (half_gap * cos(rad))) <=
         SIM_HALF_TAPE_MM;
+    sim_right_white_s = in.b_right_black ? 0.0 : sim_right_white_s + SIM_STEP_S;
+    in.b_right_black =
+        in.b_right_black || (sim_right_white_s < sim_right_hold_s);
     in.heading_deg = (int32_t)lround(p_car->heading - p_car->start_deg);
     in.distance_mm = (int32_t)p_car->travel;
     out = line_track_update(&track, &in);
@@ -588,6 +599,38 @@ test_curve_model (void)
           "straight: the 100 mm radius fitted to car10, and 200 mm met 8 "
           "degrees off, with the sensors 20 and 36 mm apart",
           b_tight && b_gap && b_wide && b_entry);
+}
+
+/* The left U of 2026-11-07, the right sensor letting go as late as there. */
+static void
+test_u_exit_model (void)
+{
+    reset();
+    sim_radius_mm = 165.0;
+    sim_u_turn = true;
+    sim_right_hold_s = 0.34;
+    sim_right_white_s = sim_right_hold_s;
+    sim_car_t car = sim_start(400.0, 18.0, 0.35, 0.0);
+    double worst = 0.0;
+    unsigned int const steps =
+        (unsigned int)(2400.0 /
+                       ((double)MOTION_FOLLOW_SPEED_MM_S * SIM_STEP_S));
+    for (unsigned int i = 0u; i < steps; i++)
+    {
+        double const off = sim_step(&car);
+        if ((car.x < -250.0) && (car.heading > 90.0))
+        {
+            worst = fmax(worst, off);
+        }
+    }
+    sim_u_turn = false;
+    sim_right_hold_s = 0.0;
+    printf("  U exit model: sensors at most %.0f mm off the exit straight, "
+           "heading %.0f deg, %.0f mm along it\n",
+           worst, car.heading, -car.x);
+    check("LT44 the car model comes out of a left U onto the straight with the "
+          "right sensor 0.34 s slow to let go, and stays on it",
+          (worst < 24.0) && (car.x < -500.0) && (LINE_MODE_TRACK == out.mode));
 }
 
 /* Heading swing on a long straight, met 3 degrees off, once settled. */
@@ -876,6 +919,39 @@ test_counter_touch (void)
           ((in.heading_deg - LINE_LEAD_DEG) == out.target_heading_deg) &&
               !track.b_curve);
 
+    /* The car straightens: the turn falls away while the touch goes on. */
+    bool b_stays = true;
+    bool b_ends = true;
+    for (int sign = -1; sign <= 1; sign += 2)
+    {
+        in_bend(sign);
+        drive(sign < 0, sign > 0, samples_for(10));
+        in.heading_deg = sign * 30;
+        drive(sign < 0, sign > 0, samples_for(LINE_COUNTER_MM - 20));
+        b_stays = b_stays && track.b_curve &&
+                  ((in.heading_deg - (sign * LINE_COUNTER_LEAD_DEG)) ==
+                   out.target_heading_deg);
+        drive(false, false, samples_for(30));
+        b_ends = b_ends && !track.b_curve &&
+                 (in.heading_deg == out.target_heading_deg);
+    }
+    check("LT42 a touch begun against a bend stays gentle as the car "
+          "straightens, left or right",
+          b_stays);
+    check("LT43 such a touch clearing after LINE_COUNTER_END_MM ends the bend: "
+          "the car holds its heading, no seek",
+          b_ends);
+
+    /* Someone else drives for a moment, the sensor still black. */
+    in_bend(1);
+    drive(false, true, samples_for(10));
+    in.b_control = false;
+    drive(false, true, 1u);
+    in.b_control = true;
+    drive(false, true, 1u);
+    check("LT45 a restart forgets a touch steering back: full lead again",
+          (in.heading_deg - LINE_LEAD_DEG) == out.target_heading_deg);
+
     /* Turning, but no bend: a correction too far gets full lead back. */
     reset();
     drive(false, false, samples_for(60));
@@ -1028,6 +1104,7 @@ main (void)
     test_junction_left();
     test_both_rise_together();
     test_curve_model();
+    test_u_exit_model();
     test_straight_model();
     test_long_both_black();
     test_bend_crossing();
