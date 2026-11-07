@@ -844,16 +844,60 @@ test_barcode_stop (void)
     reset();
     start_creep();
     drive(true, false, 3u);
-    drive(false, false, samples_for(LINE_BARCODE_TOUCH_MM + 15));
+    drive(false, false, samples_for(20));
     drive(true, false, 3u);
     bool const b_straight = !track.b_curve;
     reset();
     drive(true, false, 3u);
-    drive(false, false, samples_for(LINE_BARCODE_TOUCH_MM + 15));
+    drive(false, false, samples_for(20));
     drive(true, false, 3u);
     check("LT28 touches that are a bend at full speed are a straight in a "
           "slow pass",
           b_straight && track.b_curve);
+
+    /* 2026-11-07: both sensors white, and the car still turning. */
+    reset();
+    start_creep();
+    drive(true, false, 3u);
+    drive(false, false, samples_for(20));
+    drive(true, false, 3u);
+    drive(false, false, LINE_CONFIRM_SAMPLES + samples_for(40));
+    bool const b_holds = (out.target_heading_deg == in.heading_deg);
+    in.b_barcode_done = true;
+    drive(false, false, 1u);
+    in.b_barcode_done = false;
+    drive(false, false, samples_for(40));
+    check("LT91 a creep holds its heading between touches, and still does as "
+          "it speeds up",
+          b_holds && !out.b_slow &&
+              (out.target_heading_deg == in.heading_deg));
+
+    reset();
+    in.b_hump = true;
+    drive(false, false, 1u);
+    bool const b_on_hump = out.b_slow;
+    drive(true, false, 3u);
+    drive(false, false, samples_for(20));
+    drive(true, false, 3u);
+    check("LT92 so does a car slowed for a hump", b_on_hump && !track.b_curve);
+
+    /* The tape crossing out of a bend, as cross_bend() does, in a creep: in
+     * on the right too long before the left to be a junction. */
+    reset();
+    start_creep();
+    for (int deg = 0; deg <= 50; deg += 5)
+    {
+        in.heading_deg = deg;
+        drive(false, false, samples_for(12));
+    }
+    drive(false, true, LINE_CONFIRM_SAMPLES + samples_for(20));
+    drive(true, true, LINE_CONFIRM_SAMPLES);
+    drive(true, false, LINE_CONFIRM_SAMPLES);
+    drive(false, false, LINE_CONFIRM_SAMPLES + samples_for(10));
+    bool const b_creep_straight = !track.b_curve;
+    in.heading_deg = 0;
+    check("LT93 nor does the tape leaving a sensor read as a bend in a creep",
+          out.b_slow && b_creep_straight);
 }
 
 /* 2026-11-06 20:32:07: 7 to 57 degrees in the 120 mm before the crossing. */
@@ -1023,8 +1067,8 @@ test_hump_slow (void)
     drive(true, false, samples_for(8));
     drive(false, false, samples_for(10));
     drive(true, false, samples_for(8));
-    check("LT51 wobbling on it, even into a bend, does not end the slow pass",
-          b_held && track.b_curve && out.b_slow);
+    check("LT51 wobbling on it does not end the slow pass",
+          b_held && out.b_slow);
     in.heading_deg = 0;
     in.b_hump = false;
     drive(false, false, 2u);

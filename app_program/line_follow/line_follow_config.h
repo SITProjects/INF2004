@@ -203,14 +203,6 @@
 #define LINE_HUMP_SLOW_SAMPLES 400u
 
 /**
- * @brief LINE_CURVE_TOUCH_MM while creeping. A slower car touches the tape
- * again sooner, so this scales with speed: 80 mm at 80 mm/s, so 30 at
- * 30 mm/s. Left at 80, the model took a straight for a bend and swung +-9
- * degrees at 50 mm/s (LINE-U04 LT22, 2026-11-06).
- */
-#define LINE_BARCODE_TOUCH_MM 30
-
-/**
  * @brief Both sensors black for this many samples confirms a junction. Each
  * sensor's level is confirmed already, so one will do: at 120 mm/s a skewed
  * tape left a single sample of overlap on 2026-11-07.

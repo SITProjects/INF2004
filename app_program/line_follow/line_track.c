@@ -72,6 +72,7 @@ static void watch_barcode (line_track_t * p_track,
                            line_track_input_t const * p_in);
 static void watch_hump (line_track_t * p_track,
                         line_track_input_t const * p_in);
+static bool slow_pass (line_track_t const * p_track);
 static void watch_loop (line_track_t * p_track,
                         line_track_input_t const * p_in);
 static void note_pivot (line_track_t * p_track,
@@ -333,6 +334,18 @@ line_track_turn_name (line_turn_t turn)
 }
 
 /* Private function definitions. */
+
+/*
+ * Creeping over a barcode or a hump. These start on straights, and a slow car
+ * touches the tape often: seeking a bend here swung the car up to 18 degrees,
+ * spoilt barcodes and carried on as it sped up, off the line (2026-11-07).
+ */
+static bool
+slow_pass (line_track_t const * p_track)
+{
+    return (LINE_BARCODE_CREEP == p_track->barcode_phase) ||
+           p_track->b_hump_slow;
+}
 
 /* Remember which way the car is pivoting. */
 static void
@@ -843,7 +856,7 @@ track_edge (line_track_t * p_track, line_track_input_t const * p_in,
             }
             p_track->counter_side = SIDE_NONE;
         }
-        if (crossed_out(p_track, p_in, side))
+        if (!slow_pass(p_track) && crossed_out(p_track, p_in, side))
         {
             /* A bend on this side: the other sensor still ends it. */
             p_track->b_curve = true;
@@ -940,12 +953,9 @@ note_touch (line_track_t * p_track, line_track_input_t const * p_in,
     {
         p_track->b_curve = false;
     }
-    else if (((p_in->distance_mm - p_track->rejoin_mm) >= LINE_REJOIN_MM) &&
-             ((p_in->distance_mm - p_track->touch_mm) <=
-              (((LINE_BARCODE_CREEP == p_track->barcode_phase) ||
-                p_track->b_hump_slow)
-                   ? LINE_BARCODE_TOUCH_MM
-                   : LINE_CURVE_TOUCH_MM)))
+    else if (!slow_pass(p_track) &&
+             ((p_in->distance_mm - p_track->rejoin_mm) >= LINE_REJOIN_MM) &&
+             ((p_in->distance_mm - p_track->touch_mm) <= LINE_CURVE_TOUCH_MM))
     {
         p_track->b_curve = true;
     }
