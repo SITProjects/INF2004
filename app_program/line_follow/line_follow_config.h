@@ -203,12 +203,16 @@
 
 /**
  * @brief Travel, in mm, from a junction's first black to the point where
- * the car turns: the sensors' distance ahead of the wheel axle (about 130
- * mm) plus half the tape width, so the car pivots over the crossing. A
- * turning junction drives this far on the heading it met the junction
- * with, ignoring the sensors; straight on keeps tracking.
+ * the car starts to stop for its turn: the sensors' distance ahead of the
+ * wheel axle (about 130 mm) plus half the tape width, less the 10 mm it runs
+ * on braking, so the car pivots over the crossing. At 140 it stopped about
+ * 11 mm past the centre at 80 and 120 mm/s alike, which leaves the new line
+ * off to one side: on 2026-11-07 the car missed it after a right turn and ran
+ * parallel to it, through the curve beyond. A turning junction drives this
+ * far on the heading it met the junction with, ignoring the sensors;
+ * straight on keeps tracking.
  */
-#define LINE_JUNCTION_CENTRE_MM 140
+#define LINE_JUNCTION_CENTRE_MM 130
 
 /** U-turns pivot left (1) or right (0). */
 #define LINE_UTURN_LEFT 1
