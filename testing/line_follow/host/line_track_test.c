@@ -1130,6 +1130,70 @@ pivot_target (line_turn_t turn, int black_deg, int white_deg, int last_deg)
     return out.target_heading_deg;
 }
 
+/* A bypass: a pivot of @p deg under motion's own control, then a move. */
+static void
+pivot_then_move (int deg)
+{
+    reset();
+    in.b_control = false;
+    in.b_turning = true;
+    in.heading_deg = deg / 2;
+    out = line_track_update(&track, &in);
+    in.heading_deg = deg;
+    out = line_track_update(&track, &in);
+    in.b_turning = false;
+    in.b_moving = true;
+}
+
+/* Coming back to the line, as on 2026-11-07. */
+static void
+test_return_sensor (void)
+{
+    pivot_then_move(60);
+    drive(false, true, 1u);
+    bool const b_far = out.b_seen;
+    drive(true, false, 1u);
+    check("LT74 back from the right, only the left sensor finds the line",
+          !b_far && out.b_seen);
+
+    pivot_then_move(-60);
+    drive(true, false, 1u);
+    bool const b_far_left = out.b_seen;
+    drive(false, true, 1u);
+    check("LT75 back from the left, only the right sensor finds it",
+          !b_far_left && out.b_seen);
+
+    reset();
+    in.b_control = false;
+    in.b_moving = true;
+    drive(false, true, 1u);
+    bool const b_no_pivot = out.b_seen;
+    pivot_then_move(60);
+    in.b_moving = false;
+    drive(false, true, 1u);
+    check("LT76 otherwise either sensor counts", b_no_pivot && out.b_seen);
+
+    pivot_then_move(60);
+    in.heading_deg = 58;
+    drive(false, true, 1u);
+    check("LT77 the heading drifting on the move changes nothing", !out.b_seen);
+
+    /* Out to the right, then back left: a bypass's own pivots. */
+    pivot_then_move(60);
+    in.b_moving = false;
+    in.b_turning = true;
+    in.heading_deg = 40;
+    out = line_track_update(&track, &in);
+    in.heading_deg = 20;
+    out = line_track_update(&track, &in);
+    in.b_turning = false;
+    in.b_moving = true;
+    drive(true, false, 1u);
+    bool const b_older = out.b_seen;
+    drive(false, true, 1u);
+    check("LT78 the last pivot decides", !b_older && out.b_seen);
+}
+
 /* Left black, then right @p gap_mm later as left clears: the least overlap
  * the debounce lets through. */
 static bool
@@ -1359,6 +1423,7 @@ main (void)
     test_counter_touch();
     test_hump_slow();
     test_pivot_aim();
+    test_return_sensor();
     test_barcode_stop();
     test_creep_model();
     test_junction_uturn();

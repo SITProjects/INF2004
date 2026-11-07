@@ -81,7 +81,9 @@ typedef struct
     int32_t target_heading_deg; /**< Odometry heading to hold or pivot
                                      to; not wrapped, + is left. */
     bool b_seen;                /**< Either sensor black in this sample,
-                                     for stop-at-line (motion debounces). */
+                                     for stop-at-line (motion debounces).
+                                     On a distance move, only the sensor on
+                                     the side the car last pivoted to. */
     bool b_junction;            /**< A cross junction is being taken: from
                                      its detection until both sensors
                                      clear (straight on) or tracking
@@ -134,12 +136,14 @@ typedef struct
     uint32_t junction_phase; /* 0 none, 1 driving to the centre, 2 pivot,
                                 3 crossing straight on. */
     line_turn_t junction_turn;
-    int32_t junction_mm;     /* Travel when the junction began. */
-    int32_t junction_deg;    /* Heading the junction was met on. */
-    int32_t pivot_start_deg; /* Heading as a junction's pivot began. */
-    bool b_old_line_seen;    /* That pivot has swept the old line. */
-    uint32_t last_side;      /* Side of the last edge, for searches. */
-    int32_t white_start_mm;  /* Travel when both last read white. */
+    int32_t junction_mm;      /* Travel when the junction began. */
+    int32_t junction_deg;     /* Heading the junction was met on. */
+    int32_t pivot_start_deg;  /* Heading as a junction's pivot began. */
+    bool b_old_line_seen;     /* That pivot has swept the old line. */
+    uint32_t pivot_side;      /* Way the car last pivoted, for b_seen. */
+    int32_t last_heading_deg; /* Heading in the last sample. */
+    uint32_t last_side;       /* Side of the last edge, for searches. */
+    int32_t white_start_mm;   /* Travel when both last read white. */
     uint32_t junction_count;
     int32_t search_start_deg;
     uint32_t search_side;  /* Side the current pivot turns towards. */

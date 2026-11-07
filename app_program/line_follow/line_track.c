@@ -72,6 +72,10 @@ static void watch_barcode (line_track_t * p_track,
                            line_track_input_t const * p_in);
 static void watch_hump (line_track_t * p_track,
                         line_track_input_t const * p_in);
+static void note_pivot (line_track_t * p_track,
+                        line_track_input_t const * p_in);
+static bool line_seen (line_track_t const * p_track,
+                       line_track_input_t const * p_in);
 static void aim_by_old_line (line_track_t * p_track,
                              line_track_input_t const * p_in,
                              bool const * p_was_black);
@@ -112,6 +116,8 @@ line_track_init (line_track_t * p_track, line_track_input_t const * p_in)
         p_track->change_count[side] = 0u;
     }
     p_track->last_side = SIDE_NONE;
+    p_track->pivot_side = SIDE_NONE;
+    p_track->last_heading_deg = p_in->heading_deg;
     p_track->junction_count = 0u;
     p_track->barcode_phase = LINE_BARCODE_NONE;
     p_track->b_hump_slow = false;
@@ -126,6 +132,7 @@ line_track_update (line_track_t * p_track, line_track_input_t const * p_in)
     bool const was_black[SIDE_COUNT] = {p_track->b_black[SIDE_LEFT],
                                         p_track->b_black[SIDE_RIGHT]};
     debounce(p_track, p_in);
+    note_pivot(p_track, p_in);
     note_heading(p_track, p_in);
 
     bool const b_both =
@@ -233,7 +240,7 @@ line_track_update (line_track_t * p_track, line_track_input_t const * p_in)
     line_request_t const request = {
         .mode = (LINE_BARCODE_BRAKE == phase) ? LINE_MODE_STOP : p_track->mode,
         .target_heading_deg = p_track->target_deg,
-        .b_seen = p_in->b_left_black || p_in->b_right_black,
+        .b_seen = line_seen(p_track, p_in),
         .b_junction = (p_track->junction_phase != JUNCTION_NONE),
         .reverse_mm =
             (LINE_BARCODE_BACK == phase) ? LINE_BARCODE_REVERSE_MM : 0u,
@@ -306,6 +313,39 @@ line_track_turn_name (line_turn_t turn)
 }
 
 /* Private function definitions. */
+
+/* Remember which way the car is pivoting. */
+static void
+note_pivot (line_track_t * p_track, line_track_input_t const * p_in)
+{
+    if (p_in->b_turning && (p_in->heading_deg != p_track->last_heading_deg))
+    {
+        p_track->pivot_side = (p_in->heading_deg > p_track->last_heading_deg)
+                                  ? SIDE_LEFT
+                                  : SIDE_RIGHT;
+    }
+    p_track->last_heading_deg = p_in->heading_deg;
+}
+
+/*
+ * What stops a bypass coming back to the line. It comes back at an angle, so
+ * the sensor on the side it turned to meets the line first, and the other one
+ * meets a crossing tape first. On 2026-11-07 the far sensor on a crossing tape
+ * ended a return 70 mm short, and the car ran alongside the line.
+ */
+static bool
+line_seen (line_track_t const * p_track, line_track_input_t const * p_in)
+{
+    if (p_in->b_moving && (SIDE_LEFT == p_track->pivot_side))
+    {
+        return p_in->b_left_black;
+    }
+    if (p_in->b_moving && (SIDE_RIGHT == p_track->pivot_side))
+    {
+        return p_in->b_right_black;
+    }
+    return p_in->b_left_black || p_in->b_right_black;
+}
 
 /* A sensor's level changes after LINE_CONFIRM_SAMPLES samples agree. */
 static void
