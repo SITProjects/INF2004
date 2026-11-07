@@ -173,6 +173,14 @@
 #define LINE_BARCODE_CREEP_MM 450
 
 /**
+ * @brief On a hump the car follows at the barcode speed, to spare the sensors
+ * close to the floor there, for at most this many samples: 8 s, where the
+ * hump takes about 6 s at that speed. A car calibrated on a slope leans for
+ * good and reads as on a hump, and must not crawl for the whole run.
+ */
+#define LINE_HUMP_SLOW_SAMPLES 400u
+
+/**
  * @brief LINE_CURVE_TOUCH_MM while creeping. A slower car touches the tape
  * again sooner, so this scales with speed: 80 mm at 80 mm/s, so 30 at
  * 30 mm/s. Left at 80, the model took a straight for a bend and swung +-9

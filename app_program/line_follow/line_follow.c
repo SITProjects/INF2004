@@ -19,6 +19,7 @@
 #include "../motion/motion_command.h"
 #include "../motion/motion_command_config.h"
 #include "../terrain/terrain_compass.h"
+#include "../terrain/terrain_monitor.h"
 #if TM_MQTT
 #include "../communication/telemetry_queue.h"
 #endif
@@ -54,6 +55,7 @@ static void calibration_loop (void);
 static void report (line_request_t const * p_request,
                     line_track_input_t const * p_in);
 static void report_barcode (line_track_input_t const * p_in);
+static void report_hump (line_track_input_t const * p_in);
 #endif
 
 /* Public function definitions. */
@@ -137,6 +139,7 @@ sense_task (INT stacd, void * p_exinf)
         }
         report(&request, &in);
         report_barcode(&in);
+        report_hump(&in);
 
         /* A relative delay: late samples are never replayed. */
         (void)tk_dly_tsk(LINE_SAMPLE_MS);
@@ -157,7 +160,8 @@ take_input (void)
                              .b_moving = (ROBOT_MOTION_MODE_MOVE == mode),
                              .turn = pending_turn,
                              .b_barcode = b_barcode_ahead,
-                             .b_barcode_done = b_barcode_done};
+                             .b_barcode_done = b_barcode_done,
+                             .b_hump = terrain_monitor_on_hump()};
     b_barcode_ahead = false;
     b_barcode_done = false;
     motion_shared_odometry_t odometry;
@@ -265,6 +269,20 @@ report (line_request_t const * p_request, line_track_input_t const * p_in)
     /* A full or busy queue drops it: the console line is the record. */
     (void)telemetry_queue_push(now_ms, text, &sequence);
 #endif
+}
+
+/* Say when the car slows for a hump and when it speeds up again. */
+static void
+report_hump (line_track_input_t const * p_in)
+{
+    static bool b_last_slow;
+    bool const b_slow = line_track_hump_slow(&track);
+    if (b_slow != b_last_slow)
+    {
+        tm_printf((UB *)"line HUMP %s h=%d d=%d\n", b_slow ? "SLOW" : "DONE",
+                  (INT)p_in->heading_deg, (INT)p_in->distance_mm);
+        b_last_slow = b_slow;
+    }
 }
 
 /* Print each step of a slow pass over a barcode. */

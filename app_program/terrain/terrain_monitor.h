@@ -260,6 +260,14 @@ terrain_status_t terrain_monitor_update (void);
 terrain_status_t terrain_monitor_get_latest (terrain_data_t * p_out);
 
 /**
+ * @brief Whether the car is on a hump now.
+ * @return True from the climb until level again. False until calibrated.
+ * Safe to call from other tasks while terrain_monitor_update() runs. Short
+ * leans read true too: only a finished hump is told from them.
+ */
+bool terrain_monitor_on_hump (void);
+
+/**
  * @brief Copy the calibration details.
  * @param p_out Receives the details; read the packed part with the
  *        terrain_monitor_calib_*() functions.

@@ -245,12 +245,14 @@ def run(folder):
                 "reading 10 20 9800 mm/s2")
     car.console("terrain: hump LEVEL height 10 mm")
     car.console("terrain: hump ASCENDING")
+    car.console("line HUMP SLOW h=1 d=2")
     settle(car)
     events = get_state()["events"]
     check("D26 calibration and each finished hump show as events, not the "
           "steps of a hump",
           any("terrain: calibration VALID" in e for e in events)
           and any("hump LEVEL height 10" in e for e in events)
+          and any("line HUMP SLOW" in e for e in events)
           and not any("hump ASCENDING" in e for e in events))
 
     # The console stopped after a stall on 2026-11-07: telemetry still came.

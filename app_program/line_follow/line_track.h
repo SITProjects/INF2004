@@ -105,6 +105,7 @@ typedef struct
     line_turn_t turn;    /**< Instruction for the next junction. */
     bool b_barcode;      /**< A barcode has just come into view. */
     bool b_barcode_done; /**< The reader has finished with it. */
+    bool b_hump;         /**< The terrain task reports a hump. */
 } line_track_input_t;
 
 /** @brief Tracking state. Callers allocate it; fields are private. */
@@ -144,6 +145,9 @@ typedef struct
     uint32_t search_samples;
     bool b_search_hit; /* Search-side sensor has read black. */
     line_barcode_phase_t barcode_phase;
+    bool b_hump_slow;         /* Following slowly over a hump. */
+    bool b_hump_spent;        /* That ran its limit: wait for level ground. */
+    uint32_t hump_samples;    /* Samples spent slow on this hump. */
     uint32_t barcode_samples; /* Samples in this phase. */
     bool b_back_started;      /* The reverse has begun. */
     int32_t barcode_mm;       /* Travel when the creep began. */
@@ -175,6 +179,13 @@ line_request_t line_track_update (line_track_t * p_track,
  * @return The current phase.
  */
 line_barcode_phase_t line_track_barcode_phase (line_track_t const * p_track);
+
+/**
+ * @brief Whether the car is following slowly over a hump.
+ * @param p_track State.
+ * @return True while it is.
+ */
+bool line_track_hump_slow (line_track_t const * p_track);
 
 /** @brief Short name of @p phase for logs ("BRAKE", "BACK", ...). */
 char const * line_track_barcode_name (line_barcode_phase_t phase);

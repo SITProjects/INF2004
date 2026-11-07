@@ -403,6 +403,14 @@ terrain_monitor_get_latest (terrain_data_t * p_out)
     return TERRAIN_OK;
 }
 
+bool
+terrain_monitor_on_hump (void)
+{
+    terrain_data_t data = {{0u}};
+    (void)terrain_monitor_get_latest(&data);
+    return terrain_monitor_data_hump_state(&data) != TERRAIN_HUMP_LEVEL;
+}
+
 terrain_status_t
 terrain_monitor_get_calibration (terrain_calib_info_t * p_out)
 {

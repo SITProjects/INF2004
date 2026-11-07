@@ -70,6 +70,8 @@ static bool hold_crossing (line_track_t * p_track,
 static void back_up (line_track_t * p_track, line_track_input_t const * p_in);
 static void watch_barcode (line_track_t * p_track,
                            line_track_input_t const * p_in);
+static void watch_hump (line_track_t * p_track,
+                        line_track_input_t const * p_in);
 static void pivot_junction (line_track_t * p_track,
                             line_track_input_t const * p_in);
 static int32_t seek_target (line_track_t const * p_track,
@@ -108,6 +110,9 @@ line_track_init (line_track_t * p_track, line_track_input_t const * p_in)
     p_track->last_side = SIDE_NONE;
     p_track->junction_count = 0u;
     p_track->barcode_phase = LINE_BARCODE_NONE;
+    p_track->b_hump_slow = false;
+    p_track->b_hump_spent = false;
+    p_track->hump_samples = 0u;
     restart_tracking(p_track, p_in, p_in->heading_deg);
 }
 
@@ -219,6 +224,7 @@ line_track_update (line_track_t * p_track, line_track_input_t const * p_in)
     }
 
     watch_barcode(p_track, p_in);
+    watch_hump(p_track, p_in);
     line_barcode_phase_t const phase = p_track->barcode_phase;
     line_request_t const request = {
         .mode = (LINE_BARCODE_BRAKE == phase) ? LINE_MODE_STOP : p_track->mode,
@@ -227,8 +233,14 @@ line_track_update (line_track_t * p_track, line_track_input_t const * p_in)
         .b_junction = (p_track->junction_phase != JUNCTION_NONE),
         .reverse_mm =
             (LINE_BARCODE_BACK == phase) ? LINE_BARCODE_REVERSE_MM : 0u,
-        .b_slow = (LINE_BARCODE_CREEP == phase)};
+        .b_slow = (LINE_BARCODE_CREEP == phase) || p_track->b_hump_slow};
     return request;
+}
+
+bool
+line_track_hump_slow (line_track_t const * p_track)
+{
+    return p_track->b_hump_slow;
 }
 
 line_barcode_phase_t
@@ -512,6 +524,44 @@ back_up (line_track_t * p_track, line_track_input_t const * p_in)
 }
 
 /*
+ * Follow slowly over a hump. It starts only on a straight: most false leans
+ * are steering in bends. Once started it holds until level ground, as the car
+ * wobbles on the hump, and stopping ends the hump, so a car stalled on the
+ * ramp tries again at full speed.
+ */
+static void
+watch_hump (line_track_t * p_track, line_track_input_t const * p_in)
+{
+    if (!p_in->b_hump || !p_in->b_control)
+    {
+        p_track->b_hump_slow = false;
+        p_track->b_hump_spent = false;
+    }
+    else if (p_track->b_hump_slow)
+    {
+        p_track->hump_samples++;
+        if (p_track->hump_samples >= LINE_HUMP_SLOW_SAMPLES)
+        {
+            p_track->b_hump_slow = false;
+            p_track->b_hump_spent = true;
+        }
+    }
+    else if (!p_track->b_hump_spent && !p_track->b_curve &&
+             (abs_deg(recent_turn(p_track, p_in)) < LINE_BEND_TREND_DEG) &&
+             (LINE_MODE_TRACK == p_track->mode) &&
+             (JUNCTION_NONE == p_track->junction_phase) &&
+             (LINE_BARCODE_NONE == p_track->barcode_phase))
+    {
+        p_track->b_hump_slow = true;
+        p_track->hump_samples = 0u;
+    }
+    else
+    {
+        /* Not now: a bend, a junction, a barcode, or the limit reached. */
+    }
+}
+
+/*
  * Start a slow pass, only on plain tracking, and end one. A car still
  * turning is in a bend, and the barcode sensor crossing the tape looks like
  * a barcode: on 2026-11-06 no pass begun after turning LINE_BEND_TREND_DEG
@@ -775,7 +825,8 @@ note_touch (line_track_t * p_track, line_track_input_t const * p_in,
         p_track->b_curve = false;
     }
     else if ((p_in->distance_mm - p_track->touch_mm) <=
-             ((LINE_BARCODE_CREEP == p_track->barcode_phase)
+             (((LINE_BARCODE_CREEP == p_track->barcode_phase) ||
+               p_track->b_hump_slow)
                   ? LINE_BARCODE_TOUCH_MM
                   : LINE_CURVE_TOUCH_MM))
     {

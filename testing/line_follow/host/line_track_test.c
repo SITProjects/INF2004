@@ -1002,6 +1002,96 @@ test_counter_touch (void)
 }
 
 static void
+test_hump_slow (void)
+{
+    reset();
+    drive(false, false, samples_for(150));
+    check("LT49 no hump, full speed", !out.b_slow);
+    in.b_hump = true;
+    drive(false, false, 2u);
+    check("LT50 a hump on a straight slows the car at once", out.b_slow);
+
+    /* The real hump: up to 15 degrees of wobble, touches on both sides. */
+    bool b_held = true;
+    for (int i = 0; i < 6; i++)
+    {
+        in.heading_deg = ((i % 2) == 0) ? 15 : -15;
+        drive((i % 2) == 0, (i % 2) != 0, samples_for(30));
+        b_held = b_held && out.b_slow;
+    }
+    /* Two touches on one side, close together: a bend, as far as it knows. */
+    drive(true, false, samples_for(8));
+    drive(false, false, samples_for(10));
+    drive(true, false, samples_for(8));
+    check("LT51 wobbling on it, even into a bend, does not end the slow pass",
+          b_held && track.b_curve && out.b_slow);
+    in.heading_deg = 0;
+    in.b_hump = false;
+    drive(false, false, 2u);
+    check("LT52 level ground ends it", !out.b_slow);
+
+    in_bend(1);
+    in.b_hump = true;
+    drive(false, false, 2u);
+    check("LT53 a lean in a bend does not slow the car", !out.b_slow);
+
+    /* Leaning for good, as if calibrated on a slope. */
+    reset();
+    drive(false, false, samples_for(150));
+    in.b_hump = true;
+    drive(false, false, LINE_HUMP_SLOW_SAMPLES + 2u);
+    bool const b_ended = !out.b_slow;
+    drive(false, false, 50u);
+    check("LT54 a hump that never ends cannot hold the car slow",
+          b_ended && !out.b_slow);
+    in.b_hump = false;
+    drive(false, false, 2u);
+    in.b_hump = true;
+    drive(false, false, 2u);
+    check("LT55 after level ground the next hump slows it again", out.b_slow);
+
+    in.b_control = false;
+    drive(false, false, 1u);
+    check("LT56 losing control ends it, the hump or not", !out.b_slow);
+    in.b_control = true;
+    in.b_hump = false;
+
+    reset();
+    drive(false, false, samples_for(150));
+    in.b_barcode = true;
+    drive(false, false, 1u);
+    in.b_barcode = false;
+    in.b_hump = true;
+    drive(false, false, 2u);
+    check("LT57 a lean during a barcode stop is left alone", !out.b_slow);
+    in.b_hump = false;
+
+    reset();
+    in.turn = LINE_TURN_LEFT;
+    drive(false, false, samples_for(150));
+    drive(true, true, samples_for(12));
+    in.b_hump = true;
+    drive(false, false, 2u);
+    bool const b_junction = out.b_junction;
+    check("LT58 a lean while taking a junction is left alone",
+          b_junction && !out.b_slow);
+    in.b_hump = false;
+    in.turn = LINE_TURN_STRAIGHT;
+
+    /* A slow car touches again sooner: the same rule as a barcode creep. */
+    reset();
+    drive(false, false, samples_for(150));
+    in.b_hump = true;
+    drive(false, false, 2u);
+    drive(true, false, samples_for(8));
+    drive(false, false, samples_for(50));
+    drive(true, false, samples_for(8));
+    check("LT59 touches 50 mm apart are no bend at the slow speed",
+          out.b_slow && !track.b_curve);
+    in.b_hump = false;
+}
+
+static void
 test_crossing_hold (void)
 {
     /* 2026-11-07 run 2: 11, then 01, 11, 01 over the crossing tape. */
@@ -1145,6 +1235,7 @@ main (void)
     test_bend_crossing();
     test_crossing_hold();
     test_counter_touch();
+    test_hump_slow();
     test_barcode_stop();
     test_creep_model();
     test_junction_uturn();
