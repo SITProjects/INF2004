@@ -10,6 +10,7 @@
 #define HUMP_HEIGHT_MM 10.0f
 #define WHEELS_APART_MM 107.5f
 #define RAD_TO_DEG 57.29578f
+#define LEFT_LINE_MM 200.0f /* Past the hump before following again. */
 
 static unsigned int failures;
 
@@ -32,7 +33,8 @@ lift_mm (float x_mm)
            (1.0f - fabsf((2.0f * x_mm / HUMP_LENGTH_MM) - 1.0f));
 }
 
-/* Over the hump at @p speed; clear it at @p clear_mm, if not negative. */
+/* Over the hump at @p speed; from @p clear_mm, if not negative, the car is off
+ * the line until past it. */
 static void
 drive (float speed, float clear_mm, unsigned int * p_climbs,
        unsigned int * p_humps, int * p_height)
@@ -51,7 +53,6 @@ drive (float speed, float clear_mm, unsigned int * p_climbs,
     terrain_height_reset(&height);
     uint32_t word = 0u;
     float tilt = 0.0f;
-    bool b_cleared = false;
     *p_climbs = 0u;
     *p_humps = 0u;
     *p_height = -1;
@@ -60,15 +61,12 @@ drive (float speed, float clear_mm, unsigned int * p_climbs,
     {
         float const roll = asinf(lift_mm(x) / WHEELS_APART_MM) * RAD_TO_DEG;
         tilt += alpha * (roll - tilt);
-        if ((clear_mm >= 0.0f) && (x >= clear_mm))
+        if ((clear_mm >= 0.0f) && (x >= clear_mm) &&
+            (x < (HUMP_LENGTH_MM + LEFT_LINE_MM)))
         {
-            /* As terrain_monitor.c does off the line. */
-            b_cleared = true;
+            /* As terrain_monitor.c does off the line, then back on it. */
             word = terrain_detect_hump_clear(word);
             terrain_height_clear_hump(&height);
-        }
-        if (b_cleared)
-        {
             continue;
         }
         terrain_height_step(&height, terrain_detect_hump_state(word), roll,
@@ -109,7 +107,7 @@ main (void)
     unsigned int humps = 0u;
     int height = 0;
     drive(120.0f, 90.0f, &climbs, &humps, &height);
-    check("TH03 a hump dropped half way never counts",
+    check("TH03 a hump dropped half way never counts, back on the line after",
           (1u == climbs) && (0u == humps));
 
     printf("%u failure(s)\n", failures);
