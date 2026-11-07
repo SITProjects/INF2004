@@ -1091,23 +1091,43 @@ test_hump_slow (void)
     in.b_hump = false;
 }
 
-/* Meet a crossing tape with @p first black @p skew_mm before the other,
- * take @p turn, and return the pivot's target. */
-static int32_t
-askew_turn_target (line_turn_t turn, bool b_left_first, int skew_mm)
+/* Cross a junction and drive to its centre, for @p turn. The right sensor
+ * meets the tape @p skew_mm before the left. */
+static void
+reach_pivot (line_turn_t turn, int skew_mm)
 {
     reset();
     in.turn = turn;
     drive(false, false, samples_for(150));
     if (skew_mm > 0)
     {
-        drive(b_left_first, !b_left_first, samples_for(skew_mm));
+        drive(false, true, samples_for(skew_mm));
     }
     drive(true, true, samples_for(12));
     drive(false, false, samples_for(LINE_JUNCTION_CENTRE_MM));
-    int32_t const target = out.target_heading_deg;
     in.turn = LINE_TURN_STRAIGHT;
-    return target;
+}
+
+/* The pivot, 2 degrees a sample up to @p last_deg off the start, with the
+ * right sensor black from @p black_deg until @p white_deg; below 0 is before
+ * the car starts to turn. Its level changes one sample late, so a white_deg
+ * of 20 counts at 22. */
+static int32_t
+pivot_target (line_turn_t turn, int black_deg, int white_deg, int last_deg)
+{
+    reach_pivot(turn, 0);
+    bool const b_left = (LINE_MODE_SEARCH_LEFT == out.mode);
+    in.b_turning = true;
+    for (int deg = -4; deg <= last_deg; deg += 2)
+    {
+        int const turned = (deg > 0) ? deg : 0;
+        in.heading_deg = b_left ? turned : -turned;
+        in.b_right_black = (deg >= black_deg) && (deg < white_deg);
+        out = line_track_update(&track, &in);
+    }
+    in.b_turning = false;
+    in.heading_deg = 0;
+    return out.target_heading_deg;
 }
 
 /* Left black, then right @p gap_mm later as left clears: the least overlap
@@ -1149,29 +1169,47 @@ test_thin_crossing (void)
 }
 
 static void
-test_askew_turn (void)
+test_pivot_aim (void)
 {
-    /* The car's heading stays 0 here: only the skew moves the target. */
-    int32_t const square = askew_turn_target(LINE_TURN_LEFT, true, 0);
-    check("LT60 met square, a left turn is 90 degrees", 90 == square);
+    /* A square car's right sensor leaves at 14: at 22 it is 8 off. */
+    check("LT60 no old line swept: a left turn is 90 degrees",
+          90 == pivot_target(LINE_TURN_LEFT, 200, 200, 60));
+    check("LT61 the car right of the line: a left turn goes further",
+          98 == pivot_target(LINE_TURN_LEFT, 12, 20, 60));
+    check("LT62 a right turn is always 90 degrees",
+          -90 == pivot_target(LINE_TURN_RIGHT, 12, 20, 60));
+    check("LT63 the car left of the line: a left turn goes less",
+          84 == pivot_target(LINE_TURN_LEFT, 0, 6, 60));
+    check("LT64 a square car turns exactly 90",
+          90 == pivot_target(LINE_TURN_LEFT, 6, 12, 60));
+    check("LT65 a U-turn, pivoting left, allows for it too",
+          188 == pivot_target(LINE_TURN_UTURN, 12, 20, 60));
+    check("LT69 a sensor leaving late in the pivot is something else",
+          90 == pivot_target(LINE_TURN_LEFT, 90, 97, 120));
+    check("LT70 and so is one leaving as the car still rolls forward",
+          90 == pivot_target(LINE_TURN_LEFT, -4, 2, 60));
+    check("LT71 a sensor black from the start still counts as it leaves",
+          92 == pivot_target(LINE_TURN_LEFT, -4, 14, 60));
 
-    /* Sampling rounds the skew up to whole samples of 1.2 mm. */
-    int32_t const away = askew_turn_target(LINE_TURN_LEFT, true, 7);
-    check("LT61 left sensor first: the line runs left of the heading, so a "
-          "left turn goes further",
-          (away >= 100) && (away <= 108));
-    int32_t const towards = askew_turn_target(LINE_TURN_LEFT, false, 7);
-    check("LT62 right sensor first: a left turn goes less",
-          (towards <= 80) && (towards >= 72));
-    int32_t const right_away = askew_turn_target(LINE_TURN_RIGHT, false, 7);
-    check("LT63 right sensor first: a right turn goes further",
-          (right_away <= -100) && (right_away >= -108));
-    int32_t const right_towards = askew_turn_target(LINE_TURN_RIGHT, true, 7);
-    check("LT64 left sensor first: a right turn goes less",
-          (right_towards >= -80) && (right_towards <= -72));
-    int32_t const uturn = askew_turn_target(LINE_TURN_UTURN, true, 7);
-    int32_t const uturn_square = askew_turn_target(LINE_TURN_UTURN, true, 0);
-    check("LT65 a U-turn allows for it too", uturn > uturn_square);
+    /* Sweeping on over something else after the line. */
+    reach_pivot(LINE_TURN_LEFT, 0);
+    in.b_turning = true;
+    for (int deg = 0; deg <= 60; deg += 2)
+    {
+        in.heading_deg = deg;
+        in.b_right_black = ((deg >= 12) && (deg < 20)) ||
+                           ((deg >= 24) && (deg < 30));
+        out = line_track_update(&track, &in);
+    }
+    in.b_turning = false;
+    in.heading_deg = 0;
+    check("LT73 only the first tape swept counts",
+          98 == out.target_heading_deg);
+
+    /* 2026-11-07: right black 10 mm before the left, already on the line. */
+    reach_pivot(LINE_TURN_LEFT, 10);
+    check("LT72 a sensor on the line as the car meets the tape changes nothing",
+          90 == out.target_heading_deg);
 }
 
 static void
@@ -1320,7 +1358,7 @@ main (void)
     test_crossing_hold();
     test_counter_touch();
     test_hump_slow();
-    test_askew_turn();
+    test_pivot_aim();
     test_barcode_stop();
     test_creep_model();
     test_junction_uturn();

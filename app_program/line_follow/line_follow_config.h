@@ -231,14 +231,33 @@
 #define LINE_JUNCTION_CENTRE_MM 130
 
 /**
- * @brief The line sensors' spacing, in mm. Meeting a crossing tape one sensor
- * before the other shows how far the car is off square to it: asin(skew /
- * spacing), so 7 mm is 13 degrees. A turn allows for that, or the pivot
- * carries the error onto the new line: of 4 turns on 2026-11-07 that met the
- * tape 4 mm or more askew, away from the new line, none saw the tape as the
- * pivot ended, and 3 ran over 150 mm without a touch.
+ * @brief A left pivot starts with the sensors over the line carrying on past
+ * the junction, so the right sensor leaving that tape shows where the line
+ * runs: this many degrees behind that heading. Three left turns on 2026-11-06
+ * and 07 that lost the line stopped 8 to 10 degrees short by the next crossing
+ * tape, and this read the same to within about 2. It is half the sensors'
+ * spacing and half the tape seen 130 mm from the axle, 11 degrees, plus the
+ * debounce and lag at 90 degrees/s.
+ *
+ * The car's heading is no guide: it stopped up to 11 degrees right of the
+ * line. Nor is the gap between the sensors on the way in: a sensor already on
+ * the line reads as skew, and took 19 degrees off one left turn. Right pivots
+ * are left at 90: they work, as a short one drifts onto the tape, and nothing
+ * independent shows this reading is right for them.
  */
-#define LINE_SENSOR_GAP_MM 30
+#define LINE_OLD_LINE_DEG 14
+
+/**
+ * @brief The sensor leaving the tape counts from this far into the pivot, in
+ * degrees: before that the car is still rolling forward as it brakes.
+ */
+#define LINE_OLD_LINE_MIN_DEG 5
+
+/**
+ * @brief ...and up to this far. Logged sweeps ended by 24; later, the sensor
+ * can only be over something else: at 97 it was the crossing tape.
+ */
+#define LINE_OLD_LINE_MAX_DEG 35
 
 /** U-turns pivot left (1) or right (0). */
 #define LINE_UTURN_LEFT 1
