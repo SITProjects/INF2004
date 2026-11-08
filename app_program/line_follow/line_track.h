@@ -163,6 +163,7 @@ typedef struct
     uint32_t barcode_samples; /* Samples in this phase. */
     bool b_back_started;      /* The reverse has begun. */
     int32_t barcode_mm;       /* Travel when the creep began. */
+    int32_t line_deg;         /* The line's heading, held in a creep. */
 } line_track_t;
 
 /* Public function declarations. */

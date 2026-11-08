@@ -944,6 +944,8 @@ test_creep_bars (void)
     {
         bars_left = (0 == pass);
         int const to_tape = bars_left ? -LINE_LEAD_DEG : LINE_LEAD_DEG;
+        int const lean_to_tape =
+            bars_left ? -LINE_CREEP_LEAD_DEG : LINE_CREEP_LEAD_DEG;
 
         reset();
         start_creep();
@@ -951,13 +953,13 @@ test_creep_bars (void)
         bool const b_bars_junction = drive_both_junction(samples_for(108));
         b_lt94 = b_lt94 && !b_bars_junction && out.b_slow &&
                  (LINE_MODE_TRACK == out.mode) &&
-                 (to_tape == out.target_heading_deg);
+                 (lean_to_tape == out.target_heading_deg);
 
         drive_bars(true, false, LINE_CONFIRM_SAMPLES + samples_for(20));
-        bool const b_seeking = (to_tape == out.target_heading_deg);
+        bool const b_seeking = (lean_to_tape == out.target_heading_deg);
         drive_bars(false, false, LINE_CONFIRM_SAMPLES + samples_for(20));
         b_lt95 = b_lt95 && b_seeking && (LINE_MODE_TRACK == out.mode) &&
-                 (to_tape == out.target_heading_deg);
+                 (0 == out.target_heading_deg);
 
         reset();
         start_creep();
@@ -979,7 +981,8 @@ test_creep_bars (void)
         reset();
         start_creep();
         drive_bars(true, false, LINE_CONFIRM_SAMPLES);
-        b_lt97 = b_lt97 && out.b_slow && (-to_tape == out.target_heading_deg);
+        b_lt97 =
+            b_lt97 && out.b_slow && (-lean_to_tape == out.target_heading_deg);
 
         reset();
         start_creep();
@@ -990,10 +993,10 @@ test_creep_bars (void)
         b_lt98 = b_lt98 && b_square && b_following;
     }
     check("LT94 in a creep, bars under one sensor with the other on the tape "
-          "are no junction: the car steers to the tape, either side",
+          "are no junction: the car leans to the tape, either side",
           b_lt94);
     check("LT95 the tape's sensor off the tape first: the car is too far over, "
-          "and turns back until that sensor finds it",
+          "and leans back; with the bars gone it runs along the line",
           b_lt95);
     check("LT96 the bars stay ignored past the creep's end until they clear, "
           "as the other sensor comes and goes; black there later is the tape",
@@ -1003,6 +1006,56 @@ test_creep_bars (void)
     check("LT98 both black at once in a creep, or the same order as the bars "
           "outside one, are still junctions",
           b_lt98);
+}
+
+/* 2026-11-08: a creep swung 4 to 47 degrees, a sensor on bars taken for the
+ * tape leading the car on and on, after starting 7 degrees off the line. */
+static void
+test_creep_heading (void)
+{
+    reset();
+    drive(false, false, 10u);
+    in.heading_deg = 8;
+    in.b_barcode = true;
+    drive(false, false, 1u);
+    in.b_barcode = false;
+    drive(false, false, LINE_BARCODE_BRAKE_SAMPLES);
+    in.b_moving = true;
+    drive(false, false, 5u);
+    in.b_moving = false;
+    drive(false, false, 2u);
+    check("LT99 a creep holds the line's heading, averaged from before the "
+          "brake, not the heading the car stopped on",
+          out.b_slow && (2 == out.target_heading_deg));
+
+    reset();
+    start_creep();
+    drive(false, true, LINE_CONFIRM_SAMPLES);
+    bool b_lean = true;
+    for (int deg = 0; deg <= 20; deg++)
+    {
+        in.heading_deg = -deg;
+        drive(false, true, samples_for(5));
+        b_lean = b_lean && (-LINE_CREEP_LEAD_DEG == out.target_heading_deg);
+    }
+    check("LT100 a sensor black in a creep leans the car LINE_CREEP_LEAD_DEG "
+          "off the line, however long it stays black and the car turns",
+          b_lean && (LINE_MODE_TRACK == out.mode));
+
+    in.heading_deg = -5;
+    drive(false, false, LINE_CONFIRM_SAMPLES + samples_for(20));
+    check("LT101 clear again, the creeping car turns back along the line, not "
+          "on at the heading it reached",
+          out.b_slow && (0 == out.target_heading_deg));
+
+    reset();
+    start_creep();
+    in.heading_deg = 3;
+    bool const b_crossing = drive_both_junction(LINE_CONFIRM_SAMPLES + 2u);
+    drive(true, false, LINE_CONFIRM_SAMPLES + 2u);
+    check("LT102 a crossing met in a creep holds the line's heading, one "
+          "sensor still on it",
+          b_crossing && out.b_slow && (0 == out.target_heading_deg));
 }
 
 /* 2026-11-06 20:32:07: 7 to 57 degrees in the 120 mm before the crossing. */
@@ -1731,6 +1784,7 @@ main (void)
     test_barcode_stop();
     test_creep_model();
     test_creep_bars();
+    test_creep_heading();
     test_junction_uturn();
     test_overshoot_across();
     printf("%u failure(s)\n", failures);

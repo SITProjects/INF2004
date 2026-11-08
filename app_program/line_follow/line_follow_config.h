@@ -195,6 +195,15 @@
 #define LINE_BARCODE_CREEP_MM 520
 
 /**
+ * @brief In a creep the car holds the line's heading, its average over the
+ * LINE_TREND_SLOTS * LINE_TREND_STEP_MM before the brake, and leans this many
+ * degrees off it towards a sensor on the tape. Turning by LINE_LEAD_DEG and
+ * holding what that reached swung it 8 to 47 degrees in a creep, onto the
+ * barcodes either side of the line (2026-11-08).
+ */
+#define LINE_CREEP_LEAD_DEG 5
+
+/**
  * @brief On a hump the car follows at the barcode speed, to spare the sensors
  * close to the floor there, for at most this many samples: 8 s, where the
  * hump takes about 6 s at that speed. A car calibrated on a slope leans for

@@ -74,6 +74,9 @@ static void watch_hump (line_track_t * p_track,
                         line_track_input_t const * p_in);
 static bool slow_pass (line_track_t const * p_track);
 static void note_bars (line_track_t * p_track, bool const * p_was_black);
+static int32_t creep_lean (line_track_t const * p_track, uint32_t bars_side);
+static int32_t line_heading (line_track_t const * p_track,
+                             line_track_input_t const * p_in);
 static void watch_loop (line_track_t * p_track,
                         line_track_input_t const * p_in);
 static void note_pivot (line_track_t * p_track,
@@ -127,6 +130,7 @@ line_track_init (line_track_t * p_track, line_track_input_t const * p_in)
     p_track->rejoin_mm = p_in->distance_mm - LINE_REJOIN_MM;
     p_track->junction_count = 0u;
     p_track->barcode_phase = LINE_BARCODE_NONE;
+    p_track->line_deg = p_in->heading_deg;
     p_track->b_hump_slow = false;
     p_track->b_hump_spent = false;
     p_track->hump_samples = 0u;
@@ -257,13 +261,27 @@ line_track_update (line_track_t * p_track, line_track_input_t const * p_in)
         }
         uint32_t const tape_side =
             (SIDE_LEFT == bars_side) ? SIDE_RIGHT : SIDE_LEFT;
-        if ((LINE_MODE_TRACK == p_track->mode) &&
-            (JUNCTION_NONE == p_track->junction_phase) &&
-            (bars_side != SIDE_NONE) && !p_track->b_black[tape_side])
+        if ((LINE_MODE_TRACK != p_track->mode) ||
+            (JUNCTION_DRIVE == p_track->junction_phase))
+        {
+            /* A junction or a search took over. */
+        }
+        else if (LINE_BARCODE_CREEP == p_track->barcode_phase)
+        {
+            p_track->target_deg =
+                p_track->line_deg +
+                (p_track->b_cross_hold ? 0 : creep_lean(p_track, bars_side));
+        }
+        else if ((JUNCTION_NONE == p_track->junction_phase) &&
+                 (bars_side != SIDE_NONE) && !p_track->b_black[tape_side])
         {
             /* Only the bars are black: the tape is the other way. */
             p_track->target_deg =
                 p_in->heading_deg + (side_sign(tape_side) * LINE_LEAD_DEG);
+        }
+        else
+        {
+            /* As tracked. */
         }
     }
     else if (LINE_MODE_STOP == p_track->mode)
@@ -407,6 +425,47 @@ note_bars (line_track_t * p_track, bool const * p_was_black)
             }
         }
     }
+}
+
+/*
+ * A creep's lean off the line's heading: towards the one sensor black, or away
+ * from bars alone, else none. A lean, not a lead: the heading cannot run on
+ * while a sensor stays black, as it did on bars taken for the tape.
+ */
+static int32_t
+creep_lean (line_track_t const * p_track, uint32_t bars_side)
+{
+    bool const b_left = p_track->b_black[SIDE_LEFT];
+    bool const b_right = p_track->b_black[SIDE_RIGHT];
+    uint32_t side = SIDE_NONE;
+    if (b_left != b_right)
+    {
+        side = b_left ? SIDE_LEFT : SIDE_RIGHT;
+    }
+    else if (!b_left && (bars_side != SIDE_NONE))
+    {
+        side = (SIDE_LEFT == bars_side) ? SIDE_RIGHT : SIDE_LEFT;
+    }
+    else
+    {
+        /* Both white, or both black: along the line. */
+    }
+    return (SIDE_NONE == side) ? 0 : (side_sign(side) * LINE_CREEP_LEAD_DEG);
+}
+
+/*
+ * The line's heading on a straight: the car's, averaged with the recent
+ * headings, which evens out its weaving round the line.
+ */
+static int32_t
+line_heading (line_track_t const * p_track, line_track_input_t const * p_in)
+{
+    int32_t sum = p_in->heading_deg;
+    for (uint32_t slot = 0u; slot < LINE_TREND_SLOTS; slot++)
+    {
+        sum += p_track->trend_deg[slot];
+    }
+    return sum / (int32_t)(LINE_TREND_SLOTS + 1u);
 }
 
 /* Remember which way the car is pivoting. */
@@ -723,6 +782,7 @@ watch_barcode (line_track_t * p_track, line_track_input_t const * p_in)
         {
             p_track->barcode_phase = LINE_BARCODE_BRAKE;
             p_track->barcode_samples = 0u;
+            p_track->line_deg = line_heading(p_track, p_in);
         }
     }
     else if ((LINE_BARCODE_CREEP == p_track->barcode_phase) &&
