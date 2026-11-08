@@ -72,6 +72,14 @@ static void hold (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
                   char const * p_reason);
 static void release (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
                      bool b_to_follow, uint32_t now_ms, char const * p_reason);
+static void note_heading (obstacle_avoid_t * p_ctx,
+                          obstacle_avoid_input_t const * p_in);
+static bool line_heading_known (obstacle_avoid_t * p_ctx,
+                                obstacle_avoid_input_t const * p_in);
+static bool try_straighten (obstacle_avoid_t * p_ctx,
+                            obstacle_avoid_action_t * p_act,
+                            obstacle_avoid_input_t const * p_in,
+                            bool b_critical);
 static bool try_plan (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
                       obstacle_avoid_input_t const * p_in);
 static void start_leg (obstacle_avoid_t * p_ctx,
@@ -453,8 +461,13 @@ obstacle_avoid_step (obstacle_avoid_t * p_ctx,
     switch (p_ctx->state)
     {
         case OBSTACLE_AVOID_IDLE:
-            if (!b_clear)
+            if (b_clear)
             {
+                note_heading(p_ctx, p_in);
+            }
+            else
+            {
+                p_ctx->b_straighten_due = line_heading_known(p_ctx, p_in);
                 hold(p_ctx, &act, OBSTACLE_AVOID_STOPPING, now_ms,
                      b_critical ? "critical" : "stop request");
             }
@@ -468,6 +481,8 @@ obstacle_avoid_step (obstacle_avoid_t * p_ctx,
                 p_ctx->origin_heading_deg = p_in->heading_deg;
                 enter(p_ctx, OBSTACLE_AVOID_WAIT_RESULT, now_ms);
                 act.p_reason = "motors inhibited";
+                act.b_rearm = p_ctx->b_measure_again;
+                p_ctx->b_measure_again = false;
             }
             else if (elapsed(now_ms, p_ctx->entered_ms, p_timing->stop_ack_ms))
             {
@@ -480,7 +495,14 @@ obstacle_avoid_step (obstacle_avoid_t * p_ctx,
             }
             break;
         case OBSTACLE_AVOID_WAIT_RESULT:
-            if (try_plan(p_ctx, &act, p_in))
+            if (p_ctx->b_straighten_due &&
+                elapsed(now_ms, p_ctx->entered_ms,
+                        p_timing->straighten_settle_ms) &&
+                try_straighten(p_ctx, &act, p_in, b_critical))
+            {
+                /* The sweep will start again from the line's heading. */
+            }
+            else if (try_plan(p_ctx, &act, p_in))
             {
                 /* Planned, or refused into WAIT_CLEAR. */
             }
@@ -546,6 +568,8 @@ obstacle_avoid_step (obstacle_avoid_t * p_ctx,
                 if (p_ctx->leg == OBSTACLE_AVOID_LEG_FOLLOW)
                 {
                     enter(p_ctx, OBSTACLE_AVOID_IDLE, now_ms);
+                    p_ctx->trend_count = 0u;
+                    p_ctx->trend_mm = p_in->distance_mm;
                     act.b_side_scans_on = true;
                     act.p_reason = "following";
                 }
@@ -781,6 +805,8 @@ leg_reason (obstacle_avoid_leg_t leg)
             return "axle onto the line";
         case OBSTACLE_AVOID_LEG_TURN_HOME:
             return "original heading";
+        case OBSTACLE_AVOID_LEG_STRAIGHTEN:
+            return "straighten";
         case OBSTACLE_AVOID_LEG_FOLLOW:
         default:
             return "resume following";
@@ -834,6 +860,89 @@ release (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
     p_act->p_reason = p_reason;
     p_ctx->b_to_follow = b_to_follow;
     enter(p_ctx, OBSTACLE_AVOID_RELEASING, now_ms);
+}
+
+/* While following, keep the heading every so often. */
+static void
+note_heading (obstacle_avoid_t * p_ctx, obstacle_avoid_input_t const * p_in)
+{
+    int32_t const moved = p_in->distance_mm - p_ctx->trend_mm;
+    int32_t const step_mm = (int32_t)p_ctx->p_config->timing.straighten_step_mm;
+    if (!p_in->b_odometry_valid || ((moved < step_mm) && (moved > -step_mm)))
+    {
+        return;
+    }
+    p_ctx->trend_mm = p_in->distance_mm;
+    p_ctx->trend_deg[p_ctx->trend_next] = p_in->heading_deg;
+    p_ctx->trend_next = (p_ctx->trend_next + 1u) % OBSTACLE_AVOID_TREND_SLOTS;
+    if (p_ctx->trend_count < OBSTACLE_AVOID_TREND_SLOTS)
+    {
+        ++p_ctx->trend_count;
+    }
+}
+
+/*
+ * The line's heading as the car is stopped: its own, averaged with the recent
+ * ones, which evens out its weaving round the line. False if there are too few
+ * yet, or the car turned too far over them to be on a straight.
+ */
+static bool
+line_heading_known (obstacle_avoid_t * p_ctx,
+                    obstacle_avoid_input_t const * p_in)
+{
+    if ((0u == p_ctx->p_config->timing.straighten_max_deg) ||
+        !p_in->b_odometry_valid ||
+        (p_ctx->trend_count < OBSTACLE_AVOID_TREND_SLOTS))
+    {
+        return false;
+    }
+    int32_t sum = p_in->heading_deg;
+    int32_t lowest = p_in->heading_deg;
+    int32_t highest = p_in->heading_deg;
+    for (uint32_t slot = 0u; slot < OBSTACLE_AVOID_TREND_SLOTS; ++slot)
+    {
+        int32_t const deg = p_ctx->trend_deg[slot];
+        sum += deg;
+        lowest = (deg < lowest) ? deg : lowest;
+        highest = (deg > highest) ? deg : highest;
+    }
+    p_ctx->line_heading_deg = sum / (int32_t)(OBSTACLE_AVOID_TREND_SLOTS + 1u);
+    return (highest - lowest) <
+           (int32_t)p_ctx->p_config->timing.straighten_max_deg;
+}
+
+/*
+ * The sweep reads angles from the car, so measure from the line's heading if
+ * the car stopped off it. True if it set off; a small turn is not worth it,
+ * and a car too close must not swing its nose.
+ */
+static bool
+try_straighten (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
+                obstacle_avoid_input_t const * p_in, bool b_critical)
+{
+    obstacle_avoid_timing_t const * const p_timing = &p_ctx->p_config->timing;
+    p_ctx->b_straighten_due = false;
+    if (!p_in->b_odometry_valid)
+    {
+        return false;
+    }
+    int32_t const skew_deg = p_ctx->line_heading_deg - p_in->heading_deg;
+    uint32_t const size = (uint32_t)((skew_deg < 0) ? -skew_deg : skew_deg);
+    p_act->b_skew_known = true;
+    p_act->skew_deg = (int16_t)skew_deg;
+    if (b_critical || (size <= p_timing->resume_min_deg) ||
+        (size > p_timing->straighten_max_deg))
+    {
+        return false;
+    }
+    p_ctx->leg = OBSTACLE_AVOID_LEG_STRAIGHTEN;
+    p_ctx->b_leg_started = true;
+    p_ctx->remaining = size;
+    p_ctx->b_home_right = skew_deg < 0;
+    p_ctx->b_backoff = false;
+    p_ctx->b_measure_again = true;
+    release(p_ctx, p_act, false, p_in->now_ms, "straighten");
+    return true;
 }
 
 /* Plan from a PATH_FOUND result not used before; true if one was seen. */
@@ -1078,7 +1187,8 @@ send_part (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
          * heading measured at the stop. */
         bool const b_away = (leg == OBSTACLE_AVOID_LEG_TURN_BACK) ||
                             (leg == OBSTACLE_AVOID_LEG_TURN_IN);
-        bool const b_right = (leg == OBSTACLE_AVOID_LEG_TURN_HOME)
+        bool const b_right = ((leg == OBSTACLE_AVOID_LEG_TURN_HOME) ||
+                              (leg == OBSTACLE_AVOID_LEG_STRAIGHTEN))
                                  ? p_ctx->b_home_right
                                  : (b_away != p_ctx->plan.b_gap_right);
         p_ctx->part = p_ctx->remaining;
@@ -1343,6 +1453,18 @@ step_run_leg (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
     {
         latch_fault(p_ctx, p_act, OBSTACLE_AVOID_FAULT_REJECTED, p_in->now_ms,
                     "command rejected");
+    }
+    else if (p_ctx->leg == OBSTACLE_AVOID_LEG_STRAIGHTEN)
+    {
+        /* However it ends, measure from where the car is: a failed
+         * straighten is no reason to give up on the obstacle. */
+        if (p_in->b_stall || b_critical || p_in->b_move_done ||
+            elapsed(p_in->now_ms, p_ctx->entered_ms, p_ctx->leg_timeout_ms))
+        {
+            p_ctx->leg = OBSTACLE_AVOID_LEG_FOLLOW;
+            hold(p_ctx, p_act, OBSTACLE_AVOID_STOPPING, p_in->now_ms,
+                 "straightened");
+        }
     }
     else if (p_in->b_stall)
     {

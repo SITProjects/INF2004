@@ -107,6 +107,9 @@ static const obstacle_avoid_config_t avoid_config = {
                .retry_delay_ms = OBSTACLE_AVOID_RETRY_DELAY_MS,
                .backoff_delay_ms = OBSTACLE_AVOID_BACKOFF_DELAY_MS,
                .resweep_ms = OBSTACLE_AVOID_RESWEEP_MS,
+               .straighten_settle_ms = OBSTACLE_AVOID_STRAIGHTEN_SETTLE_MS,
+               .straighten_step_mm = OBSTACLE_AVOID_STRAIGHTEN_STEP_MM,
+               .straighten_max_deg = OBSTACLE_AVOID_STRAIGHTEN_MAX_DEG,
                .move_speed_mm_s = MOTION_MOVE_SPEED_MM_S,
                .turn_speed_deg_s = MOTION_TURN_SPEED_DEG_S,
                .resume_min_mm = OBSTACLE_AVOID_RESUME_MIN_MM,
@@ -706,6 +709,12 @@ apply_actions (obstacle_avoid_action_t const * p_act)
             avoid_in.send = (er >= E_OK) ? OBSTACLE_AVOID_SEND_OK
                                          : OBSTACLE_AVOID_SEND_ERROR;
         }
+    }
+    if (p_act->b_skew_known)
+    {
+        tm_printf(
+            (UB *)"[%lu ms]obstacle: line's heading %d deg from the car\n",
+            (unsigned long)log_time_ms(), (int)p_act->skew_deg);
     }
     if (p_act->p_reason != NULL)
     {

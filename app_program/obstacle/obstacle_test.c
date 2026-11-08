@@ -200,6 +200,10 @@ static uint16_t sim_watch_echo (float lateral_mm);
 static bool avoid_watch_front_valid (void);
 static void sim_blocked_corridor (void);
 static bool sim_held_critical (obstacle_avoid_leg_t leg);
+static bool sim_stop_off_line (int32_t off_deg);
+static bool sim_settle (void);
+static bool avoid_straighten_valid (void);
+static bool avoid_straighten_skip_valid (void);
 
 /* Public function definitions. */
 
@@ -299,6 +303,11 @@ obstacle_test (void)
                "avoid: watch the obstacle side and widen while driving");
     TEST_CHECK("OBS-U69", avoid_home_valid(),
                "avoid: turn back to the heading the car stopped on");
+    TEST_CHECK(
+        "OBS-U77", avoid_straighten_valid(),
+        "avoid: stopped off the line's heading, turn onto it and measure");
+    TEST_CHECK("OBS-U78", avoid_straighten_skip_valid(),
+               "avoid: no straightening when it would not help");
     TEST_CHECK("OBS-U72", plan_short_pass_valid(),
                "plan: stop short of the rear bumper when the edge is known");
     TEST_CHECK("OBS-U73", avoid_line_gate_valid(),
@@ -1757,7 +1766,10 @@ avoid_config (void)
                                                  .resume_min_deg = 3u,
                                                  .max_sidesteps = 3u,
                                                  .b_recheck = true,
-                                                 .resweep_ms = 3000u},
+                                                 .resweep_ms = 3000u,
+                                                 .straighten_settle_ms = 250u,
+                                                 .straighten_step_mm = 32u,
+                                                 .straighten_max_deg = 15u},
                                       .width = width_fixture(0.0f)};
     return config;
 }
@@ -3069,6 +3081,168 @@ sim_home_from (int32_t heading_deg, bool b_odometry_valid)
     sim.in.b_move_done = true;
     sim.in.motion_done = ROBOT_MOTION_DONE_DIST;
     return ok && sim_step().b_send;
+}
+
+/* Follow on heading 0 for three steps of travel, be stopped, and end up
+ * @p off_deg round from it. */
+static bool
+sim_stop_off_line (int32_t off_deg)
+{
+    sim_reset();
+    sim_scan(ROBOT_OBSTACLE_CLEAR, ROBOT_OBSTACLE_DIR_CENTRE_90, false, false);
+    bool ok = sim_until(OBSTACLE_AVOID_IDLE, OBSTACLE_AVOID_LEG_FOLLOW, 10u);
+    for (uint32_t index = 0u; index < OBSTACLE_AVOID_TREND_SLOTS; ++index)
+    {
+        sim.in.distance_mm += 32;
+        (void)sim_step();
+    }
+    sim_scan(ROBOT_OBSTACLE_SCANNING, ROBOT_OBSTACLE_DIR_NONE, true, false);
+    ok = ok && sim_step().b_set_inhibit &&
+         (sim.ctx.state == OBSTACLE_AVOID_STOPPING);
+    sim.in.heading_deg = off_deg;
+    (void)sim_step();
+    return ok && (sim.ctx.state == OBSTACLE_AVOID_WAIT_RESULT) &&
+           !sim.act.b_rearm && sim.ctx.b_straighten_due;
+}
+
+/* Up to and including the step that checks the heading after the brake. */
+static bool
+sim_settle (void)
+{
+    uint32_t const steps = sim.config.timing.straighten_settle_ms / 10u;
+    bool ok = sim_stays(OBSTACLE_AVOID_WAIT_RESULT, steps);
+    (void)sim_step();
+    return ok && sim.act.b_skew_known;
+}
+
+/* OBS-U77: both ways, then the new sweep is the one used. */
+static bool
+avoid_straighten_valid (void)
+{
+    bool ok = sim_stop_off_line(8) && sim_settle();
+    ok = ok && (sim.act.skew_deg == -8) && sim.act.b_clear_inhibit &&
+         (sim.ctx.state == OBSTACLE_AVOID_RELEASING);
+    ok = ok && sim_step().b_send && (sim.ctx.state == OBSTACLE_AVOID_SEND) &&
+         (robot_motion_cmd_get_type(sim.act.cmd) == ROBOT_MOTION_CMD_TURN) &&
+         (robot_motion_cmd_get_angle(sim.act.cmd) == 8u) &&
+         robot_motion_cmd_get_reverse(sim.act.cmd) &&
+         !robot_motion_cmd_get_stop_at_line(sim.act.cmd);
+    ok = ok &&
+         sim_until(OBSTACLE_AVOID_STOPPING, OBSTACLE_AVOID_LEG_FOLLOW, 20u);
+    ok = ok && sim.act.b_set_inhibit && (sim.in.heading_deg == 0);
+    (void)sim_step();
+    ok = ok && sim.act.b_rearm &&
+         (sim.ctx.state == OBSTACLE_AVOID_WAIT_RESULT) &&
+         (sim.ctx.origin_heading_deg == 0) && !sim.ctx.b_measure_again;
+    /* Once only, however long the new sweep takes. */
+    ok = ok && sim_stays(OBSTACLE_AVOID_WAIT_RESULT, 40u);
+    sim_scan(ROBOT_OBSTACLE_PATH_FOUND, ROBOT_OBSTACLE_DIR_LEFT_60, true,
+             false);
+    (void)sim_step();
+    ok = ok && (sim.ctx.state == OBSTACLE_AVOID_RELEASING) &&
+         (sim.ctx.leg != OBSTACLE_AVOID_LEG_STRAIGHTEN);
+
+    ok = ok && sim_stop_off_line(-4) && sim_settle();
+    ok = ok && (sim.act.skew_deg == 4) && (sim.act.p_reason != NULL);
+    ok = ok && sim_step().b_send &&
+         (robot_motion_cmd_get_angle(sim.act.cmd) == 4u) &&
+         !robot_motion_cmd_get_reverse(sim.act.cmd);
+
+    /* A stall or an obstacle too close ends it; the sweep still happens. */
+    ok = ok && sim_stop_off_line(8) && sim_settle();
+    (void)sim_step();
+    (void)sim_step();
+    ok = ok && (sim.ctx.state == OBSTACLE_AVOID_RUN_LEG);
+    sim.in.b_stall = true;
+    ok = ok && sim_step().b_set_inhibit &&
+         (sim.ctx.state == OBSTACLE_AVOID_STOPPING) && !sim.ctx.b_retry_used;
+    (void)sim_step();
+    ok = ok && sim.act.b_rearm &&
+         (sim.ctx.state == OBSTACLE_AVOID_WAIT_RESULT) &&
+         (sim.ctx.origin_heading_deg == 8);
+    ok = ok && sim_stop_off_line(8) && sim_settle();
+    (void)sim_step();
+    (void)sim_step();
+    sim_scan(ROBOT_OBSTACLE_SCANNING, ROBOT_OBSTACLE_DIR_NONE, true, true);
+    ok = ok && sim_step().b_set_inhibit &&
+         (sim.ctx.state == OBSTACLE_AVOID_STOPPING);
+    return ok;
+}
+
+/* OBS-U78: square enough, in a bend, too close or no history: measure. */
+static bool
+avoid_straighten_skip_valid (void)
+{
+    bool ok = sim_stop_off_line(3) && sim_settle();
+    ok = ok && (sim.act.skew_deg == -3) && !sim.act.b_clear_inhibit &&
+         (sim.ctx.state == OBSTACLE_AVOID_WAIT_RESULT);
+    ok = ok && !sim_step().b_skew_known; /* Checked once. */
+
+    ok = ok && sim_stop_off_line(15) && sim_settle() &&
+         (sim.ctx.state == OBSTACLE_AVOID_RELEASING);
+    ok = ok && sim_stop_off_line(16) && sim_settle() &&
+         (sim.ctx.state == OBSTACLE_AVOID_WAIT_RESULT);
+
+    ok = ok && sim_stop_off_line(8);
+    sim_scan(ROBOT_OBSTACLE_SCANNING, ROBOT_OBSTACLE_DIR_NONE, true, true);
+    ok = ok && sim_settle() && !sim.act.b_clear_inhibit;
+
+    ok = ok && sim_stop_off_line(8);
+    sim.in.b_odometry_valid = false;
+    (void)sim_stays(OBSTACLE_AVOID_WAIT_RESULT, 30u);
+    ok = ok && !sim.ctx.b_straighten_due &&
+         (sim.ctx.state == OBSTACLE_AVOID_WAIT_RESULT);
+
+    /* Too little travel since following began. */
+    sim_reset();
+    sim_scan(ROBOT_OBSTACLE_CLEAR, ROBOT_OBSTACLE_DIR_CENTRE_90, false, false);
+    ok = ok && sim_until(OBSTACLE_AVOID_IDLE, OBSTACLE_AVOID_LEG_FOLLOW, 10u);
+    ok = ok && sim_stays(OBSTACLE_AVOID_IDLE, 10u) &&
+         (sim.ctx.trend_count == 0u);
+    sim.in.distance_mm += 32;
+    (void)sim_step();
+    sim_scan(ROBOT_OBSTACLE_SCANNING, ROBOT_OBSTACLE_DIR_NONE, true, false);
+    (void)sim_step();
+    ok = ok && !sim.ctx.b_straighten_due;
+
+    /* What it kept before a stop says nothing about after it. */
+    ok = ok && sim_stop_off_line(0);
+    sim_scan(ROBOT_OBSTACLE_CLEAR, ROBOT_OBSTACLE_DIR_CENTRE_90, false, false);
+    ok = ok && sim_until(OBSTACLE_AVOID_IDLE, OBSTACLE_AVOID_LEG_FOLLOW, 10u);
+    sim.in.distance_mm += 32;
+    (void)sim_step();
+    sim_scan(ROBOT_OBSTACLE_SCANNING, ROBOT_OBSTACLE_DIR_NONE, true, false);
+    (void)sim_step();
+    ok = ok && !sim.ctx.b_straighten_due;
+
+    /* Turned through a pivot or a bend over the headings kept. */
+    sim_reset();
+    sim_scan(ROBOT_OBSTACLE_CLEAR, ROBOT_OBSTACLE_DIR_CENTRE_90, false, false);
+    ok = ok && sim_until(OBSTACLE_AVOID_IDLE, OBSTACLE_AVOID_LEG_FOLLOW, 10u);
+    for (uint32_t index = 0u; index < OBSTACLE_AVOID_TREND_SLOTS; ++index)
+    {
+        sim.in.distance_mm += 32;
+        (void)sim_step();
+    }
+    sim.in.heading_deg = 15;
+    sim_scan(ROBOT_OBSTACLE_SCANNING, ROBOT_OBSTACLE_DIR_NONE, true, false);
+    (void)sim_step();
+    ok = ok && !sim.ctx.b_straighten_due;
+
+    /* The average, oldest headings replaced: 2, 4, 6 and now 8. */
+    sim_reset();
+    sim_scan(ROBOT_OBSTACLE_CLEAR, ROBOT_OBSTACLE_DIR_CENTRE_90, false, false);
+    ok = ok && sim_until(OBSTACLE_AVOID_IDLE, OBSTACLE_AVOID_LEG_FOLLOW, 10u);
+    for (int32_t deg = -40; deg <= 6; deg = (deg < 2) ? 2 : (deg + 2))
+    {
+        sim.in.heading_deg = deg;
+        sim.in.distance_mm += 32;
+        (void)sim_step();
+    }
+    sim.in.heading_deg = 8;
+    sim_scan(ROBOT_OBSTACLE_SCANNING, ROBOT_OBSTACLE_DIR_NONE, true, false);
+    (void)sim_step();
+    return ok && sim.ctx.b_straighten_due && (sim.ctx.line_heading_deg == 5);
 }
 
 /* OBS-U72: the real car's tail is longer than the fixture's, so the pass

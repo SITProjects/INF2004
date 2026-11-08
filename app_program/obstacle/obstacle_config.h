@@ -347,6 +347,15 @@
 #define OBSTACLE_AVOID_MAX_SIDESTEPS 3u /* First plus two extra. */
 #define OBSTACLE_AVOID_RESUME_MIN_MM 10u
 #define OBSTACLE_AVOID_RESUME_MIN_DEG 3u
+/* Stopped more than RESUME_MIN_DEG off the line's heading, the car turns back
+ * onto it and measures from there. The heading is the car's, averaged over the
+ * last 3 steps of travel and the moment it was stopped, as a barcode's creep
+ * does. Stopped this long first, so the brake has finished. A car further off
+ * than the maximum, or that turned that much over those steps, is in a bend or
+ * a pivot and has no line's heading to go by; 0 never straightens. */
+#define OBSTACLE_AVOID_STRAIGHTEN_SETTLE_MS 250u
+#define OBSTACLE_AVOID_STRAIGHTEN_STEP_MM 32u
+#define OBSTACLE_AVOID_STRAIGHTEN_MAX_DEG 15u
 /* 0: one sweep at the stop, then drive the whole path without the corridor
  * sweep or forward re-checks; only CRITICAL holds the car on the way. 1:
  * re-check before each move and verify the corridor (slower). */
@@ -585,6 +594,10 @@
     (OBSTACLE_AVOID_PASS_MAX_MM > 65535u) ||                                   \
     (OBSTACLE_CAR_WIDTH_MM > 65535u) || (OBSTACLE_AVOID_RESUME_MIN_DEG > 255u)
 #error "Bypass distances must fit 16 bits"
+#endif
+#if (OBSTACLE_AVOID_STRAIGHTEN_MAX_DEG > 255u) ||                              \
+    (OBSTACLE_AVOID_STRAIGHTEN_STEP_MM > 65535u)
+#error "Straightening limits must fit their fields"
 #endif
 #if OBSTACLE_AVOID_BLOCK_WAIT_MS <= OBSTACLE_CORRIDOR_WORST_MS
 #error "A blocked bypass must be able to wait through one corridor sweep"

@@ -9,7 +9,9 @@
  * and turns back to the heading it stopped on, then hands over to the line
  * follower; every turn only changes the heading, and every move is
  * straight. The outward and pass legs, and the first half of the turn in,
- * do not acquire lines. The turn angle is as shallow
+ * do not acquire lines. Before any of this, a car stopped off the line's
+ * heading turns back onto it and measures again, so the sweep is square to
+ * the line. The turn angle is as shallow
  * as the room in front of the obstacle allows, never below angle_min_deg;
  * at 90 degrees the path is a box.
  *
@@ -37,6 +39,9 @@
 #include <stdint.h>
 
 /* Public types, constants, and macros. */
+
+/** Headings kept while following, for the line's heading at a stop. */
+#define OBSTACLE_AVOID_TREND_SLOTS 3u
 
 /** Car dimensions and bypass limits; production passes the config macros. */
 typedef struct
@@ -102,11 +107,14 @@ typedef struct
     uint32_t retry_delay_ms;   /**< Held before the one retry. */
     uint32_t backoff_delay_ms; /**< CRITICAL hold before backing off. */
     uint32_t resweep_ms; /**< Without re-checks: held this long, re-sweep. */
-    uint16_t move_speed_mm_s;  /**< MOTION_MOVE_SPEED_MM_S, nonzero. */
-    uint16_t turn_speed_deg_s; /**< MOTION_TURN_SPEED_DEG_S, nonzero. */
-    uint16_t resume_min_mm;    /**< Smaller remainders count as done. */
-    uint8_t resume_min_deg;    /**< Smaller turn remainders count as done. */
-    uint8_t max_sidesteps;     /**< First sidestep plus extra ones, >= 1. */
+    uint32_t straighten_settle_ms; /**< Stop to the check of the heading. */
+    uint16_t straighten_step_mm;   /**< Travel between headings kept. */
+    uint8_t straighten_max_deg;    /**< Further off is a bend; 0 never. */
+    uint16_t move_speed_mm_s;      /**< MOTION_MOVE_SPEED_MM_S, nonzero. */
+    uint16_t turn_speed_deg_s;     /**< MOTION_TURN_SPEED_DEG_S, nonzero. */
+    uint16_t resume_min_mm;        /**< Smaller remainders count as done. */
+    uint8_t resume_min_deg; /**< Smaller turn remainders count as done. */
+    uint8_t max_sidesteps;  /**< First sidestep plus extra ones, >= 1. */
     /** true: rearm before each move and verify the corridor. false: drive
      *  the planned path from the first sweep; only CRITICAL holds the car,
      *  and it resumes once CRITICAL clears, without re-measuring. */
@@ -212,6 +220,8 @@ typedef struct
     int16_t watch_angle;   /**< Servo angle, or OBSTACLE_SCAN_WATCH_OFF. */
     bool b_send;           /**< Clear the motion events, then send cmd. */
     uint32_t cmd;          /**< MBF_MOTION_CMD word when b_send. */
+    bool b_skew_known;     /**< The stopped car's heading was just checked. */
+    int16_t skew_deg;      /**< Line's heading - car's; + is to the left. */
     obstacle_avoid_state_t from; /**< State before this step. */
     obstacle_avoid_state_t to;   /**< State after this step. */
     char const * p_reason;       /**< Static text when the state changed. */
@@ -234,7 +244,8 @@ typedef enum
     OBSTACLE_AVOID_LEG_RETURN,    /**< Search back; acquire any line. */
     OBSTACLE_AVOID_LEG_OVERSHOOT, /**< Put the axle on the line. */
     OBSTACLE_AVOID_LEG_TURN_HOME, /**< Back to the heading at the stop. */
-    OBSTACLE_AVOID_LEG_FOLLOW     /**< Resume line following. */
+    OBSTACLE_AVOID_LEG_FOLLOW,    /**< Resume line following. */
+    OBSTACLE_AVOID_LEG_STRAIGHTEN /**< Not a bypass leg: before the sweep. */
 } obstacle_avoid_leg_t;
 
 /** State machine context; fields are private to obstacle_avoid.c. */
@@ -284,7 +295,14 @@ typedef struct
     uint32_t leg_timeout_ms;
     bool b_origin_valid;        /* origin_heading_deg was read. */
     int32_t origin_heading_deg; /* Heading when the car stopped. */
-    bool b_home_right;          /* TURN_HOME turns right. */
+    bool b_home_right;          /* TURN_HOME or STRAIGHTEN turns right. */
+    int32_t trend_deg[OBSTACLE_AVOID_TREND_SLOTS]; /* Headings kept. */
+    uint32_t trend_next;      /* Oldest of them, the next to replace. */
+    uint32_t trend_count;     /* How many are filled. */
+    int32_t trend_mm;         /* Odometry distance at the latest of them. */
+    bool b_straighten_due;    /* line_heading_deg is waiting for the stop. */
+    int32_t line_heading_deg; /* The line's heading as the car was stopped. */
+    bool b_measure_again;     /* Straightened: discard any sweep so far. */
 } obstacle_avoid_t;
 
 /* Public function declarations. */
