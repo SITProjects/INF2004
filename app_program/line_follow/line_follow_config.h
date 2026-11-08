@@ -195,14 +195,6 @@
 #define LINE_BARCODE_CREEP_MM 520
 
 /**
- * @brief 1: the barcodes lie left of the line, with the barcode sensor (user,
- * 2026-11-08); 0: right. Creeping over one, the line sensor on that side can
- * read the bars: both sensors read black for 108 mm, the car took it for
- * junctions and, as for a centred car, stopped correcting.
- */
-#define LINE_BARCODE_ON_LEFT 1
-
-/**
  * @brief On a hump the car follows at the barcode speed, to spare the sensors
  * close to the floor there, for at most this many samples: 8 s, where the
  * hump takes about 6 s at that speed. A car calibrated on a slope leans for

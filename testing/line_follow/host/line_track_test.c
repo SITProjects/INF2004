@@ -913,62 +913,96 @@ drive_both_junction (unsigned int samples)
     return b_junction;
 }
 
-/* 2026-11-08: creeping left of the line, the right sensor on the tape and the
- * left on the barcode's bars (LINE_BARCODE_ON_LEFT) for 108 mm. */
+/* Which sensor test_creep_bars() puts on the bars. */
+static bool bars_left;
+
+/* As drive(), with the levels of the bars' sensor and the tape's. */
+static void
+drive_bars (bool bars, bool tape, unsigned int samples)
+{
+    if (bars_left)
+    {
+        drive(bars, tape, samples);
+    }
+    else
+    {
+        drive(tape, bars, samples);
+    }
+}
+
+/* 2026-11-08: creeping off-centre, one sensor on the tape and the other on a
+ * barcode's bars, for 108 mm on the left. Barcodes lie on both sides. */
 static void
 test_creep_bars (void)
 {
-    reset();
-    start_creep();
-    drive(false, true, LINE_CONFIRM_SAMPLES + 2u);
-    bool const b_bars_junction = drive_both_junction(samples_for(108));
-    check("LT94 in a creep, bars under the left with the right on the tape are "
-          "no junction: the car steers right, to the tape",
-          !b_bars_junction && out.b_slow && (LINE_MODE_TRACK == out.mode) &&
-              (-LINE_LEAD_DEG == out.target_heading_deg));
+    bool b_lt94 = true;
+    bool b_lt95 = true;
+    bool b_lt96 = true;
+    bool b_lt97 = true;
+    bool b_lt98 = true;
+    for (int pass = 0; pass < 2; pass++)
+    {
+        bars_left = (0 == pass);
+        int const to_tape = bars_left ? -LINE_LEAD_DEG : LINE_LEAD_DEG;
 
-    drive(true, false, LINE_CONFIRM_SAMPLES + samples_for(20));
-    bool const b_seeking = (-LINE_LEAD_DEG == out.target_heading_deg);
-    drive(false, false, LINE_CONFIRM_SAMPLES + samples_for(20));
-    check("LT95 the right off the tape first: the car is too far left, and "
-          "turns right until the right finds it",
-          b_seeking && (LINE_MODE_TRACK == out.mode) &&
-              (-LINE_LEAD_DEG == out.target_heading_deg));
+        reset();
+        start_creep();
+        drive_bars(false, true, LINE_CONFIRM_SAMPLES + 2u);
+        bool const b_bars_junction = drive_both_junction(samples_for(108));
+        b_lt94 = b_lt94 && !b_bars_junction && out.b_slow &&
+                 (LINE_MODE_TRACK == out.mode) &&
+                 (to_tape == out.target_heading_deg);
 
-    reset();
-    start_creep();
-    drive(false, true, LINE_CONFIRM_SAMPLES + 2u);
-    (void)drive_both_junction(samples_for(40));
-    in.b_barcode_done = true;
-    drive(true, true, 1u);
-    in.b_barcode_done = false;
-    bool const b_ended = !out.b_slow;
-    drive(true, false, LINE_CONFIRM_SAMPLES + 2u);
-    bool const b_to_tape = (-LINE_LEAD_DEG == out.target_heading_deg);
-    bool const b_after_junction = drive_both_junction(samples_for(40));
-    drive(false, true, LINE_CONFIRM_SAMPLES + samples_for(10));
-    drive(false, false, LINE_CONFIRM_SAMPLES + samples_for(10));
-    drive(true, false, LINE_CONFIRM_SAMPLES);
+        drive_bars(true, false, LINE_CONFIRM_SAMPLES + samples_for(20));
+        bool const b_seeking = (to_tape == out.target_heading_deg);
+        drive_bars(false, false, LINE_CONFIRM_SAMPLES + samples_for(20));
+        b_lt95 = b_lt95 && b_seeking && (LINE_MODE_TRACK == out.mode) &&
+                 (to_tape == out.target_heading_deg);
+
+        reset();
+        start_creep();
+        drive_bars(false, true, LINE_CONFIRM_SAMPLES + 2u);
+        (void)drive_both_junction(samples_for(40));
+        in.b_barcode_done = true;
+        drive(true, true, 1u);
+        in.b_barcode_done = false;
+        bool const b_ended = !out.b_slow;
+        drive_bars(true, false, LINE_CONFIRM_SAMPLES + 2u);
+        bool const b_to_tape = (to_tape == out.target_heading_deg);
+        bool const b_after_junction = drive_both_junction(samples_for(40));
+        drive_bars(false, true, LINE_CONFIRM_SAMPLES + samples_for(10));
+        drive_bars(false, false, LINE_CONFIRM_SAMPLES + samples_for(10));
+        drive_bars(true, false, LINE_CONFIRM_SAMPLES);
+        b_lt96 = b_lt96 && b_ended && b_to_tape && !b_after_junction &&
+                 (-to_tape == out.target_heading_deg);
+
+        reset();
+        start_creep();
+        drive_bars(true, false, LINE_CONFIRM_SAMPLES);
+        b_lt97 = b_lt97 && out.b_slow && (-to_tape == out.target_heading_deg);
+
+        reset();
+        start_creep();
+        bool const b_square = drive_both_junction(LINE_CONFIRM_SAMPLES);
+        reset();
+        drive_bars(false, true, LINE_CONFIRM_SAMPLES + 2u);
+        bool const b_following = drive_both_junction(LINE_CONFIRM_SAMPLES);
+        b_lt98 = b_lt98 && b_square && b_following;
+    }
+    check("LT94 in a creep, bars under one sensor with the other on the tape "
+          "are no junction: the car steers to the tape, either side",
+          b_lt94);
+    check("LT95 the tape's sensor off the tape first: the car is too far over, "
+          "and turns back until that sensor finds it",
+          b_lt95);
     check("LT96 the bars stay ignored past the creep's end until they clear, "
-          "as the right comes and goes; black there later is the tape again",
-          b_ended && b_to_tape && !b_after_junction &&
-              (LINE_LEAD_DEG == out.target_heading_deg));
-
-    reset();
-    start_creep();
-    drive(true, false, LINE_CONFIRM_SAMPLES);
-    check("LT97 in a creep, the left black with the right white is the tape",
-          out.b_slow && (LINE_LEAD_DEG == out.target_heading_deg));
-
-    reset();
-    start_creep();
-    bool const b_square = drive_both_junction(LINE_CONFIRM_SAMPLES);
-    reset();
-    drive(false, true, LINE_CONFIRM_SAMPLES + 2u);
-    bool const b_following = drive_both_junction(LINE_CONFIRM_SAMPLES);
+          "as the other sensor comes and goes; black there later is the tape",
+          b_lt96);
+    check("LT97 in a creep, one sensor black with the other white is the tape",
+          b_lt97);
     check("LT98 both black at once in a creep, or the same order as the bars "
           "outside one, are still junctions",
-          b_square && b_following);
+          b_lt98);
 }
 
 /* 2026-11-06 20:32:07: 7 to 57 degrees in the 120 mm before the crossing. */

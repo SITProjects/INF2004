@@ -24,8 +24,6 @@
 #define SIDE_RIGHT 1u
 #define SIDE_NONE 2u
 #define SIDE_COUNT 2u
-#define BARCODE_SIDE ((LINE_BARCODE_ON_LEFT != 0) ? SIDE_LEFT : SIDE_RIGHT)
-#define TAPE_SIDE ((LINE_BARCODE_ON_LEFT != 0) ? SIDE_RIGHT : SIDE_LEFT)
 
 #define SEARCH_TIMEOUT_SAMPLES (LINE_SEARCH_TIMEOUT_MS / LINE_SAMPLE_MS)
 
@@ -125,7 +123,7 @@ line_track_init (line_track_t * p_track, line_track_input_t const * p_in)
     p_track->pivot_side = SIDE_NONE;
     p_track->last_heading_deg = p_in->heading_deg;
     p_track->b_rejoin = false;
-    p_track->b_bars = false;
+    p_track->bars_side = SIDE_NONE;
     p_track->rejoin_mm = p_in->distance_mm - LINE_REJOIN_MM;
     p_track->junction_count = 0u;
     p_track->barcode_phase = LINE_BARCODE_NONE;
@@ -141,17 +139,17 @@ line_track_update (line_track_t * p_track, line_track_input_t const * p_in)
     /* As the last update saw them, with the bars white. */
     bool was_black[SIDE_COUNT] = {p_track->b_black[SIDE_LEFT],
                                   p_track->b_black[SIDE_RIGHT]};
-    if (p_track->b_bars)
+    if (p_track->bars_side != SIDE_NONE)
     {
-        was_black[BARCODE_SIDE] = false;
+        was_black[p_track->bars_side] = false;
     }
     debounce(p_track, p_in);
     note_bars(p_track, was_black);
-    bool const b_debounced = p_track->b_black[BARCODE_SIDE];
-    if (p_track->b_bars)
+    uint32_t const bars_side = p_track->bars_side;
+    if (bars_side != SIDE_NONE)
     {
         /* Until the end of this update; debounce needs the real level. */
-        p_track->b_black[BARCODE_SIDE] = false;
+        p_track->b_black[bars_side] = false;
     }
     note_pivot(p_track, p_in);
     note_heading(p_track, p_in);
@@ -257,13 +255,15 @@ line_track_update (line_track_t * p_track, line_track_input_t const * p_in)
                 track(p_track, p_in);
             }
         }
+        uint32_t const tape_side =
+            (SIDE_LEFT == bars_side) ? SIDE_RIGHT : SIDE_LEFT;
         if ((LINE_MODE_TRACK == p_track->mode) &&
-            (JUNCTION_NONE == p_track->junction_phase) && p_track->b_bars &&
-            !p_track->b_black[TAPE_SIDE])
+            (JUNCTION_NONE == p_track->junction_phase) &&
+            (bars_side != SIDE_NONE) && !p_track->b_black[tape_side])
         {
             /* Only the bars are black: the tape is the other way. */
             p_track->target_deg =
-                p_in->heading_deg + (side_sign(TAPE_SIDE) * LINE_LEAD_DEG);
+                p_in->heading_deg + (side_sign(tape_side) * LINE_LEAD_DEG);
         }
     }
     else if (LINE_MODE_STOP == p_track->mode)
@@ -290,7 +290,11 @@ line_track_update (line_track_t * p_track, line_track_input_t const * p_in)
         .reverse_mm =
             (LINE_BARCODE_BACK == phase) ? LINE_BARCODE_REVERSE_MM : 0u,
         .b_slow = (LINE_BARCODE_CREEP == phase) || p_track->b_hump_slow};
-    p_track->b_black[BARCODE_SIDE] = b_debounced;
+    if (bars_side != SIDE_NONE)
+    {
+        /* Noted only while black. */
+        p_track->b_black[bars_side] = true;
+    }
     return request;
 }
 
@@ -373,30 +377,35 @@ slow_pass (line_track_t const * p_track)
 }
 
 /*
- * Creeping over a barcode, the line sensor on its side can read the bars
- * (2026-11-08: 108 mm, taken for junctions). Black that begins there while the
- * other sensor is already on the tape is the bars: ignore it until it clears,
- * even if the creep ends first. Black with the other white, or both at once, is
- * the tape or a crossing. A crossing met with one sensor on the tape is lost
- * too, but a creep ends on a read barcode, before its junction: one missed
- * after a failed read was STRAIGHT anyway.
+ * Creeping over a barcode, a line sensor can read the bars (2026-11-08: 108 mm
+ * on the left, taken for junctions), and barcodes lie on both sides of the
+ * line. Black that begins under one sensor while the other is already on the
+ * tape is the bars: ignore it until it clears, even if the creep ends first.
+ * Black with the other white, or both at once, is the tape or a crossing. A
+ * crossing met with one sensor on the tape is lost too, but a creep ends on a
+ * read barcode, before its junction: one missed after a failed read was
+ * STRAIGHT anyway.
  */
 static void
 note_bars (line_track_t * p_track, bool const * p_was_black)
 {
-    if (!p_track->b_black[BARCODE_SIDE])
+    if ((p_track->bars_side != SIDE_NONE) &&
+        !p_track->b_black[p_track->bars_side])
     {
-        p_track->b_bars = false;
+        p_track->bars_side = SIDE_NONE;
     }
-    else if ((LINE_BARCODE_CREEP == p_track->barcode_phase) &&
-             !p_was_black[BARCODE_SIDE] && p_was_black[TAPE_SIDE] &&
-             p_track->b_black[TAPE_SIDE])
+    if ((SIDE_NONE == p_track->bars_side) &&
+        (LINE_BARCODE_CREEP == p_track->barcode_phase))
     {
-        p_track->b_bars = true;
-    }
-    else
-    {
-        /* As it was. */
+        for (uint32_t side = 0u; side < SIDE_COUNT; side++)
+        {
+            uint32_t const other = (SIDE_LEFT == side) ? SIDE_RIGHT : SIDE_LEFT;
+            if (p_track->b_black[side] && !p_was_black[side] &&
+                p_was_black[other] && p_track->b_black[other])
+            {
+                p_track->bars_side = side;
+            }
+        }
     }
 }
 
