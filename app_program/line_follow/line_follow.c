@@ -56,6 +56,7 @@ static void report (line_request_t const * p_request,
                     line_track_input_t const * p_in);
 static void report_barcode (line_track_input_t const * p_in);
 static void report_hump (line_track_input_t const * p_in);
+static void report_retrace (line_track_input_t const * p_in);
 #endif
 
 /* Public function definitions. */
@@ -140,6 +141,7 @@ sense_task (INT stacd, void * p_exinf)
         report(&request, &in);
         report_barcode(&in);
         report_hump(&in);
+        report_retrace(&in);
 
         /* A relative delay: late samples are never replayed. */
         (void)tk_dly_tsk(LINE_SAMPLE_MS);
@@ -282,6 +284,21 @@ report_hump (line_track_input_t const * p_in)
         tm_printf((UB *)"line HUMP %s h=%d d=%d\n", b_slow ? "SLOW" : "DONE",
                   (INT)p_in->heading_deg, (INT)p_in->distance_mm);
         b_last_slow = b_slow;
+    }
+}
+
+/* Say when the car starts and ends going back past a barcode. */
+static void
+report_retrace (line_track_input_t const * p_in)
+{
+    static bool b_last_retrace;
+    bool const b_retrace = line_track_retrace(&track);
+    if (b_retrace != b_last_retrace)
+    {
+        tm_printf((UB *)"line RETRACE %s h=%d d=%d\n",
+                  b_retrace ? "START" : "DONE", (INT)p_in->heading_deg,
+                  (INT)p_in->distance_mm);
+        b_last_retrace = b_retrace;
     }
 }
 

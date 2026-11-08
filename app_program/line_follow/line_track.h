@@ -164,6 +164,9 @@ typedef struct
     bool b_back_started;      /* The reverse has begun. */
     int32_t barcode_mm;       /* Travel when the creep began. */
     int32_t line_deg;         /* The line's heading, held in a creep. */
+    int32_t brake_mm;         /* Travel when a barcode last braked the car. */
+    bool b_retrace;           /* Going back past it after its U-turn. */
+    int32_t retrace_end_mm;   /* Travel at which that ends. */
 } line_track_t;
 
 /* Public function declarations. */
@@ -199,6 +202,13 @@ line_barcode_phase_t line_track_barcode_phase (line_track_t const * p_track);
  * @return True while it is.
  */
 bool line_track_hump_slow (line_track_t const * p_track);
+
+/**
+ * @brief Whether the car is driving back past a barcode after its U-turn.
+ * @param p_track State.
+ * @return True while it is.
+ */
+bool line_track_retrace (line_track_t const * p_track);
 
 /** @brief Short name of @p phase for logs ("BRAKE", "BACK", ...). */
 char const * line_track_barcode_name (line_barcode_phase_t phase);

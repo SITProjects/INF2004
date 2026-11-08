@@ -203,6 +203,21 @@
  */
 #define LINE_CREEP_LEAD_DEG 5
 
+/** The barcode sensor is left (1) or right (0) of the line. */
+#define LINE_BARCODE_LEFT 1
+
+/**
+ * @brief Longest drive back past a barcode after its U-turn, in mm. That
+ * barcode is now on the side away from the barcode sensor and the car meets
+ * it at full speed. For as far as the car went from the brake to the junction,
+ * up to this, it steers as in a creep, and that side's sensor is on the bars
+ * whenever both are black. Steering into them took the car 36 to 154 degrees
+ * off the line on 10 of 11 returns from 12:24 on 2026-11-08, with 5 to 14
+ * touches of the right sensor on each. On the returns that stayed near the
+ * line the last touch came 34 to 104 mm before that distance.
+ */
+#define LINE_RETRACE_MAX_MM 600
+
 /**
  * @brief On a hump the car follows at the barcode speed, to spare the sensors
  * close to the floor there, for at most this many samples: 8 s, where the

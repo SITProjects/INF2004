@@ -1058,6 +1058,115 @@ test_creep_heading (void)
           b_crossing && out.b_slow && (0 == out.target_heading_deg));
 }
 
+/* A barcode, then @p mm on a junction that takes @p turn, and the pivot. */
+static void
+turn_past_barcode (line_turn_t turn, int mm)
+{
+    reset();
+    drive(false, false, samples_for(200));
+    start_creep();
+    in.b_barcode_done = true;
+    drive(false, false, 1u);
+    in.b_barcode_done = false;
+    in.heading_deg = 4;
+    in.turn = turn;
+    drive(false, false, samples_for(mm));
+    drive(true, true, LINE_CONFIRM_SAMPLES + LINE_JUNCTION_SAMPLES - 1u);
+    in.turn = LINE_TURN_STRAIGHT;
+    drive(false, false, samples_for(LINE_JUNCTION_CENTRE_MM));
+    in.b_turning = true;
+    drive(false, false, 1u);
+    in.heading_deg = out.target_heading_deg - 2;
+    in.b_turning = false;
+    drive(false, false, 1u);
+}
+
+/* 2026-11-08: back from a U-turn at 120 mm/s, the right sensor read the bars
+ * of the barcode just read, and the car turned into them, 36 to 154 degrees. */
+static void
+test_retrace (void)
+{
+    turn_past_barcode(LINE_TURN_UTURN, 400);
+    bool const b_started = line_track_retrace(&track) &&
+                           (LINE_MODE_TRACK == out.mode) &&
+                           (184 == out.target_heading_deg) &&
+                           (184 == track.line_deg);
+    drive(false, true, LINE_CONFIRM_SAMPLES);
+    bool b_lean = true;
+    for (int deg = 0; deg <= 40; deg++)
+    {
+        in.heading_deg = 182 - deg;
+        drive(false, true, 1u);
+        b_lean = b_lean &&
+                 ((184 - LINE_CREEP_LEAD_DEG) == out.target_heading_deg);
+    }
+    check("LT103 after a U-turn past a barcode, the bars or tape under one "
+          "sensor lean the car off the line's heading, however far it turns",
+          b_started && b_lean && !out.b_slow && (LINE_MODE_TRACK == out.mode));
+
+    turn_past_barcode(LINE_TURN_UTURN, 400);
+    drive(false, true, LINE_CONFIRM_SAMPLES);
+    bool const b_bars_first = !drive_both_junction(LINE_CONFIRM_SAMPLES + 3u) &&
+                              ((184 + LINE_CREEP_LEAD_DEG) ==
+                               out.target_heading_deg);
+    drive(false, true, LINE_CONFIRM_SAMPLES);
+    bool const b_away = ((184 + LINE_CREEP_LEAD_DEG) == out.target_heading_deg);
+    drive(false, false, LINE_CONFIRM_SAMPLES + 2u);
+    bool const b_along = (184 == out.target_heading_deg);
+    turn_past_barcode(LINE_TURN_UTURN, 400);
+    drive(true, false, LINE_CONFIRM_SAMPLES);
+    bool const b_tape_first = !drive_both_junction(LINE_CONFIRM_SAMPLES + 3u) &&
+                              ((184 + LINE_CREEP_LEAD_DEG) ==
+                               out.target_heading_deg);
+    check("LT104 both black going back: the far side is the bars whichever "
+          "came first, no junction, and the car leans to the tape",
+          b_bars_first && b_away && b_along && b_tape_first);
+
+    turn_past_barcode(LINE_TURN_UTURN, 400);
+    int const length = track.retrace_end_mm - in.distance_mm;
+    bool const b_brake = (track.brake_mm >= 200) &&
+                         (length == (track.junction_mm - track.brake_mm)) &&
+                         (length >= 400);
+    drive(false, false, samples_for(length - 5));
+    bool const b_during = line_track_retrace(&track);
+    drive(false, false, samples_for(10));
+    bool const b_over = !line_track_retrace(&track);
+    drive(false, true, LINE_CONFIRM_SAMPLES);
+    check("LT105 going back lasts from the brake to the junction, then a "
+          "touch steers as usual",
+          b_brake && b_during && b_over &&
+              ((in.heading_deg - LINE_LEAD_DEG) == out.target_heading_deg));
+
+    turn_past_barcode(LINE_TURN_UTURN, LINE_RETRACE_MAX_MM + 300);
+    check("LT106 a barcode far before its U-turn: going back is cut short",
+          line_track_retrace(&track) &&
+              (LINE_RETRACE_MAX_MM == (track.retrace_end_mm - in.distance_mm)));
+
+    turn_past_barcode(LINE_TURN_LEFT, 400);
+    check("LT107 only a U-turn goes back past the barcode",
+          !line_track_retrace(&track) && (LINE_MODE_TRACK == out.mode) &&
+              (94 == out.target_heading_deg));
+
+    turn_past_barcode(LINE_TURN_UTURN, 400);
+    drive(false, true, LINE_CONFIRM_SAMPLES);
+    drive(false, false, LINE_CONFIRM_SAMPLES);
+    drive(false, true, LINE_CONFIRM_SAMPLES);
+    drive(false, false, LINE_CONFIRM_SAMPLES);
+    drive(false, true, LINE_CONFIRM_SAMPLES);
+    check("LT108 touches of the bars going back are no bend", !track.b_curve);
+
+    turn_past_barcode(LINE_TURN_UTURN, 400);
+    drive(false, false, samples_for(100));
+    start_creep();
+    bool const b_creep = !line_track_retrace(&track) && out.b_slow;
+    turn_past_barcode(LINE_TURN_UTURN, 400);
+    in.b_control = false;
+    drive(false, false, 1u);
+    in.b_control = true;
+    check("LT109 the next barcode, or anyone else driving, ends going back",
+          b_creep && !line_track_retrace(&track));
+}
+
 /* 2026-11-06 20:32:07: 7 to 57 degrees in the 120 mm before the crossing. */
 #define BEND_DEG 50
 
@@ -1785,6 +1894,7 @@ main (void)
     test_creep_model();
     test_creep_bars();
     test_creep_heading();
+    test_retrace();
     test_junction_uturn();
     test_overshoot_across();
     printf("%u failure(s)\n", failures);

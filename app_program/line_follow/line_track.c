@@ -34,6 +34,9 @@
 #define JUNCTION_TURN_DEG 90
 #define JUNCTION_UTURN_DEG 180
 
+/* After a U-turn, the barcode just read is on the barcode sensor's far side. */
+#define RETRACE_BARS_SIDE ((LINE_BARCODE_LEFT != 0) ? SIDE_RIGHT : SIDE_LEFT)
+
 _Static_assert(LINE_LEAD_DEG > 0, "Invalid lead");
 _Static_assert(LINE_EDGE_MAX_MM > 0, "Invalid held-edge limit");
 _Static_assert((LINE_SEEK_MAX_DEG > 0) && (LINE_SEEK_MAX_DEG < LINE_LEAD_DEG) &&
@@ -72,7 +75,7 @@ static void watch_barcode (line_track_t * p_track,
                            line_track_input_t const * p_in);
 static void watch_hump (line_track_t * p_track,
                         line_track_input_t const * p_in);
-static bool slow_pass (line_track_t const * p_track);
+static bool straight_pass (line_track_t const * p_track);
 static void note_bars (line_track_t * p_track, bool const * p_was_black);
 static int32_t creep_lean (line_track_t const * p_track, uint32_t bars_side);
 static int32_t line_heading (line_track_t const * p_track,
@@ -89,6 +92,8 @@ static void aim_by_old_line (line_track_t * p_track,
 static void pivot_junction (line_track_t * p_track,
                             line_track_input_t const * p_in,
                             bool const * p_was_black);
+static void start_retrace (line_track_t * p_track,
+                           line_track_input_t const * p_in);
 static int32_t seek_target (line_track_t const * p_track,
                             line_track_input_t const * p_in);
 static void track_edge (line_track_t * p_track, line_track_input_t const * p_in,
@@ -131,6 +136,9 @@ line_track_init (line_track_t * p_track, line_track_input_t const * p_in)
     p_track->junction_count = 0u;
     p_track->barcode_phase = LINE_BARCODE_NONE;
     p_track->line_deg = p_in->heading_deg;
+    p_track->brake_mm = p_in->distance_mm;
+    p_track->b_retrace = false;
+    p_track->retrace_end_mm = p_in->distance_mm;
     p_track->b_hump_slow = false;
     p_track->b_hump_spent = false;
     p_track->hump_samples = 0u;
@@ -148,6 +156,10 @@ line_track_update (line_track_t * p_track, line_track_input_t const * p_in)
         was_black[p_track->bars_side] = false;
     }
     debounce(p_track, p_in);
+    if (p_track->b_retrace && (p_in->distance_mm >= p_track->retrace_end_mm))
+    {
+        p_track->b_retrace = false;
+    }
     note_bars(p_track, was_black);
     uint32_t const bars_side = p_track->bars_side;
     if (bars_side != SIDE_NONE)
@@ -266,7 +278,8 @@ line_track_update (line_track_t * p_track, line_track_input_t const * p_in)
         {
             /* A junction or a search took over. */
         }
-        else if (LINE_BARCODE_CREEP == p_track->barcode_phase)
+        else if ((LINE_BARCODE_CREEP == p_track->barcode_phase) ||
+                 p_track->b_retrace)
         {
             p_track->target_deg =
                 p_track->line_deg +
@@ -320,6 +333,12 @@ bool
 line_track_hump_slow (line_track_t const * p_track)
 {
     return p_track->b_hump_slow;
+}
+
+bool
+line_track_retrace (line_track_t const * p_track)
+{
+    return p_track->b_retrace;
 }
 
 line_barcode_phase_t
@@ -383,15 +402,16 @@ line_track_turn_name (line_turn_t turn)
 /* Private function definitions. */
 
 /*
- * Creeping over a barcode or a hump. These start on straights, and a slow car
- * touches the tape often: seeking a bend here swung the car up to 18 degrees,
- * spoilt barcodes and carried on as it sped up, off the line (2026-11-07).
+ * Creeping over a barcode or a hump, or going back past a barcode after its
+ * U-turn. These are on straights, and the car touches the tape or the bars
+ * often: seeking a bend here swung it up to 18 degrees, spoilt barcodes and
+ * carried on as it sped up, off the line (2026-11-07).
  */
 static bool
-slow_pass (line_track_t const * p_track)
+straight_pass (line_track_t const * p_track)
 {
     return (LINE_BARCODE_CREEP == p_track->barcode_phase) ||
-           p_track->b_hump_slow;
+           p_track->b_hump_slow || p_track->b_retrace;
 }
 
 /*
@@ -402,7 +422,9 @@ slow_pass (line_track_t const * p_track)
  * Black with the other white, or both at once, is the tape or a crossing. A
  * crossing met with one sensor on the tape is lost too, but a creep ends on a
  * read barcode, before its junction: one missed after a failed read was
- * STRAIGHT anyway.
+ * STRAIGHT anyway. Going back past a barcode after its U-turn, the bars can
+ * only be on one side, so both black always means that side, whichever came
+ * first: bars met before the tape must not take the tape's place.
  */
 static void
 note_bars (line_track_t * p_track, bool const * p_was_black)
@@ -424,6 +446,11 @@ note_bars (line_track_t * p_track, bool const * p_was_black)
                 p_track->bars_side = side;
             }
         }
+    }
+    if ((SIDE_NONE == p_track->bars_side) && p_track->b_retrace &&
+        p_track->b_black[SIDE_LEFT] && p_track->b_black[SIDE_RIGHT])
+    {
+        p_track->bars_side = RETRACE_BARS_SIDE;
     }
 }
 
@@ -536,6 +563,7 @@ restart_tracking (line_track_t * p_track, line_track_input_t const * p_in,
     p_track->b_curve = false;
     p_track->counter_side = SIDE_NONE;
     p_track->b_cross_hold = false;
+    p_track->b_retrace = false;
     for (uint32_t slot = 0u; slot < LINE_TREND_SLOTS; slot++)
     {
         p_track->trend_deg[slot] = p_in->heading_deg;
@@ -783,6 +811,7 @@ watch_barcode (line_track_t * p_track, line_track_input_t const * p_in)
             p_track->barcode_phase = LINE_BARCODE_BRAKE;
             p_track->barcode_samples = 0u;
             p_track->line_deg = line_heading(p_track, p_in);
+            p_track->brake_mm = p_in->distance_mm;
         }
     }
     else if ((LINE_BARCODE_CREEP == p_track->barcode_phase) &&
@@ -813,6 +842,10 @@ pivot_junction (line_track_t * p_track, line_track_input_t const * p_in,
                              LINE_SEARCH_DONE_DEG))
     {
         restart_tracking(p_track, p_in, p_track->target_deg);
+        if (LINE_TURN_UTURN == p_track->junction_turn)
+        {
+            start_retrace(p_track, p_in);
+        }
     }
     else if (p_track->search_samples >= SEARCH_TIMEOUT_SAMPLES)
     {
@@ -824,6 +857,24 @@ pivot_junction (line_track_t * p_track, line_track_input_t const * p_in,
     {
         /* Still pivoting. */
     }
+}
+
+/*
+ * Back along the line, past the barcode that called for the U-turn: it lies as
+ * far back as the brake was before the junction. The pivot's target is the
+ * line's heading.
+ */
+static void
+start_retrace (line_track_t * p_track, line_track_input_t const * p_in)
+{
+    int32_t length = p_track->junction_mm - p_track->brake_mm;
+    if (length > LINE_RETRACE_MAX_MM)
+    {
+        length = LINE_RETRACE_MAX_MM;
+    }
+    p_track->b_retrace = (length > 0);
+    p_track->retrace_end_mm = p_in->distance_mm + length;
+    p_track->line_deg = p_track->target_deg;
 }
 
 /*
@@ -978,7 +1029,7 @@ track_edge (line_track_t * p_track, line_track_input_t const * p_in,
             }
             p_track->counter_side = SIDE_NONE;
         }
-        if (!slow_pass(p_track) && crossed_out(p_track, p_in, side))
+        if (!straight_pass(p_track) && crossed_out(p_track, p_in, side))
         {
             /* A bend on this side: the other sensor still ends it. */
             p_track->b_curve = true;
@@ -1075,7 +1126,7 @@ note_touch (line_track_t * p_track, line_track_input_t const * p_in,
     {
         p_track->b_curve = false;
     }
-    else if (!slow_pass(p_track) &&
+    else if (!straight_pass(p_track) &&
              ((p_in->distance_mm - p_track->rejoin_mm) >= LINE_REJOIN_MM) &&
              ((p_in->distance_mm - p_track->touch_mm) <= LINE_CURVE_TOUCH_MM))
     {
