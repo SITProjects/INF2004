@@ -139,6 +139,8 @@ line_track_init (line_track_t * p_track, line_track_input_t const * p_in)
     p_track->brake_mm = p_in->distance_mm;
     p_track->b_retrace = false;
     p_track->retrace_end_mm = p_in->distance_mm;
+    p_track->b_settle = false;
+    p_track->settle_end_mm = p_in->distance_mm;
     p_track->b_hump_slow = false;
     p_track->b_hump_spent = false;
     p_track->hump_samples = 0u;
@@ -159,6 +161,10 @@ line_track_update (line_track_t * p_track, line_track_input_t const * p_in)
     if (p_track->b_retrace && (p_in->distance_mm >= p_track->retrace_end_mm))
     {
         p_track->b_retrace = false;
+    }
+    if (p_track->b_settle && (p_in->distance_mm >= p_track->settle_end_mm))
+    {
+        p_track->b_settle = false;
     }
     note_bars(p_track, was_black);
     uint32_t const bars_side = p_track->bars_side;
@@ -279,7 +285,7 @@ line_track_update (line_track_t * p_track, line_track_input_t const * p_in)
             /* A junction or a search took over. */
         }
         else if ((LINE_BARCODE_CREEP == p_track->barcode_phase) ||
-                 p_track->b_retrace)
+                 p_track->b_retrace || p_track->b_settle)
         {
             p_track->target_deg =
                 p_track->line_deg +
@@ -402,8 +408,9 @@ line_track_turn_name (line_turn_t turn)
 /* Private function definitions. */
 
 /*
- * Creeping over a barcode or a hump, or going back past a barcode after its
- * U-turn. These are on straights, and the car touches the tape or the bars
+ * Creeping over a barcode or a hump, on the way from a barcode to its
+ * crossing, or going back past a barcode after its U-turn. These are on
+ * straights, and the car touches the tape or the bars
  * often: seeking a bend here swung it up to 18 degrees, spoilt barcodes and
  * carried on as it sped up, off the line (2026-11-07).
  */
@@ -411,7 +418,7 @@ static bool
 straight_pass (line_track_t const * p_track)
 {
     return (LINE_BARCODE_CREEP == p_track->barcode_phase) ||
-           p_track->b_hump_slow || p_track->b_retrace;
+           p_track->b_hump_slow || p_track->b_retrace || p_track->b_settle;
 }
 
 /*
@@ -564,6 +571,7 @@ restart_tracking (line_track_t * p_track, line_track_input_t const * p_in,
     p_track->counter_side = SIDE_NONE;
     p_track->b_cross_hold = false;
     p_track->b_retrace = false;
+    p_track->b_settle = false;
     for (uint32_t slot = 0u; slot < LINE_TREND_SLOTS; slot++)
     {
         p_track->trend_deg[slot] = p_in->heading_deg;
@@ -657,6 +665,7 @@ start_episode (line_track_t * p_track, line_track_input_t const * p_in)
 static void
 start_junction (line_track_t * p_track, line_track_input_t const * p_in)
 {
+    p_track->b_settle = false;
     p_track->junction_turn = p_in->turn;
     if ((LINE_TURN_LEFT != p_in->turn) && (LINE_TURN_RIGHT != p_in->turn) &&
         (LINE_TURN_UTURN != p_in->turn))
@@ -819,7 +828,11 @@ watch_barcode (line_track_t * p_track, line_track_input_t const * p_in)
               ((p_in->distance_mm - p_track->barcode_mm) >=
                LINE_BARCODE_CREEP_MM)))
     {
+        /* The heading now: odometry drifts over a creep. */
         p_track->barcode_phase = LINE_BARCODE_NONE;
+        p_track->line_deg = line_heading(p_track, p_in);
+        p_track->b_settle = true;
+        p_track->settle_end_mm = p_in->distance_mm + LINE_BARCODE_SETTLE_MM;
     }
     else
     {

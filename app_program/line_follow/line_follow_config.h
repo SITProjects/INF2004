@@ -219,6 +219,16 @@
 #define LINE_RETRACE_MAX_MM 600
 
 /**
+ * @brief Longest the car goes on steering as in a creep after its barcode, in
+ * mm, up to the crossing. A touch at the full LINE_LEAD_DEG swung it 5 to 9
+ * degrees just before the crossing and put the tape under the other sensor: 5
+ * of 9 passes over Z on 2026-11-08 met the crossing 8 to 17 mm apart, and the
+ * one over LINE_JUNCTION_SKEW_MM was missed. The crossings came 48 to 56 mm
+ * (Z) and 179 to 188 mm (A) after the read.
+ */
+#define LINE_BARCODE_SETTLE_MM 200
+
+/**
  * @brief On a hump the car follows at the barcode speed, to spare the sensors
  * close to the floor there, for at most this many samples: 8 s, where the
  * hump takes about 6 s at that speed. A car calibrated on a slope leans for

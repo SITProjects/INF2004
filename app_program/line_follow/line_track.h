@@ -29,7 +29,8 @@
  *
  * When the barcode reader sees a barcode coming, the car brakes, backs up
  * LINE_BARCODE_REVERSE_MM to before it, and tracks on at the slow speed until
- * the reader is done. A bend, junction or search refuses this.
+ * the reader is done, then steers the same way up to the crossing. A bend,
+ * junction or search refuses this.
  *
  * The module is pure: no kernel calls, so host tests can drive it. Only
  * the line task calls it.
@@ -167,6 +168,8 @@ typedef struct
     int32_t brake_mm;         /* Travel when a barcode last braked the car. */
     bool b_retrace;           /* Going back past it after its U-turn. */
     int32_t retrace_end_mm;   /* Travel at which that ends. */
+    bool b_settle;            /* From a barcode's read to its crossing. */
+    int32_t settle_end_mm;    /* Travel at which that ends. */
 } line_track_t;
 
 /* Public function declarations. */

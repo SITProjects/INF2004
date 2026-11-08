@@ -969,6 +969,7 @@ test_creep_bars (void)
         drive(true, true, 1u);
         in.b_barcode_done = false;
         bool const b_ended = !out.b_slow;
+        track.b_settle = false; /* LT116 covers the way to the crossing. */
         drive_bars(true, false, LINE_CONFIRM_SAMPLES + 2u);
         bool const b_to_tape = (to_tape == out.target_heading_deg);
         bool const b_after_junction = drive_both_junction(samples_for(40));
@@ -1165,6 +1166,108 @@ test_retrace (void)
     in.b_control = true;
     check("LT109 the next barcode, or anyone else driving, ends going back",
           b_creep && !line_track_retrace(&track));
+}
+
+/* A slow pass, read after 100 mm on heading @p deg, back at full speed. */
+static void
+read_barcode (int deg)
+{
+    reset();
+    drive(false, false, samples_for(200));
+    start_creep();
+    in.heading_deg = deg;
+    drive(false, false, samples_for(150));
+    in.b_barcode_done = true;
+    drive(false, false, 1u);
+    in.b_barcode_done = false;
+}
+
+/* 2026-11-08: a touch just after a read swung the car and the crossing came
+ * with the tape already under the other sensor, 8 to 17 mm apart. */
+static void
+test_settle (void)
+{
+    read_barcode(0);
+    bool const b_on = track.b_settle && !out.b_slow &&
+                      (LINE_BARCODE_NONE == track.barcode_phase);
+    drive(true, false, LINE_CONFIRM_SAMPLES);
+    bool b_lean = true;
+    for (int deg = 0; deg <= 30; deg++)
+    {
+        in.heading_deg = deg;
+        drive(true, false, 1u);
+        b_lean = b_lean && (LINE_CREEP_LEAD_DEG == out.target_heading_deg);
+    }
+    check("LT110 after a read, a touch leans the car at full speed off the "
+          "line's heading, however far it turns",
+          b_on && b_lean && !out.b_slow && (LINE_MODE_TRACK == out.mode));
+
+    read_barcode(-4);
+    bool const b_fresh = (-4 == track.line_deg);
+    drive(false, true, LINE_CONFIRM_SAMPLES);
+    check("LT111 the heading to hold is the one the creep ended on, not the "
+          "one from before its drift",
+          b_fresh && ((-4 - LINE_CREEP_LEAD_DEG) == out.target_heading_deg));
+
+    read_barcode(0);
+    in.turn = LINE_TURN_UTURN;
+    drive(false, false, samples_for(50));
+    bool const b_turn = drive_both_junction(LINE_CONFIRM_SAMPLES + 3u);
+    bool const b_ended = !track.b_settle;
+    in.turn = LINE_TURN_STRAIGHT;
+    read_barcode(0);
+    drive(false, false, samples_for(50));
+    drive(true, false, 1u);
+    bool const b_skewed = drive_both_junction(LINE_CONFIRM_SAMPLES + 3u);
+    check("LT112 the crossing after a read is still taken, even a little "
+          "skewed, and ends the steering",
+          b_turn && b_ended && b_skewed && !track.b_settle);
+
+    read_barcode(0);
+    int const length = track.settle_end_mm - in.distance_mm;
+    drive(false, false, samples_for(length - 5));
+    bool const b_during = track.b_settle;
+    drive(false, false, samples_for(10));
+    bool const b_over = !track.b_settle;
+    drive(false, true, LINE_CONFIRM_SAMPLES);
+    check("LT113 with no crossing it ends after LINE_BARCODE_SETTLE_MM, then "
+          "a touch steers as usual",
+          (LINE_BARCODE_SETTLE_MM == length) && b_during && b_over &&
+              ((in.heading_deg - LINE_LEAD_DEG) == out.target_heading_deg));
+
+    read_barcode(0);
+    drive(false, true, LINE_CONFIRM_SAMPLES);
+    drive(false, false, LINE_CONFIRM_SAMPLES);
+    drive(false, true, LINE_CONFIRM_SAMPLES);
+    drive(false, false, LINE_CONFIRM_SAMPLES);
+    drive(false, true, LINE_CONFIRM_SAMPLES);
+    check("LT114 touches on the way to the crossing are no bend",
+          !track.b_curve);
+
+    read_barcode(0);
+    in.b_control = false;
+    drive(false, false, 1u);
+    in.b_control = true;
+    bool const b_lost = !track.b_settle;
+    reset();
+    start_creep();
+    drive(false, false, samples_for(LINE_BARCODE_CREEP_MM + 10));
+    check("LT115 anyone else driving ends it, and a creep that gives up "
+          "starts it too",
+          b_lost && track.b_settle && !out.b_slow);
+
+    reset();
+    start_creep();
+    drive(true, false, LINE_CONFIRM_SAMPLES + 2u);
+    (void)drive_both_junction(samples_for(40));
+    in.b_barcode_done = true;
+    drive(true, true, 1u);
+    in.b_barcode_done = false;
+    drive(false, true, LINE_CONFIRM_SAMPLES + 2u);
+    check("LT116 bars still under a sensor after the read lean the car to the "
+          "tape, and are no junction",
+          track.b_settle && !out.b_junction &&
+              (LINE_CREEP_LEAD_DEG == out.target_heading_deg));
 }
 
 /* 2026-11-06 20:32:07: 7 to 57 degrees in the 120 mm before the crossing. */
@@ -1895,6 +1998,7 @@ main (void)
     test_creep_bars();
     test_creep_heading();
     test_retrace();
+    test_settle();
     test_junction_uturn();
     test_overshoot_across();
     printf("%u failure(s)\n", failures);
