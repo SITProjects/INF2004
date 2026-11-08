@@ -2746,7 +2746,7 @@ avoid_probe_valid (void)
 
 /* OBS-U67: the bypass watches the obstacle side while it drives. Left gap,
  * 235 mm sidestep, re-checks off; on the sidestep the sensor faces the
- * obstacle's front (OBS-U76), on the pass 60 degrees, right on the car. It
+ * obstacle's front (OBS-U76), on the pass 30 degrees to the car's right. It
  * reacts only inside 105 mm (half the car plus half the margin) and restores
  * 135 mm. A point 110 mm from the path is left alone; one 100 mm away
  * lengthens the sidestep by 35 mm; the same on the pass, 100 mm in, stops and
@@ -2830,7 +2830,8 @@ avoid_watch_front_valid (void)
         ok = ok && sim_until(OBSTACLE_AVOID_RUN_LEG,
                              OBSTACLE_AVOID_LEG_SIDESTEP, 50u);
         int32_t const turn = (int32_t)sim.ctx.plan.angle_deg;
-        int32_t front = (right != 0u) ? (90 + turn) : (90 - turn);
+        bool const b_high = (right != 0u) != (OBSTACLE_SERVO_MIRRORED != 0);
+        int32_t front = b_high ? (90 + turn) : (90 - turn);
         front =
             (front < OBSTACLE_WATCH_MIN_DEG) ? OBSTACLE_WATCH_MIN_DEG : front;
         front =
@@ -2847,9 +2848,8 @@ avoid_watch_front_valid (void)
         ok = ok &&
              sim_until(OBSTACLE_AVOID_RUN_LEG, OBSTACLE_AVOID_LEG_PASS, 50u) &&
              sim.ctx.b_watching &&
-             (sim.watch_angle == ((right != 0u)
-                                      ? (int16_t)OBSTACLE_WATCH_RIGHT_DEG
-                                      : (int16_t)OBSTACLE_WATCH_LEFT_DEG));
+             (sim.watch_angle == (b_high ? (int16_t)OBSTACLE_WATCH_RIGHT_DEG
+                                         : (int16_t)OBSTACLE_WATCH_LEFT_DEG));
     }
     return ok;
 }

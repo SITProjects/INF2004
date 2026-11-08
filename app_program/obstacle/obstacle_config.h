@@ -352,10 +352,12 @@
  * last 3 steps of travel and the moment it was stopped, as a barcode's creep
  * does. Stopped this long first, so the brake has finished. A car further off
  * than the maximum, or that turned that much over those steps, is in a bend or
- * a pivot and has no line's heading to go by; 0 never straightens. */
+ * a pivot and has no line's heading to go by; 0 never straightens. Off for now:
+ * on 2026-11-08 the average lagged a correction and turned the car away from
+ * the obstacle's face, whose nearest echo was 25 to 30 degrees off centre. */
 #define OBSTACLE_AVOID_STRAIGHTEN_SETTLE_MS 250u
 #define OBSTACLE_AVOID_STRAIGHTEN_STEP_MM 32u
-#define OBSTACLE_AVOID_STRAIGHTEN_MAX_DEG 15u
+#define OBSTACLE_AVOID_STRAIGHTEN_MAX_DEG 0u
 /* 0: one sweep at the stop, then drive the whole path without the corridor
  * sweep or forward re-checks; only CRITICAL holds the car on the way. 1:
  * re-check before each move and verify the corridor (slower). */
@@ -417,9 +419,11 @@
  * Servo direction. Scan angles below 90 are left of the heading (+x). Set
  * 1 if the servo is mounted so that a command below 90 faces right: check
  * with calibration mode 5 and an object on the car's left. 0 keeps the
- * commands equal to the scan angles.
+ * commands equal to the scan angles. This car needs 1: its 60 degree command
+ * faces right (seen on 2026-11-04). At 0 the sweep's sides were swapped, and
+ * on 2026-11-08 the car went round a lopsided scan into the obstacle.
  */
-#define OBSTACLE_SERVO_MIRRORED 0
+#define OBSTACLE_SERVO_MIRRORED 1
 /* Servo command, before trim, that points the sensor at a scan angle. */
 #define OBSTACLE_SERVO_PHYSICAL_DEG(angle)                                     \
     (OBSTACLE_SERVO_MIRRORED ? (180 - (int)(angle)) : (int)(angle))
