@@ -288,6 +288,10 @@
  * a right turn ending that short ran past the curve beyond. Nor is the gap
  * between the sensors on the way in: a sensor already on the line reads as
  * skew, and took 19 degrees off one left turn.
+ *
+ * A far sensor already black as the pivot starts is not used: the car is beside
+ * the line and the sensor leaves the tape early. It cut 5 to 9 degrees off 3 of
+ * 41 logged U-turns to 2026-11-08, and they stopped short of the tape.
  */
 #define LINE_OLD_LINE_DEG 14
 

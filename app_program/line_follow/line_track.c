@@ -721,7 +721,9 @@ drive_junction (line_track_t * p_track, line_track_input_t const * p_in)
         (SIDE_LEFT == side) ? LINE_MODE_SEARCH_LEFT : LINE_MODE_SEARCH_RIGHT;
     p_track->target_deg = p_in->heading_deg + (side_sign(side) * turn_deg);
     p_track->pivot_start_deg = p_in->heading_deg;
-    p_track->b_old_line_seen = false;
+    /* A far sensor already on the tape says nothing about the line's way. */
+    p_track->b_old_line_seen =
+        p_track->b_black[(SIDE_LEFT == side) ? SIDE_RIGHT : SIDE_LEFT];
 }
 
 /* Keep the heading the junction was met on until past the crossing tape. */

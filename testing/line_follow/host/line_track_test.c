@@ -1168,6 +1168,65 @@ test_retrace (void)
           b_creep && !line_track_retrace(&track));
 }
 
+/* To the start of the pivot for @p turn, the far sensor as @p b_far_black. */
+static void
+start_pivot (line_turn_t turn, bool b_far_black)
+{
+    bool const b_right = LINE_TURN_RIGHT == turn;
+    reset();
+    drive(false, false, samples_for(100));
+    in.turn = turn;
+    drive(true, true, LINE_CONFIRM_SAMPLES + LINE_JUNCTION_SAMPLES - 1u);
+    in.turn = LINE_TURN_STRAIGHT;
+    drive(b_right && b_far_black, !b_right && b_far_black,
+          samples_for(LINE_JUNCTION_CENTRE_MM));
+    in.b_turning = true;
+}
+
+/* Sweep the pivot to @p deg with neither sensor black, as the far one leaves
+ * the tape. */
+static void
+leave_tape_at (int deg)
+{
+    in.heading_deg = deg;
+    drive(false, false, LINE_CONFIRM_SAMPLES);
+    in.b_turning = false;
+}
+
+/* 2026-11-08: the right sensor on the tape at the junction left it 7 degrees
+ * into the pivot, and the U-turn stopped 6 degrees short of the track. */
+static void
+test_pivot_far_sensor (void)
+{
+    start_pivot(LINE_TURN_UTURN, false);
+    in.heading_deg = 3;
+    drive(false, true, LINE_CONFIRM_SAMPLES);
+    leave_tape_at(20);
+    check("LT117 a far sensor crossing the tape in a pivot sets its target",
+          (186 == out.target_heading_deg) && (LINE_MODE_SEARCH_LEFT == out.mode));
+
+    start_pivot(LINE_TURN_UTURN, true);
+    bool const b_nominal = (180 == out.target_heading_deg);
+    leave_tape_at(7);
+    bool const b_uturn = b_nominal && (180 == out.target_heading_deg);
+    start_pivot(LINE_TURN_LEFT, true);
+    leave_tape_at(7);
+    bool const b_left = 90 == out.target_heading_deg;
+    start_pivot(LINE_TURN_RIGHT, true);
+    leave_tape_at(-7);
+    bool const b_right = -90 == out.target_heading_deg;
+    check("LT118 a far sensor already on the tape as a pivot starts does not "
+          "move its target, either way round",
+          b_uturn && b_left && b_right);
+
+    start_pivot(LINE_TURN_LEFT, false);
+    in.heading_deg = 3;
+    drive(true, false, LINE_CONFIRM_SAMPLES);
+    leave_tape_at(20);
+    check("LT119 only the far sensor sets a pivot's target",
+          90 == out.target_heading_deg);
+}
+
 /* A slow pass, read after 100 mm on heading @p deg, back at full speed. */
 static void
 read_barcode (int deg)
@@ -1999,6 +2058,7 @@ main (void)
     test_creep_heading();
     test_retrace();
     test_settle();
+    test_pivot_far_sensor();
     test_junction_uturn();
     test_overshoot_across();
     printf("%u failure(s)\n", failures);
