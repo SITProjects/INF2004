@@ -551,8 +551,8 @@ obstacle_scan_set_watch (int angle)
     {
         return; /* The sweep owns the servo. */
     }
-    if ((angle < (int)OBSTACLE_SWEEP_FIRST_DEG) ||
-        (angle > (int)OBSTACLE_SWEEP_LAST_DEG))
+    if ((angle < (int)OBSTACLE_WATCH_MIN_DEG) ||
+        (angle > (int)OBSTACLE_WATCH_MAX_DEG))
     {
         if (watch_angle != OBSTACLE_SCAN_WATCH_OFF)
         {

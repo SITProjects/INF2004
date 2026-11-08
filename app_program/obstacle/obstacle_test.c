@@ -196,6 +196,8 @@ static bool avoid_probe_valid (void);
 static bool avoid_watch_valid (void);
 static bool avoid_home_valid (void);
 static void sim_watch (uint16_t echo_us);
+static uint16_t sim_watch_echo (float lateral_mm);
+static bool avoid_watch_front_valid (void);
 static void sim_blocked_corridor (void);
 static bool sim_held_critical (obstacle_avoid_leg_t leg);
 
@@ -291,6 +293,8 @@ obstacle_test (void)
                "replan: closest sector return ranks usable sides");
     TEST_CHECK("OBS-U66", plan_end_room_valid(),
                "plan: a clear end counts only if the car fits past it");
+    TEST_CHECK("OBS-U76", avoid_watch_front_valid(),
+               "avoid: the sidestep watches the obstacle's front");
     TEST_CHECK("OBS-U67", avoid_watch_valid(),
                "avoid: watch the obstacle side and widen while driving");
     TEST_CHECK("OBS-U69", avoid_home_valid(),
@@ -2728,15 +2732,16 @@ avoid_probe_valid (void)
     return ok;
 }
 
-/* OBS-U67: the bypass watches the obstacle side while it drives. Left gap
- * (sensor at 60 degrees, right on the car), 235 mm sidestep, re-checks
- * off. It reacts only inside 105 mm (half the car plus half the margin)
- * and restores 135 mm. A point 110 mm from the path is left alone; one
- * 100 mm away lengthens the sidestep by 35 mm; the same on the pass, 100 mm
- * in, stops and sidesteps 35 mm more, then passes the remaining 550 mm. A
- * third widening (115 mm) would pass the 80 mm cap and is refused. No echo with the
- * last point (174 mm ahead) not yet passed by 50 mm keeps watching; then
- * sensor ahead. */
+/* OBS-U67: the bypass watches the obstacle side while it drives. Left gap,
+ * 235 mm sidestep, re-checks off; on the sidestep the sensor faces the
+ * obstacle's front (OBS-U76), on the pass 60 degrees, right on the car. It
+ * reacts only inside 105 mm (half the car plus half the margin) and restores
+ * 135 mm. A point 110 mm from the path is left alone; one 100 mm away
+ * lengthens the sidestep by 35 mm; the same on the pass, 100 mm in, stops and
+ * sidesteps 35 mm more, then passes the remaining 550 mm. A third widening
+ * (115 mm) would pass the 80 mm cap and is refused. No echo with the last
+ * point (174 mm ahead) not yet passed by 50 mm keeps watching; then sensor
+ * ahead. */
 static bool
 avoid_watch_valid (void)
 {
@@ -2745,12 +2750,11 @@ avoid_watch_valid (void)
     ok = ok &&
          sim_until(OBSTACLE_AVOID_RUN_LEG, OBSTACLE_AVOID_LEG_SIDESTEP, 20u) &&
          sim.ctx.b_watching && sim.in.watch.b_active &&
-         (sim.watch_angle == (int16_t)OBSTACLE_WATCH_LEFT_DEG) &&
          (sim.ctx.sidestep_mm == 235u);
-    sim_watch(1283u); /* 220 mm away: 110 mm from the path. */
+    sim_watch(sim_watch_echo(110.0f));
     (void)sim_step();
     ok = ok && (sim.ctx.sidestep_mm == 235u) && (sim.ctx.remaining == 235u);
-    sim_watch(1170u);
+    sim_watch(sim_watch_echo(100.0f));
     (void)sim_step();
     ok = ok && (sim.ctx.sidestep_mm == 270u) && (sim.ctx.remaining == 270u);
     sim.in.b_move_done = true;
@@ -2770,8 +2774,8 @@ avoid_watch_valid (void)
          (sim.ctx.watch_shift_mm == 70u);
     ok = ok &&
          sim_until(OBSTACLE_AVOID_RUN_LEG, OBSTACLE_AVOID_LEG_SIDESTEP, 30u);
-    sim_watch(233u);  /* 40 mm away, within this 35 mm leg: 115 mm more. */
-    (void)sim_step(); /* 70 + 115 would pass the 80 mm cap. */
+    sim_watch(sim_watch_echo(20.0f)); /* Within this 35 mm leg: 115 more. */
+    (void)sim_step();                 /* 70 + 115 would pass the 80 mm cap. */
     ok = ok && (sim.ctx.sidestep_mm == 35u) && (sim.ctx.watch_shift_mm == 70u);
     ok = ok &&
          sim_until(OBSTACLE_AVOID_RUN_LEG, OBSTACLE_AVOID_LEG_PASS, 30u) &&
@@ -2792,6 +2796,75 @@ avoid_watch_valid (void)
          (sim.act.watch_angle == (int16_t)OBSTACLE_SCAN_WATCH_OFF) &&
          !sim.ctx.b_watching && sim.ctx.b_watch_done;
     return ok;
+}
+
+/* OBS-U76: on the sidestep the sensor faces back along the line at the
+ * obstacle's front, the turn's angle round from ahead and within the servo's
+ * reach; seeing the face and then losing it at its edge does not end the
+ * watch, and the pass still watches 30 degrees off the heading. Both sides. */
+static bool
+avoid_watch_front_valid (void)
+{
+    bool ok = true;
+    for (uint32_t right = 0u; right < 2u; ++right)
+    {
+        ok = ok && sim_detect_path();
+        sim.config.timing.b_recheck = false;
+        if (right != 0u)
+        {
+            sim_scan(ROBOT_OBSTACLE_PATH_FOUND, ROBOT_OBSTACLE_DIR_RIGHT_120,
+                     true, false);
+        }
+        ok = ok && sim_until(OBSTACLE_AVOID_RUN_LEG,
+                             OBSTACLE_AVOID_LEG_SIDESTEP, 50u);
+        int32_t const turn = (int32_t)sim.ctx.plan.angle_deg;
+        int32_t front = (right != 0u) ? (90 + turn) : (90 - turn);
+        front =
+            (front < OBSTACLE_WATCH_MIN_DEG) ? OBSTACLE_WATCH_MIN_DEG : front;
+        front =
+            (front > OBSTACLE_WATCH_MAX_DEG) ? OBSTACLE_WATCH_MAX_DEG : front;
+        ok = ok && sim.ctx.b_watching && (sim.watch_angle == front) &&
+             (front != (int16_t)OBSTACLE_WATCH_LEFT_DEG) &&
+             (front != (int16_t)OBSTACLE_WATCH_RIGHT_DEG);
+        sim_watch(1170u); /* The face. */
+        (void)sim_step();
+        sim.in.distance_mm += 400;
+        sim_watch(0u); /* Past its edge. */
+        (void)sim_step();
+        ok = ok && sim.ctx.b_watching && !sim.ctx.b_watch_done;
+        ok = ok &&
+             sim_until(OBSTACLE_AVOID_RUN_LEG, OBSTACLE_AVOID_LEG_PASS, 50u) &&
+             sim.ctx.b_watching &&
+             (sim.watch_angle == ((right != 0u)
+                                      ? (int16_t)OBSTACLE_WATCH_RIGHT_DEG
+                                      : (int16_t)OBSTACLE_WATCH_LEFT_DEG));
+    }
+    return ok;
+}
+
+/* Echo of a point this far from the path at the angle the watch holds. The
+ * sine is a series: <math.h> clashes with the kernel's size_t here. */
+static uint16_t
+sim_watch_echo (float lateral_mm)
+{
+    int32_t const off_deg = 90 - (int32_t)sim.watch_angle;
+    float const x =
+        (float)((off_deg < 0) ? -off_deg : off_deg) * (3.14159265f / 180.0f);
+    float const x2 = x * x;
+    float const sine =
+        x *
+        (1.0f - (x2 / 6.0f) * (1.0f - (x2 / 20.0f) * (1.0f - (x2 / 42.0f))));
+    for (uint32_t echo = 1u; echo < 20000u; ++echo)
+    {
+        float range_mm = 0.0f;
+        if (obstacle_width_range_mm((uint16_t)echo, &sim.config.width,
+                                    &range_mm) &&
+            ((range_mm * sine) >= lateral_mm))
+        {
+            return (uint16_t)echo;
+        }
+    }
+    return 0u;
 }
 
 /* OBS-U63: complete the outward move and pass before handing back to

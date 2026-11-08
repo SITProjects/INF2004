@@ -44,6 +44,15 @@
 #define OBSTACLE_WATCH_LEFT_DEG 60u
 #define OBSTACLE_WATCH_RIGHT_DEG 120u
 
+/*
+ * On the sidestep the sensor faces back along the line at the obstacle's
+ * front, the turn's angle round from ahead, within these servo limits. A sweep
+ * from standing cannot tell 11, 16 and 21 cm apart (2026-11-08), but crossing
+ * the front, the face's echo should end at its edge however wide the beam.
+ */
+#define OBSTACLE_WATCH_MIN_DEG 30
+#define OBSTACLE_WATCH_MAX_DEG 150
+
 /* Side positions retain the median of nonzero samples. */
 #define OBSTACLE_PINGS_PER_ANGLE 3u
 

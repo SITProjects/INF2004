@@ -115,6 +115,8 @@ static void step_verify (obstacle_avoid_t * p_ctx,
 static bool watch_step (obstacle_avoid_t * p_ctx,
                         obstacle_avoid_action_t * p_act,
                         obstacle_avoid_input_t const * p_in);
+static int16_t watch_angle_for (obstacle_avoid_t const * p_ctx,
+                                obstacle_avoid_leg_t leg);
 static void watch_off (obstacle_avoid_t * p_ctx,
                        obstacle_avoid_action_t * p_act);
 static void step_run_leg (obstacle_avoid_t * p_ctx,
@@ -905,6 +907,7 @@ try_plan (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
      * sweep again before turning. */
     p_ctx->b_replan_pending = p_ctx->plan.reverse_mm > 0u;
     p_ctx->b_watching = false;
+    p_ctx->watch_angle = (int16_t)OBSTACLE_SCAN_WATCH_OFF;
     p_ctx->b_watch_seen = false;
     p_ctx->b_watch_done = false;
     p_ctx->b_watch_widened = false;
@@ -1046,20 +1049,16 @@ send_part (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
     {
         if (((leg == OBSTACLE_AVOID_LEG_SIDESTEP) ||
              (leg == OBSTACLE_AVOID_LEG_PASS)) &&
-            !p_ctx->b_watching && !p_ctx->b_watch_done)
+            !p_ctx->b_watch_done &&
+            (!p_ctx->b_watching ||
+             (p_ctx->watch_angle != watch_angle_for(p_ctx, leg))))
         {
-            /* Look ahead along the obstacle side of the path. Unmirrored,
-             * the servo's 60 degree command faces right of the heading
-             * (hardware, 2026-11-04), so a left bypass watches at 60. With
-             * OBSTACLE_SERVO_MIRRORED the scan angles are true sides. */
             p_ctx->b_watching = true;
             p_ctx->b_watch_seen = false;
             p_ctx->watch_sequence = p_in->watch.sequence;
+            p_ctx->watch_angle = watch_angle_for(p_ctx, leg);
             p_act->b_watch = true;
-            p_act->watch_angle =
-                (p_ctx->plan.b_gap_right != (OBSTACLE_SERVO_MIRRORED != 0))
-                    ? (int16_t)OBSTACLE_WATCH_RIGHT_DEG
-                    : (int16_t)OBSTACLE_WATCH_LEFT_DEG;
+            p_act->watch_angle = p_ctx->watch_angle;
         }
         uint32_t const blind_mm =
             (leg == OBSTACLE_AVOID_LEG_RETURN) ? return_blind_mm(p_ctx) : 0u;
@@ -1394,9 +1393,8 @@ step_run_leg (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
 
 /*
  * Use a new watch reading on the diagonal or the pass. The sensor looks
- * (90 - OBSTACLE_WATCH_LEFT_DEG) degrees toward the obstacle side of the
- * heading, so a point at range r lies r sin of that from the path and
- * r cos of it ahead. A point ahead within this leg and closer to the path
+ * (90 - the watch angle) degrees toward the obstacle side of the heading, so
+ * a point at range r lies r sin of that from the path and r cos of it ahead. A point ahead within this leg and closer to the path
  * than half the car plus half the margin widens the offset back to the
  * full margin: on the diagonal by driving it farther, on the pass by
  * stopping to sidestep out; once per leg and at most WATCH_SHIFT_MAX_MM per
@@ -1429,7 +1427,10 @@ watch_step (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
         int32_t const since = p_in->distance_mm - p_ctx->watch_seen_mm;
         uint32_t const past =
             (since < 0) ? (uint32_t)(-since) : (uint32_t)since;
+        /* Only on the pass: on the sidestep the sensor faces the obstacle's
+         * front, which it leaves at the edge, and the pass needs its watch. */
         if (p_ctx->b_watch_seen && p_in->b_odometry_valid &&
+            (leg == OBSTACLE_AVOID_LEG_PASS) &&
             (past >= ((uint32_t)p_ctx->watch_ahead_mm + WATCH_CLEAR_EXTRA_MM)))
         {
             watch_off(p_ctx, p_act);
@@ -1440,7 +1441,8 @@ watch_step (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
     }
 
     float const off_rad =
-        (float)(OBSTACLE_CENTRE_DEG - OBSTACLE_WATCH_LEFT_DEG) * DEG_TO_RAD;
+        fabsf((float)((int32_t)OBSTACLE_CENTRE_DEG - p_ctx->watch_angle)) *
+        DEG_TO_RAD;
     float const lateral_mm = range_mm * sinf(off_rad);
     float const ahead_mm = range_mm * cosf(off_rad);
     p_ctx->b_watch_seen = true;
@@ -1506,6 +1508,37 @@ watch_step (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
     hold(p_ctx, p_act, OBSTACLE_AVOID_RETRY_WAIT, p_in->now_ms,
          "too close, shifting out");
     return true;
+}
+
+/*
+ * Where the watch looks. Unmirrored, the servo's 60 degree command faces right
+ * of the heading (hardware, 2026-11-04), so a left bypass watches at 60. With
+ * OBSTACLE_SERVO_MIRRORED the scan angles are true sides. On the pass it looks
+ * ahead along the obstacle side; on the sidestep back along the line at the
+ * obstacle's front, as far as the servo goes.
+ */
+static int16_t
+watch_angle_for (obstacle_avoid_t const * p_ctx, obstacle_avoid_leg_t leg)
+{
+    bool const b_high =
+        p_ctx->plan.b_gap_right != (OBSTACLE_SERVO_MIRRORED != 0);
+    if (leg != OBSTACLE_AVOID_LEG_SIDESTEP)
+    {
+        return b_high ? (int16_t)OBSTACLE_WATCH_RIGHT_DEG
+                      : (int16_t)OBSTACLE_WATCH_LEFT_DEG;
+    }
+    int32_t angle =
+        b_high ? ((int32_t)OBSTACLE_CENTRE_DEG + p_ctx->plan.angle_deg)
+               : ((int32_t)OBSTACLE_CENTRE_DEG - p_ctx->plan.angle_deg);
+    if (angle < OBSTACLE_WATCH_MIN_DEG)
+    {
+        angle = OBSTACLE_WATCH_MIN_DEG;
+    }
+    if (angle > OBSTACLE_WATCH_MAX_DEG)
+    {
+        angle = OBSTACLE_WATCH_MAX_DEG;
+    }
+    return (int16_t)angle;
 }
 
 /* Face the sensor ahead again, if it was watching. */

@@ -272,6 +272,7 @@ typedef struct
     uint8_t watch_sequence;  /* Last watch reading used. */
     int32_t watch_seen_mm;   /* Odometry distance at the last sighting. */
     uint16_t watch_ahead_mm; /* How far ahead of the pivot it was. */
+    int16_t watch_angle;     /* Scan angle the watch holds. */
     bool b_blocked;          /* blocked_since_ms is running. */
     uint32_t blocked_since_ms;
     bool b_rearm_known;

@@ -189,7 +189,7 @@ void obstacle_scan_set_side_scans (bool b_enabled);
  * request and published result are kept as they were. A side scan,
  * corridor sweep or rearm ends the watch. Readings of the car's own body
  * (OBSTACLE_SIDE_SELF_*) count as no echo.
- * @param angle Servo angle, OBSTACLE_SWEEP_FIRST_DEG..LAST_DEG, or
+ * @param angle Servo angle, OBSTACLE_WATCH_MIN_DEG..MAX_DEG, or
  *        OBSTACLE_SCAN_WATCH_OFF to centre and resume centre groups.
  * Call only from the scan task.
  */
