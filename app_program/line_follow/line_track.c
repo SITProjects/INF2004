@@ -24,6 +24,8 @@
 #define SIDE_RIGHT 1u
 #define SIDE_NONE 2u
 #define SIDE_COUNT 2u
+#define BARCODE_SIDE ((LINE_BARCODE_ON_LEFT != 0) ? SIDE_LEFT : SIDE_RIGHT)
+#define TAPE_SIDE ((LINE_BARCODE_ON_LEFT != 0) ? SIDE_RIGHT : SIDE_LEFT)
 
 #define SEARCH_TIMEOUT_SAMPLES (LINE_SEARCH_TIMEOUT_MS / LINE_SAMPLE_MS)
 
@@ -73,6 +75,7 @@ static void watch_barcode (line_track_t * p_track,
 static void watch_hump (line_track_t * p_track,
                         line_track_input_t const * p_in);
 static bool slow_pass (line_track_t const * p_track);
+static void note_bars (line_track_t * p_track, bool const * p_was_black);
 static void watch_loop (line_track_t * p_track,
                         line_track_input_t const * p_in);
 static void note_pivot (line_track_t * p_track,
@@ -122,6 +125,7 @@ line_track_init (line_track_t * p_track, line_track_input_t const * p_in)
     p_track->pivot_side = SIDE_NONE;
     p_track->last_heading_deg = p_in->heading_deg;
     p_track->b_rejoin = false;
+    p_track->b_bars = false;
     p_track->rejoin_mm = p_in->distance_mm - LINE_REJOIN_MM;
     p_track->junction_count = 0u;
     p_track->barcode_phase = LINE_BARCODE_NONE;
@@ -134,9 +138,21 @@ line_track_init (line_track_t * p_track, line_track_input_t const * p_in)
 line_request_t
 line_track_update (line_track_t * p_track, line_track_input_t const * p_in)
 {
-    bool const was_black[SIDE_COUNT] = {p_track->b_black[SIDE_LEFT],
-                                        p_track->b_black[SIDE_RIGHT]};
+    /* As the last update saw them, with the bars white. */
+    bool was_black[SIDE_COUNT] = {p_track->b_black[SIDE_LEFT],
+                                  p_track->b_black[SIDE_RIGHT]};
+    if (p_track->b_bars)
+    {
+        was_black[BARCODE_SIDE] = false;
+    }
     debounce(p_track, p_in);
+    note_bars(p_track, was_black);
+    bool const b_debounced = p_track->b_black[BARCODE_SIDE];
+    if (p_track->b_bars)
+    {
+        /* Until the end of this update; debounce needs the real level. */
+        p_track->b_black[BARCODE_SIDE] = false;
+    }
     note_pivot(p_track, p_in);
     note_heading(p_track, p_in);
 
@@ -241,6 +257,14 @@ line_track_update (line_track_t * p_track, line_track_input_t const * p_in)
                 track(p_track, p_in);
             }
         }
+        if ((LINE_MODE_TRACK == p_track->mode) &&
+            (JUNCTION_NONE == p_track->junction_phase) && p_track->b_bars &&
+            !p_track->b_black[TAPE_SIDE])
+        {
+            /* Only the bars are black: the tape is the other way. */
+            p_track->target_deg =
+                p_in->heading_deg + (side_sign(TAPE_SIDE) * LINE_LEAD_DEG);
+        }
     }
     else if (LINE_MODE_STOP == p_track->mode)
     {
@@ -266,6 +290,7 @@ line_track_update (line_track_t * p_track, line_track_input_t const * p_in)
         .reverse_mm =
             (LINE_BARCODE_BACK == phase) ? LINE_BARCODE_REVERSE_MM : 0u,
         .b_slow = (LINE_BARCODE_CREEP == phase) || p_track->b_hump_slow};
+    p_track->b_black[BARCODE_SIDE] = b_debounced;
     return request;
 }
 
@@ -345,6 +370,34 @@ slow_pass (line_track_t const * p_track)
 {
     return (LINE_BARCODE_CREEP == p_track->barcode_phase) ||
            p_track->b_hump_slow;
+}
+
+/*
+ * Creeping over a barcode, the line sensor on its side can read the bars
+ * (2026-11-08: 108 mm, taken for junctions). Black that begins there while the
+ * other sensor is already on the tape is the bars: ignore it until it clears,
+ * even if the creep ends first. Black with the other white, or both at once, is
+ * the tape or a crossing. A crossing met with one sensor on the tape is lost
+ * too, but a creep ends on a read barcode, before its junction: one missed
+ * after a failed read was STRAIGHT anyway.
+ */
+static void
+note_bars (line_track_t * p_track, bool const * p_was_black)
+{
+    if (!p_track->b_black[BARCODE_SIDE])
+    {
+        p_track->b_bars = false;
+    }
+    else if ((LINE_BARCODE_CREEP == p_track->barcode_phase) &&
+             !p_was_black[BARCODE_SIDE] && p_was_black[TAPE_SIDE] &&
+             p_track->b_black[TAPE_SIDE])
+    {
+        p_track->b_bars = true;
+    }
+    else
+    {
+        /* As it was. */
+    }
 }
 
 /* Remember which way the car is pivoting. */

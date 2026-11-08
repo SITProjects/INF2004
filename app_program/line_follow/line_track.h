@@ -147,6 +147,7 @@ typedef struct
     int32_t lost_start_mm;    /* Travel when it last saw the line itself. */
     int32_t loop_mm;          /* Travel at the start of this loop check. */
     int32_t loop_deg;         /* Heading then. */
+    bool b_bars;              /* The barcode-side sensor is on the bars. */
     uint32_t last_side;       /* Side of the last edge, for searches. */
     int32_t white_start_mm;   /* Travel when both last read white. */
     uint32_t junction_count;

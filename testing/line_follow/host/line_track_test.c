@@ -900,6 +900,77 @@ test_barcode_stop (void)
           out.b_slow && b_creep_straight);
 }
 
+/* @p samples samples of both black; true if any reported a junction. */
+static bool
+drive_both_junction (unsigned int samples)
+{
+    bool b_junction = false;
+    for (unsigned int i = 0u; i < samples; i++)
+    {
+        drive(true, true, 1u);
+        b_junction = b_junction || out.b_junction;
+    }
+    return b_junction;
+}
+
+/* 2026-11-08: creeping left of the line, the right sensor on the tape and the
+ * left on the barcode's bars (LINE_BARCODE_ON_LEFT) for 108 mm. */
+static void
+test_creep_bars (void)
+{
+    reset();
+    start_creep();
+    drive(false, true, LINE_CONFIRM_SAMPLES + 2u);
+    bool const b_bars_junction = drive_both_junction(samples_for(108));
+    check("LT94 in a creep, bars under the left with the right on the tape are "
+          "no junction: the car steers right, to the tape",
+          !b_bars_junction && out.b_slow && (LINE_MODE_TRACK == out.mode) &&
+              (-LINE_LEAD_DEG == out.target_heading_deg));
+
+    drive(true, false, LINE_CONFIRM_SAMPLES + samples_for(20));
+    bool const b_seeking = (-LINE_LEAD_DEG == out.target_heading_deg);
+    drive(false, false, LINE_CONFIRM_SAMPLES + samples_for(20));
+    check("LT95 the right off the tape first: the car is too far left, and "
+          "turns right until the right finds it",
+          b_seeking && (LINE_MODE_TRACK == out.mode) &&
+              (-LINE_LEAD_DEG == out.target_heading_deg));
+
+    reset();
+    start_creep();
+    drive(false, true, LINE_CONFIRM_SAMPLES + 2u);
+    (void)drive_both_junction(samples_for(40));
+    in.b_barcode_done = true;
+    drive(true, true, 1u);
+    in.b_barcode_done = false;
+    bool const b_ended = !out.b_slow;
+    drive(true, false, LINE_CONFIRM_SAMPLES + 2u);
+    bool const b_to_tape = (-LINE_LEAD_DEG == out.target_heading_deg);
+    bool const b_after_junction = drive_both_junction(samples_for(40));
+    drive(false, true, LINE_CONFIRM_SAMPLES + samples_for(10));
+    drive(false, false, LINE_CONFIRM_SAMPLES + samples_for(10));
+    drive(true, false, LINE_CONFIRM_SAMPLES);
+    check("LT96 the bars stay ignored past the creep's end until they clear, "
+          "as the right comes and goes; black there later is the tape again",
+          b_ended && b_to_tape && !b_after_junction &&
+              (LINE_LEAD_DEG == out.target_heading_deg));
+
+    reset();
+    start_creep();
+    drive(true, false, LINE_CONFIRM_SAMPLES);
+    check("LT97 in a creep, the left black with the right white is the tape",
+          out.b_slow && (LINE_LEAD_DEG == out.target_heading_deg));
+
+    reset();
+    start_creep();
+    bool const b_square = drive_both_junction(LINE_CONFIRM_SAMPLES);
+    reset();
+    drive(false, true, LINE_CONFIRM_SAMPLES + 2u);
+    bool const b_following = drive_both_junction(LINE_CONFIRM_SAMPLES);
+    check("LT98 both black at once in a creep, or the same order as the bars "
+          "outside one, are still junctions",
+          b_square && b_following);
+}
+
 /* 2026-11-06 20:32:07: 7 to 57 degrees in the 120 mm before the crossing. */
 #define BEND_DEG 50
 
@@ -1625,6 +1696,7 @@ main (void)
     test_rejoin();
     test_barcode_stop();
     test_creep_model();
+    test_creep_bars();
     test_junction_uturn();
     test_overshoot_across();
     printf("%u failure(s)\n", failures);
