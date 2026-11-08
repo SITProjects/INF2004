@@ -204,6 +204,7 @@ static bool sim_stop_off_line (int32_t off_deg);
 static bool sim_settle (void);
 static bool avoid_straighten_valid (void);
 static bool avoid_straighten_skip_valid (void);
+static bool plan_edge_min_valid (void);
 
 /* Public function definitions. */
 
@@ -308,6 +309,9 @@ obstacle_test (void)
         "avoid: stopped off the line's heading, turn onto it and measure");
     TEST_CHECK("OBS-U78", avoid_straighten_skip_valid(),
                "avoid: no straightening when it would not help");
+    TEST_CHECK(
+        "OBS-U79", plan_edge_min_valid(),
+        "plan: the first sidestep clears the widest obstacle on the line");
     TEST_CHECK("OBS-U72", plan_short_pass_valid(),
                "plan: stop short of the rear bumper when the edge is known");
     TEST_CHECK("OBS-U73", avoid_line_gate_valid(),
@@ -3243,6 +3247,58 @@ avoid_straighten_skip_valid (void)
     sim_scan(ROBOT_OBSTACLE_SCANNING, ROBOT_OBSTACLE_DIR_NONE, true, false);
     (void)sim_step();
     return ok && sim.ctx.b_straighten_due && (sim.ctx.line_heading_deg == 5);
+}
+
+/* OBS-U79: 75 + 60 + 115 is 250 mm. An edge the sweep puts 30 mm off the line
+ * is not believed, on the first plan, on an end's fit or on the re-sweep; one
+ * farther out is. A later, extra sidestep stays as small as it needs to be. */
+static bool
+plan_edge_min_valid (void)
+{
+    obstacle_avoid_geometry_t car = avoid_fixture();
+    car.edge_min_mm = 115u;
+    robot_obstacle_result_t const result =
+        path_result(ROBOT_OBSTACLE_DIR_RIGHT_120, true, true);
+    obstacle_avoid_plan_t const close =
+        obstacle_avoid_plan(result, geometry_at(250u, 60, -30), &car);
+    obstacle_avoid_plan_t const far =
+        obstacle_avoid_plan(result, geometry_at(250u, 60, -150), &car);
+    obstacle_scan_geometry_t ends = geometry_at(250u, 60, -30);
+    ends.b_left_clear = true;
+    ends.b_right_clear = true;
+    ends.right_end_mm = 520u; /* Fits a 165 mm sidestep, not 250 mm. */
+    obstacle_avoid_plan_t const end_at_floor =
+        obstacle_avoid_plan(result, ends, &car);
+    car.edge_min_mm = 0u;
+    obstacle_avoid_plan_t const trusting =
+        obstacle_avoid_plan(result, geometry_at(250u, 60, -30), &car);
+    obstacle_avoid_plan_t const end_trusting =
+        obstacle_avoid_plan(result, ends, &car);
+    bool ok = (close.sidestep_mm == 250u) && (far.sidestep_mm == 285u) &&
+              (trusting.sidestep_mm == 165u) && !end_at_floor.b_gap_right &&
+              end_trusting.b_gap_right;
+
+    ok = ok && sim_detect_path();
+    sim.config.timing.b_recheck = false;
+    sim.config.geometry.min_room_mm = 200u;
+    sim.config.geometry.edge_min_mm = 115u;
+    sim.in.geometry = geometry_at(50u, 100, -100);
+    ok = ok &&
+         sim_until(OBSTACLE_AVOID_REPLAN, OBSTACLE_AVOID_LEG_TURN_OUT, 30u);
+    (void)sim_step();
+    sim_corridor(true);
+    ok = ok && sim_step().b_send && (sim.ctx.sidestep_mm == 250u);
+
+    /* Already out to the side: the re-sweep's shift is only what it needs. */
+    ok = ok && sim_held_critical(OBSTACLE_AVOID_LEG_PASS);
+    sim.config.geometry.edge_min_mm = 115u;
+    (void)sim_step();
+    ok =
+        ok && sim_step().b_corridor && (sim.ctx.state == OBSTACLE_AVOID_REPLAN);
+    (void)sim_step(); /* Corridor request answered. */
+    sim_corridor(true);
+    ok = ok && sim_step().b_clear_inhibit && (sim.ctx.sidestep_mm == 135u);
+    return ok;
 }
 
 /* OBS-U72: the real car's tail is longer than the fixture's, so the pass

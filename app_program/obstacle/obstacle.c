@@ -89,6 +89,7 @@ static const obstacle_avoid_config_t avoid_config = {
                  .depth_mm = OBSTACLE_AVOID_DEPTH_MM,
                  .sidestep_min_mm = OBSTACLE_AVOID_SIDESTEP_MIN_MM,
                  .sidestep_max_mm = OBSTACLE_AVOID_SIDESTEP_MAX_MM,
+                 .edge_min_mm = OBSTACLE_AVOID_EDGE_MIN_MM,
                  .lateral_max_mm = OBSTACLE_AVOID_LATERAL_MAX_MM,
                  .pass_max_mm = OBSTACLE_AVOID_PASS_MAX_MM,
                  .return_extra_mm = OBSTACLE_AVOID_RETURN_EXTRA_MM,

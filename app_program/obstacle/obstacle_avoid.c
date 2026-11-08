@@ -72,6 +72,8 @@ static void hold (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
                   char const * p_reason);
 static void release (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
                      bool b_to_follow, uint32_t now_ms, char const * p_reason);
+static uint16_t
+first_sidestep_min (obstacle_avoid_geometry_t const * p_geometry);
 static void note_heading (obstacle_avoid_t * p_ctx,
                           obstacle_avoid_input_t const * p_in);
 static bool line_heading_known (obstacle_avoid_t * p_ctx,
@@ -291,8 +293,8 @@ obstacle_avoid_plan (robot_obstacle_result_t result,
         plan.b_limited = true;
         need_mm = (int32_t)p_geometry->sidestep_max_mm;
     }
-    plan.sidestep_mm = (need_mm < (int32_t)p_geometry->sidestep_min_mm)
-                           ? p_geometry->sidestep_min_mm
+    plan.sidestep_mm = (need_mm < (int32_t)first_sidestep_min(p_geometry))
+                           ? first_sidestep_min(p_geometry)
                            : (uint16_t)need_mm;
     plan.pass_mm = (uint16_t)pass_mm;
     plan.angle_deg = plan_angle(plan.sidestep_mm, room_mm, p_geometry);
@@ -860,6 +862,22 @@ release (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
     p_act->p_reason = p_reason;
     p_ctx->b_to_follow = b_to_follow;
     enter(p_ctx, OBSTACLE_AVOID_RELEASING, now_ms);
+}
+
+/*
+ * The smallest first sidestep. A flat face stops echoing about 25 degrees off
+ * square, so a lopsided sweep reads the edge too near the line on the very side
+ * that looks free: the car has to clear edge_min_mm whatever the sweep says.
+ */
+static uint16_t
+first_sidestep_min (obstacle_avoid_geometry_t const * p_geometry)
+{
+    uint32_t const clear_mm = (uint32_t)p_geometry->edge_min_mm +
+                              p_geometry->half_width_mm + p_geometry->margin_mm;
+    return ((0u == p_geometry->edge_min_mm) ||
+            (clear_mm < p_geometry->sidestep_min_mm))
+               ? p_geometry->sidestep_min_mm
+               : (uint16_t)clear_mm;
 }
 
 /* While following, keep the heading every so often. */
@@ -1758,9 +1776,9 @@ end_fits (uint16_t end_mm, int32_t need_mm, uint32_t pass_mm,
     {
         need_mm = (int32_t)p_geometry->sidestep_max_mm;
     }
-    if (need_mm < (int32_t)p_geometry->sidestep_min_mm)
+    if (need_mm < (int32_t)first_sidestep_min(p_geometry))
     {
-        need_mm = (int32_t)p_geometry->sidestep_min_mm;
+        need_mm = (int32_t)first_sidestep_min(p_geometry);
     }
     float const angle_rad = (float)OBSTACLE_SWEEP_FIRST_DEG * DEG_TO_RAD;
     float const y_mm = (float)end_mm * sinf(angle_rad);
@@ -1958,6 +1976,9 @@ step_replan (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
     uint32_t const left_pass = pass_left(p_ctx);
     uint16_t const pass_mm =
         (left_pass > 0u) ? (uint16_t)left_pass : p_ctx->plan.pass_mm;
+    uint16_t const step_min_mm = b_any_side
+                                     ? first_sidestep_min(&p_config->geometry)
+                                     : p_config->geometry.sidestep_min_mm;
     uint16_t shift_mm[2] = {0u, 0u};
     obstacle_avoid_corridor_t side[2];
     for (uint8_t right = 0u; right < 2u; ++right)
@@ -1974,9 +1995,7 @@ step_replan (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
         if (side[right] == OBSTACLE_AVOID_CORRIDOR_SHIFT)
         {
             uint16_t const step =
-                (shift_mm[right] < p_config->geometry.sidestep_min_mm)
-                    ? p_config->geometry.sidestep_min_mm
-                    : shift_mm[right];
+                (shift_mm[right] < step_min_mm) ? step_min_mm : shift_mm[right];
             if ((p_ctx->sidesteps >= p_config->timing.max_sidesteps) ||
                 ((p_ctx->lateral_mm + step) >
                  p_config->geometry.lateral_max_mm))
@@ -2014,9 +2033,7 @@ step_replan (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
         chosen = other;
     }
     uint16_t const step_mm =
-        (shift_mm[chosen] < p_config->geometry.sidestep_min_mm)
-            ? p_config->geometry.sidestep_min_mm
-            : shift_mm[chosen];
+        (shift_mm[chosen] < step_min_mm) ? step_min_mm : shift_mm[chosen];
     if ((side[chosen] != OBSTACLE_AVOID_CORRIDOR_BLOCKED) &&
         (p_ctx->sidesteps < p_config->timing.max_sidesteps) &&
         ((p_ctx->lateral_mm + step_mm) <= p_config->geometry.lateral_max_mm))

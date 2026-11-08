@@ -53,6 +53,9 @@ typedef struct
     uint16_t depth_mm;         /**< Assumed obstacle depth (not measured). */
     uint16_t sidestep_min_mm;  /**< Smallest first sidestep. */
     uint16_t sidestep_max_mm;  /**< Largest first sidestep. */
+    uint16_t edge_min_mm;      /**< The obstacle reaches at least this far off
+                                    the line on the side passed; 0 trusts the
+                                    sweep. */
     uint16_t lateral_max_mm;   /**< Largest total offset from the line. */
     uint16_t pass_max_mm;      /**< Largest pass distance accepted. */
     uint16_t return_extra_mm;  /**< Drive past the offset to find the line. */

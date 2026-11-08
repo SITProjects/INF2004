@@ -341,6 +341,11 @@
 #define OBSTACLE_AVOID_DEPTH_MM 200u /* Largest test obstacle's depth. */
 #define OBSTACLE_AVOID_SIDESTEP_MIN_MM 100u
 #define OBSTACLE_AVOID_SIDESTEP_MAX_MM 400u
+/* An obstacle on the line reaches at least this far out on the side the car
+ * passes, whatever the sweep says: half the widest test obstacle, 230 mm. On
+ * 2026-11-08 two sidesteps planned from an edge read 0 and 30 mm off the line
+ * left the car's side 60 and 89 mm off it, and it hit a centred obstacle. */
+#define OBSTACLE_AVOID_EDGE_MIN_MM 115u
 #define OBSTACLE_AVOID_LATERAL_MAX_MM 500u
 #define OBSTACLE_AVOID_PASS_MAX_MM 1500u
 #define OBSTACLE_AVOID_RETURN_EXTRA_MM 150u
@@ -598,6 +603,10 @@
     (OBSTACLE_AVOID_PASS_MAX_MM > 65535u) ||                                   \
     (OBSTACLE_CAR_WIDTH_MM > 65535u) || (OBSTACLE_AVOID_RESUME_MIN_DEG > 255u)
 #error "Bypass distances must fit 16 bits"
+#endif
+#if (OBSTACLE_AVOID_EDGE_MIN_MM + (OBSTACLE_CAR_WIDTH_MM / 2u) +               \
+     OBSTACLE_AVOID_MARGIN_MM) > OBSTACLE_AVOID_SIDESTEP_MAX_MM
+#error "The largest sidestep must clear OBSTACLE_AVOID_EDGE_MIN_MM"
 #endif
 #if (OBSTACLE_AVOID_STRAIGHTEN_MAX_DEG > 255u) ||                              \
     (OBSTACLE_AVOID_STRAIGHTEN_STEP_MM > 65535u)
