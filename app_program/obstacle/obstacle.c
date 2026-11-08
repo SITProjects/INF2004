@@ -142,6 +142,7 @@ static void remote_reverse (bool b_held);
 static bool reverse_send (void);
 static bool reverse_finished (void);
 static void avoid_loop (robot_obstacle_result_t scan, bool b_stop);
+static void log_watch (obstacle_avoid_input_t const * p_in);
 static void apply_actions (obstacle_avoid_action_t const * p_act);
 #if TM_MQTT
 static void publish_avoid (obstacle_avoid_action_t const * p_act);
@@ -481,9 +482,29 @@ avoid_loop (robot_obstacle_result_t scan, bool b_stop)
     avoid_in.b_rejected = (events.flgptn & MOTION_EVT_REJECTED) != 0u;
     avoid_in.distance_mm = odometry.distance_mm;
     avoid_in.heading_deg = odometry.heading_deg;
+    log_watch(&avoid_in);
 
     obstacle_avoid_action_t const act = obstacle_avoid_step(&avoid, &avoid_in);
     apply_actions(&act);
+}
+
+/*
+ * Each watch reading with where the car was. A sweep from standing cannot
+ * measure the obstacle's width (2026-11-08: 11, 16 and 21 cm all echo over
+ * the same angles); ranges taken from known points on the way past may.
+ */
+static void
+log_watch (obstacle_avoid_input_t const * p_in)
+{
+    static uint8_t last_sequence;
+    bool const b_new = p_in->watch.sequence != last_sequence;
+    last_sequence = p_in->watch.sequence;
+    if (b_new && p_in->watch.b_active)
+    {
+        tm_printf((UB *)"obstacle: watch %u us d=%ld h=%ld leg=%u\n",
+                  (unsigned int)p_in->watch.echo_us, (long)p_in->distance_mm,
+                  (long)p_in->heading_deg, (unsigned int)avoid.leg);
+    }
 }
 
 /*
