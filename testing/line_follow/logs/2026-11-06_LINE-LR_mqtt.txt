@@ -1,0 +1,51 @@
+14:31:20 listening on 0.0.0.0:1884
+14:31:32 connect from 172.20.10.3:54591
+14:31:32 console 0 
+14:31:32 console 0 
+14:31:32 console 0 microT-Kernel Version 3.00
+14:31:32 console 0 
+14:31:32 console 0 
+14:31:32 console 0 === micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+14:31:32 console 0 dual-core (SMP) build, usermain on core 0
+14:31:32 console 1 line_follow: DO calibration; motors not started. Turn each potentiometer until DO flips at the tape edge (1 = black)
+14:31:32 console 1 IR calibration only: DO on GP26 left, GP27 right, GP28 barcode
+14:31:32 console 2 
+14:31:32 console 2 LINE L=0 R=0
+14:31:32 console 2 wifi: cyw43_utk_task starting (proc 1)
+14:31:32 console 2 Wi-Fi: the kernel radio service joins the network from config/wifi_secrets.h
+14:31:32 console 3 wifi: cyw43_init() ...
+14:31:32 console 3 wifi: cyw43_init() returned, bringing interface up ...
+14:31:32 console 3 barcode: Code 39 reader on GP28 started
+14:31:32 console 803 LINE L=1 R=1 *
+14:31:32 console 1453 wifi: joining "Nyx" ...
+14:31:32 console 1693 wifi: link status -> joined AP, waiting for IP (1)
+14:31:32 console 1843 LINE L=0 R=1 *
+14:31:32 console 1963 LINE L=1 R=1 *
+14:31:32 console 3963 LINE L=1 R=1
+14:31:32 console 4613 wifi: link status -> joined AP, no IP yet (2)
+14:31:32 console 4713 wifi: link up, ip=172.20.10.3
+14:31:32 console 5223 Wi-Fi connected
+14:31:32 console 5223 IP Address: 172.20.10.3
+14:31:32 console 5373 mqtt: connected to 172.20.10.2
+14:31:33 console 5963 LINE L=1 R=1
+14:31:35 console 7963 LINE L=1 R=1
+14:31:37 console 9963 LINE L=1 R=1
+14:31:39 console 11963 LINE L=1 R=1
+14:31:41 console 13963 LINE L=1 R=1
+14:31:41 console 14523 LINE L=0 R=1 *
+14:31:44 console 16523 LINE L=0 R=1
+14:31:46 console 18523 LINE L=0 R=1
+14:31:47 console 20503 LINE L=1 R=1 *
+14:31:48 console 20863 LINE L=1 R=0 *
+14:31:50 console 22863 LINE L=1 R=0
+14:31:52 console 24863 LINE L=1 R=0
+14:31:54 console 26863 LINE L=1 R=0
+14:31:54 console 27423 LINE L=1 R=1 *
+14:31:55 console 27963 LINE L=0 R=1 *
+14:31:56 console 28703 LINE L=1 R=1 *
+14:31:56 console 28883 LINE L=0 R=1 *
+14:31:58 console 30883 LINE L=0 R=1
+14:31:58 console 31063 LINE L=1 R=1 *
+14:31:58 console 31263 LINE L=1 R=0 *
+14:32:00 console 33263 LINE L=1 R=0
+14:32:01 console 34403 LINE L=1 R=1 *

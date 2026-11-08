@@ -1,0 +1,162 @@
+11:32:49 listening on 0.0.0.0:1884
+11:33:04 connect from 172.20.10.3:54591
+11:33:04 console 0 
+11:33:04 console 0 
+11:33:04 console 0 microT-Kernel Version 3.00
+11:33:04 console 0 
+11:33:04 console 0 
+11:33:04 console 0 === micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+11:33:04 console 0 dual-core (SMP) build, usermain on core 0
+11:33:04 console 1 line_follow: DO calibration; motors not started. Turn each potentiometer until DO flips at the tape edge (1 = black)
+11:33:04 console 1 IR calibration only: DO on GP26 left, GP27 right, GP28 barcode
+11:33:04 console 2 
+11:33:04 console 2 LINE L=0 R=1
+11:33:04 console 2 wifi: cyw43_utk_task starting (proc 1)
+11:33:04 console 2 Wi-Fi: the kernel radio service joins the network from config/wifi_secrets.h
+11:33:04 console 3 wifi: cyw43_init() ...
+11:33:04 console 3 wifi: cyw43_init() returned, bringing interface up ...
+11:33:04 console 3 barcode: Code 39 reader on GP28 started
+11:33:04 console 1453 wifi: joining "Nyx" ...
+11:33:04 console 1563 LINE L=0 R=0 *
+11:33:04 console 1693 wifi: link status -> joined AP, waiting for IP (1)
+11:33:04 console 1703 LINE L=1 R=1 *
+11:33:04 console 3703 LINE L=1 R=1
+11:33:04 console 4614 wifi: link status -> joined AP, no IP yet (2)
+11:33:04 console 4674 wifi: link up, ip=172.20.10.3
+11:33:04 console 4713 Wi-Fi connected
+11:33:04 console 4713 IP Address: 172.20.10.3
+11:33:04 console 4733 mqtt: connected to 172.20.10.2
+11:33:05 console 5703 LINE L=1 R=1
+11:33:07 console 7703 LINE L=1 R=1
+11:33:08 console 9163 LINE L=0 R=1 *
+11:33:08 console 9243 LINE L=0 R=0 *
+11:33:08 console 9333 barcode: edge queue overflow, scan dropped
+11:33:10 console 11243 LINE L=0 R=0
+11:33:12 console 13243 LINE L=0 R=0
+11:33:14 console 15223 LINE L=0 R=1 *
+11:33:16 console 16463 LINE L=0 R=0 *
+11:33:16 console 17023 LINE L=1 R=0 *
+11:33:17 console 17823 LINE L=0 R=0 *
+11:33:19 console 19823 LINE L=0 R=0
+11:33:21 console 21823 LINE L=0 R=0
+11:33:22 console 22813 barcode: edge queue overflow, scan dropped
+11:33:23 console 23823 LINE L=0 R=0
+11:33:25 console 25823 LINE L=0 R=0
+11:33:27 console 27823 LINE L=0 R=0
+11:33:28 console 29373 barcode: FAIL length elements=17 narrow=1 us
+11:33:28 console 29373 barcode: edge queue overflow, scan dropped
+11:33:29 console 29494 barcode: FAIL length elements=15 narrow=1 us
+11:33:29 console 29494 barcode: edge queue overflow, scan dropped
+11:33:29 console 29823 LINE L=0 R=0
+11:33:30 console 30993 barcode: edge queue overflow, scan dropped
+11:33:31 console 31653 barcode: edge queue overflow, scan dropped
+11:33:31 console 31823 LINE L=0 R=0
+11:33:31 console 31933 barcode: FAIL length elements=13 narrow=1 us
+11:33:31 console 31933 barcode: edge queue overflow, scan dropped
+11:33:31 console 31953 barcode: FAIL length elements=15 narrow=1 us
+11:33:31 console 31954 barcode: edge queue overflow, scan dropped
+11:33:31 console 31974 barcode: FAIL length elements=9 narrow=1 us
+11:33:31 console 31974 barcode: edge queue overflow, scan dropped
+11:33:33 console 33823 LINE L=0 R=0
+11:33:34 console 34613 barcode: FAIL length elements=13 narrow=1 us
+11:33:34 console 35173 barcode: edge queue overflow, scan dropped
+11:33:35 console 35633 barcode: FAIL length elements=27 narrow=1 us
+11:33:35 console 35633 barcode: edge queue overflow, scan dropped
+11:33:35 console 35823 LINE L=0 R=0
+11:33:35 console 35873 barcode: edge queue overflow, scan dropped
+11:33:36 console 36433 barcode: FAIL length elements=9 narrow=1 us
+11:33:36 console 36533 barcode: edge queue overflow, scan dropped
+11:33:36 console 37193 barcode: edge queue overflow, scan dropped
+11:33:37 console 37823 LINE L=0 R=0
+11:33:39 console 39823 LINE L=0 R=0
+11:33:41 console 41823 LINE L=0 R=0
+11:33:43 console 43823 LINE L=0 R=0
+11:33:45 console 45823 LINE L=0 R=0
+11:33:46 console 46703 LINE L=1 R=0 *
+11:33:46 console 46723 LINE L=1 R=1 *
+11:33:46 console 46943 LINE L=0 R=1 *
+11:33:46 console 46963 LINE L=0 R=0 *
+11:33:48 console 48963 LINE L=0 R=0
+11:33:48 console 49013 barcode: FAIL length elements=15 narrow=1 us
+11:33:50 console 50963 LINE L=0 R=0
+11:33:52 console 52963 LINE L=0 R=0
+11:33:53 console 54093 barcode: FAIL length elements=25 narrow=1 us
+11:33:54 console 54653 barcode: FAIL length elements=19 narrow=1 us
+11:33:54 console 54653 barcode: edge queue overflow, scan dropped
+11:33:54 console 54963 LINE L=0 R=0
+11:33:55 console 55733 barcode: FAIL length elements=9 narrow=1 us
+11:33:55 console 55733 barcode: edge queue overflow, scan dropped
+11:33:55 console 56113 barcode: FAIL length elements=11 narrow=1 us
+11:33:56 console 56963 LINE L=0 R=0
+11:33:58 console 58963 LINE L=0 R=0
+11:34:00 console 60963 LINE L=0 R=0
+11:34:00 console 61093 barcode: edge queue overflow, scan dropped
+11:34:02 console 62963 LINE L=0 R=0
+11:34:04 console 64963 LINE L=0 R=0
+11:34:06 console 66453 barcode: edge queue overflow, scan dropped
+11:34:06 console 66473 barcode: edge queue overflow, scan dropped
+11:34:06 console 66717 barcode: FAIL length elements=9 narrow=1 us
+11:34:06 console 66717 barcode: FAIL length elements=13 narrow=2 us
+11:34:06 console 66717 barcode: FAIL length elements=45 narrow=1 us
+11:34:06 console 66718 barcode: FAIL length elements=63 narrow=1 us
+11:34:06 console 66718 barcode: edge queue overflow, scan dropped
+11:34:06 console 66734 barcode: edge queue overflow, scan dropped
+11:34:06 console 66754 barcode: FAIL length elements=9 narrow=1 us
+11:34:06 console 66754 barcode: edge queue overflow, scan dropped
+11:34:06 console 66963 LINE L=0 R=0
+11:34:06 console 67173 barcode: edge queue overflow, scan dropped
+11:34:07 console 67633 barcode: FAIL length elements=11 narrow=1 us
+11:34:07 console 67633 barcode: edge queue overflow, scan dropped
+11:34:07 console 67993 barcode: edge queue overflow, scan dropped
+11:34:07 console 68113 barcode: edge queue overflow, scan dropped
+11:34:07 console 68194 barcode: FAIL length elements=55 narrow=1 us
+11:34:07 console 68194 barcode: edge queue overflow, scan dropped
+11:34:07 console 68213 barcode: edge queue overflow, scan dropped
+11:34:07 console 68234 barcode: FAIL length elements=9 narrow=2 us
+11:34:07 console 68234 barcode: edge queue overflow, scan dropped
+11:34:07 console 68254 barcode: edge queue overflow, scan dropped
+11:34:08 console 68963 LINE L=0 R=0
+11:34:10 console 70963 LINE L=0 R=0
+11:34:12 console 72963 LINE L=0 R=0
+11:34:14 console 74963 LINE L=0 R=0
+11:34:15 console 75893 barcode: edge queue overflow, scan dropped
+11:34:16 console 76963 LINE L=0 R=0
+11:34:16 console 77073 barcode: edge queue overflow, scan dropped
+11:34:18 console 78963 LINE L=0 R=0
+11:34:18 console 78993 barcode: FAIL length elements=27 narrow=2 us
+11:34:18 console 78994 barcode: edge queue overflow, scan dropped
+11:34:19 console 80133 barcode: edge queue overflow, scan dropped
+11:34:19 console 80293 barcode: edge queue overflow, scan dropped
+11:34:20 console 80493 barcode: edge queue overflow, scan dropped
+11:34:20 console 80653 barcode: edge queue overflow, scan dropped
+11:34:20 console 80963 LINE L=0 R=0
+11:34:22 console 82963 LINE L=0 R=0
+11:34:22 console 83173 barcode: edge queue overflow, scan dropped
+11:34:24 console 84413 barcode: edge queue overflow, scan dropped
+11:34:24 console 84963 LINE L=0 R=0
+11:34:25 console 85993 barcode: edge queue overflow, scan dropped
+11:34:26 console 86963 LINE L=0 R=0
+11:34:26 console 87293 barcode: edge queue overflow, scan dropped
+11:34:27 console 87513 barcode: edge queue overflow, scan dropped
+11:34:28 console 88963 LINE L=0 R=0
+11:34:29 console 89633 barcode: edge queue overflow, scan dropped
+11:34:29 console 90353 barcode: edge queue overflow, scan dropped
+11:34:30 console 90963 LINE L=0 R=0
+11:34:32 console 92793 barcode: edge queue overflow, scan dropped
+11:34:32 console 92963 LINE L=0 R=0
+11:34:33 console 93913 barcode: edge queue overflow, scan dropped
+11:34:34 console 94513 barcode: FAIL ratio elements=29 narrow=1 us
+11:34:34 console 94513 barcode: edge queue overflow, scan dropped
+11:34:34 console 94963 LINE L=0 R=0
+11:34:36 console 96963 LINE L=0 R=0
+11:34:38 console 98963 LINE L=0 R=0
+11:34:38 console 99243 LINE L=0 R=1 *
+11:34:39 console 100123 LINE L=0 R=0 *
+11:34:40 console 100483 LINE L=1 R=0 *
+11:34:40 console 101263 LINE L=0 R=0 *
+11:34:41 console 101823 LINE L=0 R=1 *
+11:34:42 console 102483 LINE L=0 R=0 *
+11:34:42 console 103423 LINE L=0 R=1 *
+11:34:43 console 104283 LINE L=0 R=0 *
+11:34:44 console 104923 LINE L=1 R=0 *
+11:34:45 console 105683 LINE L=0 R=0 *

@@ -1,0 +1,257 @@
+11:35:32 listening on 0.0.0.0:1884
+11:35:37 connect from 172.20.10.3:54591
+11:35:37 console 6 
+11:35:37 console 6 
+11:35:37 console 6 microT-Kernel Version 3.00
+11:35:37 console 6 
+11:35:37 console 6 
+11:35:37 console 6 === micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+11:35:37 console 7 dual-core (SMP) build, usermain on core 0
+11:35:37 console 8 motion: motors initialized and braked
+11:35:37 console 8 motion: encoders counting on PIO0
+11:35:37 console 8 motion: line adapter dry run; no motor API calls
+11:35:37 console 9 line_follow: digital IR line sensing started. Submitting requests to motion.
+11:35:37 console 9 all subsystems started
+11:35:37 console 10 
+11:35:37 console 10 Wi-Fi: the kernel radio service joins the network from config/wifi_secrets.h
+11:35:37 mtk3smp-pico/heartbeat/telemetry seq=0 captured_ms=1010 obstacle flags=17 edges=255 width_mm=0
+11:35:37 console 10 wifi: cyw43_utk_task starting (proc 1)
+11:35:37 console 11 wifi: cyw43_init() ...
+11:35:37 console 11 wifi: cyw43_init() returned, bringing interface up ...
+11:35:37 console 12 barcode: Code 39 reader on GP28 started
+11:35:37 console 12 [0 ms]obstacle: scanning started
+11:35:37 console 13 [0 ms]obstacle: stop request ACTIVE (sensing output only)
+11:35:37 console 160 motion: TRACK target=0 seen=1 valid=1 (dry run)
+11:35:37 console 170 terrain: IMU ready; calibrating, keep the car still on level ground
+11:35:37 console 881 [750 ms]obstacle: stop request RELEASED
+11:35:37 console 882 [750 ms]obstacle: [0x11] CLEAR dir 90
+11:35:37 console 1380 wifi: joining "Nyx" ...
+11:35:37 console 1600 wifi: link status -> joined AP, waiting for IP (1)
+11:35:37 console 3081 terrain: calibration NOT_LEVEL
+11:35:37 console 3140 [3010 ms]obstacle: stop request ACTIVE
+11:35:37 console 3141 [3010 ms]obstacle: [0x00] SCANNING dir -1
+11:35:37 console 3220 obstacle test: critical event 1 echo 557 us receipt 3220558 us flag 3220600 us elapsed 42 us
+11:35:37 console 3221 [3090 ms]obstacle: CRITICAL set
+11:35:37 mtk3smp-pico/heartbeat/telemetry seq=1 captured_ms=2010 obstacle flags=17 edges=255 width_mm=0
+11:35:37 console 3280 [3150 ms]obstacle: side scan started
+11:35:37 console 3870 line JUNCTION t=0 h=0 d=0
+11:35:37 console 4090 line JUNCTION t=0 h=0 d=0
+11:35:37 console 4221 [4090 ms]obstacle: ends L VALID 15465 us clear, R NO_ECHO 0 us clear (centre 557 us)
+11:35:37 console 4340 barcode: edge queue overflow, scan dropped
+11:35:37 console 4360 barcode: edge queue overflow, scan dropped
+11:35:37 console 4440 barcode: edge queue overflow, scan dropped
+11:35:37 console 4460 barcode: edge queue overflow, scan dropped
+11:35:37 console 4461 [4330 ms]obstacle: fine 120 deg NO_ECHO 0 us MISS
+11:35:38 console 4541 wifi: link status -> joined AP, no IP yet (2)
+11:35:38 console 4601 wifi: link up, ip=172.20.10.3
+11:35:38 console 4701 mqtt: connected to 172.20.10.2
+11:35:38 console 4705 [4570 ms]obstacle: fine 110 deg NO_ECHO 0 us MISS
+11:35:38 console 4720 Wi-Fi connected
+11:35:38 console 4720 IP Address: 172.20.10.3
+11:35:38 mtk3smp-pico/heartbeat/telemetry seq=2 captured_ms=3010 obstacle flags=0 edges=255 width_mm=0
+11:35:43 disconnect 172.20.10.3:54591
+11:35:43 connect from 172.20.10.3:54591
+11:35:43 console 0 
+11:35:43 console 0 
+11:35:43 console 0 microT-Kernel Version 3.00
+11:35:43 console 0 
+11:35:43 console 0 
+11:35:43 console 0 === micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+11:35:43 console 0 dual-core (SMP) build, usermain on core 0
+11:35:43 console 1 motion: motors initialized and braked
+11:35:43 console 1 motion: encoders counting on PIO0
+11:35:43 console 1 motion: line adapter dry run; no motor API calls
+11:35:43 console 2 line_follow: digital IR line sensing started. Submitting requests to motion.
+11:35:43 console 2 all subsystems started
+11:35:43 console 3 
+11:35:43 console 3 Wi-Fi: the kernel radio service joins the network from config/wifi_secrets.h
+11:35:43 mtk3smp-pico/heartbeat/telemetry seq=0 captured_ms=1010 obstacle flags=17 edges=255 width_mm=0
+11:35:43 console 4 wifi: cyw43_utk_task starting (proc 1)
+11:35:43 console 4 wifi: cyw43_init() ...
+11:35:43 console 5 wifi: cyw43_init() returned, bringing interface up ...
+11:35:43 console 5 barcode: Code 39 reader on GP28 started
+11:35:43 console 6 [0 ms]obstacle: scanning started
+11:35:43 console 6 [0 ms]obstacle: stop request ACTIVE (sensing output only)
+11:35:43 console 153 motion: TRACK target=0 seen=1 valid=1 (dry run)
+11:35:43 console 183 terrain: IMU ready; calibrating, keep the car still on level ground
+11:35:43 console 875 [750 ms]obstacle: stop request RELEASED
+11:35:43 console 875 [750 ms]obstacle: [0x11] CLEAR dir 90
+11:35:43 console 1413 wifi: joining "Nyx" ...
+11:35:43 console 1653 wifi: link status -> joined AP, waiting for IP (1)
+11:35:43 console 1663 line JUNCTION t=0 h=0 d=0
+11:35:43 console 4574 wifi: link status -> joined AP, no IP yet (2)
+11:35:43 console 4635 wifi: link up, ip=172.20.10.3
+11:35:43 console 4714 Wi-Fi connected
+11:35:43 console 4714 IP Address: 172.20.10.3
+11:35:43 console 4774 mqtt: connected to 172.20.10.2
+11:35:43 mtk3smp-pico/heartbeat/telemetry seq=1 captured_ms=1540 line JUNCTION t=0 h=0 d=0
+11:35:43 console 4963 [TEST] === test run start ===
+11:35:43 mtk3smp-pico/heartbeat/telemetry seq=2 captured_ms=2010 obstacle flags=17 edges=255 width_mm=0
+11:35:43 mtk3smp-pico/heartbeat/telemetry seq=3 captured_ms=3010 obstacle flags=17 edges=255 width_mm=0
+11:35:43 mtk3smp-pico/heartbeat/telemetry seq=4 captured_ms=4010 obstacle flags=17 edges=255 width_mm=0
+11:35:43 mtk3smp-pico/heartbeat/telemetry seq=5 captured_ms=5010 obstacle flags=17 edges=255 width_mm=0
+11:35:44 console 6063 [TEST] OBS-U01 PASS  scan task runs and sleeps between scans
+11:35:44 console 6064 [TEST] OBS-U02 PASS  servo PWM slice runs at 50 Hz
+11:35:44 console 6065 [TEST] OBS-U05 PASS  sweep classify: HIT, MISS, INVALID without echo wrap
+11:35:44 console 6065 [TEST] OBS-U06 PASS  width: wall past both ends is a 346 mm lower bound
+11:35:44 console 6066 [TEST] OBS-U07 PASS  width: centred 200 mm box at 250 mm reads 204 mm
+11:35:44 console 6067 [TEST] OBS-U08 PASS  width: shifted box, left not found, 155 mm lower bound
+11:46:02 disconnect 172.20.10.3:54591
+11:46:02 connect from 172.20.10.3:54591
+11:46:02 console 0 
+11:46:02 console 0 
+11:46:02 console 0 microT-Kernel Version 3.00
+11:46:02 console 0 
+11:46:02 console 0 
+11:46:02 console 0 === micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+11:46:02 console 0 dual-core (SMP) build, usermain on core 0
+11:46:02 console 1 motion: motors initialized and braked
+11:46:02 console 1 motion: encoders counting on PIO0
+11:46:02 console 1 motion: line adapter dry run; no motor API calls
+11:46:02 console 2 line_follow: digital IR line sensing started. Submitting requests to motion.
+11:46:02 console 2 all subsystems started
+11:46:02 console 3 
+11:46:02 console 3 Wi-Fi: the kernel radio service joins the network from config/wifi_secrets.h
+11:46:02 mtk3smp-pico/heartbeat/telemetry seq=0 captured_ms=1010 obstacle flags=0 edges=255 width_mm=0
+11:46:02 console 4 wifi: cyw43_utk_task starting (proc 1)
+11:46:02 console 4 wifi: cyw43_init() ...
+11:46:02 console 5 wifi: cyw43_init() returned, bringing interface up ...
+11:46:02 console 5 barcode: Code 39 reader on GP28 started
+11:46:02 console 6 [0 ms]obstacle: scanning started
+11:46:02 console 6 [0 ms]obstacle: stop request ACTIVE (sensing output only)
+11:46:02 console 153 motion: TRACK target=0 seen=0 valid=1 (dry run)
+11:46:02 console 183 terrain: IMU ready; calibrating, keep the car still on level ground
+11:46:02 console 875 [750 ms]obstacle: side scan started
+11:46:02 console 1354 wifi: joining "Nyx" ...
+11:46:03 console 1593 wifi: link status -> joined AP, waiting for IP (1)
+11:46:03 console 1794 [1670 ms]obstacle: ends L NO_ECHO 0 us clear, R VALID 1814 us clear (centre 937 us)
+11:46:03 console 2014 [1890 ms]obstacle: fine 120 deg VALID 1039 us HIT
+11:46:03 console 2334 [2210 ms]obstacle: fine 60 deg VALID 5001 us MISS
+11:46:03 console 2554 [2430 ms]obstacle: fine 70 deg VALID 1112 us HIT
+11:46:03 console 2555 [2430 ms]obstacle: width 108 mm hits 70..120 bounds 76.0..114.0
+11:46:03 console 2556 [2430 ms]obstacle: side scan completed after 1680 ms
+11:46:03 mtk3smp-pico/heartbeat/telemetry seq=1 captured_ms=2010 obstacle flags=0 edges=255 width_mm=0
+11:46:03 console 2557 [2430 ms]obstacle: [0x6A] PATH_FOUND dir 50 width 108 mm hits 70..120 (L found, R found)
+11:46:03 console 2934 [2810 ms]obstacle: side scan started
+11:46:03 console 3854 [3730 ms]obstacle: ends L NO_ECHO 0 us clear, R VALID 1331 us blocked (centre 952 us)
+11:46:03 console 4194 [4070 ms]obstacle: fine 60 deg VALID 4545 us MISS
+11:46:03 console 4414 [4290 ms]obstacle: fine 70 deg VALID 1111 us HIT
+11:46:03 console 4416 [4290 ms]obstacle: width 175 mm hits 70..130 bounds 76.0..130.0
+11:46:03 console 4416 [4290 ms]obstacle: side scan completed after 1480 ms
+11:46:03 console 4417 [4290 ms]obstacle: [0x2A] PATH_FOUND dir 50 width 175 mm hits 70..130 (L found, R not found)
+11:46:03 console 4514 wifi: link status -> joined AP, no IP yet (2)
+11:46:03 console 4635 wifi: link up, ip=172.20.10.3
+11:46:03 console 4714 Wi-Fi connected
+11:46:03 console 4715 IP Address: 172.20.10.3
+11:46:03 console 4755 mqtt: connected to 172.20.10.2
+11:46:03 console 4817 [4690 ms]obstacle: side scan started
+11:46:03 mtk3smp-pico/heartbeat/telemetry seq=2 captured_ms=3010 obstacle flags=0 edges=114 width_mm=108
+11:46:03 console 4853 [TEST] === test run start ===
+11:46:03 mtk3smp-pico/heartbeat/telemetry seq=3 captured_ms=4010 obstacle flags=0 edges=114 width_mm=108
+11:46:03 mtk3smp-pico/heartbeat/telemetry seq=4 captured_ms=5010 obstacle flags=0 edges=130 width_mm=175
+11:46:03 console 5754 [5630 ms]obstacle: ends L NO_ECHO 0 us clear, R VALID 1309 us blocked (centre 950 us)
+11:46:04 console 5954 [TEST] OBS-U01 PASS  scan task runs and sleeps between scans
+11:46:04 console 5955 [TEST] OBS-U02 PASS  servo PWM slice runs at 50 Hz
+11:46:04 console 5955 [TEST] OBS-U05 PASS  sweep classify: HIT, MISS, INVALID without echo wrap
+11:46:04 console 5956 [TEST] OBS-U06 PASS  width: wall past both ends is a 346 mm lower bound
+11:46:04 console 5957 [TEST] OBS-U07 PASS  width: centred 200 mm box at 250 mm reads 204 mm
+11:46:04 console 5957 [TEST] OBS-U08 PASS  width: shifted box, left not found, 155 mm lower bound
+11:46:04 console 5958 [TEST] OBS-U09 PASS  width: 20 mm pole reads 22 mm; over-correction collapses
+11:46:04 console 5959 [TEST] OBS-U11 PASS  width: saturates at 511 mm; invalid input unavailable
+11:46:04 console 5960 [TEST] OBS-U35 PASS  plan left: sidestep and pass from the formulas
+11:46:04 console 5960 [TEST] OBS-U36 PASS  plan: measured clearance wins over a shorter sidestep
+11:46:04 console 5961 [TEST] OBS-U37 PASS  plan limits: capped best effort; unknown edge is max
+11:46:04 console 5962 [TEST] OBS-U38 PASS  plan: BLOCKED goes round a found edge; no edge, no plan
+11:46:04 console 5963 [TEST] OBS-U39 PASS  width: centred box edges at +/-102 mm; unavailable is 0
+11:46:04 console 5964 [TEST] OBS-U40 PASS  range: from the pivot, radial offset added once
+11:46:04 console 5965 [TEST] OBS-U41 PASS  corridor: clear, shift to the far side, limits, invalid
+11:46:04 console 5966 [TEST] OBS-U42 PASS  avoid: held until clear at start-up; stop and its ack
+11:46:04 console 5967 [TEST] OBS-U43 PASS  avoid: no send while inhibited; pending; kernel faults
+11:46:04 console 5968 [TEST] OBS-U44 PASS  avoid: latched stop across turns; fresh result after rearm
+11:46:04 console 5971 [TEST] OBS-U45 PASS  avoid: extra sidesteps lengthen the return; limit holds
+11:46:04 console 5973 [TEST] OBS-U46 PASS  avoid: line ends the return early; one search, then FOLLOW
+11:46:04 console 5981 [TEST] OBS-U47 PASS  avoid: one retry from odometry; FAULT never releases
+11:46:04 console 5985 [TEST] OBS-U48 PASS  avoid: blocked moves resume; turns ignore stop; full box
+11:46:04 console 5986 [TEST] OBS-U55 PASS  avoid: angle from the room ahead; diagonals and pass sized
+11:46:04 console 5987 [TEST] OBS-U56 PASS  avoid: no re-checks; stop ignored, CRITICAL holds, resumes
+11:46:04 console 5988 [TEST] OBS-U57 PASS  avoid: side scans off for the bypass; CRITICAL backs off
+11:46:04 console 5990 [TEST] OBS-U58 PASS  avoid: CRITICAL after back-offs re-sweeps and re-plans
+11:46:04 console 5991 [TEST] OBS-U59 PASS  avoid: too close reverses to the minimum room first
+11:46:04 console 5992 [TEST] OBS-U60 PASS  plan: only a side with free space is chosen
+11:46:04 console 5993 [TEST] OBS-U61 PASS  avoid: CRITICAL during a turn backs off, then turns on
+11:46:04 console 5998 [TEST] OBS-U62 PASS  avoid: no side fits: reverse and sweep again, no 90 look
+11:46:04 console 6001 [TEST] OBS-U63 PASS  avoid: complete the pass, then reacquire the route; safety first
+11:46:04 console 6002 [TEST] OBS-U64 PASS  plan: use the scanner's farther clear side, not width
+11:46:04 console 6007 [TEST] OBS-U65 PASS  replan: closest sector return ranks usable sides
+11:46:04 console 6008 [TEST] OBS-U66 PASS  plan: a clear end counts only if the car fits past it
+11:46:04 console 6009 [TEST] OBS-U67 PASS  avoid: watch the obstacle side and widen while driving
+11:46:04 console 6011 [TEST] OBS-U69 PASS  avoid: turn back to the heading the car stopped on
+11:46:04 mtk3smp-pico/heartbeat/telemetry seq=5 captured_ms=6010 obstacle flags=0 edges=130 width_mm=175
+11:46:04 console 6011 [TEST] OBS-U10 FAIL  packed obstacle fields clamp without changing neighbours   (../app_program/obstacle/obstacle_test.c:292)
+11:46:04 console 6012 [TEST] OBS-U16 PASS  ping median ignores no-echo samples and averages two
+11:46:04 console 6012 [TEST] OBS-U17 PASS  position result is FAULT, NO_ECHO or VALID
+11:46:04 console 6013 [TEST] OBS-U18 PASS  centre: no echo or far is CLEAR, near scans, fault UNKNOWN
+11:46:04 console 6015 [TEST] OBS-U19 PASS  sides: miss the obstacle, farther wins, ties go left
+11:46:04 console 6026 [TEST] OBS-U52 PASS  side clearance agrees with width MISS and threshold
+11:46:04 console 6093 [5970 ms]obstacle: fine 60 deg VALID 4487 us MISS
+11:46:04 console 6313 [6190 ms]obstacle: fine 70 deg VALID 1088 us HIT
+11:46:04 console 6314 [6190 ms]obstacle: width 172 mm hits 70..130 bounds 76.0..130.0
+11:46:04 console 6315 [6190 ms]obstacle: side scan completed after 1500 ms
+11:46:04 console 6315 [6190 ms]obstacle: [0x2A] PATH_FOUND dir 50 width 172 mm hits 70..130 (L found, R not found)
+11:46:04 console 6693 [6570 ms]obstacle: side scan started
+11:46:05 mtk3smp-pico/heartbeat/telemetry seq=6 captured_ms=7010 obstacle flags=0 edges=130 width_mm=172
+11:46:05 console 7614 [7490 ms]obstacle: ends L VALID 4671 us clear, R VALID 1306 us blocked (centre 952 us)
+11:46:06 console 7953 [7830 ms]obstacle: fine 60 deg VALID 4513 us MISS
+11:46:06 mtk3smp-pico/heartbeat/telemetry seq=7 captured_ms=8010 obstacle flags=0 edges=130 width_mm=172
+11:46:06 console 8175 [8050 ms]obstacle: fine 70 deg VALID 1062 us HIT
+11:46:06 console 8176 [8050 ms]obstacle: width 170 mm hits 70..130 bounds 76.0..130.0
+11:46:06 console 8176 [8050 ms]obstacle: side scan completed after 1480 ms
+11:46:06 console 8177 [8050 ms]obstacle: [0x2A] PATH_FOUND dir 50 width 170 mm hits 70..130 (L found, R not found)
+11:46:06 console 8533 [8410 ms]obstacle: side scan started
+11:46:07 mtk3smp-pico/heartbeat/telemetry seq=8 captured_ms=9010 obstacle flags=0 edges=130 width_mm=170
+11:46:07 console 9473 [9350 ms]obstacle: ends L NO_ECHO 0 us clear, R VALID 1818 us clear (centre 954 us)
+11:46:07 console 9693 [9570 ms]obstacle: fine 120 deg VALID 1016 us HIT
+11:46:08 console 10013 [9890 ms]obstacle: fine 60 deg VALID 4955 us MISS
+11:46:08 mtk3smp-pico/heartbeat/telemetry seq=9 captured_ms=10010 obstacle flags=0 edges=130 width_mm=170
+11:46:08 console 10233 [10110 ms]obstacle: fine 70 deg VALID 1062 us HIT
+11:46:08 console 10234 [10110 ms]obstacle: width 104 mm hits 70..120 bounds 76.0..114.0
+11:46:08 console 10235 [10110 ms]obstacle: side scan completed after 1700 ms
+11:46:08 console 10235 [10110 ms]obstacle: [0x6A] PATH_FOUND dir 50 width 104 mm hits 70..120 (L found, R found)
+11:46:08 console 10613 [10490 ms]obstacle: side scan started
+11:46:09 mtk3smp-pico/heartbeat/telemetry seq=10 captured_ms=11010 obstacle flags=0 edges=114 width_mm=104
+11:46:09 console 11553 [11430 ms]obstacle: ends L NO_ECHO 0 us clear, R VALID 1192 us blocked (centre 953 us)
+11:46:10 console 11893 [11770 ms]obstacle: fine 60 deg VALID 4687 us MISS
+11:46:10 console 12113 [11990 ms]obstacle: fine 70 deg VALID 1068 us HIT
+11:46:10 console 12114 [11990 ms]obstacle: width 159 mm hits 70..130 bounds 76.0..130.0
+11:46:10 console 12115 [11990 ms]obstacle: side scan completed after 1500 ms
+11:46:10 console 12115 [11990 ms]obstacle: [0x2A] PATH_FOUND dir 50 width 159 mm hits 70..130 (L found, R not found)
+11:46:10 mtk3smp-pico/heartbeat/telemetry seq=11 captured_ms=12010 obstacle flags=42 edges=130 width_mm=159
+11:46:10 console 12473 [12350 ms]obstacle: side scan started
+11:46:11 mtk3smp-pico/heartbeat/telemetry seq=12 captured_ms=13010 obstacle flags=0 edges=130 width_mm=159
+11:46:11 console 13413 [13290 ms]obstacle: ends L NO_ECHO 0 us clear, R VALID 1311 us blocked (centre 960 us)
+11:46:11 console 13753 [13630 ms]obstacle: fine 60 deg VALID 4601 us MISS
+11:46:12 console 13973 [13850 ms]obstacle: fine 70 deg VALID 1067 us HIT
+11:46:12 console 13974 [13850 ms]obstacle: width 171 mm hits 70..130 bounds 76.0..130.0
+11:46:12 console 13975 [13850 ms]obstacle: side scan completed after 1500 ms
+11:46:12 console 13975 [13850 ms]obstacle: [0x2A] PATH_FOUND dir 50 width 171 mm hits 70..130 (L found, R not found)
+11:46:12 mtk3smp-pico/heartbeat/telemetry seq=13 captured_ms=14010 obstacle flags=42 edges=130 width_mm=171
+11:46:12 console 14353 [14230 ms]obstacle: side scan started
+11:46:13 mtk3smp-pico/heartbeat/telemetry seq=14 captured_ms=15010 obstacle flags=0 edges=130 width_mm=171
+11:46:13 console 15313 [15190 ms]obstacle: ends L NO_ECHO 0 us clear, R VALID 1332 us blocked (centre 960 us)
+11:46:13 console 15673 [15550 ms]obstacle: fine 60 deg NO_ECHO 0 us MISS
+11:46:14 console 15893 [15770 ms]obstacle: fine 70 deg VALID 1044 us HIT
+11:46:14 console 15894 [15770 ms]obstacle: width 173 mm hits 70..130 bounds 76.0..130.0
+11:46:14 console 15895 [15770 ms]obstacle: side scan completed after 1540 ms
+11:46:14 console 15895 [15770 ms]obstacle: [0x2A] PATH_FOUND dir 50 width 173 mm hits 70..130 (L found, R not found)
+11:46:14 mtk3smp-pico/heartbeat/telemetry seq=15 captured_ms=16010 obstacle flags=42 edges=130 width_mm=173
+11:46:14 console 16273 [16150 ms]obstacle: side scan started
+11:46:15 mtk3smp-pico/heartbeat/telemetry seq=16 captured_ms=17010 obstacle flags=0 edges=130 width_mm=173
+11:46:15 console 17193 [17070 ms]obstacle: ends L NO_ECHO 0 us clear, R VALID 1872 us clear (centre 954 us)
+11:46:15 console 17413 [17290 ms]obstacle: fine 120 deg VALID 1043 us HIT
+11:46:15 console 17753 [17630 ms]obstacle: fine 60 deg NO_ECHO 0 us MISS
+11:46:16 console 17973 [17850 ms]obstacle: fine 70 deg VALID 1117 us HIT
+11:46:16 console 17974 [17850 ms]obstacle: width 108 mm hits 70..120 bounds 76.0..114.0
+11:46:16 console 17975 [17850 ms]obstacle: side scan completed after 1700 ms
+11:46:16 console 17975 [17850 ms]obstacle: [0x6A] PATH_FOUND dir 50 width 108 mm hits 70..120 (L found, R found)
+11:46:16 mtk3smp-pico/heartbeat/telemetry seq=17 captured_ms=18010 obstacle flags=106 edges=114 width_mm=108
+11:46:16 console 18353 [18230 ms]obstacle: side scan started

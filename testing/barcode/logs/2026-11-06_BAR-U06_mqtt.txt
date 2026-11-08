@@ -1,0 +1,197 @@
+17:02:10 listening on 0.0.0.0:1884
+17:12:17 connect from 172.20.10.3:54591
+17:12:17 console 0 
+17:12:17 console 0 
+17:12:17 console 0 microT-Kernel Version 3.00
+17:12:17 console 0 
+17:12:17 console 0 
+17:12:17 console 0 === micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+17:12:17 console 0 dual-core (SMP) build, usermain on core 0
+17:12:17 console 1 obstacle: motors held until the path is confirmed clear
+17:12:17 console 1 motion: motors initialized and braked
+17:12:17 console 1 motion: encoders counting on PIO0
+17:12:17 console 2 motion: tMotion line adapter at 80 mm/s; 5 s startup delay, no run cutoff
+17:12:17 console 3 Wi-Fi: the kernel radio service joins the network from config/wifi_secrets.h
+17:12:17 console 3 all subsystems started
+17:12:17 console 3 
+17:12:18 mtk3smp-pico/heartbeat/telemetry seq=0 captured_ms=750 avoid WAIT_CLEAR>RELEASING path clear
+17:12:18 console 4 wifi: cyw43_utk_task starting (proc 1)
+17:12:18 console 5 wifi: cyw43_init() ...
+17:12:18 console 5 wifi: cyw43_init() returned, bringing interface up ...
+17:12:18 console 5 barcode: Code 39 reader on GP28 started
+17:12:18 console 6 [0 ms]obstacle: scanning started
+17:12:18 console 6 [0 ms]obstacle: stop request ACTIVE (sensing output only)
+17:12:18 console 153 terrain: IMU ready; calibrating, keep the car still on level ground
+17:12:18 console 223 terrain: compass ready
+17:12:18 console 503 barcode: B=1 raw=0 kept=0
+17:12:18 console 874 [750 ms]obstacle: avoid WAIT_CLEAR -> RELEASING (path clear)
+17:12:18 console 875 [750 ms]obstacle: stop request RELEASED
+17:12:18 console 875 [750 ms]obstacle: [0x11] CLEAR dir 90
+17:12:18 console 894 [770 ms]obstacle: avoid RELEASING -> SEND (resume following)
+17:12:18 console 914 [790 ms]obstacle: avoid SEND -> IDLE (following)
+17:12:18 console 1013 barcode: B=1 raw=0 kept=0
+17:12:18 console 1433 wifi: joining "Nyx" ...
+17:12:18 console 1514 barcode: B=0 raw=75 kept=1
+17:12:18 console 1673 wifi: link status -> joined AP, waiting for IP (1)
+17:12:18 console 2033 barcode: B=0 raw=0 kept=0
+17:12:18 console 2533 barcode: B=0 raw=0 kept=0
+17:12:18 console 3053 barcode: B=0 raw=0 kept=0
+17:12:18 mtk3smp-pico/heartbeat/telemetry seq=1 captured_ms=770 avoid RELEASING>SEND resume following
+17:12:18 console 3573 barcode: B=0 raw=0 kept=0
+17:12:18 console 4093 barcode: B=0 raw=0 kept=0
+17:12:18 console 4593 barcode: B=0 raw=0 kept=0
+17:12:18 console 4614 wifi: link status -> joined AP, no IP yet (2)
+17:12:18 console 4655 wifi: link up, ip=172.20.10.3
+17:12:18 console 4713 Wi-Fi connected
+17:12:18 console 4714 IP Address: 172.20.10.3
+17:12:18 console 5093 barcode: B=0 raw=0 kept=0
+17:12:18 console 5133 line_follow: digital IR line sensing started. Submitting requests to motion. Built Nov  6 2026 08:58:24
+17:12:18 console 5513 LT t=0 h=0 d=22 00 c=294 m=-650,44 n=37
+17:12:18 console 5593 barcode: B=0 raw=0 kept=0
+17:12:18 console 5654 mqtt: connected to 172.20.10.2
+17:12:18 console 5659 terrain: speed CRUISING t 5.65 s
+17:12:18 console 5913 LT t=0 h=0 d=53 00 c=298 m=-653,70 n=39
+17:12:18 console 6093 barcode: B=0 raw=0 kept=0
+17:12:18 mtk3smp-pico/heartbeat/telemetry seq=2 captured_ms=790 avoid SEND>IDLE following
+17:12:18 console 6313 LT t=0 h=0 d=86 00 c=299 m=-652,77 n=41
+17:12:19 console 6596 barcode: B=1 raw=6 kept=3
+17:12:19 mtk3smp-pico/heartbeat/telemetry seq=3 captured_ms=1010 obstacle flags=17 edges=255 width_mm=0
+17:12:19 console 6713 LT t=0 h=0 d=118 00 c=302 m=-649,96 n=43
+17:12:19 mtk3smp-pico/heartbeat/telemetry seq=4 captured_ms=2010 obstacle flags=17 edges=255 width_mm=0
+17:12:19 mtk3smp-pico/heartbeat/telemetry seq=5 captured_ms=3010 obstacle flags=17 edges=255 width_mm=0
+17:12:19 mtk3smp-pico/heartbeat/telemetry seq=6 captured_ms=4010 obstacle flags=17 edges=255 width_mm=0
+17:12:19 console 7097 barcode: B=1 raw=7 kept=4
+17:12:19 console 7115 LT t=0 h=0 d=152 00 c=305 m=-646,115 n=45
+17:12:19 mtk3smp-pico/heartbeat/telemetry seq=7 captured_ms=5010 obstacle flags=17 edges=255 width_mm=0
+17:12:19 mtk3smp-pico/heartbeat/telemetry seq=8 captured_ms=6010 obstacle flags=17 edges=255 width_mm=0
+17:12:19 mtk3smp-pico/heartbeat/telemetry seq=9 captured_ms=7010 obstacle flags=17 edges=255 width_mm=0
+17:12:19 console 7515 LT t=0 h=0 d=185 00 c=307 m=-645,132 n=47
+17:12:19 console 7614 barcode: B=1 raw=11 kept=6
+17:12:19 console 7774 LT t=0 h=0 d=204 10 c=308 m=-632,132 n=49
+17:12:20 console 7795 LT t=0 h=0 d=206 00 c=308 m=-632,132 n=49
+17:12:20 console 7813 LT t=0 h=0 d=208 10 c=308 m=-632,132 n=49
+17:12:20 console 7893 LT t=15 h=0 d=214 00 c=308 m=-632,132 n=49
+17:12:20 console 7975 terrain: TURNING t 7.95 s
+17:12:20 console 7976 terrain: summary humps 0 (mm:) highest 0 mm collisions 0 turns 1 msg 00 00 01 00 00 00 00 00 00 00 00
+17:12:20 console 8134 barcode: B=1 raw=26 kept=2
+17:12:20 mtk3smp-pico/heartbeat/telemetry seq=10 captured_ms=8010 obstacle flags=17 edges=255 width_mm=0
+17:12:21 console 8214 LT t=19 h=7 d=239 01 c=316 m=-599,167 n=51
+17:12:21 mtk3smp-pico/heartbeat/telemetry seq=11 captured_ms=8170 line JUNCTION STRAIGHT t=10 h=10 d=246
+17:12:21 console 8235 LT t=-7 h=8 d=241 11 c=316 m=-599,167 n=51
+17:12:21 console 8294 line JUNCTION STRAIGHT t=10 h=10 d=246
+17:12:21 console 8453 LT t=9 h=9 d=259 01 c=320 m=-578,180 n=52
+17:12:21 console 8513 barcode: FAIL length elements=15 narrow=40060 us
+17:12:21 console 8514 barcode: widths 583 2384 458 1100 1922 1077 1787 1066 404 1031 400 1058 1901 1397 3245
+17:12:21 console 8556 terrain: STRAIGHT t 8.55 s
+17:12:21 console 8633 LT t=-11 h=4 d=274 00 c=321 m=-567,183 n=53
+17:12:21 console 8634 barcode: B=0 raw=7 kept=5
+17:12:21 console 8723 terrain: TURNING t 8.71 s
+17:12:21 console 8723 terrain: summary humps 0 (mm:) highest 0 mm collisions 0 turns 2 msg 00 00 02 00 00 00 00 00 00 00 00
+17:12:21 console 8833 barcode: short scan elements=5
+17:12:21 console 8834 barcode: widths 353 477 223 519 244
+17:12:21 console 9033 LT t=-18 h=-6 d=306 00 c=313 m=-605,149 n=55
+17:12:21 console 9074 LT t=-20 h=-8 d=309 10 c=309 m=-611,123 n=56
+17:12:21 console 9153 barcode: B=0 raw=11 kept=6
+17:12:21 console 9173 LT t=6 h=-9 d=318 00 c=309 m=-611,123 n=56
+17:12:21 mtk3smp-pico/heartbeat/telemetry seq=12 captured_ms=9010 obstacle flags=17 edges=255 width_mm=0
+17:12:21 console 9213 LT t=-6 h=-7 d=321 10 c=306 m=-620,102 n=57
+17:12:21 console 9233 LT t=-4 h=-6 d=323 00 c=306 m=-620,102 n=57
+17:12:21 console 9573 LT t=12 h=0 d=352 10 c=313 m=-588,136 n=60
+17:12:21 console 9613 LT t=16 h=1 d=355 00 c=313 m=-588,136 n=60
+17:12:21 console 9656 barcode: short scan elements=5
+17:12:21 console 9656 barcode: widths 228 727 1327 1216 2536
+17:12:21 console 9657 barcode: B=0 raw=4 kept=2
+17:12:22 console 9855 LT t=16 h=6 d=373 01 c=323 m=-547,171 n=62
+17:12:22 console 10034 LT t=-11 h=4 d=388 00 c=326 m=-534,182 n=63
+17:12:22 mtk3smp-pico/heartbeat/telemetry seq=13 captured_ms=10010 obstacle flags=17 edges=255 width_mm=0
+17:12:22 console 10174 barcode: B=0 raw=5 kept=2
+17:12:22 console 10393 LT t=-16 h=-4 d=418 10 c=319 m=-540,133 n=66
+17:12:22 console 10513 LT t=12 h=-3 d=428 00 c=319 m=-540,133 n=66
+17:12:22 console 10693 barcode: B=0 raw=0 kept=0
+17:12:23 console 10914 LT t=16 h=4 d=461 00 c=325 m=-505,132 n=69
+17:12:23 console 10973 LT t=18 h=6 d=466 01 c=325 m=-505,132 n=69
+17:12:23 mtk3smp-pico/heartbeat/telemetry seq=14 captured_ms=11010 obstacle flags=17 edges=255 width_mm=0
+17:12:23 console 11193 LT t=-13 h=2 d=483 00 c=333 m=-477,159 n=70
+17:12:23 console 11194 barcode: B=0 raw=0 kept=0
+17:12:23 console 11593 LT t=-19 h=-7 d=516 00 c=331 m=-473,131 n=72
+17:12:24 console 11693 LT t=-23 h=-11 d=527 11 c=325 m=-482,98 n=73
+17:12:24 console 11714 barcode: B=1 raw=2 kept=1
+17:12:24 console 11754 line JUNCTION STRAIGHT t=-14 h=-14 d=533
+17:12:24 mtk3smp-pico/heartbeat/telemetry seq=15 captured_ms=11630 line JUNCTION STRAIGHT t=-14 h=-14 d=533
+17:12:24 console 12093 LT t=-13 h=-13 d=565 11 c=337 m=-452,151 n=75
+17:12:24 mtk3smp-pico/heartbeat/telemetry seq=16 captured_ms=12010 obstacle flags=17 edges=255 width_mm=0
+17:12:24 console 12196 terrain: STRAIGHT t 12.17 s
+17:12:24 console 12214 barcode: B=1 raw=0 kept=0
+17:12:24 console 12493 LT t=-13 h=-13 d=598 11 c=325 m=-500,130 n=77
+17:12:24 console 12733 barcode: B=1 raw=0 kept=0
+17:12:24 console 12815 LT t=-13 h=-13 d=625 01 c=308 m=-561,72 n=78
+17:12:25 console 13054 terrain: TURNING t 13.03 s
+17:12:25 console 13054 terrain: summary humps 0 (mm:) highest 0 mm collisions 0 turns 3 msg 00 00 03 00 00 00 00 00 00 00 00
+17:12:25 console 13113 LT t=-42 h=-27 d=649 00 c=299 m=-631,63 n=80
+17:12:25 mtk3smp-pico/heartbeat/telemetry seq=17 captured_ms=13010 obstacle flags=17 edges=255 width_mm=0
+17:12:25 console 13234 barcode: B=0 raw=8 kept=1
+17:12:25 console 13513 LT t=-50 h=-38 d=682 00 c=299 m=-653,75 n=81
+17:12:25 console 13754 barcode: B=0 raw=0 kept=0
+17:12:26 console 13913 LT t=-67 h=-55 d=708 00 c=301 m=-654,93 n=83
+17:12:26 console 14114 LT t=-73 h=-61 d=723 10 c=297 m=-675,73 n=84
+17:12:26 mtk3smp-pico/heartbeat/telemetry seq=18 captured_ms=14010 obstacle flags=17 edges=255 width_mm=0
+17:12:26 console 14233 LT t=-45 h=-60 d=732 00 c=297 m=-675,73 n=84
+17:12:26 console 14255 barcode: B=0 raw=0 kept=0
+17:12:27 console 14633 LT t=-41 h=-53 d=761 00 c=303 m=-655,111 n=86
+17:12:27 mtk3smp-pico/heartbeat/telemetry seq=19 captured_ms=15010 obstacle flags=17 edges=255 width_mm=0
+17:12:27 console 14753 LT t=-37 h=-49 d=771 01 c=303 m=-655,111 n=86
+17:12:27 console 14774 barcode: B=0 raw=4 kept=2
+17:12:27 console 14933 LT t=-67 h=-52 d=786 00 c=311 m=-629,154 n=87
+17:12:27 console 15293 barcode: B=1 raw=10 kept=5
+17:12:27 console 15333 LT t=-75 h=-63 d=820 00 c=304 m=-645,110 n=88
+17:12:27 console 15394 LT t=-77 h=-65 d=825 10 c=299 m=-665,83 n=89
+17:12:27 console 15414 LT t=-78 h=-66 d=827 00 c=299 m=-665,83 n=89
+17:12:27 console 15614 barcode: FAIL length elements=9 narrow=21571 us
+17:12:27 console 15614 barcode: widths 890 2146 215 612 1644 761 1297 688 351
+17:12:27 console 15794 barcode: B=0 raw=9 kept=5
+17:12:28 console 15815 LT t=-96 h=-84 d=860 00 c=290 m=-675,27 n=90
+17:12:28 mtk3smp-pico/heartbeat/telemetry seq=20 captured_ms=16010 obstacle flags=17 edges=255 width_mm=0
+17:12:28 console 16213 LT t=-115 h=-103 d=893 00 c=270 m=-689,-96 n=92
+17:12:28 console 16315 barcode: B=0 raw=0 kept=0
+17:12:28 console 16613 LT t=-136 h=-124 d=923 00 c=256 m=-695,-179 n=93
+17:12:29 console 16833 barcode: B=1 raw=17 kept=3
+17:12:29 console 16935 [16810 ms]obstacle: avoid IDLE -> STOPPING (stop request)
+17:12:29 console 16936 [16810 ms]obstacle: stop request ACTIVE
+17:12:29 console 16936 [16810 ms]obstacle: [0x00] SCANNING dir -1
+17:12:29 mtk3smp-pico/heartbeat/telemetry seq=21 captured_ms=16810 avoid IDLE>STOPPING stop request
+17:12:29 console 16956 [16830 ms]obstacle: avoid STOPPING -> WAIT_RESULT (motors inhibited)
+17:12:29 mtk3smp-pico/heartbeat/telemetry seq=22 captured_ms=16830 avoid STOPPING>WAIT_RESULT motors inhibited
+17:12:29 console 17094 [16970 ms]obstacle: avoid WAIT_RESULT -> RELEASING (path clear)
+17:12:29 console 17094 [16970 ms]obstacle: stop request RELEASED
+17:12:29 console 17095 [16970 ms]obstacle: [0x11] CLEAR dir 90
+17:12:29 console 17116 [16990 ms]obstacle: avoid RELEASING -> SEND (resume following)
+17:12:29 console 17136 LT t=-136 h=-136 d=945 11 c=234 m=-614,-289 n=95
+17:12:29 mtk3smp-pico/heartbeat/telemetry seq=23 captured_ms=16970 avoid WAIT_RESULT>RELEASING path clear
+17:12:30 console 17137 line JUNCTION STRAIGHT t=-136 h=-136 d=945
+17:12:30 console 17138 terrain: speed STATIONARY t 17.11 s
+17:12:30 console 17138 [17010 ms]obstacle: avoid SEND -> IDLE (following)
+17:12:30 mtk3smp-pico/heartbeat/telemetry seq=24 captured_ms=16990 avoid RELEASING>SEND resume following
+17:12:30 console 17333 barcode: B=1 raw=3 kept=2
+17:12:30 console 17514 terrain: speed CRUISING t 17.50 s
+17:12:30 console 17533 LT t=-124 h=-124 d=967 11 c=32 m=-266,30 n=98
+17:12:30 console 17853 barcode: B=1 raw=0 kept=0
+17:12:30 console 17933 LT t=-121 h=-121 d=994 11 c=30 m=-224,117 n=100
+17:12:30 console 17974 terrain: STRAIGHT t 17.95 s
+17:12:30 console 18333 LT t=-116 h=-116 d=1025 11 c=38 m=-158,138 n=103
+17:12:30 console 18353 barcode: B=1 raw=0 kept=0
+17:12:30 mtk3smp-pico/heartbeat/telemetry seq=25 captured_ms=17010 line JUNCTION STRAIGHT t=-136 h=-136 d=945
+17:12:30 mtk3smp-pico/heartbeat/telemetry seq=26 captured_ms=17010 avoid SEND>IDLE following
+17:12:30 console 18619 terrain: TURNING t 18.61 s
+17:12:30 console 18619 terrain: summary humps 0 (mm:) highest 0 mm collisions 0 turns 4 msg 00 00 04 00 00 00 00 00 00 00 00
+17:12:30 mtk3smp-pico/heartbeat/telemetry seq=27 captured_ms=17010 obstacle flags=17 edges=255 width_mm=0
+17:12:30 console 18735 LT t=-121 h=-121 d=1066 11 c=47 m=-150,86 n=107
+17:12:30 mtk3smp-pico/heartbeat/telemetry seq=28 captured_ms=18010 obstacle flags=17 edges=255 width_mm=0
+17:12:31 console 18856 barcode: B=1 raw=0 kept=0
+17:12:31 console 19134 LT t=-127 h=-127 d=1105 11 c=57 m=-125,48 n=110
+17:12:31 mtk3smp-pico/heartbeat/telemetry seq=29 captured_ms=19010 obstacle flags=17 edges=255 width_mm=0
+17:12:31 console 19374 barcode: B=1 raw=0 kept=0
+17:12:31 console 19533 LT t=-130 h=-130 d=1142 11 c=62 m=-118,23 n=113
+17:12:31 console 19597 terrain: STRAIGHT t 19.59 s
+17:12:32 console 19893 barcode: B=1 raw=0 kept=0
+17:12:32 console 19933 LT t=-127 h=-127 d=1172 11 c=64 m=-99,24 n=115
+17:12:32 mtk3smp-pico/heartbeat/telemetry seq=30 captured_ms=20010 obstacle flags=17 edges=255 width_mm=0
