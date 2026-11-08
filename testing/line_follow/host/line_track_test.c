@@ -1329,6 +1329,41 @@ test_settle (void)
               (LINE_CREEP_LEAD_DEG == out.target_heading_deg));
 }
 
+/* 2026-11-08: over A with no touch, 600 mm from the creep's start ran out
+ * 10 mm before the crossing, and the search took the crossing tape. */
+static void
+test_clean_pass (void)
+{
+    reset();
+    drive(false, false, samples_for(100));
+    drive(false, true, LINE_CONFIRM_SAMPLES);
+    drive(false, false, LINE_CONFIRM_SAMPLES);
+    start_creep();
+    drive(false, false, samples_for(425));
+    in.b_barcode_done = true;
+    drive(false, false, 1u);
+    in.b_barcode_done = false;
+    in.turn = LINE_TURN_UTURN;
+    drive(false, false, samples_for(186));
+    bool const b_tracking = LINE_MODE_TRACK == out.mode;
+    bool const b_crossing = drive_both_junction(LINE_CONFIRM_SAMPLES + 3u);
+    in.turn = LINE_TURN_STRAIGHT;
+    check("LT120 a slow pass with no touches still reaches its crossing",
+          b_tracking && b_crossing);
+
+    read_barcode(0);
+    drive(false, true, LINE_CONFIRM_SAMPLES);
+    drive(false, false, LINE_CONFIRM_SAMPLES);
+    int const left = LINE_STRAIGHT_LOST_MM - LINE_BARCODE_SETTLE_MM;
+    drive(false, false, samples_for(LINE_BARCODE_SETTLE_MM + 10));
+    drive(false, false, samples_for(left - 40));
+    bool const b_waits = LINE_MODE_TRACK == out.mode;
+    drive(false, false, samples_for(60));
+    check("LT121 with no crossing and no line, the car still searches in the "
+          "end",
+          b_waits && (LINE_MODE_TRACK != out.mode));
+}
+
 /* 2026-11-06 20:32:07: 7 to 57 degrees in the 120 mm before the crossing. */
 #define BEND_DEG 50
 
@@ -2059,6 +2094,7 @@ main (void)
     test_retrace();
     test_settle();
     test_pivot_far_sensor();
+    test_clean_pass();
     test_junction_uturn();
     test_overshoot_across();
     printf("%u failure(s)\n", failures);

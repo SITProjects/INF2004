@@ -835,6 +835,8 @@ watch_barcode (line_track_t * p_track, line_track_input_t const * p_in)
         p_track->line_deg = line_heading(p_track, p_in);
         p_track->b_settle = true;
         p_track->settle_end_mm = p_in->distance_mm + LINE_BARCODE_SETTLE_MM;
+        /* Held on the line, a pass can go its whole length without a touch. */
+        p_track->lost_start_mm = p_in->distance_mm;
     }
     else
     {

@@ -139,7 +139,10 @@
 
 /**
  * @brief The same outside a bend, where white is normal while centred, so
- * it must be long: the car has run 368 mm without a touch (car10).
+ * it must be long: the car has run 368 mm without a touch (car10). A slow pass
+ * restarts it when it ends: counted from the start of the pass, a clean pass
+ * over A reached this 10 mm before the crossing, and the search that started
+ * took the crossing tape for the line (2026-11-08, 2 of 8 reads).
  */
 #define LINE_STRAIGHT_LOST_MM 600
 
