@@ -29,6 +29,7 @@ Define a test here before running it. Test IDs never change.
 | INT-15 | obstacle state for other tasks | IF-07 | manual | A task polls `obstacle_get_state()` and waits on `obstacle_flg_event` while a board comes and goes | STOP and CRITICAL follow the scanner; RESULT on each new sequence; the copy is never torn |
 | INT-16 | go around obstacle and return to the route | IF-06, line-to-motion handoff | manual | Both detour directions: place a crossing line during outward/pass travel and the route line behind the obstacle; then repeat with no return line | Outward/pass crossings do not complete the bypass. Complete the pass, turn inward (looking for the line only on the second half of the turn), acquire the line, drive the axle onto it and turn back to the heading the car stopped on, then follow along the line. If the return and one extra search both miss it, line following takes over and searches. Physical result NOT RUN |
 | INT-17 | clearest side selection | obstacle scanner → planner | manual | Arrange two clear side paths with unequal measured ranges but a shorter sidestep on the nearer side; repeat mirrored, then replan after a reverse | Actual turn follows the farther clear side, independent of sidestep size; corridor replans use the side with greater closest-sector range. Capture raw ends/corridor data and chosen turn; physical result NOT RUN |
+| INT-18 | minimum-bit layouts for shared, stored and sent data | IF-04, IF-05, IF-07, IF-08, IF-09, IF-10 | auto | `sh testing/integration/host/run.sh` | Every field reads back at its minimum and maximum, saturates one past them, and leaves its neighbours alone |
 
 *Method:* **auto** = `TEST_CHECK` in code, result printed on the console;
 **manual** = a person observes the result (LED, scope, meter, phone app…).
@@ -40,3 +41,5 @@ Add a new row for every run. Never edit or delete old rows.
 | Date | Test ID | Commit | Tester | Result | Log / evidence | Notes |
 |---|---|---|---|---|---|---|
 | YYYY-MM-DD | INT-01 | `abc1234` | | PASS / FAIL | `logs/YYYY-MM-DD_….txt` | |
+| 2026-11-09 | INT-18 | #138 | Kitsunez (host) | PASS | `sh testing/integration/host/run.sh` | Planted bugs caught in every layout. Line tracker, bypass and collision rule also matched the previous main on identical random inputs |
+| 2026-11-09 | INT-16 | #138 | Kitsunez (car) | PASS | `testing/system/logs/2026-11-09_minbit_mqtt.txt` (not committed) | Six bypasses finished and rejoined the line, centred obstacles included. An earlier attempt took a 3.4 g hit on the sidestep; a later one stayed blocked and was stopped |

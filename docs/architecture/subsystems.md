@@ -218,8 +218,10 @@ request.
 - **Bends.** The same side touching again soon means a bend, and the car keeps
   turning toward the last edge while both read white.
 - **Search.** An edge black for 200 mm, or a long white run (250 mm in a bend),
-  starts a pivot search toward the last edge.
-- **Junctions.** Both sensors going black together is a cross. Straight on, the
+  starts a pivot search toward the last edge. A held edge never does so during
+  a slow barcode pass, because a pivot there would lose the barcode.
+- **Junctions.** Both sensors going black within 14 mm of each other is a cross
+  (18 mm while a barcode's turn is waiting). Straight on, the
   heading is held over it. For a turn, the car drives 130 mm on and pivots
   exactly 90 or 180 degrees.
 - **Barcodes.** When the reader sees one coming, the car brakes, backs up
@@ -366,7 +368,7 @@ are only read inside the leg or bypass that set them.
 - The console text and its MQTT mirror, the only debug view without a cable.
 
 **Measured effect** on the normal MQTT image: static RAM fell from 111,804 to
-103,048 bytes (8,756 saved), for 4,760 bytes more code from the packing helpers.
+103,048 bytes (8,756 saved), for 4,784 bytes more code from the packing helpers.
 
 | Variable | Before (bytes) | After (bytes) |
 |---|---|---|
@@ -390,8 +392,12 @@ are only read inside the leg or bypass that set them.
 - **Squaring up.** The car does not yet square up to the obstacle's face before
   measuring. The heading-based straighten leg lagged and is switched off
   (`OBSTACLE_AVOID_STRAIGHTEN_MAX_DEG` is 0).
-- **Collision rule.** Confirmed on two of three deliberate hits, with no evidence
-  yet from a hump pass or a long drive for false counts.
+- **Collision rule.** Counts real hits, including a 3.4 g one on the car, but it
+  also counts small pushes that were not hits. On 2026-11-09 the car counted
+  collisions of 0.1 to 0.5 g, some of them while slowing for a hump.
+- **Crossing and slow-pass fixes.** The wider crossing limit with a turn waiting
+  and the rule against searching during a slow pass have host tests only. Neither
+  has run on the car.
 - **Bypass-state reasons on telemetry.** The packed record carries the from and
   to states only. The reason text is on the console mirror.
 - **Barcode text on telemetry.** Limited to 10 characters. Longer text still
