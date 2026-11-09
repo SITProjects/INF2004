@@ -257,6 +257,15 @@
 #define LINE_JUNCTION_SKEW_MM 14
 
 /**
+ * @brief The same limit, in mm, while a barcode has asked for a turn. A
+ * crossing is expected then, and missing it hands the turn to the next one:
+ * on 2026-11-09 the crossing after F, met while still correcting out of a bend,
+ * read 15 mm apart, and LEFT was taken at the crossing 1.3 m on. Only here,
+ * because 16 fires in a bend when applied to every sample.
+ */
+#define LINE_JUNCTION_SKEW_TURN_MM 18
+
+/**
  * @brief Going straight over a junction, hold the heading it was met on for
  * this travel, in mm, so the crossing tape cannot steer the car: on
  * 2026-11-07 it turned the car 19 degrees right and off the line. Only when

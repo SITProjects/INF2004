@@ -907,6 +907,20 @@ test_barcode_stop (void)
     in.heading_deg = 0;
     check("LT93 nor does the tape leaving a sensor read as a bend in a creep",
           out.b_slow && b_creep_straight);
+
+    /* The Z pass of 2026-11-09: the left sensor on the tape all the way. */
+    start_creep();
+    drive(true, false, LINE_CONFIRM_SAMPLES + samples_for(LINE_EDGE_MAX_MM + 40));
+    check("LT125 an edge held through a creep starts no search",
+          out.b_slow && (LINE_MODE_TRACK == out.mode));
+    in.b_barcode_done = true;
+    drive(true, false, 1u);
+    in.b_barcode_done = false;
+    drive(true, false, samples_for(LINE_EDGE_MAX_MM - 20));
+    bool const b_not_yet = (LINE_MODE_TRACK == out.mode);
+    drive(true, false, samples_for(30));
+    check("LT126 after the creep the edge counts afresh, and then does",
+          b_not_yet && (LINE_MODE_SEARCH_LEFT == out.mode));
 }
 
 /* @p samples samples of both black; true if any reported a junction. */
@@ -1865,14 +1879,21 @@ test_rejoin (void)
 /* Left black, then right @p gap_mm later as left clears: the least overlap
  * the debounce lets through. */
 static bool
-thin_crossing (int gap_mm)
+thin_crossing_turn (line_turn_t turn, int gap_mm)
 {
     reset();
+    in.turn = turn;
     drive(false, false, samples_for(150));
     drive(true, false, samples_for(gap_mm));
     drive(true, true, 1u);
     drive(false, true, 1u);
     return out.b_junction;
+}
+
+static bool
+thin_crossing (int gap_mm)
+{
+    return thin_crossing_turn(LINE_TURN_STRAIGHT, gap_mm);
 }
 
 /* The logged misses of 2026-11-07, and the sweeps that must stay out. */
@@ -1884,6 +1905,12 @@ test_thin_crossing (void)
           thin_crossing(11));
     check("LT67 the tape sweeping across the sensors, 17 mm apart, is not",
           !thin_crossing(17));
+    check("LT122 with a turn waiting, a crossing read 15 mm askew is a junction",
+          thin_crossing_turn(LINE_TURN_LEFT, 15));
+    check("LT123 with none waiting, the same tape is not",
+          !thin_crossing_turn(LINE_TURN_STRAIGHT, 15));
+    check("LT124 nor is tape further apart, even with a turn waiting",
+          !thin_crossing_turn(LINE_TURN_LEFT, 20));
 
     /* Straight and clean for so long that the car looks for the line, just
      * as it reaches a crossing. */

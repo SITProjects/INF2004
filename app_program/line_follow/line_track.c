@@ -66,6 +66,8 @@ _Static_assert(LINE_BARCODE_REVERSE_MM <= ROBOT_LINE_REQ_REVERSE_MAX_MM,
 _Static_assert(LINE_MODE_STOP <= 3, "Line mode must fit two bits");
 _Static_assert((LINE_JUNCTION_SKEW_MM >= 0) && (LINE_JUNCTION_CENTRE_MM > 0),
                "Invalid junction geometry");
+_Static_assert(LINE_JUNCTION_SKEW_TURN_MM >= LINE_JUNCTION_SKEW_MM,
+               "A waiting turn must not narrow the crossing limit");
 
 /* Private function declarations. */
 static void debounce (line_track_t * p_track, line_track_input_t const * p_in);
@@ -704,13 +706,15 @@ follow_episode (line_track_t * p_track, line_track_input_t const * p_in,
     {
         if (!line_track_flag(p_track, LINE_TRACK_F_BOTH_SEEN))
         {
+            int32_t const skew_max_mm = (LINE_TURN_STRAIGHT == p_in->turn)
+                                            ? LINE_JUNCTION_SKEW_MM
+                                            : LINE_JUNCTION_SKEW_TURN_MM;
             flag_set(p_track, LINE_TRACK_F_BOTH_SEEN, true);
-            flag_set(
-                p_track, LINE_TRACK_F_SKEW_SMALL,
-                (SIDE_NONE ==
-                 field_get(p_track, LINE_TRACK_FIELD_ENTRY_SIDE)) ||
-                    ((p_in->distance_mm - mark_mm(p_in, p_track->entry_mm)) <=
-                     LINE_JUNCTION_SKEW_MM));
+            flag_set(p_track, LINE_TRACK_F_SKEW_SMALL,
+                     (SIDE_NONE ==
+                      field_get(p_track, LINE_TRACK_FIELD_ENTRY_SIDE)) ||
+                         ((p_in->distance_mm -
+                           mark_mm(p_in, p_track->entry_mm)) <= skew_max_mm));
         }
         if (line_track_flag(p_track, LINE_TRACK_F_SKEW_SMALL) &&
             (JUNCTION_NONE ==
@@ -954,6 +958,9 @@ watch_barcode (line_track_t * p_track, line_track_input_t const * p_in)
             robot_mark16(p_in->distance_mm + LINE_BARCODE_SETTLE_MM);
         /* Held on the line, a pass can go its whole length without a touch. */
         p_track->lost_start_mm = robot_mark16(p_in->distance_mm);
+        /* Nor did it steer: an edge held through it counts from here. */
+        p_track->black_start_mm[SIDE_LEFT] = robot_mark16(p_in->distance_mm);
+        p_track->black_start_mm[SIDE_RIGHT] = robot_mark16(p_in->distance_mm);
     }
     else
     {
@@ -1152,8 +1159,14 @@ track_edge (line_track_t * p_track, line_track_input_t const * p_in,
             field_set(p_track, LINE_TRACK_FIELD_TOUCH_SIDE, (uint32_t)side);
         }
         field_set(p_track, LINE_TRACK_FIELD_LAST_SIDE, (uint32_t)side);
-        if ((p_in->distance_mm -
-             mark_mm(p_in, p_track->black_start_mm[side])) >= LINE_EDGE_MAX_MM)
+        /* A creep holds its heading, so a held edge says nothing about a bend,
+         * and a pivot would lose the barcode (Z, 2026-11-09). */
+        if ((LINE_BARCODE_CREEP !=
+             (line_barcode_phase_t)field_get(p_track,
+                                             LINE_TRACK_FIELD_BARCODE_PHASE)) &&
+            ((p_in->distance_mm -
+              mark_mm(p_in, p_track->black_start_mm[side])) >=
+             LINE_EDGE_MAX_MM))
         {
             /* Turning is not bringing the tape back: a tight bend. */
             start_search(p_track, p_in, side);
