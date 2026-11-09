@@ -78,3 +78,6 @@ in `TEAM.md` sections 3 and 4.
   `obstacle/drv_gpio_irq.c` now owns the one `IO_IRQ_BANK0` handler and
   calls the ultrasonic echo and barcode handlers in turn. `tBarcode` decodes
   Code 39 from the edge widths in either direction.
+
+For what each buddy owns, how each subsystem works and how data is packed,
+see [subsystems.md](subsystems.md).
