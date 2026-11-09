@@ -320,8 +320,8 @@ scan_task (INT stacd, void * p_exinf)
                                          .avoid_state = 0u,
                                          .fault_reason = 0u};
 #if AVOID_ACTIVE
-        state.avoid_state = (uint8_t)avoid.state;
-        state.fault_reason = (uint8_t)avoid.fault;
+        state.avoid_state = (uint8_t)obstacle_avoid_state_of(&avoid);
+        state.fault_reason = (uint8_t)obstacle_avoid_fault_of(&avoid);
 #endif
         publish_state(&state, new_result);
         if (new_result && (scan.width_mm != ROBOT_OBSTACLE_WIDTH_UNAVAILABLE))
@@ -527,7 +527,8 @@ log_watch (obstacle_avoid_input_t const * p_in)
     {
         tm_printf((UB *)"obstacle: watch %u us d=%ld h=%ld leg=%u\n",
                   (unsigned int)p_in->watch.echo_us, (long)p_in->distance_mm,
-                  (long)p_in->heading_deg, (unsigned int)avoid.leg);
+                  (long)p_in->heading_deg,
+                  (unsigned int)obstacle_avoid_leg_of(&avoid));
     }
 }
 
@@ -555,7 +556,7 @@ remote_hold (void)
     }
     else if (!b_stopped && b_held)
     {
-        if (avoid.state != OBSTACLE_AVOID_FAULT)
+        if (obstacle_avoid_state_of(&avoid) != OBSTACLE_AVOID_FAULT)
         {
             obstacle_avoid_init(&avoid, &avoid_config, log_time_ms());
             avoid_in = (obstacle_avoid_input_t){0};
@@ -590,7 +591,8 @@ remote_reverse (bool b_held)
     switch (phase)
     {
         case REVERSE_IDLE:
-            if (b_wanted && b_held && (avoid.state == OBSTACLE_AVOID_FAULT))
+            if (b_wanted && b_held &&
+                (obstacle_avoid_state_of(&avoid) == OBSTACLE_AVOID_FAULT))
             {
                 remote_command_reverse_done();
                 tm_printf((UB *)"[%lu ms]obstacle: reverse refused, fault "

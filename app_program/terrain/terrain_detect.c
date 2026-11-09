@@ -8,6 +8,7 @@
  */
 
 #include "terrain_detect.h"
+#include "../robot_types.h"
 #include <math.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -19,6 +20,12 @@
  * peak lean 8 | turning state 1 | turn counter 5 | spare 8. */
 /* A hit's push is kept for about 0.15 s: halves in 14 samples. */
 #define STOPPED_PEAK_FADE 0.95f
+/* terrain_stopped_t: word fields "shift, bits", peak in 1/256 g. */
+#define STOPPED_KEPT 0u, 11u
+#define STOPPED_AGE 11u, 8u
+#define STOPPED_OFF_LEVEL 19u, 8u
+#define STOPPED_PEAK_SCALE 256.0f
+#define STOPPED_PEAK_MAX_G 255
 
 #define HUMP_SHIFT 0u
 #define HUMP_BITS 2u
@@ -533,16 +540,23 @@ terrain_detect_stopped_dead (terrain_stopped_t * p_state, int32_t speed_mm_s,
         return false;
     }
 
-    float const faded = p_state->peak_g * STOPPED_PEAK_FADE;
-    p_state->peak_g = (push_g > faded) ? push_g : faded;
+    uint32_t kept = robot_field_get(p_state->word, STOPPED_KEPT);
+    uint32_t age = robot_field_get(p_state->word, STOPPED_AGE);
+    uint32_t off_level = robot_field_get(p_state->word, STOPPED_OFF_LEVEL);
+    float const faded =
+        terrain_detect_stopped_peak_g(p_state) * STOPPED_PEAK_FADE;
+    float const peak_g = (push_g > faded) ? push_g : faded;
+    p_state->peak_x256 = (peak_g >= (float)STOPPED_PEAK_MAX_G)
+                             ? UINT16_MAX
+                             : (uint16_t)((peak_g * STOPPED_PEAK_SCALE) + 0.5f);
 
     if (hump == TERRAIN_HUMP_LEVEL)
     {
-        p_state->off_level = 0u;
+        off_level = 0u;
     }
-    else if (p_state->off_level <= p_limits->grace_samples)
+    else if (off_level <= p_limits->grace_samples)
     {
-        p_state->off_level++;
+        off_level++;
     }
     else
     {
@@ -550,26 +564,26 @@ terrain_detect_stopped_dead (terrain_stopped_t * p_state, int32_t speed_mm_s,
     }
 
     bool b_hit = false;
-    if (!b_driving || (p_state->off_level > p_limits->grace_samples))
+    if (!b_driving || (off_level > p_limits->grace_samples))
     {
-        p_state->kept_mm_s = 0;
-        p_state->age = 0u;
+        kept = 0u;
+        age = 0u;
     }
     else if (speed_mm_s >= p_limits->from_mm_s)
     {
-        p_state->kept_mm_s = speed_mm_s;
-        p_state->age = 0u;
+        kept = (uint32_t)speed_mm_s;
+        age = 0u;
     }
-    else if (p_state->kept_mm_s > 0)
+    else if (kept > 0u)
     {
-        p_state->age++;
-        if (p_state->age > p_limits->window_samples)
+        age++;
+        if (age > p_limits->window_samples)
         {
-            p_state->kept_mm_s = 0;
+            kept = 0u;
         }
-        else if ((speed_mm_s * 2) <= p_state->kept_mm_s)
+        else if ((speed_mm_s * 2) <= (int32_t)kept)
         {
-            p_state->kept_mm_s = 0;
+            kept = 0u;
             b_hit = true;
         }
         else
@@ -581,7 +595,17 @@ terrain_detect_stopped_dead (terrain_stopped_t * p_state, int32_t speed_mm_s,
     {
         /* Not driving fast enough to have anything to fall from. */
     }
+
+    uint32_t word = robot_field_put(0u, STOPPED_KEPT, kept);
+    word = robot_field_put(word, STOPPED_AGE, age);
+    p_state->word = robot_field_put(word, STOPPED_OFF_LEVEL, off_level);
     return b_hit;
+}
+
+float
+terrain_detect_stopped_peak_g (terrain_stopped_t const * p_state)
+{
+    return (float)p_state->peak_x256 / STOPPED_PEAK_SCALE;
 }
 
 /* Private function definitions. */

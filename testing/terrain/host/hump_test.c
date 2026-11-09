@@ -320,7 +320,19 @@ test_stopped_dead (void)
                                       &stop_limits);
     (void)hold_speed(&state, 120, 8u, true, level);
     check("TH24 the push is remembered for the moments before the speed falls",
-          state.peak_g > 0.4f);
+          terrain_detect_stopped_peak_g(&state) > 0.4f);
+
+    state = (terrain_stopped_t){0};
+    (void)terrain_detect_stopped_dead(&state, 0, 0.3f, false,
+                                      TERRAIN_HUMP_LEVEL, &stop_limits);
+    float const small_g = terrain_detect_stopped_peak_g(&state);
+    state = (terrain_stopped_t){0};
+    (void)terrain_detect_stopped_dead(&state, 0, 300.0f, false,
+                                      TERRAIN_HUMP_LEVEL, &stop_limits);
+    float const huge_g = terrain_detect_stopped_peak_g(&state);
+    check("TH25 the kept push is exact to 1/256 g and saturates",
+          (small_g > 0.296f) && (small_g < 0.304f) && (huge_g > 255.0f) &&
+              (huge_g < 256.0f));
 }
 
 int

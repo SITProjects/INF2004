@@ -9,6 +9,12 @@
 /* 120 mm/s sampled every 10 ms. */
 #define MM_PER_SAMPLE_X10 12
 
+/* Start of the run's travel: run.sh repeats every test across the 16-bit
+ * wrap of the tracker's distance marks. */
+#ifndef TRAVEL_OFFSET_MM
+#define TRAVEL_OFFSET_MM 0
+#endif
+
 static line_track_t track;
 static line_track_input_t in;
 static line_request_t out;
@@ -27,7 +33,8 @@ static void
 reset (void)
 {
     travel_x10 = 0;
-    in = (line_track_input_t){.b_control = true};
+    in = (line_track_input_t){.b_control = true,
+                              .distance_mm = TRAVEL_OFFSET_MM};
     line_track_init(&track, &in);
     out = line_track_update(&track, &in);
 }
@@ -41,7 +48,7 @@ drive (bool left, bool right, unsigned int samples)
     for (unsigned int i = 0u; i < samples; i++)
     {
         travel_x10 += MM_PER_SAMPLE_X10;
-        in.distance_mm = travel_x10 / 10;
+        in.distance_mm = TRAVEL_OFFSET_MM + (travel_x10 / 10);
         out = line_track_update(&track, &in);
     }
 }
@@ -538,7 +545,7 @@ sim_step (sim_car_t * p_car)
     in.b_right_black =
         in.b_right_black || (sim_right_white_s < sim_right_hold_s);
     in.heading_deg = (int32_t)lround(p_car->heading - p_car->start_deg);
-    in.distance_mm = (int32_t)p_car->travel;
+    in.distance_mm = TRAVEL_OFFSET_MM + (int32_t)p_car->travel;
     out = line_track_update(&track, &in);
 
     for (unsigned int k = SIM_DELAY_SAMPLES; k > 0u; k--)
@@ -698,8 +705,10 @@ test_creep_model (void)
     double swing = 0.0;
     while (car.travel < (double)LINE_BARCODE_CREEP_MM)
     {
-        track.barcode_phase = LINE_BARCODE_CREEP;
-        track.barcode_mm = (int32_t)car.travel;
+        track.fields = robot_field_put(track.fields,
+                                       LINE_TRACK_FIELD_BARCODE_PHASE,
+                                       (uint32_t)LINE_BARCODE_CREEP);
+        track.barcode_mm = (int16_t)(TRAVEL_OFFSET_MM + (int32_t)car.travel);
         (void)sim_step(&car);
         if (car.travel > 100.0)
         {
@@ -744,7 +753,7 @@ test_barcode_stop (void)
     /* The sensors are ignored all the way back. */
     bool const b_back = (LINE_BARCODE_REVERSE_MM == out.reverse_mm) &&
                         (LINE_MODE_TRACK == out.mode) &&
-                        !track.b_both_seen;
+                        !line_track_flag(&track, LINE_TRACK_F_BOTH_SEEN);
     in.b_moving = true;
     drive(true, false, 5u);
     bool const b_still_back = (LINE_BARCODE_REVERSE_MM == out.reverse_mm);
@@ -786,7 +795,7 @@ test_barcode_stop (void)
     drive(true, false, 3u);
     drive(false, false, 3u);
     drive(true, false, 3u);
-    bool const b_bend = track.b_curve;
+    bool const b_bend = line_track_flag(&track, LINE_TRACK_F_CURVE);
     in.b_barcode = true;
     drive(true, false, 1u);
     in.b_barcode = false;
@@ -846,14 +855,14 @@ test_barcode_stop (void)
     drive(true, false, 3u);
     drive(false, false, samples_for(20));
     drive(true, false, 3u);
-    bool const b_straight = !track.b_curve;
+    bool const b_straight = !line_track_flag(&track, LINE_TRACK_F_CURVE);
     reset();
     drive(true, false, 3u);
     drive(false, false, samples_for(20));
     drive(true, false, 3u);
     check("LT28 touches that are a bend at full speed are a straight in a "
           "slow pass",
-          b_straight && track.b_curve);
+          b_straight && line_track_flag(&track, LINE_TRACK_F_CURVE));
 
     /* 2026-11-07: both sensors white, and the car still turning. */
     reset();
@@ -879,7 +888,7 @@ test_barcode_stop (void)
     drive(true, false, 3u);
     drive(false, false, samples_for(20));
     drive(true, false, 3u);
-    check("LT92 so does a car slowed for a hump", b_on_hump && !track.b_curve);
+    check("LT92 so does a car slowed for a hump", b_on_hump && !line_track_flag(&track, LINE_TRACK_F_CURVE));
 
     /* The tape crossing out of a bend, as cross_bend() does, in a creep: in
      * on the right too long before the left to be a junction. */
@@ -894,7 +903,7 @@ test_barcode_stop (void)
     drive(true, true, LINE_CONFIRM_SAMPLES);
     drive(true, false, LINE_CONFIRM_SAMPLES);
     drive(false, false, LINE_CONFIRM_SAMPLES + samples_for(10));
-    bool const b_creep_straight = !track.b_curve;
+    bool const b_creep_straight = !line_track_flag(&track, LINE_TRACK_F_CURVE);
     in.heading_deg = 0;
     check("LT93 nor does the tape leaving a sensor read as a bend in a creep",
           out.b_slow && b_creep_straight);
@@ -969,7 +978,7 @@ test_creep_bars (void)
         drive(true, true, 1u);
         in.b_barcode_done = false;
         bool const b_ended = !out.b_slow;
-        track.b_settle = false; /* LT116 covers the way to the crossing. */
+        track.flags &= (uint16_t)~LINE_TRACK_F_SETTLE; /* LT116 covers the way to the crossing. */
         drive_bars(true, false, LINE_CONFIRM_SAMPLES + 2u);
         bool const b_to_tape = (to_tape == out.target_heading_deg);
         bool const b_after_junction = drive_both_junction(samples_for(40));
@@ -1124,9 +1133,9 @@ test_retrace (void)
           b_bars_first && b_away && b_along && b_tape_first);
 
     turn_past_barcode(LINE_TURN_UTURN, 400);
-    int const length = track.retrace_end_mm - in.distance_mm;
-    bool const b_brake = (track.brake_mm >= 200) &&
-                         (length == (track.junction_mm - track.brake_mm)) &&
+    int const length = (int16_t)(track.retrace_end_mm - in.distance_mm);
+    bool const b_brake = ((int16_t)(track.brake_mm - TRAVEL_OFFSET_MM) >= 200) &&
+                         (length == (int16_t)(track.junction_mm - track.brake_mm)) &&
                          (length >= 400);
     drive(false, false, samples_for(length - 5));
     bool const b_during = line_track_retrace(&track);
@@ -1141,7 +1150,8 @@ test_retrace (void)
     turn_past_barcode(LINE_TURN_UTURN, LINE_RETRACE_MAX_MM + 300);
     check("LT106 a barcode far before its U-turn: going back is cut short",
           line_track_retrace(&track) &&
-              (LINE_RETRACE_MAX_MM == (track.retrace_end_mm - in.distance_mm)));
+              (LINE_RETRACE_MAX_MM ==
+               (int16_t)(track.retrace_end_mm - in.distance_mm)));
 
     turn_past_barcode(LINE_TURN_LEFT, 400);
     check("LT107 only a U-turn goes back past the barcode",
@@ -1154,7 +1164,7 @@ test_retrace (void)
     drive(false, true, LINE_CONFIRM_SAMPLES);
     drive(false, false, LINE_CONFIRM_SAMPLES);
     drive(false, true, LINE_CONFIRM_SAMPLES);
-    check("LT108 touches of the bars going back are no bend", !track.b_curve);
+    check("LT108 touches of the bars going back are no bend", !line_track_flag(&track, LINE_TRACK_F_CURVE));
 
     turn_past_barcode(LINE_TURN_UTURN, 400);
     drive(false, false, samples_for(100));
@@ -1247,8 +1257,8 @@ static void
 test_settle (void)
 {
     read_barcode(0);
-    bool const b_on = track.b_settle && !out.b_slow &&
-                      (LINE_BARCODE_NONE == track.barcode_phase);
+    bool const b_on = line_track_flag(&track, LINE_TRACK_F_SETTLE) && !out.b_slow &&
+                      (LINE_BARCODE_NONE == line_track_barcode_phase(&track));
     drive(true, false, LINE_CONFIRM_SAMPLES);
     bool b_lean = true;
     for (int deg = 0; deg <= 30; deg++)
@@ -1272,7 +1282,7 @@ test_settle (void)
     in.turn = LINE_TURN_UTURN;
     drive(false, false, samples_for(50));
     bool const b_turn = drive_both_junction(LINE_CONFIRM_SAMPLES + 3u);
-    bool const b_ended = !track.b_settle;
+    bool const b_ended = !line_track_flag(&track, LINE_TRACK_F_SETTLE);
     in.turn = LINE_TURN_STRAIGHT;
     read_barcode(0);
     drive(false, false, samples_for(50));
@@ -1280,14 +1290,14 @@ test_settle (void)
     bool const b_skewed = drive_both_junction(LINE_CONFIRM_SAMPLES + 3u);
     check("LT112 the crossing after a read is still taken, even a little "
           "skewed, and ends the steering",
-          b_turn && b_ended && b_skewed && !track.b_settle);
+          b_turn && b_ended && b_skewed && !line_track_flag(&track, LINE_TRACK_F_SETTLE));
 
     read_barcode(0);
-    int const length = track.settle_end_mm - in.distance_mm;
+    int const length = (int16_t)(track.settle_end_mm - in.distance_mm);
     drive(false, false, samples_for(length - 5));
-    bool const b_during = track.b_settle;
+    bool const b_during = line_track_flag(&track, LINE_TRACK_F_SETTLE);
     drive(false, false, samples_for(10));
-    bool const b_over = !track.b_settle;
+    bool const b_over = !line_track_flag(&track, LINE_TRACK_F_SETTLE);
     drive(false, true, LINE_CONFIRM_SAMPLES);
     check("LT113 with no crossing it ends after LINE_BARCODE_SETTLE_MM, then "
           "a touch steers as usual",
@@ -1301,19 +1311,19 @@ test_settle (void)
     drive(false, false, LINE_CONFIRM_SAMPLES);
     drive(false, true, LINE_CONFIRM_SAMPLES);
     check("LT114 touches on the way to the crossing are no bend",
-          !track.b_curve);
+          !line_track_flag(&track, LINE_TRACK_F_CURVE));
 
     read_barcode(0);
     in.b_control = false;
     drive(false, false, 1u);
     in.b_control = true;
-    bool const b_lost = !track.b_settle;
+    bool const b_lost = !line_track_flag(&track, LINE_TRACK_F_SETTLE);
     reset();
     start_creep();
     drive(false, false, samples_for(LINE_BARCODE_CREEP_MM + 10));
     check("LT115 anyone else driving ends it, and a creep that gives up "
           "starts it too",
-          b_lost && track.b_settle && !out.b_slow);
+          b_lost && line_track_flag(&track, LINE_TRACK_F_SETTLE) && !out.b_slow);
 
     reset();
     start_creep();
@@ -1325,7 +1335,7 @@ test_settle (void)
     drive(false, true, LINE_CONFIRM_SAMPLES + 2u);
     check("LT116 bars still under a sensor after the read lean the car to the "
           "tape, and are no junction",
-          track.b_settle && !out.b_junction &&
+          line_track_flag(&track, LINE_TRACK_F_SETTLE) && !out.b_junction &&
               (LINE_CREEP_LEAD_DEG == out.target_heading_deg));
 }
 
@@ -1417,13 +1427,13 @@ test_counter_touch (void)
     for (int sign = -1; sign <= 1; sign += 2)
     {
         in_bend(sign);
-        bool const b_in_bend = track.b_curve;
+        bool const b_in_bend = line_track_flag(&track, LINE_TRACK_F_CURVE);
         drive(sign < 0, sign > 0, samples_for(10));
         b_gentle = b_gentle && b_in_bend &&
                    ((in.heading_deg - (sign * LINE_COUNTER_LEAD_DEG)) ==
                     out.target_heading_deg);
         drive(false, false, samples_for(30));
-        b_seeks_on = b_seeks_on && track.b_curve &&
+        b_seeks_on = b_seeks_on && line_track_flag(&track, LINE_TRACK_F_CURVE) &&
                      ((sign * (out.target_heading_deg - in.heading_deg)) >=
                       (LINE_SEEK_MAX_DEG - 1));
     }
@@ -1441,7 +1451,7 @@ test_counter_touch (void)
     }
     check("LT40 black for longer than that is a real turn: full lead, bend off",
           ((in.heading_deg - LINE_LEAD_DEG) == out.target_heading_deg) &&
-              !track.b_curve);
+              !line_track_flag(&track, LINE_TRACK_F_CURVE));
 
     /* The car straightens: the turn falls away while the touch goes on. */
     bool b_stays = true;
@@ -1452,11 +1462,11 @@ test_counter_touch (void)
         drive(sign < 0, sign > 0, samples_for(10));
         in.heading_deg = sign * 30;
         drive(sign < 0, sign > 0, samples_for(LINE_COUNTER_MM - 20));
-        b_stays = b_stays && track.b_curve &&
+        b_stays = b_stays && line_track_flag(&track, LINE_TRACK_F_CURVE) &&
                   ((in.heading_deg - (sign * LINE_COUNTER_LEAD_DEG)) ==
                    out.target_heading_deg);
         drive(false, false, samples_for(30));
-        b_ends = b_ends && !track.b_curve &&
+        b_ends = b_ends && !line_track_flag(&track, LINE_TRACK_F_CURVE) &&
                  (in.heading_deg == out.target_heading_deg);
     }
     check("LT42 a touch begun against a bend stays gentle as the car "
@@ -1474,13 +1484,13 @@ test_counter_touch (void)
         in_bend(sign);
         drive(sign < 0, sign > 0, samples_for(52));
         drive(false, false, samples_for(30));
-        b_exit_ends = b_exit_ends && !track.b_curve &&
+        b_exit_ends = b_exit_ends && !line_track_flag(&track, LINE_TRACK_F_CURVE) &&
                       (in.heading_deg == out.target_heading_deg) &&
-                      (track.last_side == ((sign < 0) ? 0u : 1u));
+                      (robot_field_get(track.fields, LINE_TRACK_FIELD_LAST_SIDE) == ((sign < 0) ? 0u : 1u));
         in_bend(sign);
         drive(sign < 0, sign > 0, samples_for(37));
         drive(false, false, samples_for(30));
-        b_mid_stays = b_mid_stays && track.b_curve;
+        b_mid_stays = b_mid_stays && line_track_flag(&track, LINE_TRACK_F_CURVE);
     }
     check("LT46 the 52 mm touch that ended a right turn ends the bend, and "
           "the tape counts as last seen on that side",
@@ -1598,7 +1608,7 @@ test_hump_slow (void)
     drive(false, false, samples_for(50));
     drive(true, false, samples_for(8));
     check("LT59 touches 50 mm apart are no bend at the slow speed",
-          out.b_slow && !track.b_curve);
+          out.b_slow && !line_track_flag(&track, LINE_TRACK_F_CURVE));
     in.b_hump = false;
 }
 
@@ -2015,7 +2025,7 @@ test_bend_crossing (void)
     drive(true, false, samples_for(5));
     drive(false, false, samples_for(30));
     check("LT35 a correction sweeping the tape across a straight is no bend",
-          (out.target_heading_deg == in.heading_deg) && !track.b_curve);
+          (out.target_heading_deg == in.heading_deg) && !line_track_flag(&track, LINE_TRACK_F_CURVE));
 
     /* The seek is not forever: a tape that never returns is searched for. */
     cross_bend(BEND_DEG, 120, true, LINE_LOST_MM + 10);

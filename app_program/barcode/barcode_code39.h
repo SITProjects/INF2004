@@ -44,7 +44,7 @@ typedef enum
  * @return BARCODE_CODE39_OK, or why the forward reading failed (the
  * reversed reading's reason when the forward one had no '*' frame).
  */
-barcode_code39_status_t barcode_code39_decode (uint32_t const * p_widths,
+barcode_code39_status_t barcode_code39_decode (uint16_t const * p_widths,
                                                uint32_t count, char * p_text,
                                                uint32_t text_size,
                                                bool * p_reversed);
@@ -65,7 +65,7 @@ barcode_code39_status_t barcode_code39_decode (uint32_t const * p_widths,
  * readings disagree.
  */
 barcode_code39_status_t
-barcode_code39_decode_partial (uint32_t const * p_widths, uint32_t count,
+barcode_code39_decode_partial (uint16_t const * p_widths, uint32_t count,
                                char * p_text, uint32_t text_size,
                                bool * p_reversed);
 

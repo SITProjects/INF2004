@@ -1834,12 +1834,13 @@ sim_step (void)
 {
     if (sim.b_auto)
     {
-        if ((sim.ctx.state == OBSTACLE_AVOID_PREPARE) && sim.ctx.b_rearm_known)
+        if ((obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_PREPARE) &&
+            obstacle_avoid_flag(&sim.ctx, OBSTACLE_AVOID_F_REARM_KNOWN))
         {
             sim_scan(ROBOT_OBSTACLE_CLEAR, ROBOT_OBSTACLE_DIR_CENTRE_90, false,
                      false);
         }
-        else if (sim.ctx.state == OBSTACLE_AVOID_RUN_LEG)
+        else if (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_RUN_LEG)
         {
             /* A return leg looking for the line finds it; every other leg
              * its target. A finished turn moves the odometry heading
@@ -1853,14 +1854,18 @@ sim_step (void)
             }
             sim.in.b_move_done = true;
             sim.in.motion_done =
-                ((sim.ctx.leg == OBSTACLE_AVOID_LEG_RETURN) &&
+                ((obstacle_avoid_leg_of(&sim.ctx) ==
+                  OBSTACLE_AVOID_LEG_RETURN) &&
                  robot_motion_cmd_get_stop_at_line(sim.ctx.cmd))
                     ? ROBOT_MOTION_DONE_LINE
                     : ROBOT_MOTION_DONE_DIST;
         }
-        else if (((sim.ctx.state == OBSTACLE_AVOID_VERIFY) ||
-                  (sim.ctx.state == OBSTACLE_AVOID_REPLAN)) &&
-                 sim.ctx.b_corridor_started)
+        else if (((obstacle_avoid_state_of(&sim.ctx) ==
+                   OBSTACLE_AVOID_VERIFY) ||
+                  (obstacle_avoid_state_of(&sim.ctx) ==
+                   OBSTACLE_AVOID_REPLAN)) &&
+                 obstacle_avoid_flag(&sim.ctx,
+                                     OBSTACLE_AVOID_F_CORRIDOR_STARTED))
         {
             sim_corridor(false);
         }
@@ -1943,7 +1948,8 @@ sim_until (obstacle_avoid_state_t state, obstacle_avoid_leg_t leg,
     for (uint32_t index = 0u; index < max_steps; ++index)
     {
         (void)sim_step();
-        if ((sim.ctx.state == state) && (sim.ctx.leg == leg))
+        if ((obstacle_avoid_state_of(&sim.ctx) == state) &&
+            (obstacle_avoid_leg_of(&sim.ctx) == leg))
         {
             sim.b_auto = false;
             return true;
@@ -1960,7 +1966,7 @@ sim_stays (obstacle_avoid_state_t state, uint32_t steps)
     for (uint32_t index = 0u; index < steps; ++index)
     {
         (void)sim_step();
-        if (sim.ctx.state != state)
+        if (obstacle_avoid_state_of(&sim.ctx) != state)
         {
             return false;
         }
@@ -1977,9 +1983,10 @@ sim_detect_path (void)
     bool ok = sim_until(OBSTACLE_AVOID_IDLE, OBSTACLE_AVOID_LEG_FOLLOW, 10u);
     sim_scan(ROBOT_OBSTACLE_SCANNING, ROBOT_OBSTACLE_DIR_NONE, true, false);
     ok = ok && sim_step().b_set_inhibit &&
-         (sim.ctx.state == OBSTACLE_AVOID_STOPPING);
+         (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_STOPPING);
     (void)sim_step();
-    ok = ok && (sim.ctx.state == OBSTACLE_AVOID_WAIT_RESULT);
+    ok =
+        ok && (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_WAIT_RESULT);
     sim_scan(ROBOT_OBSTACLE_PATH_FOUND, ROBOT_OBSTACLE_DIR_LEFT_60, true,
              false);
     return ok;
@@ -1990,23 +1997,24 @@ static bool
 avoid_stop_valid (void)
 {
     sim_reset();
-    bool ok = (sim.ctx.state == OBSTACLE_AVOID_WAIT_CLEAR);
+    bool ok = (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_WAIT_CLEAR);
     for (uint32_t index = 0u; ok && (index < 20u); ++index)
     {
         ok = !sim_step().b_clear_inhibit;
     }
     sim_scan(ROBOT_OBSTACLE_CLEAR, ROBOT_OBSTACLE_DIR_CENTRE_90, false, false);
     ok = ok && sim_step().b_clear_inhibit &&
-         (sim.ctx.state == OBSTACLE_AVOID_RELEASING);
+         (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_RELEASING);
     ok = ok && sim_step().b_send && (sim.act.cmd == robot_motion_cmd_follow());
     (void)sim_step();
-    ok = ok && (sim.ctx.state == OBSTACLE_AVOID_IDLE);
+    ok = ok && (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_IDLE);
 
     sim_scan(ROBOT_OBSTACLE_SCANNING, ROBOT_OBSTACLE_DIR_NONE, true, false);
     ok = ok && sim_step().b_set_inhibit &&
-         (sim.ctx.state == OBSTACLE_AVOID_STOPPING);
+         (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_STOPPING);
     (void)sim_step();
-    ok = ok && (sim.ctx.state == OBSTACLE_AVOID_WAIT_RESULT);
+    ok =
+        ok && (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_WAIT_RESULT);
 
     /* tMotion never reports INHIBITED: FAULT after 500 ms, not before. */
     sim_reset();
@@ -2017,12 +2025,14 @@ avoid_stop_valid (void)
     (void)sim_step();
     ok = ok && sim_stays(OBSTACLE_AVOID_STOPPING, 49u);
     for (uint32_t index = 0u;
-         ok && (sim.ctx.state != OBSTACLE_AVOID_FAULT) && (index < 5u); ++index)
+         ok && (obstacle_avoid_state_of(&sim.ctx) != OBSTACLE_AVOID_FAULT) &&
+         (index < 5u);
+         ++index)
     {
         (void)sim_step();
     }
-    return ok && (sim.ctx.state == OBSTACLE_AVOID_FAULT) &&
-           (sim.ctx.fault == OBSTACLE_AVOID_FAULT_STOP_ACK);
+    return ok && (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_FAULT) &&
+           (obstacle_avoid_fault_of(&sim.ctx) == OBSTACLE_AVOID_FAULT_STOP_ACK);
 }
 
 /* OBS-U43: release before sending; pending commands; kernel failures. */
@@ -2033,7 +2043,7 @@ avoid_send_valid (void)
     uint32_t const sends = sim.sends;
     sim.b_hold_inhibited = true;
     ok = ok && sim_step().b_clear_inhibit && !sim.act.b_send &&
-         (sim.ctx.state == OBSTACLE_AVOID_RELEASING);
+         (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_RELEASING);
     for (uint32_t index = 0u; ok && (index < 3u); ++index)
     {
         ok = !sim_step().b_send;
@@ -2047,12 +2057,12 @@ avoid_send_valid (void)
     {
         ok = sim_step().b_send &&
              (sim.act.cmd == robot_motion_cmd_turn(90u, false, false)) &&
-             (sim.ctx.state == OBSTACLE_AVOID_SEND);
+             (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_SEND);
     }
     sim.b_send_busy = false;
     (void)sim_step();
     (void)sim_step();
-    ok = ok && (sim.ctx.state == OBSTACLE_AVOID_RUN_LEG) &&
+    ok = ok && (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_RUN_LEG) &&
          (sim.sends == sends + 1u);
 
     /* FOLLOW stays pending too, and busy past 200 ms is a FAULT. */
@@ -2064,21 +2074,24 @@ avoid_send_valid (void)
     ok = ok && sim_stays(OBSTACLE_AVOID_SEND, 19u) &&
          (sim.act.cmd == robot_motion_cmd_follow());
     for (uint32_t index = 0u;
-         ok && (sim.ctx.state != OBSTACLE_AVOID_FAULT) && (index < 5u); ++index)
+         ok && (obstacle_avoid_state_of(&sim.ctx) != OBSTACLE_AVOID_FAULT) &&
+         (index < 5u);
+         ++index)
     {
         (void)sim_step();
     }
-    ok = ok && (sim.ctx.fault == OBSTACLE_AVOID_FAULT_KERNEL);
+    ok = ok &&
+         (obstacle_avoid_fault_of(&sim.ctx) == OBSTACLE_AVOID_FAULT_KERNEL);
 
     /* A send error, or a failed INHIBIT call, latches FAULT at once. */
     ok = ok && sim_detect_path();
     sim.in.send = OBSTACLE_AVOID_SEND_ERROR;
     ok = ok && sim_step().b_set_inhibit &&
-         (sim.ctx.fault == OBSTACLE_AVOID_FAULT_KERNEL);
+         (obstacle_avoid_fault_of(&sim.ctx) == OBSTACLE_AVOID_FAULT_KERNEL);
     ok = ok && sim_detect_path();
     sim.in.b_inhibit_failed = true;
     ok = ok && sim_step().b_set_inhibit &&
-         (sim.ctx.fault == OBSTACLE_AVOID_FAULT_KERNEL);
+         (obstacle_avoid_fault_of(&sim.ctx) == OBSTACLE_AVOID_FAULT_KERNEL);
     return ok;
 }
 
@@ -2095,7 +2108,8 @@ avoid_rearm_valid (void)
     sim.in.scan.sequence = 254u; /* The rearm publishes 255; then 0. */
     sim.in.b_move_done = true;
     sim.in.motion_done = ROBOT_MOTION_DONE_DIST;
-    ok = ok && sim_step().b_rearm && (sim.ctx.state == OBSTACLE_AVOID_PREPARE);
+    ok = ok && sim_step().b_rearm &&
+         (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_PREPARE);
     ok = ok && !sim_step().b_send && (sim.in.scan.sequence == 255u);
     /* CLEAR, but with the rearm's own sequence: not fresh. */
     sim.in.scan.flags = robot_obstacle_pack_flags(
@@ -2113,7 +2127,7 @@ avoid_rearm_valid (void)
     (void)sim_step();
     sim_scan(ROBOT_OBSTACLE_UNKNOWN, ROBOT_OBSTACLE_DIR_NONE, true, false);
     ok = ok && sim_step().b_set_inhibit &&
-         (sim.ctx.state == OBSTACLE_AVOID_BLOCKED_WAIT);
+         (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_BLOCKED_WAIT);
     return ok;
 }
 
@@ -2136,7 +2150,8 @@ avoid_verify_valid (void)
     }
     ok = ok &&
          sim_until(OBSTACLE_AVOID_VERIFY, OBSTACLE_AVOID_LEG_VERIFY, 60u) &&
-         (sim.ctx.lateral_mm == 505u) && (sim.ctx.sidesteps == 3u);
+         (sim.ctx.lateral_mm == 505u) &&
+         (obstacle_avoid_field(&sim.ctx, OBSTACLE_AVOID_FIELD_SIDESTEPS) == 3u);
     (void)sim_step();
     sim_corridor(false);
     ok =
@@ -2152,12 +2167,13 @@ avoid_verify_valid (void)
     (void)sim_step();
     sim_corridor(true);
     ok = ok && sim_step().b_set_inhibit &&
-         (sim.ctx.state == OBSTACLE_AVOID_BLOCKED_WAIT);
+         (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_BLOCKED_WAIT);
     sim.in.b_stop_requested = true;
     ok = ok && sim_stays(OBSTACLE_AVOID_BLOCKED_WAIT, 499u);
     (void)sim_step();
     (void)sim_step();
-    return ok && (sim.ctx.fault == OBSTACLE_AVOID_FAULT_BLOCKED);
+    return ok &&
+           (obstacle_avoid_fault_of(&sim.ctx) == OBSTACLE_AVOID_FAULT_BLOCKED);
 }
 
 /* OBS-U46: the done reason ends the return leg early: the axle goes onto
@@ -2178,7 +2194,7 @@ avoid_line_valid (void)
     ok = ok && sim_step().b_send &&
          (sim.act.cmd == robot_motion_cmd_move(40u, false, false)) &&
          (sim.act.p_reason != NULL) &&
-         (sim.ctx.leg == OBSTACLE_AVOID_LEG_OVERSHOOT) &&
+         (obstacle_avoid_leg_of(&sim.ctx) == OBSTACLE_AVOID_LEG_OVERSHOOT) &&
          (sim.in.heading_deg == -90);
     ok = ok &&
          sim_until(OBSTACLE_AVOID_SEND, OBSTACLE_AVOID_LEG_TURN_HOME, 20u) &&
@@ -2194,7 +2210,7 @@ avoid_line_valid (void)
     sim.in.b_move_done = true;
     sim.in.motion_done = ROBOT_MOTION_DONE_DIST;
     ok = ok && sim_step().b_set_inhibit &&
-         (sim.ctx.state == OBSTACLE_AVOID_RETRY_WAIT);
+         (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_RETRY_WAIT);
     ok = ok && sim_stays(OBSTACLE_AVOID_RETRY_WAIT, 99u);
     ok = ok && sim_until(OBSTACLE_AVOID_SEND, OBSTACLE_AVOID_LEG_RETURN, 20u) &&
          (sim.act.cmd == robot_motion_cmd_move(150u, false, true));
@@ -2203,10 +2219,10 @@ avoid_line_valid (void)
     sim.in.motion_done = ROBOT_MOTION_DONE_DIST;
     ok = ok && sim_step().b_send &&
          (sim.act.cmd == robot_motion_cmd_follow()) &&
-         (sim.ctx.leg == OBSTACLE_AVOID_LEG_FOLLOW) &&
-         (sim.ctx.fault == OBSTACLE_AVOID_FAULT_NONE);
+         (obstacle_avoid_leg_of(&sim.ctx) == OBSTACLE_AVOID_LEG_FOLLOW) &&
+         (obstacle_avoid_fault_of(&sim.ctx) == OBSTACLE_AVOID_FAULT_NONE);
     (void)sim_step();
-    return ok && (sim.ctx.state == OBSTACLE_AVOID_IDLE);
+    return ok && (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_IDLE);
 }
 
 /* Run to the sidestep with its move just queued at odometry 0. */
@@ -2227,7 +2243,7 @@ avoid_fault_valid (void)
     sim.in.distance_mm = 100;
     sim.in.b_stall = true;
     ok = ok && sim_step().b_set_inhibit &&
-         (sim.ctx.state == OBSTACLE_AVOID_RETRY_WAIT);
+         (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_RETRY_WAIT);
     ok = ok && sim_stays(OBSTACLE_AVOID_RETRY_WAIT, 99u);
     ok = ok &&
          sim_until(OBSTACLE_AVOID_SEND, OBSTACLE_AVOID_LEG_SIDESTEP, 20u) &&
@@ -2235,7 +2251,8 @@ avoid_fault_valid (void)
     (void)sim_step();
     sim.in.b_stall = true;
     (void)sim_step();
-    ok = ok && (sim.ctx.fault == OBSTACLE_AVOID_FAULT_RETRY_USED);
+    ok = ok &&
+         (obstacle_avoid_fault_of(&sim.ctx) == OBSTACLE_AVOID_FAULT_RETRY_USED);
 
     /* FAULT ignores every later input and keeps asking for INHIBIT. */
     for (uint32_t index = 0u; ok && (index < 1000u); ++index)
@@ -2249,7 +2266,8 @@ avoid_fault_valid (void)
         sim.in.motion_mode = ROBOT_MOTION_MODE_STOPPED;
         obstacle_avoid_action_t act = sim_step();
         ok = act.b_set_inhibit && !act.b_clear_inhibit && !act.b_send &&
-             !act.b_rearm && (sim.ctx.state == OBSTACLE_AVOID_FAULT);
+             !act.b_rearm &&
+             (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_FAULT);
     }
 
     /* A remainder under 10 mm counts as done: the next leg is the turn. */
@@ -2265,16 +2283,19 @@ avoid_fault_valid (void)
     ok = ok && sim_in_sidestep();
     sim.in.b_enc_fault = true;
     (void)sim_step();
-    ok = ok && (sim.ctx.fault == OBSTACLE_AVOID_FAULT_ENCODER);
+    ok = ok &&
+         (obstacle_avoid_fault_of(&sim.ctx) == OBSTACLE_AVOID_FAULT_ENCODER);
     ok = ok && sim_in_sidestep();
     sim.in.b_rejected = true;
     (void)sim_step();
-    ok = ok && (sim.ctx.fault == OBSTACLE_AVOID_FAULT_REJECTED);
+    ok = ok &&
+         (obstacle_avoid_fault_of(&sim.ctx) == OBSTACLE_AVOID_FAULT_REJECTED);
     ok = ok && sim_in_sidestep();
     sim.in.b_odometry_valid = false;
     sim.in.b_stall = true;
     (void)sim_step();
-    return ok && (sim.ctx.fault == OBSTACLE_AVOID_FAULT_ODOMETRY);
+    return ok &&
+           (obstacle_avoid_fault_of(&sim.ctx) == OBSTACLE_AVOID_FAULT_ODOMETRY);
 }
 
 /* OBS-U48: obstacles during the bypass, and one complete ideal box. */
@@ -2285,7 +2306,7 @@ avoid_obstacles_valid (void)
     sim.in.distance_mm = 50;
     sim.in.b_stop_requested = true;
     ok = ok && sim_step().b_set_inhibit &&
-         (sim.ctx.state == OBSTACLE_AVOID_BLOCKED_WAIT);
+         (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_BLOCKED_WAIT);
     ok = ok && sim_stays(OBSTACLE_AVOID_BLOCKED_WAIT, 10u);
     sim.in.b_stop_requested = false;
     ok = ok && sim_step().b_clear_inhibit;
@@ -2299,7 +2320,8 @@ avoid_obstacles_valid (void)
     ok = ok && sim_stays(OBSTACLE_AVOID_BLOCKED_WAIT, 499u);
     (void)sim_step();
     (void)sim_step();
-    ok = ok && (sim.ctx.fault == OBSTACLE_AVOID_FAULT_BLOCKED);
+    ok = ok &&
+         (obstacle_avoid_fault_of(&sim.ctx) == OBSTACLE_AVOID_FAULT_BLOCKED);
 
     /* During a turn a stop request is ignored, but CRITICAL is not. */
     ok = ok && sim_detect_path();
@@ -2309,14 +2331,14 @@ avoid_obstacles_valid (void)
     ok = ok && sim_stays(OBSTACLE_AVOID_RUN_LEG, 5u);
     sim.in.scan.flags = robot_obstacle_set_critical(sim.in.scan.flags, true);
     ok = ok && sim_step().b_set_inhibit &&
-         (sim.ctx.state == OBSTACLE_AVOID_BLOCKED_WAIT);
+         (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_BLOCKED_WAIT);
 
     /* A whole box ends with FOLLOW queued and the machine IDLE. */
     ok = ok && sim_detect_path();
     ok = ok &&
          sim_until(OBSTACLE_AVOID_IDLE, OBSTACLE_AVOID_LEG_FOLLOW, 200u) &&
          (sim.last_cmd == robot_motion_cmd_follow()) &&
-         (sim.ctx.fault == OBSTACLE_AVOID_FAULT_NONE);
+         (obstacle_avoid_fault_of(&sim.ctx) == OBSTACLE_AVOID_FAULT_NONE);
     return ok;
 }
 
@@ -2360,7 +2382,8 @@ avoid_angle_valid (void)
     uint32_t seen = 0u;
     sim.b_auto = true;
     for (uint32_t index = 0u;
-         ok && (index < 300u) && (sim.ctx.state != OBSTACLE_AVOID_IDLE);
+         ok && (index < 300u) &&
+         (obstacle_avoid_state_of(&sim.ctx) != OBSTACLE_AVOID_IDLE);
          ++index)
     {
         uint32_t const before = sim.sends;
@@ -2373,7 +2396,7 @@ avoid_angle_valid (void)
         }
     }
     sim.b_auto = false;
-    return ok && (sim.ctx.state == OBSTACLE_AVOID_IDLE) &&
+    return ok && (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_IDLE) &&
            (seen == ARRAY_COUNT(expected)) && (sim.sends - first == seen);
 }
 
@@ -2388,17 +2411,18 @@ avoid_no_recheck_valid (void)
     uint32_t rechecks = 0u;
     sim.b_auto = true;
     for (uint32_t index = 0u;
-         ok && (index < 200u) && (sim.ctx.state != OBSTACLE_AVOID_IDLE);
+         ok && (index < 200u) &&
+         (obstacle_avoid_state_of(&sim.ctx) != OBSTACLE_AVOID_IDLE);
          ++index)
     {
         sim.in.b_stop_requested = true; /* Latched, never released. */
         obstacle_avoid_action_t const act = sim_step();
         rechecks += (act.b_rearm || act.b_corridor) ? 1u : 0u;
-        ok = sim.ctx.state != OBSTACLE_AVOID_BLOCKED_WAIT;
+        ok = obstacle_avoid_state_of(&sim.ctx) != OBSTACLE_AVOID_BLOCKED_WAIT;
     }
     sim.b_auto = false;
-    ok = ok && (sim.ctx.state == OBSTACLE_AVOID_IDLE) && (rechecks == 0u) &&
-         (sim.last_cmd == robot_motion_cmd_follow());
+    ok = ok && (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_IDLE) &&
+         (rechecks == 0u) && (sim.last_cmd == robot_motion_cmd_follow());
 
     /* CRITICAL 50 mm into the sidestep holds; clearing it resumes 185 mm
      * at once, with the stop request still latched. */
@@ -2411,12 +2435,12 @@ avoid_no_recheck_valid (void)
     sim.in.distance_mm = 50;
     sim.in.scan.flags = robot_obstacle_set_critical(sim.in.scan.flags, true);
     ok = ok && sim_step().b_set_inhibit &&
-         (sim.ctx.state == OBSTACLE_AVOID_BLOCKED_WAIT);
+         (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_BLOCKED_WAIT);
     ok = ok && sim_stays(OBSTACLE_AVOID_BLOCKED_WAIT, 5u);
     sim.in.scan.flags = robot_obstacle_set_critical(sim.in.scan.flags, false);
     sim.in.b_stop_requested = true;
     ok = ok && sim_step().b_clear_inhibit && !sim_step().b_rearm &&
-         (sim.ctx.state == OBSTACLE_AVOID_SEND) &&
+         (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_SEND) &&
          (sim.act.cmd == robot_motion_cmd_move(185u, false, false));
     return ok;
 }
@@ -2444,13 +2468,15 @@ avoid_backoff_valid (void)
         sim.in.scan.flags =
             robot_obstacle_set_critical(sim.in.scan.flags, true);
         ok = sim_step().b_set_inhibit &&
-             (sim.ctx.state == OBSTACLE_AVOID_BLOCKED_WAIT) &&
+             (obstacle_avoid_state_of(&sim.ctx) ==
+              OBSTACLE_AVOID_BLOCKED_WAIT) &&
              sim_stays(OBSTACLE_AVOID_BLOCKED_WAIT, 29u);
         if (backoff == 2u)
         {
             /* Back-offs used up: turn back parallel to re-sweep. */
             (void)sim_step();
-            ok = ok && sim_step().b_clear_inhibit && sim.ctx.b_replan_pending;
+            ok = ok && sim_step().b_clear_inhibit &&
+                 obstacle_avoid_flag(&sim.ctx, OBSTACLE_AVOID_F_REPLAN_PENDING);
             break;
         }
         (void)sim_step();
@@ -2485,7 +2511,7 @@ sim_held_critical (obstacle_avoid_leg_t leg)
     sim.in.distance_mm = 100;
     sim.in.scan.flags = robot_obstacle_set_critical(sim.in.scan.flags, true);
     return ok && sim_step().b_set_inhibit &&
-           (sim.ctx.state == OBSTACLE_AVOID_BLOCKED_WAIT) &&
+           (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_BLOCKED_WAIT) &&
            sim_stays(OBSTACLE_AVOID_BLOCKED_WAIT, 29u);
 }
 
@@ -2498,13 +2524,13 @@ avoid_replan_valid (void)
 {
     bool ok = sim_held_critical(OBSTACLE_AVOID_LEG_PASS);
     (void)sim_step();
-    ok =
-        ok && sim_step().b_corridor && (sim.ctx.state == OBSTACLE_AVOID_REPLAN);
+    ok = ok && sim_step().b_corridor &&
+         (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_REPLAN);
     (void)sim_step(); /* Corridor request answered. */
     sim_corridor(true);
     ok = ok && sim_step().b_clear_inhibit && sim.act.b_side_scans_off &&
          (sim.ctx.sidestep_mm == 135u) && (sim.ctx.lateral_mm == 235u) &&
-         !sim.ctx.plan.b_gap_right;
+         !obstacle_avoid_plan_flag(&sim.ctx, OBSTACLE_AVOID_PLAN_F_GAP_RIGHT);
     sim.in.scan.flags = robot_obstacle_set_critical(sim.in.scan.flags, false);
     ok = ok && sim_step().b_send &&
          (sim.act.cmd == robot_motion_cmd_turn(90u, false, false));
@@ -2518,8 +2544,8 @@ avoid_replan_valid (void)
     (void)sim_step(); /* Queued. */
     sim.in.b_move_done = true;
     sim.in.motion_done = ROBOT_MOTION_DONE_DIST;
-    ok =
-        ok && sim_step().b_corridor && (sim.ctx.state == OBSTACLE_AVOID_REPLAN);
+    ok = ok && sim_step().b_corridor &&
+         (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_REPLAN);
     (void)sim_step();
     sim_corridor(false);
     ok = ok && sim_step().b_send &&
@@ -2556,14 +2582,14 @@ avoid_reverse_valid (void)
     ok = ok && sim_step().b_send &&
          (sim.act.cmd == robot_motion_cmd_move(150u, true, false));
     (void)sim_step(); /* Queued; CRITICAL does not stop a reverse. */
-    ok = ok && (sim.ctx.state == OBSTACLE_AVOID_RUN_LEG);
+    ok = ok && (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_RUN_LEG);
     sim.in.scan.flags = robot_obstacle_set_critical(sim.in.scan.flags, false);
     sim.in.b_move_done = true;
     sim.in.motion_done = ROBOT_MOTION_DONE_DIST;
     /* The first sweep was too close to trust: sweep the corridor. A
      * point straight ahead needs 135 mm either way; the tie keeps left. */
-    ok =
-        ok && sim_step().b_corridor && (sim.ctx.state == OBSTACLE_AVOID_REPLAN);
+    ok = ok && sim_step().b_corridor &&
+         (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_REPLAN);
     (void)sim_step();
     sim_corridor(true);
     ok = ok && sim_step().b_send &&
@@ -2662,7 +2688,7 @@ avoid_turn_backoff_valid (void)
     sim.in.heading_deg = 40;
     sim.in.scan.flags = robot_obstacle_set_critical(sim.in.scan.flags, true);
     ok = ok && sim_step().b_set_inhibit &&
-         (sim.ctx.state == OBSTACLE_AVOID_BLOCKED_WAIT) &&
+         (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_BLOCKED_WAIT) &&
          sim_stays(OBSTACLE_AVOID_BLOCKED_WAIT, 29u);
     (void)sim_step();
     ok = ok && sim_step().b_clear_inhibit && sim_step().b_send &&
@@ -2712,7 +2738,7 @@ avoid_probe_valid (void)
             sim.in.b_move_done = true;
             sim.in.motion_done = ROBOT_MOTION_DONE_DIST;
             ok = ok && sim_step().b_corridor &&
-                 (sim.ctx.state == OBSTACLE_AVOID_REPLAN);
+                 (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_REPLAN);
             if (clear_first != 0u)
             {
                 (void)sim_step();
@@ -2727,7 +2753,8 @@ avoid_probe_valid (void)
             (void)sim_step();
             sim_blocked_corridor();
             (void)sim_step();
-            ok = ok && (sim.ctx.state == OBSTACLE_AVOID_BLOCKED_WAIT);
+            ok = ok && (obstacle_avoid_state_of(&sim.ctx) ==
+                        OBSTACLE_AVOID_BLOCKED_WAIT);
         }
     }
 
@@ -2744,7 +2771,8 @@ avoid_probe_valid (void)
     ok = ok &&
          sim_until(OBSTACLE_AVOID_RUN_LEG, OBSTACLE_AVOID_LEG_REVERSE, 10u) &&
          (sim.last_cmd == robot_motion_cmd_move(100u, true, false)) &&
-         (sim.ctx.escaped_mm == 100u) && sim.ctx.b_replan_pending;
+         (sim.ctx.escaped_mm == 100u) &&
+         obstacle_avoid_flag(&sim.ctx, OBSTACLE_AVOID_F_REPLAN_PENDING);
     return ok;
 }
 
@@ -2765,8 +2793,8 @@ avoid_watch_valid (void)
     sim.config.timing.b_recheck = false;
     ok = ok &&
          sim_until(OBSTACLE_AVOID_RUN_LEG, OBSTACLE_AVOID_LEG_SIDESTEP, 20u) &&
-         sim.ctx.b_watching && sim.in.watch.b_active &&
-         (sim.ctx.sidestep_mm == 235u);
+         obstacle_avoid_flag(&sim.ctx, OBSTACLE_AVOID_F_WATCHING) &&
+         sim.in.watch.b_active && (sim.ctx.sidestep_mm == 235u);
     sim_watch(sim_watch_echo(110.0f));
     (void)sim_step();
     ok = ok && (sim.ctx.sidestep_mm == 235u) && (sim.ctx.remaining == 235u);
@@ -2784,8 +2812,8 @@ avoid_watch_valid (void)
     sim.in.distance_mm += 100;
     sim_watch(1170u);
     ok = ok && sim_step().b_set_inhibit &&
-         (sim.ctx.state == OBSTACLE_AVOID_RETRY_WAIT) &&
-         (sim.ctx.leg == OBSTACLE_AVOID_LEG_TURN_OUT) &&
+         (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_RETRY_WAIT) &&
+         (obstacle_avoid_leg_of(&sim.ctx) == OBSTACLE_AVOID_LEG_TURN_OUT) &&
          (sim.ctx.sidestep_mm == 35u) && (sim.ctx.forward_mm == 100u) &&
          (sim.ctx.watch_shift_mm == 70u);
     ok = ok &&
@@ -2798,19 +2826,22 @@ avoid_watch_valid (void)
          (sim.ctx.remaining == 550u) && (sim.ctx.lateral_mm == 305u);
     sim_watch(1170u); /* On the pass too, 70 + 35 passes the cap: no stop. */
     ok = ok && !sim_step().b_set_inhibit &&
-         (sim.ctx.state == OBSTACLE_AVOID_RUN_LEG) &&
+         (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_RUN_LEG) &&
          (sim.ctx.watch_shift_mm == 70u);
     /* A dropout with the last point still ahead keeps watching. */
     sim_watch(0u);
-    ok = ok && !sim_step().b_watch && sim.ctx.b_watching;
+    ok = ok && !sim_step().b_watch &&
+         obstacle_avoid_flag(&sim.ctx, OBSTACLE_AVOID_F_WATCHING);
     sim.in.distance_mm += 223; /* 174 mm ahead + 50: one short. */
     sim_watch(0u);
-    ok = ok && !sim_step().b_watch && sim.ctx.b_watching;
+    ok = ok && !sim_step().b_watch &&
+         obstacle_avoid_flag(&sim.ctx, OBSTACLE_AVOID_F_WATCHING);
     sim.in.distance_mm += 1;
     sim_watch(0u);
     ok = ok && sim_step().b_watch &&
          (sim.act.watch_angle == (int16_t)OBSTACLE_SCAN_WATCH_OFF) &&
-         !sim.ctx.b_watching && sim.ctx.b_watch_done;
+         !obstacle_avoid_flag(&sim.ctx, OBSTACLE_AVOID_F_WATCHING) &&
+         obstacle_avoid_flag(&sim.ctx, OBSTACLE_AVOID_F_WATCH_DONE);
     return ok;
 }
 
@@ -2833,14 +2864,15 @@ avoid_watch_front_valid (void)
         }
         ok = ok && sim_until(OBSTACLE_AVOID_RUN_LEG,
                              OBSTACLE_AVOID_LEG_SIDESTEP, 50u);
-        int32_t const turn = (int32_t)sim.ctx.plan.angle_deg;
+        int32_t const turn = (int32_t)obstacle_avoid_plan_angle(&sim.ctx);
         bool const b_high = (right != 0u) != (OBSTACLE_SERVO_MIRRORED != 0);
         int32_t front = b_high ? (90 + turn) : (90 - turn);
         front =
             (front < OBSTACLE_WATCH_MIN_DEG) ? OBSTACLE_WATCH_MIN_DEG : front;
         front =
             (front > OBSTACLE_WATCH_MAX_DEG) ? OBSTACLE_WATCH_MAX_DEG : front;
-        ok = ok && sim.ctx.b_watching && (sim.watch_angle == front) &&
+        ok = ok && obstacle_avoid_flag(&sim.ctx, OBSTACLE_AVOID_F_WATCHING) &&
+             (sim.watch_angle == front) &&
              (front != (int16_t)OBSTACLE_WATCH_LEFT_DEG) &&
              (front != (int16_t)OBSTACLE_WATCH_RIGHT_DEG);
         sim_watch(1170u); /* The face. */
@@ -2848,10 +2880,11 @@ avoid_watch_front_valid (void)
         sim.in.distance_mm += 400;
         sim_watch(0u); /* Past its edge. */
         (void)sim_step();
-        ok = ok && sim.ctx.b_watching && !sim.ctx.b_watch_done;
+        ok = ok && obstacle_avoid_flag(&sim.ctx, OBSTACLE_AVOID_F_WATCHING) &&
+             !obstacle_avoid_flag(&sim.ctx, OBSTACLE_AVOID_F_WATCH_DONE);
         ok = ok &&
              sim_until(OBSTACLE_AVOID_RUN_LEG, OBSTACLE_AVOID_LEG_PASS, 50u) &&
-             sim.ctx.b_watching &&
+             obstacle_avoid_flag(&sim.ctx, OBSTACLE_AVOID_F_WATCHING) &&
              (sim.watch_angle == (b_high ? (int16_t)OBSTACLE_WATCH_RIGHT_DEG
                                          : (int16_t)OBSTACLE_WATCH_LEFT_DEG));
     }
@@ -2926,11 +2959,12 @@ avoid_rejoin_valid (void)
             sim.b_send_busy = true;
             uint32_t const overshoot = robot_motion_cmd_move(40u, false, false);
             ok = ok && sim_step().b_send && (sim.act.cmd == overshoot) &&
-                 (sim.ctx.leg == OBSTACLE_AVOID_LEG_OVERSHOOT);
+                 (obstacle_avoid_leg_of(&sim.ctx) ==
+                  OBSTACLE_AVOID_LEG_OVERSHOOT);
             for (uint32_t step = 0u; ok && (step < 3u); ++step)
             {
                 ok = sim_step().b_send && (sim.act.cmd == overshoot) &&
-                     (sim.ctx.state == OBSTACLE_AVOID_SEND);
+                     (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_SEND);
             }
             sim.b_send_busy = false;
             (void)sim_step(); /* Queued on this retry. */
@@ -2964,7 +2998,7 @@ avoid_rejoin_valid (void)
         sim.in.scan.flags =
             robot_obstacle_set_critical(sim.in.scan.flags, true);
         ok = ok && sim_step().b_set_inhibit && !sim.act.b_send &&
-             (sim.ctx.state == OBSTACLE_AVOID_BLOCKED_WAIT);
+             (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_BLOCKED_WAIT);
         if (!ok)
         {
             return false;
@@ -2981,7 +3015,7 @@ avoid_rejoin_valid (void)
         sim.in.motion_done = ROBOT_MOTION_DONE_LINE;
         sim.in.b_stop_requested = true;
         ok = ok && sim_step().b_set_inhibit && !sim.act.b_send &&
-             (sim.ctx.state == OBSTACLE_AVOID_BLOCKED_WAIT);
+             (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_BLOCKED_WAIT);
         if (!ok)
         {
             return false;
@@ -3058,7 +3092,8 @@ replan_measured_clearance_valid (void)
         bool const right = (choice == 0u) || (choice == 3u);
         ok = ok && sim_step().b_send &&
              (sim.act.cmd == robot_motion_cmd_turn(90u, right, false)) &&
-             (sim.ctx.plan.b_gap_right == right);
+             (obstacle_avoid_plan_flag(
+                  &sim.ctx, OBSTACLE_AVOID_PLAN_F_GAP_RIGHT) == right);
         if (!ok)
         {
             return false;
@@ -3102,11 +3137,13 @@ sim_stop_off_line (int32_t off_deg)
     }
     sim_scan(ROBOT_OBSTACLE_SCANNING, ROBOT_OBSTACLE_DIR_NONE, true, false);
     ok = ok && sim_step().b_set_inhibit &&
-         (sim.ctx.state == OBSTACLE_AVOID_STOPPING);
+         (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_STOPPING);
     sim.in.heading_deg = off_deg;
     (void)sim_step();
-    return ok && (sim.ctx.state == OBSTACLE_AVOID_WAIT_RESULT) &&
-           !sim.act.b_rearm && sim.ctx.b_straighten_due;
+    return ok &&
+           (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_WAIT_RESULT) &&
+           !sim.act.b_rearm &&
+           obstacle_avoid_flag(&sim.ctx, OBSTACLE_AVOID_F_STRAIGHTEN_DUE);
 }
 
 /* Up to and including the step that checks the heading after the brake. */
@@ -3125,8 +3162,9 @@ avoid_straighten_valid (void)
 {
     bool ok = sim_stop_off_line(8) && sim_settle();
     ok = ok && (sim.act.skew_deg == -8) && sim.act.b_clear_inhibit &&
-         (sim.ctx.state == OBSTACLE_AVOID_RELEASING);
-    ok = ok && sim_step().b_send && (sim.ctx.state == OBSTACLE_AVOID_SEND) &&
+         (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_RELEASING);
+    ok = ok && sim_step().b_send &&
+         (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_SEND) &&
          (robot_motion_cmd_get_type(sim.act.cmd) == ROBOT_MOTION_CMD_TURN) &&
          (robot_motion_cmd_get_angle(sim.act.cmd) == 8u) &&
          robot_motion_cmd_get_reverse(sim.act.cmd) &&
@@ -3136,15 +3174,17 @@ avoid_straighten_valid (void)
     ok = ok && sim.act.b_set_inhibit && (sim.in.heading_deg == 0);
     (void)sim_step();
     ok = ok && sim.act.b_rearm &&
-         (sim.ctx.state == OBSTACLE_AVOID_WAIT_RESULT) &&
-         (sim.ctx.origin_heading_deg == 0) && !sim.ctx.b_measure_again;
+         (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_WAIT_RESULT) &&
+         (sim.ctx.origin_heading_deg == 0) &&
+         !obstacle_avoid_flag(&sim.ctx, OBSTACLE_AVOID_F_MEASURE_AGAIN);
     /* Once only, however long the new sweep takes. */
     ok = ok && sim_stays(OBSTACLE_AVOID_WAIT_RESULT, 40u);
     sim_scan(ROBOT_OBSTACLE_PATH_FOUND, ROBOT_OBSTACLE_DIR_LEFT_60, true,
              false);
     (void)sim_step();
-    ok = ok && (sim.ctx.state == OBSTACLE_AVOID_RELEASING) &&
-         (sim.ctx.leg != OBSTACLE_AVOID_LEG_STRAIGHTEN);
+    ok = ok &&
+         (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_RELEASING) &&
+         (obstacle_avoid_leg_of(&sim.ctx) != OBSTACLE_AVOID_LEG_STRAIGHTEN);
 
     ok = ok && sim_stop_off_line(-4) && sim_settle();
     ok = ok && (sim.act.skew_deg == 4) && (sim.act.p_reason != NULL);
@@ -3156,20 +3196,21 @@ avoid_straighten_valid (void)
     ok = ok && sim_stop_off_line(8) && sim_settle();
     (void)sim_step();
     (void)sim_step();
-    ok = ok && (sim.ctx.state == OBSTACLE_AVOID_RUN_LEG);
+    ok = ok && (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_RUN_LEG);
     sim.in.b_stall = true;
     ok = ok && sim_step().b_set_inhibit &&
-         (sim.ctx.state == OBSTACLE_AVOID_STOPPING) && !sim.ctx.b_retry_used;
+         (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_STOPPING) &&
+         !obstacle_avoid_flag(&sim.ctx, OBSTACLE_AVOID_F_RETRY_USED);
     (void)sim_step();
     ok = ok && sim.act.b_rearm &&
-         (sim.ctx.state == OBSTACLE_AVOID_WAIT_RESULT) &&
+         (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_WAIT_RESULT) &&
          (sim.ctx.origin_heading_deg == 8);
     ok = ok && sim_stop_off_line(8) && sim_settle();
     (void)sim_step();
     (void)sim_step();
     sim_scan(ROBOT_OBSTACLE_SCANNING, ROBOT_OBSTACLE_DIR_NONE, true, true);
     ok = ok && sim_step().b_set_inhibit &&
-         (sim.ctx.state == OBSTACLE_AVOID_STOPPING);
+         (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_STOPPING);
     return ok;
 }
 
@@ -3179,13 +3220,13 @@ avoid_straighten_skip_valid (void)
 {
     bool ok = sim_stop_off_line(3) && sim_settle();
     ok = ok && (sim.act.skew_deg == -3) && !sim.act.b_clear_inhibit &&
-         (sim.ctx.state == OBSTACLE_AVOID_WAIT_RESULT);
+         (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_WAIT_RESULT);
     ok = ok && !sim_step().b_skew_known; /* Checked once. */
 
     ok = ok && sim_stop_off_line(15) && sim_settle() &&
-         (sim.ctx.state == OBSTACLE_AVOID_RELEASING);
+         (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_RELEASING);
     ok = ok && sim_stop_off_line(16) && sim_settle() &&
-         (sim.ctx.state == OBSTACLE_AVOID_WAIT_RESULT);
+         (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_WAIT_RESULT);
 
     ok = ok && sim_stop_off_line(8);
     sim_scan(ROBOT_OBSTACLE_SCANNING, ROBOT_OBSTACLE_DIR_NONE, true, true);
@@ -3194,20 +3235,22 @@ avoid_straighten_skip_valid (void)
     ok = ok && sim_stop_off_line(8);
     sim.in.b_odometry_valid = false;
     (void)sim_stays(OBSTACLE_AVOID_WAIT_RESULT, 30u);
-    ok = ok && !sim.ctx.b_straighten_due &&
-         (sim.ctx.state == OBSTACLE_AVOID_WAIT_RESULT);
+    ok = ok &&
+         !obstacle_avoid_flag(&sim.ctx, OBSTACLE_AVOID_F_STRAIGHTEN_DUE) &&
+         (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_WAIT_RESULT);
 
     /* Too little travel since following began. */
     sim_reset();
     sim_scan(ROBOT_OBSTACLE_CLEAR, ROBOT_OBSTACLE_DIR_CENTRE_90, false, false);
     ok = ok && sim_until(OBSTACLE_AVOID_IDLE, OBSTACLE_AVOID_LEG_FOLLOW, 10u);
     ok = ok && sim_stays(OBSTACLE_AVOID_IDLE, 10u) &&
-         (sim.ctx.trend_count == 0u);
+         (obstacle_avoid_field(&sim.ctx, OBSTACLE_AVOID_FIELD_TREND_COUNT) ==
+          0u);
     sim.in.distance_mm += 32;
     (void)sim_step();
     sim_scan(ROBOT_OBSTACLE_SCANNING, ROBOT_OBSTACLE_DIR_NONE, true, false);
     (void)sim_step();
-    ok = ok && !sim.ctx.b_straighten_due;
+    ok = ok && !obstacle_avoid_flag(&sim.ctx, OBSTACLE_AVOID_F_STRAIGHTEN_DUE);
 
     /* What it kept before a stop says nothing about after it. */
     ok = ok && sim_stop_off_line(0);
@@ -3217,7 +3260,7 @@ avoid_straighten_skip_valid (void)
     (void)sim_step();
     sim_scan(ROBOT_OBSTACLE_SCANNING, ROBOT_OBSTACLE_DIR_NONE, true, false);
     (void)sim_step();
-    ok = ok && !sim.ctx.b_straighten_due;
+    ok = ok && !obstacle_avoid_flag(&sim.ctx, OBSTACLE_AVOID_F_STRAIGHTEN_DUE);
 
     /* Turned through a pivot or a bend over the headings kept. */
     sim_reset();
@@ -3231,7 +3274,7 @@ avoid_straighten_skip_valid (void)
     sim.in.heading_deg = 15;
     sim_scan(ROBOT_OBSTACLE_SCANNING, ROBOT_OBSTACLE_DIR_NONE, true, false);
     (void)sim_step();
-    ok = ok && !sim.ctx.b_straighten_due;
+    ok = ok && !obstacle_avoid_flag(&sim.ctx, OBSTACLE_AVOID_F_STRAIGHTEN_DUE);
 
     /* The average, oldest headings replaced: 2, 4, 6 and now 8. */
     sim_reset();
@@ -3246,7 +3289,9 @@ avoid_straighten_skip_valid (void)
     sim.in.heading_deg = 8;
     sim_scan(ROBOT_OBSTACLE_SCANNING, ROBOT_OBSTACLE_DIR_NONE, true, false);
     (void)sim_step();
-    return ok && sim.ctx.b_straighten_due && (sim.ctx.line_heading_deg == 5);
+    return ok &&
+           obstacle_avoid_flag(&sim.ctx, OBSTACLE_AVOID_F_STRAIGHTEN_DUE) &&
+           (sim.ctx.line_heading_deg == 5);
 }
 
 /* OBS-U79: 75 + 60 + 115 is 250 mm. An edge the sweep puts 30 mm off the line
@@ -3293,8 +3338,8 @@ plan_edge_min_valid (void)
     ok = ok && sim_held_critical(OBSTACLE_AVOID_LEG_PASS);
     sim.config.geometry.edge_min_mm = 115u;
     (void)sim_step();
-    ok =
-        ok && sim_step().b_corridor && (sim.ctx.state == OBSTACLE_AVOID_REPLAN);
+    ok = ok && sim_step().b_corridor &&
+         (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_REPLAN);
     (void)sim_step(); /* Corridor request answered. */
     sim_corridor(true);
     ok = ok && sim_step().b_clear_inhibit && (sim.ctx.sidestep_mm == 135u);
@@ -3453,14 +3498,14 @@ avoid_home_valid (void)
 {
     bool ok = sim_home_from(-97, true) &&
               (sim.act.cmd == robot_motion_cmd_turn(97u, false, false)) &&
-              (sim.ctx.leg == OBSTACLE_AVOID_LEG_TURN_HOME);
+              (obstacle_avoid_leg_of(&sim.ctx) == OBSTACLE_AVOID_LEG_TURN_HOME);
     ok = ok && sim_home_from(-2, true) &&
          (sim.act.cmd == robot_motion_cmd_follow());
     ok = ok && sim_home_from(350, true) &&
          (sim.act.cmd == robot_motion_cmd_turn(10u, false, false));
     ok = ok && sim_home_from(-90, false) &&
          (sim.act.cmd == robot_motion_cmd_follow()) &&
-         (sim.ctx.fault == OBSTACLE_AVOID_FAULT_NONE);
+         (obstacle_avoid_fault_of(&sim.ctx) == OBSTACLE_AVOID_FAULT_NONE);
     return ok;
 }
 

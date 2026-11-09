@@ -202,6 +202,10 @@ static uint32_t detect_word = 0u;  /* terrain_detect.h layout. */
 static int32_t hump_start_mm = 0;  /* Where the latest climb began. */
 static uint32_t collide_word = 0u; /* terrain_detect.h layout. */
 static terrain_stopped_t stopped;
+_Static_assert(TERRAIN_COLLISION_STOP_WINDOW_SAMPLES < 255u,
+               "Collision window must fit the 8-bit age");
+_Static_assert(TERRAIN_COLLISION_STOP_GRACE_SAMPLES < 255u,
+               "Collision grace must fit the 8-bit off-level count");
 static uint32_t speed_word = 0u; /* terrain_detect.h layout. */
 static terrain_height_t height;
 
@@ -1167,7 +1171,7 @@ detect_collision (terrain_vec3_t const * p_accel, terrain_hint_t const * p_hint,
         p_hint->b_distance_known,
         (int32_t)p_hint->speed_mm_s,
         b_stopped_dead,
-        stopped.peak_g};
+        terrain_detect_stopped_peak_g(&stopped)};
     uint32_t value = 0u;
 
     if (terrain_detect_collision_step(&collide_word, &in, &collision_limits,

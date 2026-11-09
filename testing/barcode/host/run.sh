@@ -10,3 +10,8 @@ ${CC:-cc} -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -g \
     "$repo_root/app_program/barcode/barcode_scan.c" \
     -o "$test_tmp/barcode"
 "$test_tmp/barcode"
+
+${CC:-cc} -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -g \
+    "$repo_root/testing/barcode/host/scan_limits_test.c" \
+    -o "$test_tmp/scan-limits"
+"$test_tmp/scan-limits"

@@ -660,6 +660,56 @@ robot_field64_put (uint64_t word, uint32_t shift, uint32_t bits, uint32_t value)
 }
 
 /**
+ * @brief Saturate a value to 16 signed bits.
+ * @param value Full-size value.
+ * @return Value limited to INT16_MIN..INT16_MAX.
+ */
+static inline int16_t
+robot_clamp_i16 (int32_t value)
+{
+    return (value > INT16_MAX)
+               ? INT16_MAX
+               : ((value < INT16_MIN) ? INT16_MIN : (int16_t)value);
+}
+
+/**
+ * @brief Saturate a value to 16 unsigned bits.
+ * @param value Full-size value.
+ * @return Value limited to UINT16_MAX.
+ */
+static inline uint16_t
+robot_clamp_u16 (uint32_t value)
+{
+    return (value > UINT16_MAX) ? UINT16_MAX : (uint16_t)value;
+}
+
+/**
+ * @brief Keep the low 16 bits of a running distance as a mark.
+ * @param value Running distance in mm.
+ * @return Mark for robot_mark16_near().
+ */
+static inline int16_t
+robot_mark16 (int32_t value)
+{
+    return (int16_t)(uint16_t)(uint32_t)value;
+}
+
+/**
+ * @brief The running distance a 16-bit mark stands for.
+ * @param now Current running distance in mm.
+ * @param mark Mark from robot_mark16().
+ * @return The value nearest @p now; marks more than 32 m away do not read
+ * correctly, so age any mark that can stay unused for that long.
+ */
+static inline int32_t
+robot_mark16_near (int32_t now, int16_t mark)
+{
+    uint32_t const low = (uint32_t)(int32_t)mark - (uint32_t)now;
+
+    return now + (int32_t)(int16_t)(uint16_t)low;
+}
+
+/**
  * @brief Encode a line request (IF-04).
  * @param mode line_mode_t value, 0 to 3.
  * @param flags ROBOT_LINE_REQ_SEEN, JUNCTION, SLOW and VALID, ORed.

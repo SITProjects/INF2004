@@ -42,6 +42,7 @@
 /* Public includes. */
 #include <stdbool.h>
 #include <stdint.h>
+#include "../robot_types.h"
 
 /* Public types, constants, and macros. */
 
@@ -111,66 +112,93 @@ typedef struct
     bool b_hump;         /**< The terrain task reports a hump. */
 } line_track_input_t;
 
-/** @brief Tracking state. Callers allocate it; fields are private. */
+/* line_track_t.flags, one bit per fact. */
+#define LINE_TRACK_F_BLACK_LEFT 0x0001u    /* Confirmed level, left. */
+#define LINE_TRACK_F_BLACK_RIGHT 0x0002u   /* Confirmed level, right. */
+#define LINE_TRACK_F_CURVE 0x0004u         /* A side touched again soon. */
+#define LINE_TRACK_F_CROSS_HOLD 0x0008u    /* Heading held over a crossing. */
+#define LINE_TRACK_F_BOTH_SEEN 0x0010u     /* Both black this dark episode. */
+#define LINE_TRACK_F_SKEW_SMALL 0x0020u    /* ... within the junction skew. */
+#define LINE_TRACK_F_OLD_LINE_SEEN 0x0040u /* The pivot swept the old line. */
+#define LINE_TRACK_F_REJOIN 0x0080u        /* After a bypass: find the line. */
+#define LINE_TRACK_F_SEARCH_HIT 0x0100u    /* Search-side sensor read black. */
+#define LINE_TRACK_F_HUMP_SLOW 0x0200u     /* Following slowly over a hump. */
+#define LINE_TRACK_F_HUMP_SPENT 0x0400u    /* Ran its limit: await level. */
+#define LINE_TRACK_F_BACK_STARTED 0x0800u  /* The reverse has begun. */
+#define LINE_TRACK_F_RETRACE 0x1000u /* Going back past it after U-turn. */
+#define LINE_TRACK_F_SETTLE 0x2000u  /* From a read to its crossing. */
+
+/* line_track_t.fields, each "shift, bits": 30 of 32 bits. */
+#define LINE_TRACK_FIELD_MODE 0u, 2u
+#define LINE_TRACK_FIELD_TOUCH_SIDE 2u, 2u   /* Last single-side touch. */
+#define LINE_TRACK_FIELD_COUNTER_SIDE 4u, 2u /* Steering back on a bend. */
+#define LINE_TRACK_FIELD_ENTRY_SIDE 6u, 2u   /* First black; 2 = both. */
+#define LINE_TRACK_FIELD_PIVOT_SIDE 8u, 2u   /* Way it last pivoted. */
+#define LINE_TRACK_FIELD_BARS_SIDE 10u, 2u   /* On a barcode's bars. */
+#define LINE_TRACK_FIELD_LAST_SIDE 12u, 2u   /* Side of the last edge. */
+#define LINE_TRACK_FIELD_SEARCH_SIDE 14u, 2u /* Current pivot's side. */
+#define LINE_TRACK_FIELD_JUNCTION_PHASE                                        \
+    16u, 2u /* 0 none, 1 to the centre,
+                                                   2 pivot, 3 straight on. */
+#define LINE_TRACK_FIELD_JUNCTION_TURN 18u, 2u
+#define LINE_TRACK_FIELD_SEARCH_PHASE 20u, 1u /* 0 first side, 1 the other. */
+#define LINE_TRACK_FIELD_BARCODE_PHASE 21u, 2u
+#define LINE_TRACK_FIELD_TREND_NEXT 23u, 2u
+#define LINE_TRACK_FIELD_JUNCTION_COUNT 25u, 1u
+#define LINE_TRACK_CHANGE_SHIFT 26u /* Samples disagreeing, per side. */
+#define LINE_TRACK_CHANGE_BITS 2u
+
+/**
+ * @brief Tracking state. Callers allocate it; fields are private.
+ *
+ * Distance marks keep the low 16 bits of the travel: compare them through
+ * the module's wrap-safe helpers. Headings are odometry degrees, which
+ * IF-05 limits to 16 bits.
+ */
 typedef struct
 {
-    bool b_black[2];          /* Confirmed levels: [0] left, [1] right. */
-    uint32_t change_count[2]; /* Samples disagreeing with b_black. */
-    line_mode_t mode;
-    int32_t target_deg;
-    int32_t black_start_mm[2]; /* Travel when each edge turned black. */
-    uint32_t touch_side;       /* Side of the last single-side touch. */
-    int32_t touch_mm;          /* Travel when it began. */
-    bool b_curve;              /* That side touched again soon: a bend. */
-    uint32_t counter_side;     /* Side steering back against a bend. */
-    int32_t counter_mm;        /* Travel when that touch began. */
-    bool b_cross_hold;         /* Holding the heading over a crossing. */
-    int32_t trend_deg[LINE_TREND_SLOTS]; /* Recent headings, oldest at next. */
-    uint32_t trend_next;
-    int32_t trend_mm; /* Travel at the latest of them. */
+    uint32_t fields; /* Small values, LINE_TRACK_FIELD_*. */
+    uint16_t flags;  /* LINE_TRACK_F_*. */
+    int16_t target_deg;
+    int16_t black_start_mm[2]; /* Travel when each edge turned black. */
+    int16_t touch_mm;          /* Travel when the last touch began. */
+    int16_t counter_mm;        /* Travel when the counter touch began. */
+    int16_t trend_deg[LINE_TREND_SLOTS]; /* Recent headings, oldest at next. */
+    int16_t trend_mm;                    /* Travel at the latest of them. */
     /* Dark episode: from a sensor turning black until both read white. */
-    uint32_t entry_side;     /* First side black; 2 = both at once. */
-    int32_t entry_mm;        /* Travel when the episode started. */
-    int32_t entry_deg;       /* Heading then. */
-    bool b_both_seen;        /* Both black during this episode. */
-    bool b_skew_small;       /* ... within LINE_JUNCTION_SKEW_MM. */
-    uint32_t junction_phase; /* 0 none, 1 driving to the centre, 2 pivot,
-                                3 crossing straight on. */
-    line_turn_t junction_turn;
-    int32_t junction_mm;      /* Travel when the junction began. */
-    int32_t junction_deg;     /* Heading the junction was met on. */
-    int32_t pivot_start_deg;  /* Heading as a junction's pivot began. */
-    bool b_old_line_seen;     /* That pivot has swept the old line. */
-    uint32_t pivot_side;      /* Way the car last pivoted, for b_seen. */
-    int32_t last_heading_deg; /* Heading in the last sample. */
-    bool b_rejoin;            /* A bypass took the car off: find the line. */
-    int32_t rejoin_mm;        /* Travel when it last set out to rejoin. */
-    int32_t lost_start_mm;    /* Travel when it last saw the line itself. */
-    int32_t loop_mm;          /* Travel at the start of this loop check. */
-    int32_t loop_deg;         /* Heading then. */
-    uint32_t bars_side;       /* Sensor on a barcode's bars, if either. */
-    uint32_t last_side;       /* Side of the last edge, for searches. */
-    int32_t white_start_mm;   /* Travel when both last read white. */
-    uint32_t junction_count;
-    int32_t search_start_deg;
-    uint32_t search_side;  /* Side the current pivot turns towards. */
-    uint32_t search_phase; /* 0 first side, 1 the other side. */
-    uint32_t search_samples;
-    bool b_search_hit; /* Search-side sensor has read black. */
-    line_barcode_phase_t barcode_phase;
-    bool b_hump_slow;         /* Following slowly over a hump. */
-    bool b_hump_spent;        /* That ran its limit: wait for level ground. */
-    uint32_t hump_samples;    /* Samples spent slow on this hump. */
-    uint32_t barcode_samples; /* Samples in this phase. */
-    bool b_back_started;      /* The reverse has begun. */
-    int32_t barcode_mm;       /* Travel when the creep began. */
-    int32_t line_deg;         /* The line's heading, held in a creep. */
-    int32_t brake_mm;         /* Travel when a barcode last braked the car. */
-    bool b_retrace;           /* Going back past it after its U-turn. */
-    int32_t retrace_end_mm;   /* Travel at which that ends. */
-    bool b_settle;            /* From a barcode's read to its crossing. */
-    int32_t settle_end_mm;    /* Travel at which that ends. */
+    int16_t entry_mm;         /* Travel when the episode started. */
+    int16_t entry_deg;        /* Heading then. */
+    int16_t junction_mm;      /* Travel when the junction began. */
+    int16_t junction_deg;     /* Heading the junction was met on. */
+    int16_t pivot_start_deg;  /* Heading as a junction's pivot began. */
+    int16_t last_heading_deg; /* Heading in the last sample. */
+    int16_t rejoin_mm;        /* Travel when it last set out to rejoin. */
+    int16_t lost_start_mm;    /* Travel when it last saw the line itself. */
+    int16_t loop_mm;          /* Travel at the start of this loop check. */
+    int16_t loop_deg;         /* Heading then. */
+    int16_t white_start_mm;   /* Travel when both last read white. */
+    int16_t search_start_deg;
+    uint16_t search_samples;
+    uint16_t hump_samples;   /* Samples spent slow on this hump. */
+    uint8_t barcode_samples; /* Samples in this phase. */
+    int16_t barcode_mm;      /* Travel when the creep began. */
+    int16_t line_deg;        /* The line's heading, held in a creep. */
+    int16_t brake_mm;        /* Travel when a barcode last braked the car. */
+    int16_t retrace_end_mm;  /* Travel at which the retrace ends. */
+    int16_t settle_end_mm;   /* Travel at which the settle ends. */
 } line_track_t;
+
+/**
+ * @brief Read one LINE_TRACK_F_* fact.
+ * @param p_track Tracking state.
+ * @param flag One LINE_TRACK_F_* bit.
+ * @return true if that fact holds.
+ */
+static inline bool
+line_track_flag (line_track_t const * p_track, uint32_t flag)
+{
+    return (p_track->flags & flag) != 0u;
+}
 
 /* Public function declarations. */
 
