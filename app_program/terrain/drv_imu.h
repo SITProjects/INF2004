@@ -3,8 +3,8 @@
  * @brief LSM303DLHC (GY-511) accelerometer and magnetometer driver.
  *
  * Talks to the chip only through drv_imu_bus.h, so it has no Pico SDK or
- * kernel dependencies. Phase 1 covers the accelerometer; the
- * magnetometer follows in the last phase.
+ * kernel dependencies. Phase 1 covers the accelerometer; the magnetometer
+ * (compass) reads raw field counts for terrain_compass.c.
  *
  * Register values come from the ST LSM303DLHC datasheet, Doc ID 018771
  * Rev 1 (April 2011); table numbers below refer to that document.
@@ -69,6 +69,44 @@ typedef struct
     int16_t z;
 } imu_accel_raw_t;
 
+/** @brief Magnetometer output data rate (CRA_REG_M bits DO2-DO0). */
+typedef enum
+{
+    IMU_MAG_ODR_15HZ = 4,
+    IMU_MAG_ODR_30HZ = 5,
+    IMU_MAG_ODR_75HZ = 6,
+    IMU_MAG_ODR_220HZ = 7
+} imu_mag_odr_t;
+
+/**
+ * @brief Magnetometer range (CRB_REG_M bits GN2-GN0): +/-1.3 gauss
+ *        (1100 counts per gauss on X and Y, 980 on Z) up to +/-8.1 gauss.
+ */
+typedef enum
+{
+    IMU_MAG_GAIN_1_3_GAUSS = 1,
+    IMU_MAG_GAIN_1_9_GAUSS = 2,
+    IMU_MAG_GAIN_2_5_GAUSS = 3,
+    IMU_MAG_GAIN_4_0_GAUSS = 4,
+    IMU_MAG_GAIN_4_7_GAUSS = 5,
+    IMU_MAG_GAIN_5_6_GAUSS = 6,
+    IMU_MAG_GAIN_8_1_GAUSS = 7
+} imu_mag_gain_t;
+
+/** A magnetometer axis past its range reads this. */
+#define IMU_MAG_OVERFLOW (-4096)
+
+/**
+ * @brief One magnetometer sample in the board's own axes: signed counts,
+ *        -2048 to +2047, or IMU_MAG_OVERFLOW.
+ */
+typedef struct
+{
+    int16_t x;
+    int16_t y;
+    int16_t z;
+} imu_mag_raw_t;
+
 /* Public function declarations. */
 
 /**
@@ -116,5 +154,28 @@ imu_status_t imu_accel_read_fifo (imu_accel_raw_t * p_buf, uint32_t max_count,
  * @return m/s^2 per count, or 0 before imu_accel_init() succeeds.
  */
 float imu_accel_scale_mps2 (void);
+
+/**
+ * @brief Check the magnetometer's identity, then set its data rate and
+ *        range and start continuous conversion.
+ * @param addr 7-bit I2C address of the magnetometer (0x1E on GY-511).
+ * @param odr Output data rate.
+ * @param gain Range.
+ * @return IMU_OK; IMU_ERR_NOT_FOUND if nothing answers at @p addr or the
+ *         identity registers do not read "H43"; IMU_ERR_VERIFY if a
+ *         setting reads back wrong; IMU_ERR_BUS or IMU_ERR_PARAM
+ *         otherwise.
+ * imu_bus_init() must have succeeded first. Independent of the
+ * accelerometer: either may work without the other.
+ */
+imu_status_t imu_mag_init (uint8_t addr, imu_mag_odr_t odr,
+                           imu_mag_gain_t gain);
+
+/**
+ * @brief Read the newest magnetometer sample.
+ * @param p_raw Receives the sample.
+ * @return IMU_OK, IMU_ERR_NOT_INIT, IMU_ERR_PARAM or IMU_ERR_BUS.
+ */
+imu_status_t imu_mag_read (imu_mag_raw_t * p_raw);
 
 #endif /* DRV_IMU_H */

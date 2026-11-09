@@ -137,18 +137,22 @@ motion_task_status_t motion_get_status (void);
 bool motion_get_odometry (motion_shared_odometry_t * p_odometry);
 
 /**
- * @brief Pass in the latest line reading (interim line input).
- * TODO(step 9, line_follow): replace with tMotion reading line_state_t
- * under MTX_LINE once line_follow publishes it; this then goes.
- * @param error Line position, -1000 to 1000 (clamped); + means the line
- * is left of the car's centre. When lost, the last sign at full scale.
- * @param b_seen False only when both sensors read white.
- * Call from ONE task (the line owner), once per new reading; tMotion uses
- * each reading once, on its next update. Either core: one 32-bit store.
+ * @brief Whether tMotion follows the line task's requests.
+ * @return True after start-up and after a FOLLOW command; false after any
+ * other queued command or INHIBIT until the next FOLLOW.
+ * Any task, either core: one byte written by tMotion only. The line task
+ * uses it to restart tracking on the heading a bypass leaves it on.
  */
-void motion_set_line_input (int16_t error, bool b_seen);
+bool motion_line_control_active (void);
 
 #if APP_TEST
+/**
+ * @brief Test line input (MOT-U36): pass whether the line is seen.
+ * @param b_seen True for a line under either sensor.
+ * Test task only, once per update; tMotion uses each reading once.
+ */
+void motion_test_set_line (bool b_seen);
+
 /**
  * @brief Hand the motion module to the test task, or back to tMotion.
  * @param b_hold True: tMotion brakes and stops touching the hardware or

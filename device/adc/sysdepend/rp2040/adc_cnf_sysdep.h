@@ -38,10 +38,11 @@
  *	in TEAM.md.
  *	  channel 0 = GP26, channel 1 = GP27, channel 2 = GP28
  *	  channel 3 = GP29 is the Pico W RADIO CLOCK: never set _3 to TRUE.
- *	Channels 0 and 1 are the line_follow IR sensors (TEAM.md section 2).
+ *	No channel is in use: GP26/27 are the line sensors' digital DO
+ *	inputs and GP28 the barcode sensor's (TEAM.md section 2).
  */
-#define	DEVCONF_ADC_PIN_INIT_0	TRUE
-#define	DEVCONF_ADC_PIN_INIT_1	TRUE
+#define	DEVCONF_ADC_PIN_INIT_0	FALSE
+#define	DEVCONF_ADC_PIN_INIT_1	FALSE
 #define	DEVCONF_ADC_PIN_INIT_2	FALSE
 #define	DEVCONF_ADC_PIN_INIT_3	FALSE
 

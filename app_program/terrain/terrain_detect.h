@@ -116,7 +116,27 @@ typedef struct
     terrain_hump_state_t hump; /**< Hump state after this sample. */
     bool b_speed_known;        /**< speed_mm_s is valid. */
     int32_t speed_mm_s;        /**< Car speed, mm/s; either sign. */
+    bool b_stopped_dead;       /**< terrain_detect_stopped_dead() said so. */
+    float peak_g;              /**< Its recent biggest push, g, reported as
+                                    the size of that hit. */
 } terrain_collision_input_t;
+
+/** @brief Limits of terrain_detect_stopped_dead(). */
+typedef struct
+{
+    int32_t from_mm_s;       /**< Driving at this or faster can stop dead. */
+    uint32_t window_samples; /**< Longest fall to half speed, samples. */
+    uint32_t grace_samples;  /**< A lean this new may be the hit itself. */
+} terrain_stopped_limits_t;
+
+/** @brief Memory of terrain_detect_stopped_dead(); starts zeroed. */
+typedef struct
+{
+    int32_t kept_mm_s;  /* Speed last driven at; 0 when none to fall from. */
+    uint32_t age;       /* Samples since then. */
+    uint32_t off_level; /* Samples since the hump state left LEVEL. */
+    float peak_g;       /* Biggest recent push, fading, g. */
+} terrain_stopped_t;
 
 /* Largest sample count the 5-bit turn counter holds. */
 #define TERRAIN_DETECT_TURN_COUNT_MAX 31u
@@ -194,6 +214,64 @@ terrain_hump_state_t terrain_detect_hump_state (uint32_t word);
  *         and the spare bits are kept.
  */
 uint32_t terrain_detect_hump_clear (uint32_t word);
+
+/**
+ * @brief Whether a hump was long enough to count.
+ * @param start_mm Odometry distance as the climb began.
+ * @param end_mm Odometry distance when level again.
+ * @param min_mm TERRAIN_HUMP_MIN_MM.
+ * @return True if it counts. Distances may wrap; reversing never counts.
+ */
+bool terrain_detect_hump_lasted (int32_t start_mm, int32_t end_mm,
+                                 int32_t min_mm);
+
+/**
+ * @brief The travel a hump needs to count.
+ * @param speed_mm_s Ground speed as the hump ended.
+ * @param slow_mm_s TERRAIN_HUMP_SLOW_MM_S.
+ * @param slow_min_mm TERRAIN_HUMP_SLOW_MIN_MM.
+ * @param min_mm TERRAIN_HUMP_MIN_MM.
+ * @return @p slow_min_mm for a car that slowed for it, else @p min_mm.
+ */
+int32_t terrain_detect_hump_min_mm (int32_t speed_mm_s, int32_t slow_mm_s,
+                                    int32_t slow_min_mm, int32_t min_mm);
+
+/** @brief What a sample means to the hump machine. */
+typedef enum
+{
+    TERRAIN_HUMP_SAMPLE_USE,   /**< Step the machine. */
+    TERRAIN_HUMP_SAMPLE_PAUSE, /**< Skip it, keeping any hump so far. */
+    TERRAIN_HUMP_SAMPLE_DROP   /**< Drop any hump so far. */
+} terrain_hump_sample_t;
+
+/**
+ * @brief Whether a sample can say anything about a hump.
+ * @param b_following Following the line: moves, pivots and hands fake a lean.
+ * @param b_roll_held The roll is an old value, not news.
+ * @param speed_mm_s Ground speed; + is forward.
+ * @param min_speed_mm_s TERRAIN_HUMP_MIN_SPEED_MM_S.
+ * @return What to do with it. Too slow only pauses: the car brakes for a hump,
+ *         almost to a stop, and that must not end the hump.
+ */
+terrain_hump_sample_t terrain_detect_hump_sample (bool b_following,
+                                                  bool b_roll_held,
+                                                  int32_t speed_mm_s,
+                                                  int32_t min_speed_mm_s);
+
+/**
+ * @brief The push to judge: none unless driving forward and not lifted.
+ * @param push_g Horizontal push, in g.
+ * @param speed_mm_s Ground speed; + is forward.
+ * @param lean_deg Size of the roll, in degrees.
+ * @param driving_mm_s TERRAIN_COLLISION_DRIVING_MM_S.
+ * @param max_lean_deg TERRAIN_COLLISION_MAX_LEAN_DEG.
+ * @return @p push_g, or 0.
+ * @note A hit under way still counts as the car slows through the limit: its
+ *       check needs only the speed.
+ */
+float terrain_detect_collision_push (float push_g, int32_t speed_mm_s,
+                                     float lean_deg, int32_t driving_mm_s,
+                                     float max_lean_deg);
 
 /**
  * @brief Run the turning state machine on one sample.
@@ -282,5 +360,27 @@ terrain_speed_state_t terrain_detect_speed_state (uint32_t word);
 terrain_event_type_t terrain_detect_collision_step (
     uint32_t * p_word, terrain_collision_input_t const * p_in,
     terrain_collision_limits_t const * p_limits, uint32_t * p_value);
+
+/**
+ * @brief Whether the wheels have just fallen to half speed with nothing asking
+ *        them to: the mark of a hit at line-following speed.
+ *
+ * At 120 mm/s a hit is a small push, inside what driving and the hump give, so
+ * the push cannot tell it. Everything that slows the car on purpose either
+ * leaves following (a stop, a pivot) or starts with the hump state leaving
+ * LEVEL and takes longer than the grace to halve the speed.
+ *
+ * @param p_state State, zeroed to start. Call once per sample.
+ * @param speed_mm_s Car speed, mean of both wheels, mm/s.
+ * @param push_g This sample's horizontal push, g.
+ * @param b_driving Following the line, with speed_mm_s valid.
+ * @param hump Hump state after this sample.
+ * @param p_limits Limits.
+ * @return True once for each fall.
+ */
+bool terrain_detect_stopped_dead (terrain_stopped_t * p_state,
+                                  int32_t speed_mm_s, float push_g,
+                                  bool b_driving, terrain_hump_state_t hump,
+                                  terrain_stopped_limits_t const * p_limits);
 
 #endif /* TERRAIN_DETECT_H */

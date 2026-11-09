@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Car Dashboard</title>
+<style>
+:root {
+  --bg: #f4f5f7; --panel: #ffffff; --text: #1c2026; --muted: #5d6673;
+  --line: #d9dde3; --go: #1a7f4b; --stop: #c62828; --warn: #8a5a00;
+  --warn-bg: #fff4d6; --field: #ffffff;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14171b; --panel: #1e2329; --text: #e8ebef; --muted: #9aa4b1;
+    --line: #333a43; --go: #2fa56a; --stop: #e04b4b; --warn: #f0c060;
+    --warn-bg: #3a2f14; --field: #14171b;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 16px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+main { max-width: 760px; margin: 0 auto; padding: 16px; display: grid; gap: 14px; }
+h1 { font-size: 1.25rem; margin: 0; }
+h2 { font-size: 1rem; margin: 0 0 10px; }
+header { display: flex; justify-content: space-between; align-items: center;
+  gap: 12px; flex-wrap: wrap; }
+.panel { background: var(--panel); border: 1px solid var(--line);
+  border-radius: 10px; padding: 14px; }
+.pill { padding: 3px 10px; border-radius: 999px; font-size: .85rem;
+  font-weight: 600; border: 1px solid var(--line); color: var(--muted); }
+.pill.on { color: var(--go); border-color: var(--go); }
+.pill.off { color: var(--stop); border-color: var(--stop); }
+.controls { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+button { font: inherit; cursor: pointer; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--field); color: var(--text);
+  padding: 7px 12px; }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button.big { padding: 20px 0; font-size: 1.25rem; font-weight: 700;
+  color: #fff; border: 0; }
+#start { background: var(--go); }
+#stop { background: var(--stop); }
+#reverse { grid-column: 1 / -1; background: #5b6470; }
+.notice { background: var(--warn-bg); color: var(--warn); border-radius: 8px;
+  padding: 8px 12px; font-size: .92rem; }
+.facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.fact span { display: block; color: var(--muted); font-size: .82rem; }
+.fact strong { font-size: 1.1rem; overflow-wrap: anywhere; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px; }
+.tiles.stale { opacity: .45; }
+.fact small { color: var(--muted); font-size: .8rem; }
+h3 { font-size: .82rem; color: var(--muted); margin: 14px 0 6px; font-weight: 600; }
+h3:first-of-type { margin-top: 0; }
+.row { display: grid; grid-template-columns: 90px 1fr auto; gap: 8px;
+  margin-bottom: 8px; }
+input, select { font: inherit; padding: 7px 9px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--field); color: var(--text);
+  min-width: 0; width: 100%; }
+input { text-transform: uppercase; }
+.foot { display: flex; justify-content: space-between; align-items: center;
+  gap: 10px; flex-wrap: wrap; }
+.hint { color: var(--muted); font-size: .88rem; }
+.hint.bad { color: var(--stop); }
+ol { list-style: none; margin: 0; padding: 0; max-height: 300px;
+  overflow-y: auto; font: .84rem/1.5 ui-monospace, Menlo, Consolas, monospace; }
+li { overflow-wrap: anywhere; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Car Dashboard</h1>
+    <div>
+      <span id="link" class="pill off">Car offline</span>
+      <span id="run" class="pill">State unknown</span>
+    </div>
+  </header>
+
+  <section class="panel">
+    <div class="controls">
+      <button id="start" class="big" disabled>Start</button>
+      <button id="stop" class="big" disabled>Stop</button>
+      <button id="reverse" class="big" disabled
+        title="Backs a stopped car up 20 cm. Nothing watches behind it.">Reverse 20 cm</button>
+    </div>
+    <p id="offline" class="notice" hidden>The car isn't connected, so these
+      buttons can't reach it. Use the car's power switch to stop it.</p>
+  </section>
+
+  <section class="panel facts">
+    <div class="fact"><span>Last barcode</span><strong id="barcode">None yet</strong></div>
+    <div class="fact"><span>Its action</span><strong id="action">–</strong></div>
+    <div class="fact"><span>Last junction</span><strong id="junction">None yet</strong></div>
+  </section>
+
+  <section class="panel">
+    <h2>Car <small id="age" class="hint"></small></h2>
+    <div id="live">
+      <h3>Motion</h3>
+      <div class="tiles">
+        <div class="fact"><span>Speed</span><strong id="speed">–</strong></div>
+        <div class="fact"><span>Wheels (left, right)</span><strong id="wheels">–</strong></div>
+        <div class="fact"><span>Distance</span><strong id="distance">–</strong></div>
+        <div class="fact"><span>Heading</span><strong id="heading">–</strong></div>
+        <div class="fact"><span>Mode</span><strong id="mode">–</strong></div>
+      </div>
+      <h3>Obstacle</h3>
+      <div class="tiles">
+        <div class="fact"><span>Sensor</span><strong id="obstacle">–</strong></div>
+        <div class="fact"><span>Bypass</span><strong id="bypass">–</strong></div>
+        <div class="fact"><span>Last width</span><strong id="width">None yet</strong></div>
+        <div class="fact"><span>Last distance</span><strong id="range">None yet</strong></div>
+      </div>
+      <h3>IMU</h3>
+      <div class="tiles">
+        <div class="fact"><span>Tilt (pitch, roll)</span><strong id="tilt">–</strong></div>
+        <div class="fact"><span>Turn rate</span><strong id="turn">–</strong></div>
+        <div class="fact"><span>Humps</span><strong id="humps">–</strong></div>
+        <div class="fact"><span>Collisions</span><strong id="collisions">–</strong></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Barcode actions at the next junction</h2>
+    <div id="rows"></div>
+    <div class="foot">
+      <button id="add">Add barcode</button>
+      <span id="saved" class="hint">Any barcode not listed goes straight on.</span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Events</h2>
+    <ol id="events"></ol>
+  </section>
+</main>
+<script>
+const ACTIONS = [["STRAIGHT", "Straight"], ["LEFT", "Left"], ["RIGHT", "Right"],
+                 ["UTURN", "U-turn"]];
+const MAX_ROWS = 8;
+const STALE_S = 2;
+const MODES = ["Stopped", "Moving", "Stalled", "Turning", "Timed out", "Following",
+               "Held"];
+const CALIBRATION = ["Calibrating, keep still", "Not level"];
+const CALIBRATED = 2;
+const OBSTACLE = ["Scanning", "Clear", "Path found", "Blocked", "Unknown"];
+const $ = (id) => document.getElementById(id);
+let loaded = false;
+
+async function post(path, body) {
+  const reply = await fetch(path, {
+    method: "POST",
+    headers: {"Content-Type": "application/json", "X-Car-Dashboard": "1"},
+    body: JSON.stringify(body),
+  });
+  const data = await reply.json();
+  if (!reply.ok) { throw new Error(data.error || "Request failed"); }
+  return data;
+}
+
+function hint(text, bad) {
+  $("saved").textContent = text;
+  $("saved").classList.toggle("bad", Boolean(bad));
+}
+
+function addRow(barcode = "", action = "STRAIGHT") {
+  const row = document.createElement("div");
+  row.className = "row";
+  const text = document.createElement("input");
+  text.maxLength = 3;
+  text.placeholder = "F";
+  text.value = barcode;
+  text.setAttribute("aria-label", "Barcode");
+  const choice = document.createElement("select");
+  choice.setAttribute("aria-label", "Action");
+  for (const [value, label] of ACTIONS) {
+    choice.add(new Option(label, value, false, value === action));
+  }
+  const remove = document.createElement("button");
+  remove.textContent = "Remove";
+  remove.onclick = () => { row.remove(); saveMap(); };
+  text.onchange = saveMap;
+  choice.onchange = saveMap;
+  row.append(text, choice, remove);
+  $("rows").append(row);
+  $("add").disabled = $("rows").children.length >= MAX_ROWS;
+  return text;
+}
+
+async function saveMap() {
+  const rows = [...$("rows").children]
+    .map((row) => ({barcode: row.children[0].value.trim().toUpperCase(),
+                    action: row.children[1].value}))
+    .filter((row) => row.barcode !== "");
+  $("add").disabled = $("rows").children.length >= MAX_ROWS;
+  try {
+    const reply = await post("/map", {map: rows});
+    hint(reply.sent ? "Sent to the car."
+                    : "Saved. It will be sent when the car connects.");
+  } catch (error) {
+    hint(error.message, true);
+  }
+}
+
+async function command(name) {
+  try {
+    await post("/command", {command: name});
+  } catch (error) {
+    hint(error.message, true);
+  }
+}
+
+function showCar(state) {
+  const car = state.car;
+  const stale = !car || state.car_age_s > STALE_S;
+  $("live").querySelectorAll(".tiles").forEach(
+    (tiles) => tiles.classList.toggle("stale", stale));
+  $("age").textContent = !car ? "No data yet"
+    : stale ? `No data for ${Math.round(state.car_age_s)} s: these are old values`
+    : "";
+  const last = state.last_obstacle;
+  $("width").textContent = last ? `${last.width_mm} mm` : "None yet";
+  $("range").textContent = last ? `${last.range_mm} mm` : "None yet";
+  if (!car) { return; }
+  $("speed").textContent = `${car.v} mm/s`;
+  $("wheels").textContent = `${car.l}, ${car.r} mm/s`;
+  $("distance").textContent = `${(car.d / 1000).toFixed(2)} m`;
+  $("heading").textContent = `${car.h}°`;
+  $("mode").textContent = MODES[car.m] || `Mode ${car.m}`;
+  $("obstacle").textContent = OBSTACLE[car.os] || `Status ${car.os}`;
+  $("bypass").textContent = car.av;
+  /* Tilt and humps run only once calibrated: 0 would look like a reading. */
+  const b_calibrated = car.cs === CALIBRATED;
+  $("tilt").textContent = b_calibrated
+    ? `${(car.p / 10).toFixed(1)}°, ${(car.ro / 10).toFixed(1)}°`
+    : CALIBRATION[car.cs] || "Not calibrated";
+  $("turn").textContent = `${car.tr}°/s`;
+  $("humps").textContent = b_calibrated ? car.hu : "Not running";
+  $("collisions").textContent = car.co;
+}
+
+function show(state) {
+  const online = state.car_connected;
+  $("link").textContent = online ? "Car connected" : "Car offline";
+  $("link").className = "pill " + (online ? "on" : "off");
+  $("run").textContent = {running: "Running", stopped: "Stopped"}[state.run]
+    || "State unknown";
+  $("run").className = "pill " + ({running: "on", stopped: "off"}[state.run] || "");
+  $("start").disabled = !online || state.run === "running";
+  $("stop").disabled = !online;
+  $("reverse").disabled = !online || state.run !== "stopped";
+  $("offline").hidden = online;
+  $("barcode").textContent = state.barcode || "None yet";
+  $("action").textContent = state.barcode_action || "–";
+  $("junction").textContent = state.junction || "None yet";
+  showCar(state);
+  const list = $("events");
+  list.replaceChildren(...state.events.map((line) => {
+    const item = document.createElement("li");
+    item.textContent = line;
+    return item;
+  }));
+  if (!loaded) {
+    loaded = true;
+    state.map.forEach((row) => addRow(row.barcode, row.action));
+  }
+}
+
+async function poll() {
+  try {
+    show(await (await fetch("/state")).json());
+  } catch (error) {
+    $("link").textContent = "Dashboard stopped";
+    $("link").className = "pill off";
+    $("start").disabled = true;
+    $("stop").disabled = true;
+    $("reverse").disabled = true;
+  }
+  setTimeout(poll, 500);
+}
+
+$("start").onclick = () => command("start");
+$("stop").onclick = () => command("stop");
+$("reverse").onclick = () => command("reverse");
+$("add").onclick = () => addRow().focus();
+poll();
+</script>
+</body>
+</html>

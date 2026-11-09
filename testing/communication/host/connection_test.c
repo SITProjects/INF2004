@@ -9,6 +9,7 @@
 #include "wifi_secrets.h"
 
 #include "mqtt_client.h"
+#include "remote_command.h"
 static u32_t now;
 static unsigned connects, publishes, subscriptions, disconnects;
 static bool connected;
@@ -98,11 +99,16 @@ mqtt_set_inpub_callback (mqtt_client_t * c, mqtt_incoming_publish_cb_t pub,
     incoming_cb = pub;
     data_cb = data;
 }
+void
+console_mirror_mqtt_service (mqtt_client_t * c)
+{
+    (void)c;
+}
 err_t
 mqtt_sub_unsub (mqtt_client_t * c, const char * topic, u8_t qos,
                 mqtt_request_cb_t cb, void * arg, u8_t sub)
 {
-    assert(c == handle && strcmp(topic, MQTT_TOPIC) == 0);
+    assert(c == handle && strcmp(topic, MQTT_TOPIC "/cmd") == 0);
     assert(qos == 0 && sub == 1);
     subscriptions++;
     if (subscribe_error == ERR_OK)
@@ -133,11 +139,37 @@ main (void)
     connected = true;
     connection_cb(handle, NULL, MQTT_CONNECT_ACCEPTED);
     assert(subscriptions == 0);
+    /* A failed subscribe request is tried again on the next pass. */
+    subscribe_error = ERR_MEM;
+    mqtt_client_service(true);
+    assert(subscriptions == 1);
+    subscribe_error = ERR_OK;
     for (now = 0; now <= 15000; now += 1000)
     {
         mqtt_client_service(true);
     }
-    assert(publishes == 0);
+    assert(publishes == 0 && subscriptions == 2);
+
+    /* Dashboard commands reach the module, even in two fragments. */
+    assert(remote_command_stopped());
+    incoming_cb(NULL, MQTT_TOPIC "/cmd", 5u);
+    data_cb(NULL, (u8_t const *)"start", 5u, MQTT_DATA_FLAG_LAST);
+    assert(!remote_command_stopped());
+    incoming_cb(NULL, MQTT_TOPIC "/cmd", 4u);
+    data_cb(NULL, (u8_t const *)"st", 2u, 0u);
+    data_cb(NULL, (u8_t const *)"op", 2u, MQTT_DATA_FLAG_LAST);
+    assert(remote_command_stopped());
+    incoming_cb(NULL, MQTT_TOPIC "/cmd", 10u);
+    data_cb(NULL, (u8_t const *)"map F LEFT", 10u, MQTT_DATA_FLAG_LAST);
+    assert(LINE_TURN_LEFT == remote_command_turn("F"));
+    /* Longer than the buffer: refused, and nothing is overrun. */
+    char long_text[100];
+    memset(long_text, 'x', sizeof(long_text));
+    incoming_cb(NULL, MQTT_TOPIC "/cmd", (u32_t)sizeof(long_text));
+    data_cb(NULL, (u8_t const *)long_text, (u16_t)sizeof(long_text),
+            MQTT_DATA_FLAG_LAST);
+    assert(remote_command_stopped());
+
     connected = false;
     connection_cb(handle, NULL, MQTT_CONNECT_DISCONNECTED);
     now = 18999;
@@ -165,6 +197,7 @@ main (void)
     connection_cb(handle, NULL, MQTT_CONNECT_ACCEPTED);
     now = 35000;
     mqtt_client_service(true);
-    assert(publishes == 0 && subscriptions == 0);
-    puts("PASS: no heartbeat publish/subscription, reconnect retry, Wi-Fi loss");
+    assert(publishes == 0 && subscriptions == 3);
+    puts("PASS: no heartbeat publish, command subscription and messages, "
+         "reconnect retry, Wi-Fi loss");
 }

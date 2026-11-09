@@ -20,7 +20,8 @@
  * -------------------------------------
  *   obstacle/       ultrasonic sensor on a servo, scans for a path
  *   motion/         two H-bridge DC motors, held braked for now
- *   line_follow/    two IR sensors -> line-following commands
+ *   line_follow/    two digital IR sensors -> line-following requests
+ *   barcode/        third IR sensor -> Code 39 text
  *   terrain/        GY-511 accelerometer, calibration at start-up
  *   communication/  Wi-Fi connection status from the kernel's radio task
  *
@@ -33,10 +34,12 @@
  */
 
 #include "app.h"
+#include "console_mirror/console_mirror.h"
 
 /* Private types, constants, and macros. */
 #define WATCHDOG_TICK 0x4005802Cu
 #define WATCHDOG_TICK_ENABLE 0x200u
+#define TEST_MQTT_WAIT_MS 20000u
 
 /* Static data. */
 
@@ -117,10 +120,15 @@ usermain (void)
     app_check(motion_init(), "motion_init");
 #endif
     app_check(line_follow_init(), "line_follow_init");
-#if !IR_CALIBRATION_ONLY && !IR_MOTOR_TEST
-    app_check(terrain_init(), "terrain_init");
-    app_check(communication_init(), "communication_init");
+#if !IR_MOTOR_TEST
+    app_check(barcode_init(), "barcode_init");
 #endif
+#if !IR_MOTOR_TEST
+    /* Also with IR_CALIBRATION, for the compass calibration spin. */
+    app_check(terrain_init(), "terrain_init");
+#endif
+    /* Every image, so MQTT builds can run without a USB console. */
+    app_check(communication_init(), "communication_init");
 
     /* Phase 2: every subsystem starts its tasks. */
 #if !IR_CALIBRATION_ONLY
@@ -130,16 +138,21 @@ usermain (void)
     app_check(motion_start(), "motion_start");
 #endif
     app_check(line_follow_start(), "line_follow_start");
-#if !IR_CALIBRATION_ONLY && !IR_MOTOR_TEST
-    app_check(terrain_start(), "terrain_start");
+#if !IR_MOTOR_TEST
+    app_check(barcode_start(), "barcode_start");
+#endif
     app_check(communication_start(), "communication_start");
-
+#if !IR_MOTOR_TEST
+    app_check(terrain_start(), "terrain_start");
+#endif
+#if !IR_CALIBRATION_ONLY && !IR_MOTOR_TEST
     tm_printf((UB *)"all subsystems started\n\n");
 #elif IR_MOTOR_TEST
     tm_printf(
         (UB *)"IR MOTOR TEST: continuous line following; no run cutoff\n\n");
 #else
-    tm_printf((UB *)"IR calibration only: GP26 left, GP27 right\n\n");
+    tm_printf((UB *)"IR calibration only: DO on GP26 left, GP27 right, "
+                    "GP28 barcode; compass printed for the spin\n\n");
 #endif
 
 #if APP_TEST && !IR_CALIBRATION_ONLY && !IR_MOTOR_TEST
@@ -148,10 +161,18 @@ usermain (void)
      * the initial task, while the system is running. Tests may call
      * tk_dly_tsk() to let the other tasks work for a while.
      */
+#if TM_MQTT
+    /* Start once the console reaches MQTT, so no result waits in RAM. */
+    if (!console_mirror_wait_online(TEST_MQTT_WAIT_MS))
+    {
+        tm_printf((UB *)"[TEST] MQTT not connected; running anyway\n");
+    }
+#endif
     tm_printf((UB *)"[TEST] === test run start ===\n");
     obstacle_test();
     motion_test();
     line_follow_test();
+    barcode_test();
     terrain_test();
     communication_test();
     tm_printf((UB *)"[TEST] === test run end ===\n");

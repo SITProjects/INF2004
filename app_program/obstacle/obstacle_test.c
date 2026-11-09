@@ -46,6 +46,14 @@
 #define WIDTH_TOLERANCE_MM 2u
 #define CENTRE_EDGE_INDEX ((uint8_t)OBSTACLE_CENTRE_INDEX)
 #define LAST_EDGE_INDEX ((uint8_t)(OBSTACLE_SWEEP_POINTS - 1u))
+/* Echo at which a sweep end stops counting as the obstacle: the ends are
+ * 40 degrees off centre, where a flat face reads the centre echo / cos 40
+ * (1.3054 times). */
+#define FLAT_END_US(centre_us)                                                 \
+    ((uint16_t)((((uint32_t)(centre_us)*13054u) + 5000u) / 10000u))
+#define END_LIMIT_US(centre_us) (FLAT_END_US(centre_us) + OBSTACLE_EDGE_JUMP_US)
+_Static_assert((OBSTACLE_CENTRE_DEG - OBSTACLE_SWEEP_FIRST_DEG) == 40u,
+               "END_LIMIT_US assumes the sweep ends are 40 degrees off");
 
 /** One side-selection case: both inputs and the expected decision. */
 typedef struct
@@ -165,6 +173,13 @@ static bool avoid_verify_valid (void);
 static bool avoid_line_valid (void);
 static bool avoid_rejoin_valid (void);
 static bool sim_in_sidestep (void);
+static bool plan_short_pass_valid (void);
+static bool avoid_line_gate_valid (void);
+static uint16_t close_up_width (uint8_t left, uint8_t right, uint16_t left_us,
+                                uint16_t right_us, uint16_t centre_us,
+                                uint16_t * p_estimate);
+static bool width_close_up_valid (void);
+static bool width_end_is_edge_valid (void);
 static bool avoid_fault_valid (void);
 static bool avoid_obstacles_valid (void);
 static bool avoid_angle_valid (void);
@@ -179,9 +194,17 @@ static bool replan_measured_clearance_valid (void);
 static bool avoid_turn_backoff_valid (void);
 static bool avoid_probe_valid (void);
 static bool avoid_watch_valid (void);
+static bool avoid_home_valid (void);
 static void sim_watch (uint16_t echo_us);
+static uint16_t sim_watch_echo (float lateral_mm);
+static bool avoid_watch_front_valid (void);
 static void sim_blocked_corridor (void);
 static bool sim_held_critical (obstacle_avoid_leg_t leg);
+static bool sim_stop_off_line (int32_t off_deg);
+static bool sim_settle (void);
+static bool avoid_straighten_valid (void);
+static bool avoid_straighten_skip_valid (void);
+static bool plan_edge_min_valid (void);
 
 /* Public function definitions. */
 
@@ -213,7 +236,7 @@ obstacle_test (void)
     TEST_CHECK("OBS-U05", classify_valid(),
                "sweep classify: HIT, MISS, INVALID without echo wrap");
     TEST_CHECK("OBS-U06", width_wall_valid(),
-               "width: wall past both ends is a 346 mm lower bound");
+               "width: wall past both ends is a 168 mm lower bound");
     TEST_CHECK("OBS-U07", width_box_valid(),
                "width: centred 200 mm box at 250 mm reads 204 mm");
     TEST_CHECK("OBS-U08", width_shifted_valid(),
@@ -245,7 +268,7 @@ obstacle_test (void)
     TEST_CHECK("OBS-U45", avoid_verify_valid(),
                "avoid: extra sidesteps lengthen the return; limit holds");
     TEST_CHECK("OBS-U46", avoid_line_valid(),
-               "avoid: a found line hands over to FOLLOW; two misses FAULT");
+               "avoid: line ends the return early; one search, then FOLLOW");
     TEST_CHECK("OBS-U47", avoid_fault_valid(),
                "avoid: one retry from odometry; FAULT never releases");
     TEST_CHECK("OBS-U48", avoid_obstacles_valid(),
@@ -275,8 +298,28 @@ obstacle_test (void)
                "replan: closest sector return ranks usable sides");
     TEST_CHECK("OBS-U66", plan_end_room_valid(),
                "plan: a clear end counts only if the car fits past it");
+    TEST_CHECK("OBS-U76", avoid_watch_front_valid(),
+               "avoid: the sidestep watches the obstacle's front");
     TEST_CHECK("OBS-U67", avoid_watch_valid(),
                "avoid: watch the obstacle side and widen while driving");
+    TEST_CHECK("OBS-U69", avoid_home_valid(),
+               "avoid: turn back to the heading the car stopped on");
+    TEST_CHECK(
+        "OBS-U77", avoid_straighten_valid(),
+        "avoid: stopped off the line's heading, turn onto it and measure");
+    TEST_CHECK("OBS-U78", avoid_straighten_skip_valid(),
+               "avoid: no straightening when it would not help");
+    TEST_CHECK(
+        "OBS-U79", plan_edge_min_valid(),
+        "plan: the first sidestep clears the widest obstacle on the line");
+    TEST_CHECK("OBS-U72", plan_short_pass_valid(),
+               "plan: stop short of the rear bumper when the edge is known");
+    TEST_CHECK("OBS-U73", avoid_line_gate_valid(),
+               "avoid: black far from the line is not the line");
+    TEST_CHECK("OBS-U74", width_close_up_valid(),
+               "width: close up, the corners' range sets the width");
+    TEST_CHECK("OBS-U75", width_end_is_edge_valid(),
+               "width: an end behind the face is not the obstacle");
 
     TEST_CHECK("OBS-U10", packed_obstacle_fields_valid(),
                "packed obstacle fields clamp without changing neighbours");
@@ -611,61 +654,89 @@ width_unavailable (obstacle_width_result_t width)
            !width.b_left_found && !width.b_right_found && !width.b_collapsed;
 }
 
-/* OBS-U05: centre 1458 us gives a HIT limit of 1924 us (exclusive). */
+/* OBS-U05: centre 1458 us gives a HIT limit of 1924 us (exclusive) at the
+ * centre; a flat face reads 1683.5 us 30 degrees off (limit 2150 us) and
+ * 1903.3 us at the 40 degree ends (limit 2369 us). */
 static bool
 classify_valid (void)
 {
-    return (obstacle_width_classify(ULTRASONIC_VALID, 1923u, 1458u) ==
+    uint8_t const centre = CENTRE_EDGE_INDEX;
+    return (obstacle_width_classify(ULTRASONIC_VALID, 1923u, 1458u, centre) ==
             OBSTACLE_WIDTH_HIT) &&
-           (obstacle_width_classify(ULTRASONIC_VALID, 1924u, 1458u) ==
+           (obstacle_width_classify(ULTRASONIC_VALID, 1924u, 1458u, centre) ==
             OBSTACLE_WIDTH_MISS) &&
-           (obstacle_width_classify(ULTRASONIC_VALID, 1u, 1458u) ==
+           (obstacle_width_classify(ULTRASONIC_VALID, 1u, 1458u, centre) ==
             OBSTACLE_WIDTH_HIT) &&
-           (obstacle_width_classify(ULTRASONIC_NO_ECHO, 0u, 1458u) ==
+           (obstacle_width_classify(ULTRASONIC_NO_ECHO, 0u, 1458u, centre) ==
             OBSTACLE_WIDTH_MISS) &&
-           (obstacle_width_classify(ULTRASONIC_FAULT, 0u, 1458u) ==
+           (obstacle_width_classify(ULTRASONIC_FAULT, 0u, 1458u, centre) ==
             OBSTACLE_WIDTH_INVALID) &&
-           (obstacle_width_classify(ULTRASONIC_PENDING, 1u, 1458u) ==
+           (obstacle_width_classify(ULTRASONIC_PENDING, 1u, 1458u, centre) ==
             OBSTACLE_WIDTH_INVALID) &&
+           (obstacle_width_classify(ULTRASONIC_VALID, 2149u, 1458u, 1u) ==
+            OBSTACLE_WIDTH_HIT) &&
+           (obstacle_width_classify(ULTRASONIC_VALID, 2150u, 1458u, 7u) ==
+            OBSTACLE_WIDTH_MISS) &&
+           (obstacle_width_classify(ULTRASONIC_VALID, 2368u, 1458u, 0u) ==
+            OBSTACLE_WIDTH_HIT) &&
+           (obstacle_width_classify(ULTRASONIC_VALID, 2369u, 1458u,
+                                    LAST_EDGE_INDEX) == OBSTACLE_WIDTH_MISS) &&
+           /* Beyond the grid counts as the centre. */
+           (obstacle_width_classify(ULTRASONIC_VALID, 1924u, 1458u,
+                                    LAST_EDGE_INDEX + 1u) ==
+            OBSTACLE_WIDTH_MISS) &&
            /* 65500 + 466 exceeds 16 bits; the sum must not wrap. */
-           (obstacle_width_classify(ULTRASONIC_VALID, UINT16_MAX, 65500u) ==
+           (obstacle_width_classify(ULTRASONIC_VALID, UINT16_MAX, 65500u,
+                                    centre) == OBSTACLE_WIDTH_HIT) &&
+           (obstacle_width_classify(ULTRASONIC_VALID, UINT16_MAX, 65500u, 0u) ==
             OBSTACLE_WIDTH_HIT);
 }
 
-/* OBS-U06: flat wall 300 mm ahead covers both ends (346 mm at 60/120). */
+/* OBS-U06: flat wall 100 mm ahead covers both ends (130.5 mm at 50/130,
+ * 83.9 mm either side). */
 static bool
 width_wall_valid (void)
 {
     obstacle_width_config_t config = width_fixture(0.0f);
-    obstacle_width_edge_t left = {.index = 0u, .echo_us = 2020u};
-    obstacle_width_edge_t right = {.index = LAST_EDGE_INDEX, .echo_us = 2020u};
-    return width_matches(obstacle_width_estimate(left, right, &config), 346u,
+    obstacle_width_edge_t left = {.index = 0u, .echo_us = 761u};
+    obstacle_width_edge_t right = {.index = LAST_EDGE_INDEX, .echo_us = 761u};
+    return width_matches(obstacle_width_estimate(left, right, &config), 168u,
                          0u, LAST_EDGE_INDEX, false, false);
 }
 
-/* OBS-U07: 200 mm box centred 250 mm ahead hits 70..110 degrees. */
+/* OBS-U07: 200 mm box centred 250 mm ahead hits 70..110 degrees; the
+ * edges lie half a step out, at 65 and 115 degrees. */
 static bool
 width_box_valid (void)
 {
     obstacle_width_config_t config = width_fixture(0.0f);
     obstacle_width_edge_t left = {.index = 2u, .echo_us = 1551u};
-    obstacle_width_edge_t right = {.index = 10u, .echo_us = 1551u};
+    obstacle_width_edge_t right = {.index = 6u, .echo_us = 1551u};
     obstacle_width_result_t width =
         obstacle_width_estimate(left, right, &config);
-    return width_matches(width, 204u, 2u, 10u, true, true) &&
-           (width.left_bound_ddeg == 675u) && (width.right_bound_ddeg == 1125u);
+    return width_matches(width, 225u, 2u, 6u, true, true) &&
+           (width.left_bound_ddeg == 650u) && (width.right_bound_ddeg == 1150u);
 }
 
-/* OBS-U08: the same box 80 mm left continues past 60 degrees. */
+/* OBS-U08: the same box 80 mm left hits 60..90 degrees, so both edges
+ * are found. A 230 mm box 150 mm ahead (edges 37.5 degrees off centre)
+ * hits 60..120 and misses 50 and 130, so both edges are found, where the
+ * 60..120 sweep found none; without beam spread the half-step bound reads
+ * 199 mm, before OBSTACLE_EDGE_CORRECTION_DEG is fitted on the car. */
 static bool
 width_shifted_valid (void)
 {
     obstacle_width_config_t config = width_fixture(0.0f);
-    obstacle_width_edge_t left = {.index = 0u, .echo_us = 1683u};
+    obstacle_width_edge_t left = {.index = 1u, .echo_us = 1683u};
     obstacle_width_edge_t right = {.index = CENTRE_EDGE_INDEX,
                                    .echo_us = 1458u};
-    return width_matches(obstacle_width_estimate(left, right, &config), 155u,
-                         0u, CENTRE_EDGE_INDEX, false, true);
+    obstacle_width_edge_t wide_left = {.index = 1u, .echo_us = 1010u};
+    obstacle_width_edge_t wide_right = {.index = 7u, .echo_us = 1010u};
+    return width_matches(obstacle_width_estimate(left, right, &config), 188u,
+                         1u, CENTRE_EDGE_INDEX, true, true) &&
+           width_matches(
+               obstacle_width_estimate(wide_left, wide_right, &config), 199u,
+               1u, 7u, true, true);
 }
 
 /* OBS-U09: a 20 mm pole at 250 mm hits only the centre. */
@@ -677,14 +748,14 @@ width_pole_valid (void)
                                     .echo_us = 1458u};
     obstacle_width_result_t width =
         obstacle_width_estimate(centre, centre, &config);
-    if (!width_matches(width, 22u, CENTRE_EDGE_INDEX, CENTRE_EDGE_INDEX, true,
+    if (!width_matches(width, 44u, CENTRE_EDGE_INDEX, CENTRE_EDGE_INDEX, true,
                        true) ||
         width.b_collapsed)
     {
         return false;
     }
-    /* 5 degrees inward from 87.5/92.5 crosses: both move to 90 degrees. */
-    config = width_fixture(5.0f);
+    /* 6 degrees inward from 85/95 crosses: both move to 90 degrees. */
+    config = width_fixture(6.0f);
     width = obstacle_width_estimate(centre, centre, &config);
     return (width.width_mm == 1u) && width.b_collapsed &&
            (width.left_bound_ddeg == 900u) && (width.right_bound_ddeg == 900u);
@@ -851,20 +922,18 @@ sides_valid (void)
          ROBOT_OBSTACLE_PATH_FOUND, ROBOT_OBSTACLE_DIR_RIGHT_120},
         {ULTRASONIC_NO_ECHO, 0u, ULTRASONIC_FAULT, 0u, 0u,
          ROBOT_OBSTACLE_PATH_FOUND, ROBOT_OBSTACLE_DIR_LEFT_60},
-        /* A square-on wall near detection still occupies both sides. */
-        {ULTRASONIC_VALID, (uint16_t)((uint32_t)NEAR_US * 1155u / 1000u),
-         ULTRASONIC_VALID, (uint16_t)((uint32_t)NEAR_US * 1155u / 1000u),
-         NEAR_US, ROBOT_OBSTACLE_BLOCKED, ROBOT_OBSTACLE_DIR_NONE},
-        /* The jump boundary is inclusive, on either side. */
-        {ULTRASONIC_VALID, NEAR_US + OBSTACLE_EDGE_JUMP_US, ULTRASONIC_VALID,
-         NEAR_US, NEAR_US, ROBOT_OBSTACLE_PATH_FOUND,
-         ROBOT_OBSTACLE_DIR_LEFT_60},
-        {ULTRASONIC_VALID, NEAR_US, ULTRASONIC_VALID,
-         NEAR_US + OBSTACLE_EDGE_JUMP_US, NEAR_US, ROBOT_OBSTACLE_PATH_FOUND,
-         ROBOT_OBSTACLE_DIR_RIGHT_120},
-        {ULTRASONIC_VALID, NEAR_US + OBSTACLE_EDGE_JUMP_US - 1u,
-         ULTRASONIC_VALID, NEAR_US, NEAR_US, ROBOT_OBSTACLE_BLOCKED,
+        /* A square-on wall near detection still occupies both sides: at the
+         * 40 degree ends it reads the centre echo / cos 40. */
+        {ULTRASONIC_VALID, FLAT_END_US(NEAR_US), ULTRASONIC_VALID,
+         FLAT_END_US(NEAR_US), NEAR_US, ROBOT_OBSTACLE_BLOCKED,
          ROBOT_OBSTACLE_DIR_NONE},
+        /* The flat-face boundary is inclusive, on either side. */
+        {ULTRASONIC_VALID, END_LIMIT_US(NEAR_US), ULTRASONIC_VALID, NEAR_US,
+         NEAR_US, ROBOT_OBSTACLE_PATH_FOUND, ROBOT_OBSTACLE_DIR_LEFT_60},
+        {ULTRASONIC_VALID, NEAR_US, ULTRASONIC_VALID, END_LIMIT_US(NEAR_US),
+         NEAR_US, ROBOT_OBSTACLE_PATH_FOUND, ROBOT_OBSTACLE_DIR_RIGHT_120},
+        {ULTRASONIC_VALID, END_LIMIT_US(NEAR_US) - 1u, ULTRASONIC_VALID,
+         NEAR_US, NEAR_US, ROBOT_OBSTACLE_BLOCKED, ROBOT_OBSTACLE_DIR_NONE},
         /* A tiny centre echo leaves the detection threshold in charge. */
         {ULTRASONIC_VALID, NEAR_US, ULTRASONIC_VALID, NEAR_US, 1u,
          ROBOT_OBSTACLE_BLOCKED, ROBOT_OBSTACLE_DIR_NONE},
@@ -908,7 +977,7 @@ sides_agree_valid (void)
 
     for (unsigned int c = 0u; c < ARRAY_COUNT(centres); ++c)
     {
-        uint32_t const jump = (uint32_t)centres[c] + OBSTACLE_EDGE_JUMP_US;
+        uint32_t const jump = obstacle_width_hit_limit_us(centres[c], 0u);
         uint32_t const echoes[] = {
             0u,         1u,        NEAR_US, THRESHOLD_US, CLEAR_US,
             FARTHER_US, jump - 1u, jump,    jump + 1u,    UINT16_MAX};
@@ -921,8 +990,8 @@ sides_agree_valid (void)
             uint16_t const echo = (uint16_t)echoes[e];
             bool const b_clear =
                 (echo >= OBSTACLE_DETECT_ECHO_US) &&
-                (obstacle_width_classify(ULTRASONIC_VALID, echo, centres[c]) ==
-                 OBSTACLE_WIDTH_MISS);
+                (obstacle_width_classify(ULTRASONIC_VALID, echo, centres[c],
+                                         0u) == OBSTACLE_WIDTH_MISS);
             obstacle_side_decision_t const left = obstacle_decision_sides(
                 ULTRASONIC_VALID, echo, ULTRASONIC_FAULT, 0u, centres[c]);
             obstacle_side_decision_t const right = obstacle_decision_sides(
@@ -1074,7 +1143,7 @@ packed_obstacle_fields_valid (void)
     robot_obstacle_result_t sample = {
         .flags = robot_obstacle_pack_flags(
             ROBOT_OBSTACLE_PATH_FOUND, ROBOT_OBSTACLE_DIR_LEFT_60, true, true),
-        .edges = robot_obstacle_pack_edges(2u, 10u),
+        .edges = robot_obstacle_pack_edges(2u, 7u),
         .width_mm = ROBOT_OBSTACLE_WIDTH_UNAVAILABLE,
         .sequence = UINT8_MAX};
     for (unsigned int index = 0u;
@@ -1082,7 +1151,7 @@ packed_obstacle_fields_valid (void)
     {
         sample.width_mm = robot_obstacle_clamp_width(width_input[index]);
         if ((sample.width_mm != expected_width[index]) ||
-            (sample.flags != 0x6Au) || (sample.edges != 0xA2u) ||
+            (sample.flags != 0x6Au) || (sample.edges != 0x72u) ||
             (sample.sequence != UINT8_MAX))
         {
             return false;
@@ -1090,7 +1159,7 @@ packed_obstacle_fields_valid (void)
     }
     sample.sequence = (uint8_t)(sample.sequence + 1u);
     if ((sample.sequence != 0u) || (sample.flags != 0x6Au) ||
-        (sample.edges != 0xA2u) ||
+        (sample.edges != 0x72u) ||
         (sample.width_mm != ROBOT_OBSTACLE_WIDTH_MAX_MM))
     {
         return false;
@@ -1098,19 +1167,19 @@ packed_obstacle_fields_valid (void)
     return true;
 }
 
-/* OBS-U39: the OBS-U07 box (edges 67.5 and 112.5 deg at 266 mm) lies
- * 266 * cos(67.5 deg) = 102 mm either side of the pivot. */
+/* OBS-U39: the OBS-U07 box (edges 65 and 115 deg at 266 mm) lies
+ * 266 * cos(65 deg) = 112 mm either side of the pivot. */
 static bool
 width_offsets_valid (void)
 {
     obstacle_width_config_t config = width_fixture(0.0f);
     obstacle_width_edge_t left = {.index = 2u, .echo_us = 1551u};
-    obstacle_width_edge_t right = {.index = 10u, .echo_us = 1551u};
+    obstacle_width_edge_t right = {.index = 6u, .echo_us = 1551u};
     obstacle_width_result_t width =
         obstacle_width_estimate(left, right, &config);
     obstacle_width_result_t none = obstacle_width_unavailable();
-    return (width.left_x_mm >= 99) && (width.left_x_mm <= 105) &&
-           (width.right_x_mm <= -99) && (width.right_x_mm >= -105) &&
+    return (width.left_x_mm >= 109) && (width.left_x_mm <= 115) &&
+           (width.right_x_mm <= -109) && (width.right_x_mm >= -115) &&
            (none.left_x_mm == 0) && (none.right_x_mm == 0);
 }
 
@@ -1175,7 +1244,7 @@ wait_result (obstacle_scan_test_snapshot_t * p_snapshot,
 }
 
 /* OBS-U49: a scripted sweep (near centre, both ends no echo, fine hits at
- * 115 and 65 degrees) publishes PATH_FOUND left with its geometry. The
+ * 120 and 60 degrees) publishes PATH_FOUND left with its geometry. The
  * geometry outlives reset_sweep() and is replaced by the next publish. */
 static bool
 geometry_persists_valid (void)
@@ -1445,6 +1514,7 @@ avoid_fixture (void)
                                           .lateral_max_mm = 500u,
                                           .pass_max_mm = 1500u,
                                           .return_extra_mm = 150u,
+                                          .overshoot_mm = 40u,
                                           .angle_min_deg = 90u};
     return geometry;
 }
@@ -1456,7 +1526,7 @@ path_result (robot_obstacle_direction_t dir, bool b_left_found,
     robot_obstacle_result_t result = {
         .flags = robot_obstacle_pack_flags(ROBOT_OBSTACLE_PATH_FOUND, dir,
                                            b_left_found, b_right_found),
-        .edges = robot_obstacle_pack_edges(1u, 11u),
+        .edges = robot_obstacle_pack_edges(1u, 7u),
         .width_mm = 200u,
         .sequence = 1u};
     return result;
@@ -1638,7 +1708,7 @@ corridor_check_valid (void)
 
     /* 100 degrees at 290 mm is 50.4 mm right: 85 mm more to the left. */
     corridor = empty_corridor();
-    corridor.echo_us[8] = 1691u;
+    corridor.echo_us[5] = 1691u; /* 100 degrees. */
     ok = ok &&
          (obstacle_avoid_check_corridor(&corridor, &width, &car, 650u, false,
                                         &shift_mm) ==
@@ -1647,7 +1717,7 @@ corridor_check_valid (void)
 
     /* The mirror: 80 degrees at 290 mm with the gap on the right. */
     corridor = empty_corridor();
-    corridor.echo_us[4] = 1691u;
+    corridor.echo_us[3] = 1691u; /* 80 degrees. */
     ok = ok &&
          (obstacle_avoid_check_corridor(&corridor, &width, &car, 650u, true,
                                         &shift_mm) ==
@@ -1657,7 +1727,7 @@ corridor_check_valid (void)
     /* Beyond the pass, or a wall on the gap side outside the path: clear. */
     corridor = empty_corridor();
     corridor.echo_us[CENTRE_EDGE_INDEX] = 4665u;
-    corridor.echo_us[0] = 2332u;
+    corridor.echo_us[1] = 2332u; /* 60 degrees: 200 mm left. */
     ok = ok && (obstacle_avoid_check_corridor(&corridor, &width, &car, 650u,
                                               false, &shift_mm) ==
                 OBSTACLE_AVOID_CORRIDOR_CLEAR);
@@ -1700,7 +1770,10 @@ avoid_config (void)
                                                  .resume_min_deg = 3u,
                                                  .max_sidesteps = 3u,
                                                  .b_recheck = true,
-                                                 .resweep_ms = 3000u},
+                                                 .resweep_ms = 3000u,
+                                                 .straighten_settle_ms = 250u,
+                                                 .straighten_step_mm = 32u,
+                                                 .straighten_max_deg = 15u},
                                       .width = width_fixture(0.0f)};
     return config;
 }
@@ -1712,7 +1785,7 @@ sim_scan (robot_obstacle_status_t status, robot_obstacle_direction_t dir,
 {
     sim.in.scan.flags = robot_obstacle_set_critical(
         robot_obstacle_pack_flags(status, dir, true, true), b_critical);
-    sim.in.scan.edges = robot_obstacle_pack_edges(1u, 11u);
+    sim.in.scan.edges = robot_obstacle_pack_edges(1u, 7u);
     sim.in.scan.width_mm = 200u;
     sim.in.scan.sequence = (uint8_t)(sim.in.scan.sequence + 1u);
     sim.in.b_stop_requested = b_stop;
@@ -1768,11 +1841,22 @@ sim_step (void)
         }
         else if (sim.ctx.state == OBSTACLE_AVOID_RUN_LEG)
         {
-            /* The return leg finds the line; every other leg its target. */
+            /* A return leg looking for the line finds it; every other leg
+             * its target. A finished turn moves the odometry heading
+             * (+ left). */
+            if (robot_motion_cmd_get_type(sim.ctx.cmd) == ROBOT_MOTION_CMD_TURN)
+            {
+                int32_t const angle =
+                    (int32_t)robot_motion_cmd_get_angle(sim.ctx.cmd);
+                sim.in.heading_deg +=
+                    robot_motion_cmd_get_reverse(sim.ctx.cmd) ? -angle : angle;
+            }
             sim.in.b_move_done = true;
-            sim.in.motion_done = (sim.ctx.leg == OBSTACLE_AVOID_LEG_RETURN)
-                                     ? ROBOT_MOTION_DONE_LINE
-                                     : ROBOT_MOTION_DONE_DIST;
+            sim.in.motion_done =
+                ((sim.ctx.leg == OBSTACLE_AVOID_LEG_RETURN) &&
+                 robot_motion_cmd_get_stop_at_line(sim.ctx.cmd))
+                    ? ROBOT_MOTION_DONE_LINE
+                    : ROBOT_MOTION_DONE_DIST;
         }
         else if (((sim.ctx.state == OBSTACLE_AVOID_VERIFY) ||
                   (sim.ctx.state == OBSTACLE_AVOID_REPLAN)) &&
@@ -2076,7 +2160,9 @@ avoid_verify_valid (void)
     return ok && (sim.ctx.fault == OBSTACLE_AVOID_FAULT_BLOCKED);
 }
 
-/* OBS-U46: the done reason ends the return leg early or retries once. */
+/* OBS-U46: the done reason ends the return leg early: the axle goes onto
+ * the line and the car turns back 90 degrees left to the heading it
+ * stopped on. A missed line retries once, then line following searches. */
 static bool
 avoid_line_valid (void)
 {
@@ -2090,11 +2176,18 @@ avoid_line_valid (void)
     sim.in.b_move_done = true;
     sim.in.motion_done = ROBOT_MOTION_DONE_LINE;
     ok = ok && sim_step().b_send &&
-         (sim.act.cmd == robot_motion_cmd_follow()) &&
+         (sim.act.cmd == robot_motion_cmd_move(40u, false, false)) &&
          (sim.act.p_reason != NULL) &&
-         (sim.ctx.leg == OBSTACLE_AVOID_LEG_FOLLOW);
+         (sim.ctx.leg == OBSTACLE_AVOID_LEG_OVERSHOOT) &&
+         (sim.in.heading_deg == -90);
+    ok = ok &&
+         sim_until(OBSTACLE_AVOID_SEND, OBSTACLE_AVOID_LEG_TURN_HOME, 20u) &&
+         (sim.act.cmd == robot_motion_cmd_turn(90u, false, false));
+    ok = ok && sim_until(OBSTACLE_AVOID_IDLE, OBSTACLE_AVOID_LEG_FOLLOW, 20u) &&
+         (sim.last_cmd == robot_motion_cmd_follow()) &&
+         (sim.in.heading_deg == 0);
 
-    /* Missed line: one search move of 150 mm, then FAULT. */
+    /* Missed line: one search move of 150 mm, then line following. */
     ok = ok && sim_detect_path();
     ok =
         ok && sim_until(OBSTACLE_AVOID_RUN_LEG, OBSTACLE_AVOID_LEG_RETURN, 80u);
@@ -2108,15 +2201,12 @@ avoid_line_valid (void)
     (void)sim_step();
     sim.in.b_move_done = true;
     sim.in.motion_done = ROBOT_MOTION_DONE_DIST;
-    ok = ok && sim_step().b_set_inhibit && !sim.act.b_send &&
-         !sim.act.b_clear_inhibit && (sim.ctx.state == OBSTACLE_AVOID_FAULT) &&
-         (sim.ctx.fault == OBSTACLE_AVOID_FAULT_RETRY_USED);
-    for (uint32_t index = 0u; ok && (index < 100u); ++index)
-    {
-        ok = sim_step().b_set_inhibit && !sim.act.b_send &&
-             !sim.act.b_clear_inhibit;
-    }
-    return ok;
+    ok = ok && sim_step().b_send &&
+         (sim.act.cmd == robot_motion_cmd_follow()) &&
+         (sim.ctx.leg == OBSTACLE_AVOID_LEG_FOLLOW) &&
+         (sim.ctx.fault == OBSTACLE_AVOID_FAULT_NONE);
+    (void)sim_step();
+    return ok && (sim.ctx.state == OBSTACLE_AVOID_IDLE);
 }
 
 /* Run to the sidestep with its move just queued at odometry 0. */
@@ -2233,7 +2323,9 @@ avoid_obstacles_valid (void)
 /* OBS-U55: with a 30 degree minimum, the angle follows the room in front
  * (centre less the 60 mm margin), rounded up to 5 degrees. At 600 mm the
  * 235 mm offset fits 30 degrees: a 470 mm diagonal gains 407 mm, leaving
- * 593 of the 1000 mm pass; the return diagonal is (235 + 150) / sin 30. */
+ * 593 of the 1000 mm pass; the turn in looks for the line only on its
+ * second 15 degrees; the return diagonal is (235 + 150) / sin 30; on the
+ * line the axle moves 40 mm on and the car turns 30 degrees back left. */
 static bool
 avoid_angle_valid (void)
 {
@@ -2254,9 +2346,12 @@ avoid_angle_valid (void)
     uint32_t const expected[] = {robot_motion_cmd_turn(30u, false, false),
                                  robot_motion_cmd_move(470u, false, false),
                                  robot_motion_cmd_turn(30u, true, false),
-                                 robot_motion_cmd_move(593u, false, false),
-                                 robot_motion_cmd_turn(30u, true, true),
+                                 robot_motion_cmd_move(510u, false, false),
+                                 robot_motion_cmd_turn(15u, true, false),
+                                 robot_motion_cmd_turn(15u, true, true),
                                  robot_motion_cmd_move(770u, false, true),
+                                 robot_motion_cmd_move(40u, false, false),
+                                 robot_motion_cmd_turn(30u, false, false),
                                  robot_motion_cmd_follow()};
     ok = ok && sim_detect_path();
     sim.config.geometry.angle_min_deg = 30u;
@@ -2513,11 +2608,12 @@ plan_clear_side_valid (void)
 }
 
 /* OBS-U66: edges at +-60 mm, 250 mm ahead, need 195 mm either way, so a
- * point beside the shifted car must be 330 mm out. The scanner chose right
- * and both ends were clear. Right end at 659 mm (329.5 mm out, inside the
- * 650 mm pass): too close, so left. At 662 mm: fits, right. At 800 mm:
+ * point beside the shifted car must be 330 mm out. The ends are 40 degrees
+ * off the heading. The scanner chose right and both ends were clear. Right
+ * end at 513 mm (329.8 mm out, inside the 650 mm pass): too close, so
+ * left. At 514 mm (330.4 mm out): fits, right. At 849 mm (650.4 mm ahead):
  * beyond the pass, right. Both ends too close (300 mm): the scanner's
- * right, flagged tight; left at 400 mm instead: the roomier left. */
+ * right, flagged tight; left at 350 mm instead: the roomier left. */
 static bool
 plan_end_room_valid (void)
 {
@@ -2527,20 +2623,20 @@ plan_end_room_valid (void)
     obstacle_scan_geometry_t geometry = geometry_at(250u, 60, -60);
     geometry.b_left_clear = true;
     geometry.b_right_clear = true;
-    geometry.right_end_mm = 659u;
+    geometry.right_end_mm = 513u;
     obstacle_avoid_plan_t const tight =
         obstacle_avoid_plan(result, geometry, &car);
-    geometry.right_end_mm = 662u;
+    geometry.right_end_mm = 514u;
     obstacle_avoid_plan_t const fits =
         obstacle_avoid_plan(result, geometry, &car);
-    geometry.right_end_mm = 800u;
+    geometry.right_end_mm = 849u;
     obstacle_avoid_plan_t const beyond =
         obstacle_avoid_plan(result, geometry, &car);
     geometry.right_end_mm = 300u;
     geometry.left_end_mm = 300u;
     obstacle_avoid_plan_t const neither =
         obstacle_avoid_plan(result, geometry, &car);
-    geometry.left_end_mm = 400u;
+    geometry.left_end_mm = 350u;
     obstacle_avoid_plan_t const roomier =
         obstacle_avoid_plan(result, geometry, &car);
     return plan_is(tight, false, false, 195u, 650u) && !tight.b_no_fit &&
@@ -2652,12 +2748,16 @@ avoid_probe_valid (void)
     return ok;
 }
 
-/* OBS-U67: the bypass watches the obstacle side while it drives. Left gap
- * (sensor at 60 degrees, right on the car), 235 mm sidestep, re-checks off. A point 200 mm
- * away (100 mm from the path, inside 135) lengthens the sidestep by 35 mm;
- * the same on the pass, 100 mm in, stops and sidesteps 35 mm more, then
- * passes the remaining 550 mm. No echo with the last point (174 mm
- * ahead) not yet passed by 50 mm keeps watching; then sensor ahead. */
+/* OBS-U67: the bypass watches the obstacle side while it drives. Left gap,
+ * 235 mm sidestep, re-checks off; on the sidestep the sensor faces the
+ * obstacle's front (OBS-U76), on the pass 30 degrees to the car's right. It
+ * reacts only inside 105 mm (half the car plus half the margin) and restores
+ * 135 mm. A point 110 mm from the path is left alone; one 100 mm away
+ * lengthens the sidestep by 35 mm; the same on the pass, 100 mm in, stops and
+ * sidesteps 35 mm more, then passes the remaining 550 mm. A third widening
+ * (115 mm) would pass the 80 mm cap and is refused. No echo with the last
+ * point (174 mm ahead) not yet passed by 50 mm keeps watching; then sensor
+ * ahead. */
 static bool
 avoid_watch_valid (void)
 {
@@ -2666,9 +2766,11 @@ avoid_watch_valid (void)
     ok = ok &&
          sim_until(OBSTACLE_AVOID_RUN_LEG, OBSTACLE_AVOID_LEG_SIDESTEP, 20u) &&
          sim.ctx.b_watching && sim.in.watch.b_active &&
-         (sim.watch_angle == (int16_t)OBSTACLE_SWEEP_FIRST_DEG) &&
          (sim.ctx.sidestep_mm == 235u);
-    sim_watch(1170u);
+    sim_watch(sim_watch_echo(110.0f));
+    (void)sim_step();
+    ok = ok && (sim.ctx.sidestep_mm == 235u) && (sim.ctx.remaining == 235u);
+    sim_watch(sim_watch_echo(100.0f));
     (void)sim_step();
     ok = ok && (sim.ctx.sidestep_mm == 270u) && (sim.ctx.remaining == 270u);
     sim.in.b_move_done = true;
@@ -2684,10 +2786,20 @@ avoid_watch_valid (void)
     ok = ok && sim_step().b_set_inhibit &&
          (sim.ctx.state == OBSTACLE_AVOID_RETRY_WAIT) &&
          (sim.ctx.leg == OBSTACLE_AVOID_LEG_TURN_OUT) &&
-         (sim.ctx.sidestep_mm == 35u) && (sim.ctx.forward_mm == 100u);
+         (sim.ctx.sidestep_mm == 35u) && (sim.ctx.forward_mm == 100u) &&
+         (sim.ctx.watch_shift_mm == 70u);
+    ok = ok &&
+         sim_until(OBSTACLE_AVOID_RUN_LEG, OBSTACLE_AVOID_LEG_SIDESTEP, 30u);
+    sim_watch(sim_watch_echo(20.0f)); /* Within this 35 mm leg: 115 more. */
+    (void)sim_step();                 /* 70 + 115 would pass the 80 mm cap. */
+    ok = ok && (sim.ctx.sidestep_mm == 35u) && (sim.ctx.watch_shift_mm == 70u);
     ok = ok &&
          sim_until(OBSTACLE_AVOID_RUN_LEG, OBSTACLE_AVOID_LEG_PASS, 30u) &&
          (sim.ctx.remaining == 550u) && (sim.ctx.lateral_mm == 305u);
+    sim_watch(1170u); /* On the pass too, 70 + 35 passes the cap: no stop. */
+    ok = ok && !sim_step().b_set_inhibit &&
+         (sim.ctx.state == OBSTACLE_AVOID_RUN_LEG) &&
+         (sim.ctx.watch_shift_mm == 70u);
     /* A dropout with the last point still ahead keeps watching. */
     sim_watch(0u);
     ok = ok && !sim_step().b_watch && sim.ctx.b_watching;
@@ -2702,9 +2814,77 @@ avoid_watch_valid (void)
     return ok;
 }
 
+/* OBS-U76: on the sidestep the sensor faces back along the line at the
+ * obstacle's front, the turn's angle round from ahead and within the servo's
+ * reach; seeing the face and then losing it at its edge does not end the
+ * watch, and the pass still watches 30 degrees off the heading. Both sides. */
+static bool
+avoid_watch_front_valid (void)
+{
+    bool ok = true;
+    for (uint32_t right = 0u; right < 2u; ++right)
+    {
+        ok = ok && sim_detect_path();
+        sim.config.timing.b_recheck = false;
+        if (right != 0u)
+        {
+            sim_scan(ROBOT_OBSTACLE_PATH_FOUND, ROBOT_OBSTACLE_DIR_RIGHT_120,
+                     true, false);
+        }
+        ok = ok && sim_until(OBSTACLE_AVOID_RUN_LEG,
+                             OBSTACLE_AVOID_LEG_SIDESTEP, 50u);
+        int32_t const turn = (int32_t)sim.ctx.plan.angle_deg;
+        bool const b_high = (right != 0u) != (OBSTACLE_SERVO_MIRRORED != 0);
+        int32_t front = b_high ? (90 + turn) : (90 - turn);
+        front =
+            (front < OBSTACLE_WATCH_MIN_DEG) ? OBSTACLE_WATCH_MIN_DEG : front;
+        front =
+            (front > OBSTACLE_WATCH_MAX_DEG) ? OBSTACLE_WATCH_MAX_DEG : front;
+        ok = ok && sim.ctx.b_watching && (sim.watch_angle == front) &&
+             (front != (int16_t)OBSTACLE_WATCH_LEFT_DEG) &&
+             (front != (int16_t)OBSTACLE_WATCH_RIGHT_DEG);
+        sim_watch(1170u); /* The face. */
+        (void)sim_step();
+        sim.in.distance_mm += 400;
+        sim_watch(0u); /* Past its edge. */
+        (void)sim_step();
+        ok = ok && sim.ctx.b_watching && !sim.ctx.b_watch_done;
+        ok = ok &&
+             sim_until(OBSTACLE_AVOID_RUN_LEG, OBSTACLE_AVOID_LEG_PASS, 50u) &&
+             sim.ctx.b_watching &&
+             (sim.watch_angle == (b_high ? (int16_t)OBSTACLE_WATCH_RIGHT_DEG
+                                         : (int16_t)OBSTACLE_WATCH_LEFT_DEG));
+    }
+    return ok;
+}
+
+/* Echo of a point this far from the path at the angle the watch holds. The
+ * sine is a series: <math.h> clashes with the kernel's size_t here. */
+static uint16_t
+sim_watch_echo (float lateral_mm)
+{
+    int32_t const off_deg = 90 - (int32_t)sim.watch_angle;
+    float const x =
+        (float)((off_deg < 0) ? -off_deg : off_deg) * (3.14159265f / 180.0f);
+    float const x2 = x * x;
+    float const sine =
+        x *
+        (1.0f - (x2 / 6.0f) * (1.0f - (x2 / 20.0f) * (1.0f - (x2 / 42.0f))));
+    for (uint32_t echo = 1u; echo < 20000u; ++echo)
+    {
+        float range_mm = 0.0f;
+        if (obstacle_width_range_mm((uint16_t)echo, &sim.config.width,
+                                    &range_mm) &&
+            ((range_mm * sine) >= lateral_mm))
+        {
+            return (uint16_t)echo;
+        }
+    }
+    return 0u;
+}
+
 /* OBS-U63: complete the outward move and pass before handing back to
- * line following. Both sides, post-pass line capture, the heading left
- * when the inward turn is cut short, and safety priority. */
+ * line following. Both sides, post-pass line capture and safety priority. */
 static bool
 avoid_rejoin_valid (void)
 {
@@ -2732,26 +2912,43 @@ avoid_rejoin_valid (void)
             ok = ok &&
                  sim_until(OBSTACLE_AVOID_SEND, OBSTACLE_AVOID_LEG_PASS, 50u) &&
                  !robot_motion_cmd_get_stop_at_line(sim.act.cmd);
+            if (legs[index] == OBSTACLE_AVOID_LEG_TURN_IN)
+            {
+                /* The first half of the turn in does not look. */
+                ok = ok && sim_until(OBSTACLE_AVOID_SEND, legs[index], 100u) &&
+                     !robot_motion_cmd_get_stop_at_line(sim.act.cmd);
+            }
             ok = ok && sim_until(OBSTACLE_AVOID_SEND, legs[index], 100u) &&
                  robot_motion_cmd_get_stop_at_line(sim.act.cmd);
             (void)sim_step(); /* Acquisition command queued. */
             sim.in.b_move_done = true;
             sim.in.motion_done = ROBOT_MOTION_DONE_LINE;
             sim.b_send_busy = true;
-            ok = ok && sim_step().b_send &&
-                 (sim.act.cmd == robot_motion_cmd_follow()) &&
-                 (sim.ctx.leg == OBSTACLE_AVOID_LEG_FOLLOW);
+            uint32_t const overshoot = robot_motion_cmd_move(40u, false, false);
+            ok = ok && sim_step().b_send && (sim.act.cmd == overshoot) &&
+                 (sim.ctx.leg == OBSTACLE_AVOID_LEG_OVERSHOOT);
             for (uint32_t step = 0u; ok && (step < 3u); ++step)
             {
-                ok = sim_step().b_send &&
-                     (sim.act.cmd == robot_motion_cmd_follow()) &&
+                ok = sim_step().b_send && (sim.act.cmd == overshoot) &&
                      (sim.ctx.state == OBSTACLE_AVOID_SEND);
             }
             sim.b_send_busy = false;
             (void)sim_step(); /* Queued on this retry. */
-            (void)sim_step(); /* Accepted: resume sensing and alignment. */
-            ok = ok && (sim.ctx.state == OBSTACLE_AVOID_IDLE) &&
-                 sim.act.b_side_scans_on;
+            /* Back to the stop heading: 45 degrees after half a turn in,
+             * 90 after the whole turn and the return. */
+            uint32_t const home =
+                (legs[index] == OBSTACLE_AVOID_LEG_TURN_IN) ? 45u : 90u;
+            ok = ok &&
+                 sim_until(OBSTACLE_AVOID_SEND, OBSTACLE_AVOID_LEG_TURN_HOME,
+                           20u) &&
+                 (sim.act.cmd ==
+                  robot_motion_cmd_turn(home, right != 0u, false));
+            ok = ok &&
+                 sim_until(OBSTACLE_AVOID_IDLE, OBSTACLE_AVOID_LEG_FOLLOW,
+                           20u) &&
+                 sim.act.b_side_scans_on &&
+                 (sim.last_cmd == robot_motion_cmd_follow()) &&
+                 (sim.in.heading_deg == 0);
             if (!ok)
             {
                 return false;
@@ -2768,34 +2965,6 @@ avoid_rejoin_valid (void)
             robot_obstacle_set_critical(sim.in.scan.flags, true);
         ok = ok && sim_step().b_set_inhibit && !sim.act.b_send &&
              (sim.ctx.state == OBSTACLE_AVOID_BLOCKED_WAIT);
-        if (!ok)
-        {
-            return false;
-        }
-    }
-    /* TURN_IN cut short by a line (12 of 30 degrees, or 40 of 90 on a box
-     * path): FOLLOW is the next and only command, so line following starts
-     * from the partial heading; nothing turns the car further first. */
-    for (uint32_t box = 0u; box < 2u; ++box)
-    {
-        bool ok = sim_detect_path();
-        sim.config.timing.b_recheck = false;
-        sim.config.geometry.angle_min_deg = (box != 0u) ? 90u : 30u;
-        sim.in.geometry = geometry_at(600u, 100, -100);
-        ok = ok &&
-             sim_until(OBSTACLE_AVOID_RUN_LEG, OBSTACLE_AVOID_LEG_TURN_IN,
-                       100u) &&
-             (sim.ctx.plan.angle_deg == ((box != 0u) ? 90u : 30u));
-        uint32_t const sends = sim.sends;
-        sim.in.heading_deg += (box != 0u) ? 40 : 12;
-        sim.in.b_move_done = true;
-        sim.in.motion_done = ROBOT_MOTION_DONE_LINE;
-        ok = ok && sim_step().b_send &&
-             (sim.act.cmd == robot_motion_cmd_follow()) &&
-             (sim.ctx.leg == OBSTACLE_AVOID_LEG_FOLLOW);
-        (void)sim_step(); /* Queued. */
-        ok = ok && (sim.ctx.state == OBSTACLE_AVOID_IDLE) &&
-             (sim.sends == (sends + 1u));
         if (!ok)
         {
             return false;
@@ -2827,7 +2996,7 @@ static bool
 plan_measured_clearance_valid (void)
 {
     obstacle_avoid_geometry_t car = avoid_fixture();
-    uint16_t const clear_us = THRESHOLD_US + OBSTACLE_EDGE_JUMP_US + 100u;
+    uint16_t const clear_us = END_LIMIT_US(NEAR_US) + 100u;
     for (unsigned int right = 0u; right < 2u; ++right)
     {
         obstacle_side_decision_t const decision = obstacle_decision_sides(
@@ -2896,6 +3065,403 @@ replan_measured_clearance_valid (void)
         }
     }
     return true;
+}
+
+/* Run a left bypass to the line on the return leg, set the heading the
+ * odometry reports there, and step to the next command after the 40 mm
+ * axle move. */
+static bool
+sim_home_from (int32_t heading_deg, bool b_odometry_valid)
+{
+    bool ok = sim_detect_path() &&
+              sim_until(OBSTACLE_AVOID_RUN_LEG, OBSTACLE_AVOID_LEG_RETURN, 80u);
+    sim.in.heading_deg = heading_deg;
+    sim.in.b_odometry_valid = b_odometry_valid;
+    sim.in.b_move_done = true;
+    sim.in.motion_done = ROBOT_MOTION_DONE_LINE;
+    ok = ok && sim_step().b_send &&
+         (sim.act.cmd == robot_motion_cmd_move(40u, false, false));
+    (void)sim_step();
+    sim.in.b_move_done = true;
+    sim.in.motion_done = ROBOT_MOTION_DONE_DIST;
+    return ok && sim_step().b_send;
+}
+
+/* Follow on heading 0 for three steps of travel, be stopped, and end up
+ * @p off_deg round from it. */
+static bool
+sim_stop_off_line (int32_t off_deg)
+{
+    sim_reset();
+    sim_scan(ROBOT_OBSTACLE_CLEAR, ROBOT_OBSTACLE_DIR_CENTRE_90, false, false);
+    bool ok = sim_until(OBSTACLE_AVOID_IDLE, OBSTACLE_AVOID_LEG_FOLLOW, 10u);
+    for (uint32_t index = 0u; index < OBSTACLE_AVOID_TREND_SLOTS; ++index)
+    {
+        sim.in.distance_mm += 32;
+        (void)sim_step();
+    }
+    sim_scan(ROBOT_OBSTACLE_SCANNING, ROBOT_OBSTACLE_DIR_NONE, true, false);
+    ok = ok && sim_step().b_set_inhibit &&
+         (sim.ctx.state == OBSTACLE_AVOID_STOPPING);
+    sim.in.heading_deg = off_deg;
+    (void)sim_step();
+    return ok && (sim.ctx.state == OBSTACLE_AVOID_WAIT_RESULT) &&
+           !sim.act.b_rearm && sim.ctx.b_straighten_due;
+}
+
+/* Up to and including the step that checks the heading after the brake. */
+static bool
+sim_settle (void)
+{
+    uint32_t const steps = sim.config.timing.straighten_settle_ms / 10u;
+    bool ok = sim_stays(OBSTACLE_AVOID_WAIT_RESULT, steps);
+    (void)sim_step();
+    return ok && sim.act.b_skew_known;
+}
+
+/* OBS-U77: both ways, then the new sweep is the one used. */
+static bool
+avoid_straighten_valid (void)
+{
+    bool ok = sim_stop_off_line(8) && sim_settle();
+    ok = ok && (sim.act.skew_deg == -8) && sim.act.b_clear_inhibit &&
+         (sim.ctx.state == OBSTACLE_AVOID_RELEASING);
+    ok = ok && sim_step().b_send && (sim.ctx.state == OBSTACLE_AVOID_SEND) &&
+         (robot_motion_cmd_get_type(sim.act.cmd) == ROBOT_MOTION_CMD_TURN) &&
+         (robot_motion_cmd_get_angle(sim.act.cmd) == 8u) &&
+         robot_motion_cmd_get_reverse(sim.act.cmd) &&
+         !robot_motion_cmd_get_stop_at_line(sim.act.cmd);
+    ok = ok &&
+         sim_until(OBSTACLE_AVOID_STOPPING, OBSTACLE_AVOID_LEG_FOLLOW, 20u);
+    ok = ok && sim.act.b_set_inhibit && (sim.in.heading_deg == 0);
+    (void)sim_step();
+    ok = ok && sim.act.b_rearm &&
+         (sim.ctx.state == OBSTACLE_AVOID_WAIT_RESULT) &&
+         (sim.ctx.origin_heading_deg == 0) && !sim.ctx.b_measure_again;
+    /* Once only, however long the new sweep takes. */
+    ok = ok && sim_stays(OBSTACLE_AVOID_WAIT_RESULT, 40u);
+    sim_scan(ROBOT_OBSTACLE_PATH_FOUND, ROBOT_OBSTACLE_DIR_LEFT_60, true,
+             false);
+    (void)sim_step();
+    ok = ok && (sim.ctx.state == OBSTACLE_AVOID_RELEASING) &&
+         (sim.ctx.leg != OBSTACLE_AVOID_LEG_STRAIGHTEN);
+
+    ok = ok && sim_stop_off_line(-4) && sim_settle();
+    ok = ok && (sim.act.skew_deg == 4) && (sim.act.p_reason != NULL);
+    ok = ok && sim_step().b_send &&
+         (robot_motion_cmd_get_angle(sim.act.cmd) == 4u) &&
+         !robot_motion_cmd_get_reverse(sim.act.cmd);
+
+    /* A stall or an obstacle too close ends it; the sweep still happens. */
+    ok = ok && sim_stop_off_line(8) && sim_settle();
+    (void)sim_step();
+    (void)sim_step();
+    ok = ok && (sim.ctx.state == OBSTACLE_AVOID_RUN_LEG);
+    sim.in.b_stall = true;
+    ok = ok && sim_step().b_set_inhibit &&
+         (sim.ctx.state == OBSTACLE_AVOID_STOPPING) && !sim.ctx.b_retry_used;
+    (void)sim_step();
+    ok = ok && sim.act.b_rearm &&
+         (sim.ctx.state == OBSTACLE_AVOID_WAIT_RESULT) &&
+         (sim.ctx.origin_heading_deg == 8);
+    ok = ok && sim_stop_off_line(8) && sim_settle();
+    (void)sim_step();
+    (void)sim_step();
+    sim_scan(ROBOT_OBSTACLE_SCANNING, ROBOT_OBSTACLE_DIR_NONE, true, true);
+    ok = ok && sim_step().b_set_inhibit &&
+         (sim.ctx.state == OBSTACLE_AVOID_STOPPING);
+    return ok;
+}
+
+/* OBS-U78: square enough, in a bend, too close or no history: measure. */
+static bool
+avoid_straighten_skip_valid (void)
+{
+    bool ok = sim_stop_off_line(3) && sim_settle();
+    ok = ok && (sim.act.skew_deg == -3) && !sim.act.b_clear_inhibit &&
+         (sim.ctx.state == OBSTACLE_AVOID_WAIT_RESULT);
+    ok = ok && !sim_step().b_skew_known; /* Checked once. */
+
+    ok = ok && sim_stop_off_line(15) && sim_settle() &&
+         (sim.ctx.state == OBSTACLE_AVOID_RELEASING);
+    ok = ok && sim_stop_off_line(16) && sim_settle() &&
+         (sim.ctx.state == OBSTACLE_AVOID_WAIT_RESULT);
+
+    ok = ok && sim_stop_off_line(8);
+    sim_scan(ROBOT_OBSTACLE_SCANNING, ROBOT_OBSTACLE_DIR_NONE, true, true);
+    ok = ok && sim_settle() && !sim.act.b_clear_inhibit;
+
+    ok = ok && sim_stop_off_line(8);
+    sim.in.b_odometry_valid = false;
+    (void)sim_stays(OBSTACLE_AVOID_WAIT_RESULT, 30u);
+    ok = ok && !sim.ctx.b_straighten_due &&
+         (sim.ctx.state == OBSTACLE_AVOID_WAIT_RESULT);
+
+    /* Too little travel since following began. */
+    sim_reset();
+    sim_scan(ROBOT_OBSTACLE_CLEAR, ROBOT_OBSTACLE_DIR_CENTRE_90, false, false);
+    ok = ok && sim_until(OBSTACLE_AVOID_IDLE, OBSTACLE_AVOID_LEG_FOLLOW, 10u);
+    ok = ok && sim_stays(OBSTACLE_AVOID_IDLE, 10u) &&
+         (sim.ctx.trend_count == 0u);
+    sim.in.distance_mm += 32;
+    (void)sim_step();
+    sim_scan(ROBOT_OBSTACLE_SCANNING, ROBOT_OBSTACLE_DIR_NONE, true, false);
+    (void)sim_step();
+    ok = ok && !sim.ctx.b_straighten_due;
+
+    /* What it kept before a stop says nothing about after it. */
+    ok = ok && sim_stop_off_line(0);
+    sim_scan(ROBOT_OBSTACLE_CLEAR, ROBOT_OBSTACLE_DIR_CENTRE_90, false, false);
+    ok = ok && sim_until(OBSTACLE_AVOID_IDLE, OBSTACLE_AVOID_LEG_FOLLOW, 10u);
+    sim.in.distance_mm += 32;
+    (void)sim_step();
+    sim_scan(ROBOT_OBSTACLE_SCANNING, ROBOT_OBSTACLE_DIR_NONE, true, false);
+    (void)sim_step();
+    ok = ok && !sim.ctx.b_straighten_due;
+
+    /* Turned through a pivot or a bend over the headings kept. */
+    sim_reset();
+    sim_scan(ROBOT_OBSTACLE_CLEAR, ROBOT_OBSTACLE_DIR_CENTRE_90, false, false);
+    ok = ok && sim_until(OBSTACLE_AVOID_IDLE, OBSTACLE_AVOID_LEG_FOLLOW, 10u);
+    for (uint32_t index = 0u; index < OBSTACLE_AVOID_TREND_SLOTS; ++index)
+    {
+        sim.in.distance_mm += 32;
+        (void)sim_step();
+    }
+    sim.in.heading_deg = 15;
+    sim_scan(ROBOT_OBSTACLE_SCANNING, ROBOT_OBSTACLE_DIR_NONE, true, false);
+    (void)sim_step();
+    ok = ok && !sim.ctx.b_straighten_due;
+
+    /* The average, oldest headings replaced: 2, 4, 6 and now 8. */
+    sim_reset();
+    sim_scan(ROBOT_OBSTACLE_CLEAR, ROBOT_OBSTACLE_DIR_CENTRE_90, false, false);
+    ok = ok && sim_until(OBSTACLE_AVOID_IDLE, OBSTACLE_AVOID_LEG_FOLLOW, 10u);
+    for (int32_t deg = -40; deg <= 6; deg = (deg < 2) ? 2 : (deg + 2))
+    {
+        sim.in.heading_deg = deg;
+        sim.in.distance_mm += 32;
+        (void)sim_step();
+    }
+    sim.in.heading_deg = 8;
+    sim_scan(ROBOT_OBSTACLE_SCANNING, ROBOT_OBSTACLE_DIR_NONE, true, false);
+    (void)sim_step();
+    return ok && sim.ctx.b_straighten_due && (sim.ctx.line_heading_deg == 5);
+}
+
+/* OBS-U79: 75 + 60 + 115 is 250 mm. An edge the sweep puts 30 mm off the line
+ * is not believed, on the first plan, on an end's fit or on the re-sweep; one
+ * farther out is. A later, extra sidestep stays as small as it needs to be. */
+static bool
+plan_edge_min_valid (void)
+{
+    obstacle_avoid_geometry_t car = avoid_fixture();
+    car.edge_min_mm = 115u;
+    robot_obstacle_result_t const result =
+        path_result(ROBOT_OBSTACLE_DIR_RIGHT_120, true, true);
+    obstacle_avoid_plan_t const close =
+        obstacle_avoid_plan(result, geometry_at(250u, 60, -30), &car);
+    obstacle_avoid_plan_t const far =
+        obstacle_avoid_plan(result, geometry_at(250u, 60, -150), &car);
+    obstacle_scan_geometry_t ends = geometry_at(250u, 60, -30);
+    ends.b_left_clear = true;
+    ends.b_right_clear = true;
+    ends.right_end_mm = 520u; /* Fits a 165 mm sidestep, not 250 mm. */
+    obstacle_avoid_plan_t const end_at_floor =
+        obstacle_avoid_plan(result, ends, &car);
+    car.edge_min_mm = 0u;
+    obstacle_avoid_plan_t const trusting =
+        obstacle_avoid_plan(result, geometry_at(250u, 60, -30), &car);
+    obstacle_avoid_plan_t const end_trusting =
+        obstacle_avoid_plan(result, ends, &car);
+    bool ok = (close.sidestep_mm == 250u) && (far.sidestep_mm == 285u) &&
+              (trusting.sidestep_mm == 165u) && !end_at_floor.b_gap_right &&
+              end_trusting.b_gap_right;
+
+    ok = ok && sim_detect_path();
+    sim.config.timing.b_recheck = false;
+    sim.config.geometry.min_room_mm = 200u;
+    sim.config.geometry.edge_min_mm = 115u;
+    sim.in.geometry = geometry_at(50u, 100, -100);
+    ok = ok &&
+         sim_until(OBSTACLE_AVOID_REPLAN, OBSTACLE_AVOID_LEG_TURN_OUT, 30u);
+    (void)sim_step();
+    sim_corridor(true);
+    ok = ok && sim_step().b_send && (sim.ctx.sidestep_mm == 250u);
+
+    /* Already out to the side: the re-sweep's shift is only what it needs. */
+    ok = ok && sim_held_critical(OBSTACLE_AVOID_LEG_PASS);
+    sim.config.geometry.edge_min_mm = 115u;
+    (void)sim_step();
+    ok =
+        ok && sim_step().b_corridor && (sim.ctx.state == OBSTACLE_AVOID_REPLAN);
+    (void)sim_step(); /* Corridor request answered. */
+    sim_corridor(true);
+    ok = ok && sim_step().b_clear_inhibit && (sim.ctx.sidestep_mm == 135u);
+    return ok;
+}
+
+/* OBS-U72: the real car's tail is longer than the fixture's, so the pass
+ * ends at the far face plus (half width + margin) x tan(angle / 2). */
+static bool
+plan_short_pass_valid (void)
+{
+    obstacle_avoid_geometry_t geometry = avoid_fixture();
+    geometry.half_width_mm = 84u;
+    geometry.rear_mm = 162u;
+    geometry.angle_min_deg = 60u;
+    obstacle_scan_geometry_t scan = geometry_at(200u, 98, -98);
+    scan.b_left_clear = true;
+    scan.b_right_clear = true;
+    obstacle_avoid_plan_t const known = obstacle_avoid_plan(
+        path_result(ROBOT_OBSTACLE_DIR_LEFT_60, true, true), scan, &geometry);
+    /* 200 room + 80 pivot + 200 depth + 144 tan(30), rounded up. */
+    bool ok = (known.status == OBSTACLE_AVOID_PLAN_OK) &&
+              (known.angle_deg == 60u) && (known.pass_mm == 564u);
+
+    /* With only the far edge seen, the side taken has none: keep it all. */
+    obstacle_avoid_plan_t const unknown = obstacle_avoid_plan(
+        path_result(ROBOT_OBSTACLE_DIR_LEFT_60, false, true), scan, &geometry);
+    ok = ok && (unknown.status == OBSTACLE_AVOID_PLAN_OK) &&
+         unknown.b_edge_unknown && (unknown.pass_mm == 702u);
+
+    /* A short tail never lengthens the pass. */
+    obstacle_avoid_geometry_t const fixture = avoid_fixture();
+    obstacle_avoid_plan_t const small = obstacle_avoid_plan(
+        path_result(ROBOT_OBSTACLE_DIR_LEFT_60, true, true), scan, &fixture);
+    return ok && (small.pass_mm == 600u);
+}
+
+/* OBS-U73: both sides. Too far out, the turn in and the first part of the
+ * return ignore black; the last part, ending past the line, looks for it. */
+static bool
+avoid_line_gate_valid (void)
+{
+    for (uint32_t right = 0u; right < 2u; ++right)
+    {
+        bool ok = sim_detect_path();
+        sim.config.timing.b_recheck = false;
+        sim.config.geometry.line_gate_mm = 100u;
+        if (right != 0u)
+        {
+            sim_scan(ROBOT_OBSTACLE_PATH_FOUND, ROBOT_OBSTACLE_DIR_RIGHT_120,
+                     true, false);
+        }
+        ok = ok &&
+             sim_until(OBSTACLE_AVOID_SEND, OBSTACLE_AVOID_LEG_TURN_IN, 100u) &&
+             (sim.act.cmd == robot_motion_cmd_turn(90u, right == 0u, false));
+        ok = ok &&
+             sim_until(OBSTACLE_AVOID_SEND, OBSTACLE_AVOID_LEG_RETURN, 100u);
+        /* Lateral + 150 extra, less 150 + 100 gate + 40 IR row to axle. */
+        uint32_t const blind = sim.ctx.lateral_mm - 140u;
+        ok = ok && (sim.ctx.lateral_mm > 150u) &&
+             !robot_motion_cmd_get_stop_at_line(sim.act.cmd) &&
+             (robot_motion_cmd_get_distance(sim.act.cmd) == blind);
+        ok = ok &&
+             sim_until(OBSTACLE_AVOID_SEND, OBSTACLE_AVOID_LEG_RETURN, 100u) &&
+             robot_motion_cmd_get_stop_at_line(sim.act.cmd) &&
+             (robot_motion_cmd_get_distance(sim.act.cmd) == 290u);
+        if (!ok)
+        {
+            return false;
+        }
+    }
+
+    /* Close enough for the row to reach it: the turn in looks again. */
+    bool ok = sim_detect_path();
+    sim.config.timing.b_recheck = false;
+    sim.config.geometry.line_gate_mm = 1000u;
+    ok = ok &&
+         sim_until(OBSTACLE_AVOID_SEND, OBSTACLE_AVOID_LEG_TURN_IN, 100u) &&
+         !robot_motion_cmd_get_stop_at_line(sim.act.cmd);
+    return ok &&
+           sim_until(OBSTACLE_AVOID_SEND, OBSTACLE_AVOID_LEG_TURN_IN, 100u) &&
+           robot_motion_cmd_get_stop_at_line(sim.act.cmd);
+}
+
+/* The production corrections on one logged scan. */
+static uint16_t
+close_up_width (uint8_t left, uint8_t right, uint16_t left_us,
+                uint16_t right_us, uint16_t centre_us, uint16_t * p_estimate)
+{
+    obstacle_width_config_t const config = {
+        .scale_mm_per_10k = OBSTACLE_SOUND_MM_PER_10K_US,
+        .echo_offset_mm = OBSTACLE_ECHO_OFFSET_MM,
+        .radial_offset_mm = OBSTACLE_SENSOR_RADIAL_OFFSET_MM,
+        .edge_correction_deg = OBSTACLE_EDGE_CORRECTION_DEG};
+    obstacle_width_edge_t const left_edge = {.index = left, .echo_us = left_us};
+    obstacle_width_edge_t const right_edge = {.index = right,
+                                              .echo_us = right_us};
+    obstacle_width_result_t const result =
+        obstacle_width_estimate(left_edge, right_edge, &config);
+    *p_estimate = result.width_mm;
+    return obstacle_width_close_up(&result, left_us, right_us, centre_us,
+                                   &config);
+}
+
+/* OBS-U74: scans logged on 2026-11-07, hits 60 to 120 unless stated. */
+static bool
+width_close_up_valid (void)
+{
+    uint16_t grid = 0u;
+    uint16_t const small = close_up_width(1u, 7u, 1185u, 1009u, 945u, &grid);
+    bool ok = (grid > 200u) && (small > 170u) && (small < 190u);
+    uint16_t const large = close_up_width(1u, 7u, 1170u, 1159u, 977u, &grid);
+    ok = ok && (large > 205u) && (large < 220u) && (large < grid);
+
+    /* A stray long echo must not raise it: the grid's width stands. */
+    ok = ok && (close_up_width(1u, 7u, 1158u, 1302u, 948u, &grid) == grid);
+
+    /* Further off, the outer hits are the face. */
+    ok = ok && (close_up_width(1u, 7u, 1400u, 1400u, 1300u, &grid) == grid);
+
+    /* One edge short of the limit, and an edge not found. */
+    ok = ok && (close_up_width(1u, 6u, 1116u, 946u, 929u, &grid) == grid);
+    ok = ok && (close_up_width(2u, 7u, 1033u, 1034u, 954u, &grid) == grid);
+    return ok && (close_up_width(0u, 7u, 1185u, 1009u, 945u, &grid) == grid);
+}
+
+/* OBS-U75: ends logged on 2026-11-07. A flat face at 958 us reads 1251 us at
+ * the 130 degree end, so 1351 us is the first echo behind it. */
+static bool
+width_end_is_edge_valid (void)
+{
+    /* Beside a 16 cm obstacle, the other end clear. */
+    bool ok = !obstacle_width_end_is_edge(1408u, 958u, 8u, true);
+    ok = ok && !obstacle_width_end_is_edge(1377u, 959u, 0u, true);
+
+    /* In front of the face: on the obstacle, or what blocks that side. */
+    ok = ok && obstacle_width_end_is_edge(1148u, 948u, 0u, true);
+    ok = ok && obstacle_width_end_is_edge(1168u, 918u, 0u, true);
+    ok = ok && obstacle_width_end_is_edge(883u, 864u, 8u, true);
+
+    /* The limit itself. */
+    ok = ok && obstacle_width_end_is_edge(1350u, 958u, 8u, true);
+    ok = ok && !obstacle_width_end_is_edge(1351u, 958u, 8u, true);
+
+    /* With no clear end, a blocked side must not gain an edge. */
+    return ok && obstacle_width_end_is_edge(1408u, 958u, 8u, false);
+}
+
+/* OBS-U69: the car stopped on heading 0. A pass that drifted 7 degrees
+ * right turns back 97 left, not the planned 90; 2 degrees off is within
+ * the 3 degree resume minimum and goes straight to following; 350 (a
+ * full turn too many) turns back 10 left, the shorter way; without
+ * odometry it follows without a home turn. */
+static bool
+avoid_home_valid (void)
+{
+    bool ok = sim_home_from(-97, true) &&
+              (sim.act.cmd == robot_motion_cmd_turn(97u, false, false)) &&
+              (sim.ctx.leg == OBSTACLE_AVOID_LEG_TURN_HOME);
+    ok = ok && sim_home_from(-2, true) &&
+         (sim.act.cmd == robot_motion_cmd_follow());
+    ok = ok && sim_home_from(350, true) &&
+         (sim.act.cmd == robot_motion_cmd_turn(10u, false, false));
+    ok = ok && sim_home_from(-90, false) &&
+         (sim.act.cmd == robot_motion_cmd_follow()) &&
+         (sim.ctx.fault == OBSTACLE_AVOID_FAULT_NONE);
+    return ok;
 }
 
 #endif /* APP_TEST */
