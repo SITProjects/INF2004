@@ -269,7 +269,12 @@ report (line_request_t const * p_request, line_track_input_t const * p_in)
     SYSTIM now;
     uint32_t const now_ms = (tk_get_otm(&now) == E_OK) ? (uint32_t)now.lo : 0u;
     /* A full or busy queue drops it: the console line is the record. */
-    (void)telemetry_queue_push(now_ms, text, &sequence);
+    (void)telemetry_queue_push(
+        now_ms,
+        robot_telemetry_line((uint32_t)p_request->mode, b_junction,
+                             (uint32_t)p_in->turn, p_in->distance_mm,
+                             p_request->target_heading_deg, p_in->heading_deg),
+        &sequence);
 #endif
 }
 

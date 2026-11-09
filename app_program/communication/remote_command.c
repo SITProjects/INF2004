@@ -37,7 +37,6 @@ static volatile uint32_t table[REMOTE_MAP_SIZE];
 
 /* Private function declarations. */
 static bool find_entry (char const * p_text, uint32_t * p_entry);
-static uint32_t char_code (char symbol);
 static uint32_t split_words (char const * p_text, uint32_t length,
                              word_t * p_words);
 static bool word_is (word_t const * p_word, char const * p_expected);
@@ -127,21 +126,6 @@ remote_command_mapped (char const * p_text)
 
 /* Private function definitions. */
 
-/* A character's 6-bit code, 1 to 42; 0 if it is not a Code 39 character. */
-static uint32_t
-char_code (char symbol)
-{
-    static char const symbols[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-.$/+%";
-    for (uint32_t i = 0u; i < (sizeof(symbols) - 1u); i++)
-    {
-        if (symbols[i] == symbol)
-        {
-            return i + 1u;
-        }
-    }
-    return 0u;
-}
-
 /* The table entry for a barcode; false if it has none. */
 static bool
 find_entry (char const * p_text, uint32_t * p_entry)
@@ -218,7 +202,7 @@ text_key (char const * p_text, uint32_t length, uint32_t * p_key)
     uint32_t key = 0u;
     for (uint32_t i = 0u; i < length; i++)
     {
-        uint32_t const code = char_code(p_text[i]);
+        uint32_t const code = robot_barcode_char_code(p_text[i]);
         if (0u == code)
         {
             return false;

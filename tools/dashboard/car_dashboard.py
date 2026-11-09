@@ -20,6 +20,7 @@ import json
 import pathlib
 import re
 import socket
+import struct
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -29,6 +30,18 @@ PAGE = HERE / "index.html"
 map_file = HERE / "barcode_map.json"
 ACTIONS = ("STRAIGHT", "LEFT", "RIGHT", "UTURN")
 MAP_SIZE = 8  # REMOTE_MAP_SIZE
+# Packed layouts: app_program/robot_types.h. Names keep the firmware's order.
+AVOID_STATES = ("IDLE", "STOPPING", "WAIT_RESULT", "WAIT_CLEAR", "RELEASING",
+                "PREPARE", "SEND", "RUN_LEG", "VERIFY", "BLOCKED_WAIT",
+                "RETRY_WAIT", "REPLAN", "FAULT")
+LINE_MODES = ("TRACK", "SEARCH_L", "SEARCH_R", "STOP")
+LINE_TURNS = ("STRAIGHT", "LEFT", "RIGHT", "UTURN")
+BARCODE_SYMBOLS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-.$/+%"
+TELEMETRY_WORDS = 3
+STATUS_WORDS = 6
+TICK_MS = 10
+TYPE_OBSTACLE, TYPE_AVOID, TYPE_LINE, TYPE_BARCODE = 1, 2, 3, 4
+
 BARCODE_TEXT = re.compile(r"^[0-9A-Z.$/+%-]{1,3}$")  # REMOTE_TEXT_MAX, no space
 SHOWN_EVENT = re.compile(
     r"remote: |barcode: FAIL|line (JUNCTION|SEARCH|STOP|BARCODE|HUMP)"
@@ -53,11 +66,11 @@ state = {
     "junction": None,
     "events": collections.deque(maxlen=40),
     "map": [],
-    "car": None,  # The latest CAR line, as numbers and names.
+    "car": None,  # The latest status record, as numbers and names.
     "car_age_s": None,
     "last_obstacle": None,  # Width and range of the last obstacle measured.
 }
-car_seen = 0.0  # time.monotonic() of the latest CAR line.
+car_seen = 0.0  # time.monotonic() of the latest status record.
 last_scan = {"barcode": None, "at": 0.0}  # The latest read, for note_scan().
 car = {"conn": None, "topic": None}
 log_path = "car.log"
@@ -71,12 +84,86 @@ def log(line, quiet=False):
         print(f"{stamp} {line}", flush=True)
 
 
-def note_car(message):
-    """Keep one CAR line: see app_program/communication/car_status.c."""
+def field(word, shift, bits, signed=False):
+    """One field of a packed word, as robot_field_get() reads it."""
+    value = (word >> shift) & ((1 << bits) - 1)
+    if signed and value >= (1 << (bits - 1)):
+        value -= 1 << bits
+    return value
+
+
+def decode_status(payload):
+    """A /status record as named numbers, or None if it is cut short."""
+    if len(payload) != STATUS_WORDS * 4:
+        return None
+    words = struct.unpack(f"<{STATUS_WORDS}I", payload)
+    avoid = field(words[1], 28, 4)
+    return {
+        "v": field(words[1], 0, 11, True),
+        "l": field(words[1], 11, 11, True),
+        "r": field(words[2], 0, 11, True),
+        "d": field(words[0], 0, 24, True),
+        "h": field(words[3], 0, 16, True),
+        "m": field(words[1], 22, 3),
+        "os": field(words[1], 25, 3),
+        "ow": field(words[2], 11, 9),
+        "od": field(words[2], 20, 12),
+        "av": AVOID_STATES[avoid] if avoid < len(AVOID_STATES) else "?",
+        "p": field(words[3], 16, 12, True),
+        "ro": field(words[4], 0, 12, True),
+        "tr": field(words[4], 12, 11, True),
+        "hu": field(words[0], 24, 8),
+        "co": field(words[5], 0, 8),
+        "rq": field(words[4], 23, 8),
+        "rt": field(words[5], 8, 8),
+        "cs": field(words[3], 28, 3),
+    }
+
+
+def decode_barcode(first, second):
+    """Barcode text from a record's two payload words."""
+    text = ""
+    for word in (first, second):
+        for place in range(5):
+            code = field(word, place * 6, 6)
+            if code == 0 or code > len(BARCODE_SYMBOLS):
+                return text
+            text += BARCODE_SYMBOLS[code - 1]
+    return text
+
+
+def decode_telemetry(payload):
+    """A /telemetry record as the text line it stands for, or None."""
+    if len(payload) != TELEMETRY_WORDS * 4:
+        return None
+    head, first, second = struct.unpack(f"<{TELEMETRY_WORDS}I", payload)
+    kind = field(head, 0, 4)
+    stamp = f"seq={field(head, 4, 8)} captured_ms={field(head, 12, 20) * TICK_MS}"
+    if kind == TYPE_OBSTACLE:
+        return (f"{stamp} obstacle flags={field(first, 0, 8)} "
+                f"edges={field(first, 8, 8)} width_mm={field(first, 16, 9)}")
+    if kind == TYPE_AVOID:
+        before = field(first, 0, 4)
+        after = field(first, 4, 4)
+        if max(before, after) >= len(AVOID_STATES):
+            return None
+        return f"{stamp} avoid {AVOID_STATES[before]}>{AVOID_STATES[after]}"
+    if kind == TYPE_LINE:
+        junction = field(first, 2, 1)
+        name = (f"JUNCTION {LINE_TURNS[field(first, 3, 2)]}" if junction
+                else LINE_MODES[field(first, 0, 2)])
+        return (f"{stamp} line {name} t={field(second, 0, 16, True)} "
+                f"h={field(second, 16, 16, True)} "
+                f"d={field(first, 5, 20, True)}")
+    if kind == TYPE_BARCODE:
+        direction = "rev" if field(first, 30, 1) else "fwd"
+        return f"{stamp} barcode {decode_barcode(first, second)} {direction}"
+    return None
+
+
+def note_car(values):
+    """Keep one status record: see app_program/communication/car_status.c."""
     global car_seen
-    fields = dict(pair.split("=", 1) for pair in message.split()[1:])
-    values = {key: (value if key == "av" else int(value))
-              for key, value in fields.items()}
     with lock:
         state["car"] = values
         car_seen = time.monotonic()
@@ -125,12 +212,6 @@ def note_telemetry(payload):
 def note_console(text):
     """Update the dashboard state from one console line."""
     message = text.split(" ", 1)[-1]
-    if message.startswith("CAR "):
-        try:
-            note_car(message)
-        except (KeyError, ValueError):
-            pass  # A cut line: the next is half a second away.
-        return
     with lock:
         match = re.search(r"remote: (?:ready|.*state) (stopped|running)", message)
         if match:
@@ -182,7 +263,7 @@ def encode_length(count):
 
 def publish_packet(topic, payload):
     name = topic.encode()
-    body = len(name).to_bytes(2, "big") + name + payload.encode()
+    body = len(name).to_bytes(2, "big") + name + (payload if isinstance(payload, bytes) else payload.encode())
     return bytes([0x30]) + encode_length(len(body)) + body
 
 
@@ -223,14 +304,24 @@ def handle_publish(conn, header, body):
     if qos:
         packet_id = body[position:position + 2]
         position += 2
-    payload = body[position:].decode(errors="replace")
+    payload = body[position:]
     if topic.endswith("/console"):
-        for text in payload.splitlines():
-            log(f"console {text}", quiet=" CAR " in text)
+        for text in payload.decode(errors="replace").splitlines():
+            log(f"console {text}")
             note_console(text)
+    elif topic.endswith("/status"):
+        values = decode_status(payload)
+        if values is not None:  # A cut record: the next is half a second away.
+            pairs = " ".join(f"{key}={value}" for key, value in values.items())
+            log(f"status CAR {pairs}", quiet=True)
+            note_car(values)
+    elif topic.endswith("/telemetry"):
+        text = decode_telemetry(payload)
+        if text is not None:
+            log(f"{topic} {text}")
+            note_telemetry(text)
     else:
-        log(f"{topic} {payload}")
-        note_telemetry(payload)
+        log(f"{topic} {payload.decode(errors='replace')}")
     if qos == 1:
         conn.sendall(b"\x40\x02" + packet_id)
     packet = publish_packet(topic, payload)

@@ -22,6 +22,7 @@ static char payload[192], log_text[32768];
 static mqtt_request_cb_t pending_cb;
 static void * pending_arg;
 static unsigned telemetry_publishes;
+static unsigned status_publishes;
 static bool locked;
 static bool inline_ack;
 int
@@ -140,6 +141,12 @@ mqtt_publish (mqtt_client_t * c, const char * topic, const void * data,
               void * arg)
 {
     assert(c == handle && retain == 0 && len < sizeof(payload));
+    if (strcmp(topic, MQTT_TOPIC "/status") == 0)
+    {
+        assert(qos == 0 && len == (ROBOT_STATUS_WORDS * 4u));
+        status_publishes++;
+        return ERR_OK;
+    }
     assert(strcmp(topic, MQTT_TOPIC "/telemetry") == 0);
     memcpy(payload, data, len);
     payload[len] = 0;
@@ -162,6 +169,42 @@ mqtt_publish (mqtt_client_t * c, const char * topic, const void * data,
     return publish_error;
 }
 
+void
+car_status_encode (uint32_t * p_words)
+{
+    memset(p_words, 0, ROBOT_STATUS_WORDS * sizeof(uint32_t));
+}
+
+/* Records tell themselves apart by their width field. */
+static robot_telemetry_payload_t
+tag (uint32_t width)
+{
+    return robot_telemetry_obstacle(0u, 0u, width);
+}
+
+static uint32_t
+sequence_of (telemetry_record_t const * p_record)
+{
+    return robot_field_get(p_record->words[0], ROBOT_TELEMETRY_SEQUENCE_SHIFT,
+                           ROBOT_TELEMETRY_SEQUENCE_BITS);
+}
+
+static uint32_t
+ticks_of (telemetry_record_t const * p_record)
+{
+    return robot_field_get(p_record->words[0], ROBOT_TELEMETRY_TIME_SHIFT,
+                           ROBOT_TELEMETRY_TIME_BITS);
+}
+
+/* The record last published carries this tag. */
+static bool
+sent_is (uint32_t width)
+{
+    uint32_t words[ROBOT_TELEMETRY_WORDS];
+    memcpy(words, payload, sizeof(words));
+    return words[1] == tag(width).first;
+}
+
 int
 main (void)
 {
@@ -171,34 +214,33 @@ main (void)
     assert(!telemetry_queue_peek(&head));
     assert(!telemetry_queue_peek(NULL));
     assert(!telemetry_queue_ack(0));
-    assert(telemetry_queue_push(1, "", &seq) == TELEMETRY_INVALID);
-    assert(telemetry_queue_push(1, NULL, &seq) == TELEMETRY_INVALID);
-    char oversized[TELEMETRY_TEXT_SIZE + 1];
-    memset(oversized, 'x', sizeof(oversized));
-    oversized[sizeof(oversized) - 1] = 0;
-    assert(telemetry_queue_push(1, oversized, &seq) == TELEMETRY_INVALID);
+    assert(telemetry_queue_push(1, (robot_telemetry_payload_t){0u, 0u, 0u},
+                                &seq) == TELEMETRY_INVALID);
+    assert(telemetry_queue_push(1, (robot_telemetry_payload_t){5u, 0u, 0u},
+                                &seq) == TELEMETRY_INVALID);
     locked = true;
-    assert(telemetry_queue_push(1, "busy", &seq) == TELEMETRY_BUSY);
+    assert(telemetry_queue_push(1, tag(1u), &seq) == TELEMETRY_BUSY);
     locked = false;
     for (unsigned i = 0; i < TELEMETRY_QUEUE_CAPACITY; ++i)
     {
-        assert(telemetry_queue_push(i, "sample", &seq) == TELEMETRY_QUEUED);
+        assert(telemetry_queue_push(i * ROBOT_TELEMETRY_TICK_MS, tag(7u),
+                                    &seq) == TELEMETRY_QUEUED);
         assert(seq == i);
     }
-    assert(telemetry_queue_push(999, "full", &seq) == TELEMETRY_FULL);
-    assert(telemetry_queue_peek(&head) && head.sequence == 0);
+    assert(telemetry_queue_push(999, tag(9u), &seq) == TELEMETRY_FULL);
+    assert(telemetry_queue_peek(&head) && sequence_of(&head) == 0);
     assert(!telemetry_queue_ack(99));
     for (unsigned i = 0; i < TELEMETRY_QUEUE_CAPACITY; ++i)
     {
-        assert(telemetry_queue_peek(&head) && head.sequence == i);
-        assert(head.captured_ms == i && strcmp(head.text, "sample") == 0);
+        assert(telemetry_queue_peek(&head) && sequence_of(&head) == i);
+        assert(ticks_of(&head) == i && head.words[1] == tag(7u).first);
         assert(telemetry_queue_ack(i));
     }
     assert(!telemetry_queue_peek(&head));
-    assert(telemetry_queue_push(42, "offline-A", &seq) == TELEMETRY_QUEUED);
+    assert(telemetry_queue_push(420, tag(11u), &seq) == TELEMETRY_QUEUED);
     assert(seq == TELEMETRY_QUEUE_CAPACITY + 1);
     uint32_t first_seq = seq;
-    assert(telemetry_queue_push(43, "offline-B", &seq) == TELEMETRY_QUEUED);
+    assert(telemetry_queue_push(430, tag(12u), &seq) == TELEMETRY_QUEUED);
     mqtt_client_service(false);
     assert(publishes == 0);
     mqtt_client_service(true);
@@ -206,24 +248,24 @@ main (void)
     connection_cb(handle, NULL, MQTT_CONNECT_ACCEPTED);
     mqtt_client_service(true);
     assert(telemetry_publishes == 1);
-    assert(strstr(payload, "offline-A") != NULL);
-    assert(strstr(payload, "captured_ms=42") != NULL);
-    assert(telemetry_queue_peek(&head) && head.sequence == first_seq);
+    assert(sent_is(11u));
+    assert(ticks_of(&(telemetry_record_t){{((uint32_t const *)(void const *)payload)[0], 0u, 0u}}) == 42u);
+    assert(telemetry_queue_peek(&head) && sequence_of(&head) == first_seq);
     mqtt_client_service(true);
     assert(telemetry_publishes == 1); /* no publish before PUBACK */
     mqtt_request_cb_t stale_cb = pending_cb;
     void * stale_arg = pending_arg;
     mqtt_client_service(false); /* disconnect with ACK lost */
-    assert(telemetry_queue_peek(&head) && head.sequence == first_seq);
+    assert(telemetry_queue_peek(&head) && sequence_of(&head) == first_seq);
     now = 3000;
     mqtt_client_service(true);
     connected = true;
     connection_cb(handle, NULL, MQTT_CONNECT_ACCEPTED);
     mqtt_client_service(true);
-    assert(telemetry_publishes == 2 && strstr(payload, "offline-A"));
+    assert(telemetry_publishes == 2 && sent_is(11u));
     stale_cb(stale_arg, ERR_OK); /* old attempt cannot remove current head */
     mqtt_client_service(true);
-    assert(telemetry_queue_peek(&head) && head.sequence == first_seq);
+    assert(telemetry_queue_peek(&head) && sequence_of(&head) == first_seq);
     locked = true;
     pending_cb(pending_arg, ERR_OK);
     mqtt_client_service(true); /* ACK waits for queue lock */
@@ -231,8 +273,8 @@ main (void)
     locked = false;
     now += 100;
     mqtt_client_service(true);
-    assert(telemetry_queue_peek(&head) && head.sequence == first_seq + 1);
-    assert(telemetry_publishes == 3 && strstr(payload, "offline-B"));
+    assert(telemetry_queue_peek(&head) && sequence_of(&head) == first_seq + 1);
+    assert(telemetry_publishes == 3 && sent_is(12u));
     pending_cb(pending_arg, ERR_TIMEOUT);
     now += 99;
     mqtt_client_service(true);
@@ -241,24 +283,24 @@ main (void)
     publish_error = ERR_MEM;
     mqtt_client_service(true);
     assert(telemetry_publishes == 4);
-    assert(telemetry_queue_peek(&head) && head.sequence == first_seq + 1);
+    assert(telemetry_queue_peek(&head) && sequence_of(&head) == first_seq + 1);
     publish_error = ERR_OK;
     now += 1000;
     mqtt_client_service(true);
-    assert(telemetry_publishes == 5 && strstr(payload, "offline-B"));
+    assert(telemetry_publishes == 5 && sent_is(12u));
     pending_cb(pending_arg, ERR_OK);
     mqtt_client_service(true);
     assert(!telemetry_queue_peek(&head));
     /* New data after drain is not stuck behind an old pending request. */
-    assert(telemetry_queue_push(44, "online-C", &seq) == TELEMETRY_QUEUED);
+    assert(telemetry_queue_push(440, tag(13u), &seq) == TELEMETRY_QUEUED);
     now += 100;
     mqtt_client_service(true);
-    assert(telemetry_publishes == 6 && strstr(payload, "online-C"));
+    assert(telemetry_publishes == 6 && sent_is(13u));
     pending_cb(pending_arg, ERR_OK);
     mqtt_client_service(true);
     assert(!telemetry_queue_peek(&head));
     /* A broker-triggered disconnect also drops lwIP's request callbacks. */
-    assert(telemetry_queue_push(45, "broker-outage", &seq) == TELEMETRY_QUEUED);
+    assert(telemetry_queue_push(450, tag(14u), &seq) == TELEMETRY_QUEUED);
     now += 100;
     mqtt_client_service(true);
     unsigned before = telemetry_publishes;
@@ -270,7 +312,7 @@ main (void)
     connection_cb(handle, NULL, MQTT_CONNECT_ACCEPTED);
     mqtt_client_service(true);
     assert(telemetry_publishes == before + 1);
-    assert(telemetry_queue_peek(&head) && head.sequence == seq);
+    assert(telemetry_queue_peek(&head) && sequence_of(&head) == seq);
     /* Received PUBACK survives Wi-Fi loss even if removal was contended. */
     pending_cb(pending_arg, ERR_OK);
     locked = true;
@@ -283,14 +325,14 @@ main (void)
     connected = true;
     connection_cb(handle, NULL, MQTT_CONNECT_ACCEPTED);
     /* The publish callback may complete before mqtt_publish returns. */
-    assert(telemetry_queue_push(46, "inline-ack", &seq) == TELEMETRY_QUEUED);
+    assert(telemetry_queue_push(460, tag(15u), &seq) == TELEMETRY_QUEUED);
     inline_ack = true;
     mqtt_client_service(true);
     mqtt_client_service(true);
     assert(!telemetry_queue_peek(&head));
     inline_ack = false;
     /* Retry elapsed-time arithmetic must tolerate 32-bit clock rollover. */
-    assert(telemetry_queue_push(47, "clock-wrap", &seq) == TELEMETRY_QUEUED);
+    assert(telemetry_queue_push(470, tag(16u), &seq) == TELEMETRY_QUEUED);
     now = 0xfffffff0U;
     mqtt_client_service(true);
     before = telemetry_publishes;
@@ -304,6 +346,20 @@ main (void)
     pending_cb(pending_arg, ERR_OK);
     mqtt_client_service(true);
     assert(!telemetry_queue_peek(&head));
+    /* The stored capture time wraps after 2^20 ticks instead of sticking. */
+    while (telemetry_queue_peek(&head))
+    {
+        assert(telemetry_queue_ack(sequence_of(&head)));
+    }
+    assert(telemetry_queue_push(((1u << 20u) + 3u) * ROBOT_TELEMETRY_TICK_MS,
+                                tag(20u), &seq) == TELEMETRY_QUEUED);
+    assert(telemetry_queue_peek(&head) && ticks_of(&head) == 3u);
+    assert(telemetry_queue_ack(sequence_of(&head)));
+    /* An 8-bit sequence: an ack for another record's number is refused. */
+    assert(telemetry_queue_push(480, tag(21u), &seq) == TELEMETRY_QUEUED);
+    assert(telemetry_queue_peek(&head) && (seq == sequence_of(&head)));
+    assert(!telemetry_queue_ack((seq + 1u) & 0xFFu));
+    assert(telemetry_queue_ack(seq));
     puts("PASS: FIFO capacity/wrap, validation, contention, offline replay, "
          "lost ACK, stale callback, asynchronous/inline ACK, timeout, "
          "publish error, broker loss, deferred ACK/disconnect, clock wrap");

@@ -4,13 +4,16 @@
  */
 #include "telemetry_queue.h"
 #include "telemetry_queue_port.h"
-#include <string.h>
+#include <stddef.h>
 
 /* Static data. */
 static telemetry_record_t records[TELEMETRY_QUEUE_CAPACITY];
-static uint16_t head;
-static uint16_t count;
-static uint32_t next_sequence;
+static uint8_t head;
+static uint8_t count;
+static uint8_t next_sequence;
+
+_Static_assert(TELEMETRY_QUEUE_CAPACITY < 256u,
+               "Sequences must tell every queued record apart");
 
 /* Public function definitions. */
 int
@@ -20,19 +23,11 @@ telemetry_queue_init (void)
 }
 
 telemetry_enqueue_result_t
-telemetry_queue_push (uint32_t captured_ms, const char * p_text,
+telemetry_queue_push (uint32_t captured_ms, robot_telemetry_payload_t payload,
                       uint32_t * p_sequence)
 {
-    if (p_text == NULL)
-    {
-        return TELEMETRY_INVALID;
-    }
-    uint16_t len = 0u;
-    while ((len < TELEMETRY_TEXT_SIZE) && (p_text[len] != '\0'))
-    {
-        ++len;
-    }
-    if ((len == 0u) || (len == TELEMETRY_TEXT_SIZE))
+    if ((payload.type < (uint32_t)ROBOT_TELEMETRY_OBSTACLE) ||
+        (payload.type > (uint32_t)ROBOT_TELEMETRY_BARCODE))
     {
         return TELEMETRY_INVALID;
     }
@@ -40,7 +35,8 @@ telemetry_queue_push (uint32_t captured_ms, const char * p_text,
     {
         return TELEMETRY_BUSY;
     }
-    uint32_t sequence = next_sequence++;
+    uint32_t const sequence = next_sequence;
+    next_sequence = (uint8_t)(next_sequence + 1u);
     if (p_sequence != NULL)
     {
         *p_sequence = sequence;
@@ -50,10 +46,17 @@ telemetry_queue_push (uint32_t captured_ms, const char * p_text,
         telemetry_queue_port_unlock();
         return TELEMETRY_FULL;
     }
-    uint16_t tail = (uint16_t)((head + count) % TELEMETRY_QUEUE_CAPACITY);
-    records[tail].sequence = sequence;
-    records[tail].captured_ms = captured_ms;
-    memcpy(records[tail].text, p_text, len + 1u);
+    uint8_t const tail = (uint8_t)((head + count) % TELEMETRY_QUEUE_CAPACITY);
+    uint32_t word = robot_field_put(0u, ROBOT_TELEMETRY_TYPE_SHIFT,
+                                    ROBOT_TELEMETRY_TYPE_BITS, payload.type);
+    word = robot_field_put(word, ROBOT_TELEMETRY_SEQUENCE_SHIFT,
+                           ROBOT_TELEMETRY_SEQUENCE_BITS, sequence);
+    uint32_t const ticks = captured_ms / ROBOT_TELEMETRY_TICK_MS;
+    records[tail].words[0] =
+        robot_field_put(word, ROBOT_TELEMETRY_TIME_SHIFT,
+                        ROBOT_TELEMETRY_TIME_BITS, ticks & 0xFFFFFu);
+    records[tail].words[1] = payload.first;
+    records[tail].words[2] = payload.second;
     ++count;
     telemetry_queue_port_unlock();
     return TELEMETRY_QUEUED;
@@ -82,10 +85,13 @@ telemetry_queue_ack (uint32_t sequence)
     {
         return false;
     }
-    bool b_matches = (count != 0u) && (records[head].sequence == sequence);
+    bool const b_matches =
+        (count != 0u) &&
+        (robot_field_get(records[head].words[0], ROBOT_TELEMETRY_SEQUENCE_SHIFT,
+                         ROBOT_TELEMETRY_SEQUENCE_BITS) == sequence);
     if (b_matches)
     {
-        head = (uint16_t)((head + 1u) % TELEMETRY_QUEUE_CAPACITY);
+        head = (uint8_t)((head + 1u) % TELEMETRY_QUEUE_CAPACITY);
         --count;
     }
     telemetry_queue_port_unlock();

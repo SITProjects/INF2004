@@ -293,12 +293,10 @@ now_us (void)
 static void
 publish (char const * p_text, bool b_reversed)
 {
-    char record[TELEMETRY_TEXT_SIZE];
     SYSTIM now;
     uint32_t sequence = 0u;
-    (void)tm_sprintf((UB *)record, (const UB *)"barcode %s %s", p_text,
-                     b_reversed ? "rev" : "fwd");
     uint32_t const now_ms = (tk_get_otm(&now) == E_OK) ? (uint32_t)now.lo : 0u;
-    (void)telemetry_queue_push(now_ms, record, &sequence);
+    (void)telemetry_queue_push(
+        now_ms, robot_telemetry_barcode(p_text, b_reversed), &sequence);
 }
 #endif

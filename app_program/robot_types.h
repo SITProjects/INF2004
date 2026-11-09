@@ -308,6 +308,129 @@ typedef struct
 #define ROBOT_BARCODE_EDGE_BLACK 0x00000001u
 #define ROBOT_BARCODE_EDGE_TIME_MASK 0xFFFFFFFEu
 
+/*
+ * Telemetry record, three words sent as they are, little-endian. Word 0:
+ * bits 0..3 type, 4..11 sequence (wraps), 12..31 capture time in 10 ms
+ * ticks (wraps after 2.9 h). Words 1 and 2 by type:
+ * OBSTACLE word 1: flags 0..7, edges 8..15, width 16..24.
+ * AVOID word 1: from 0..3, to 4..7.
+ * LINE word 1: mode 0..1, junction 2, turn 3..4, distance 5..24 in mm
+ * (about 524 m each way); word 2: target heading 0..15, heading 16..31.
+ * BARCODE words 1 and 2: five 6-bit characters each, first lowest, 0 ends
+ * the text; word 1 bit 30 reversed.
+ * The dashboard decodes these: change it with them.
+ */
+#define ROBOT_TELEMETRY_WORDS 3u
+#define ROBOT_TELEMETRY_TYPE_SHIFT 0u
+#define ROBOT_TELEMETRY_TYPE_BITS 4u
+#define ROBOT_TELEMETRY_SEQUENCE_SHIFT 4u
+#define ROBOT_TELEMETRY_SEQUENCE_BITS 8u
+#define ROBOT_TELEMETRY_TIME_SHIFT 12u
+#define ROBOT_TELEMETRY_TIME_BITS 20u
+#define ROBOT_TELEMETRY_TICK_MS 10u
+
+#define ROBOT_TELEMETRY_OBSTACLE_EDGES_SHIFT 8u
+#define ROBOT_TELEMETRY_OBSTACLE_WIDTH_SHIFT 16u
+#define ROBOT_TELEMETRY_OBSTACLE_WIDTH_BITS 9u
+#define ROBOT_TELEMETRY_AVOID_TO_SHIFT 4u
+#define ROBOT_TELEMETRY_AVOID_STATE_BITS 4u
+#define ROBOT_TELEMETRY_LINE_MODE_BITS 2u
+#define ROBOT_TELEMETRY_LINE_JUNCTION 0x00000004u
+#define ROBOT_TELEMETRY_LINE_TURN_SHIFT 3u
+#define ROBOT_TELEMETRY_LINE_TURN_BITS 2u
+#define ROBOT_TELEMETRY_LINE_DISTANCE_SHIFT 5u
+#define ROBOT_TELEMETRY_LINE_DISTANCE_BITS 20u
+#define ROBOT_TELEMETRY_LINE_HEADING_SHIFT 16u
+#define ROBOT_TELEMETRY_LINE_HEADING_BITS 16u
+#define ROBOT_TELEMETRY_BARCODE_CHARS_PER_WORD 5u
+#define ROBOT_TELEMETRY_BARCODE_CHARS 10u
+#define ROBOT_TELEMETRY_BARCODE_REVERSED 0x40000000u
+
+/** Telemetry record kinds; 0 is never queued. */
+typedef enum
+{
+    ROBOT_TELEMETRY_OBSTACLE = 1,
+    ROBOT_TELEMETRY_AVOID = 2,
+    ROBOT_TELEMETRY_LINE = 3,
+    ROBOT_TELEMETRY_BARCODE = 4
+} robot_telemetry_type_t;
+
+/** A record's kind and its two payload words, before queueing. */
+typedef struct
+{
+    uint32_t type;   /**< robot_telemetry_type_t. */
+    uint32_t first;  /**< Word 1. */
+    uint32_t second; /**< Word 2. */
+} robot_telemetry_payload_t;
+
+/*
+ * Car status (MQTT "/status"), six words sent as they are, little-endian.
+ * Word 0: distance 0..23, hump count 24..31.
+ * Word 1: speed 0..10, left 11..21, mode 22..24, obstacle status 25..27,
+ * avoid state 28..31.
+ * Word 2: right 0..10, width 11..19, centre range 20..31.
+ * Word 3: heading 0..15, pitch 16..27, calibration 28..30.
+ * Word 4: roll 0..11, turn rate 12..22, requests 23..30.
+ * Word 5: collisions 0..7, requests taken 8..15.
+ * Speeds in mm/s, distance in mm, angles in tenths of a degree except
+ * heading (degrees) and turn rate (degrees/s). Request counts are the low
+ * 8 bits, enough to see them rise. The dashboard decodes these.
+ */
+#define ROBOT_STATUS_WORDS 6u
+#define ROBOT_STATUS_SPEED_BITS 11u
+#define ROBOT_STATUS_DISTANCE_SHIFT 0u
+#define ROBOT_STATUS_DISTANCE_BITS 24u
+#define ROBOT_STATUS_HUMPS_SHIFT 24u
+#define ROBOT_STATUS_COUNT_BITS 8u
+#define ROBOT_STATUS_SPEED_SHIFT 0u
+#define ROBOT_STATUS_LEFT_SHIFT 11u
+#define ROBOT_STATUS_MODE_SHIFT 22u
+#define ROBOT_STATUS_MODE_BITS 3u
+#define ROBOT_STATUS_OBSTACLE_SHIFT 25u
+#define ROBOT_STATUS_OBSTACLE_BITS 3u
+#define ROBOT_STATUS_AVOID_SHIFT 28u
+#define ROBOT_STATUS_AVOID_BITS 4u
+#define ROBOT_STATUS_RIGHT_SHIFT 0u
+#define ROBOT_STATUS_WIDTH_SHIFT 11u
+#define ROBOT_STATUS_WIDTH_BITS 9u
+#define ROBOT_STATUS_RANGE_SHIFT 20u
+#define ROBOT_STATUS_RANGE_BITS 12u
+#define ROBOT_STATUS_HEADING_SHIFT 0u
+#define ROBOT_STATUS_HEADING_BITS 16u
+#define ROBOT_STATUS_PITCH_SHIFT 16u
+#define ROBOT_STATUS_ANGLE_BITS 12u
+#define ROBOT_STATUS_CALIB_SHIFT 28u
+#define ROBOT_STATUS_CALIB_BITS 3u
+#define ROBOT_STATUS_ROLL_SHIFT 0u
+#define ROBOT_STATUS_TURN_SHIFT 12u
+#define ROBOT_STATUS_TURN_BITS 11u
+#define ROBOT_STATUS_REQUESTS_SHIFT 23u
+#define ROBOT_STATUS_COLLISIONS_SHIFT 0u
+#define ROBOT_STATUS_TAKEN_SHIFT 8u
+
+/** Car status, unpacked: robot_status_pack() fits it to the layout above. */
+typedef struct
+{
+    int32_t distance_mm;
+    int32_t speed_mm_s;
+    int32_t left_mm_s;
+    int32_t right_mm_s;
+    int32_t heading_deg;
+    int32_t pitch_ddeg;
+    int32_t roll_ddeg;
+    int32_t turn_dps;
+    uint32_t mode;
+    uint32_t obstacle;
+    uint32_t avoid;
+    uint32_t width_mm;
+    uint32_t range_mm;
+    uint32_t calibration;
+    uint32_t humps;
+    uint32_t collisions;
+    uint32_t requests; /**< Low bits only are sent. */
+    uint32_t taken;    /**< Low bits only are sent. */
+} robot_status_t;
+
 /* Public inline function definitions. */
 
 /**
@@ -949,6 +1072,204 @@ robot_obstacle_watch_unpack (uint32_t word)
                                             ROBOT_WATCH_ECHO_BITS);
     out.b_active = (word & ROBOT_WATCH_ACTIVE) != 0u;
     return out;
+}
+
+/**
+ * @brief A character's 6-bit code in the barcode layouts.
+ * @param symbol Character.
+ * @return Code 1 to 42; 0 if it is not one of the car's Code 39 characters.
+ */
+static inline uint32_t
+robot_barcode_char_code (char symbol)
+{
+    static char const symbols[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-.$/+%";
+    for (uint32_t i = 0u; i < (sizeof(symbols) - 1u); i++)
+    {
+        if (symbols[i] == symbol)
+        {
+            return i + 1u;
+        }
+    }
+    return 0u;
+}
+
+/**
+ * @brief Build an obstacle telemetry payload.
+ * @param flags Packed result flags.
+ * @param edges Packed result edges.
+ * @param width_mm Width in mm; saturates at 9 bits.
+ * @return Payload for telemetry_queue_push().
+ */
+static inline robot_telemetry_payload_t
+robot_telemetry_obstacle (uint8_t flags, uint8_t edges, uint32_t width_mm)
+{
+    robot_telemetry_payload_t payload = {(uint32_t)ROBOT_TELEMETRY_OBSTACLE, 0u,
+                                         0u};
+
+    payload.first = (uint32_t)flags |
+                    ((uint32_t)edges << ROBOT_TELEMETRY_OBSTACLE_EDGES_SHIFT);
+    payload.first =
+        robot_field_put(payload.first, ROBOT_TELEMETRY_OBSTACLE_WIDTH_SHIFT,
+                        ROBOT_TELEMETRY_OBSTACLE_WIDTH_BITS, width_mm);
+    return payload;
+}
+
+/**
+ * @brief Build a bypass-state telemetry payload.
+ * @param from State before; saturates at 4 bits.
+ * @param to State after; saturates at 4 bits.
+ * @return Payload for telemetry_queue_push().
+ */
+static inline robot_telemetry_payload_t
+robot_telemetry_avoid (uint32_t from, uint32_t to)
+{
+    robot_telemetry_payload_t payload = {(uint32_t)ROBOT_TELEMETRY_AVOID, 0u,
+                                         0u};
+
+    payload.first =
+        robot_field_put(0u, 0u, ROBOT_TELEMETRY_AVOID_STATE_BITS, from);
+    payload.first =
+        robot_field_put(payload.first, ROBOT_TELEMETRY_AVOID_TO_SHIFT,
+                        ROBOT_TELEMETRY_AVOID_STATE_BITS, to);
+    return payload;
+}
+
+/**
+ * @brief Build a line telemetry payload.
+ * @param mode line_mode_t value.
+ * @param b_junction A cross junction, with @p turn.
+ * @param turn line_turn_t value.
+ * @param distance_mm Travel; saturates at 20 bits.
+ * @param target_deg Target heading; saturates at 16 bits.
+ * @param heading_deg Heading; saturates at 16 bits.
+ * @return Payload for telemetry_queue_push().
+ */
+static inline robot_telemetry_payload_t
+robot_telemetry_line (uint32_t mode, bool b_junction, uint32_t turn,
+                      int32_t distance_mm, int32_t target_deg,
+                      int32_t heading_deg)
+{
+    robot_telemetry_payload_t payload = {(uint32_t)ROBOT_TELEMETRY_LINE, 0u,
+                                         0u};
+
+    payload.first =
+        robot_field_put(b_junction ? ROBOT_TELEMETRY_LINE_JUNCTION : 0u, 0u,
+                        ROBOT_TELEMETRY_LINE_MODE_BITS, mode);
+    payload.first =
+        robot_field_put(payload.first, ROBOT_TELEMETRY_LINE_TURN_SHIFT,
+                        ROBOT_TELEMETRY_LINE_TURN_BITS, turn);
+    payload.first =
+        robot_field_put(payload.first, ROBOT_TELEMETRY_LINE_DISTANCE_SHIFT,
+                        ROBOT_TELEMETRY_LINE_DISTANCE_BITS,
+                        robot_field_from_signed(
+                            distance_mm, ROBOT_TELEMETRY_LINE_DISTANCE_BITS));
+    payload.second = robot_field_put(
+        0u, 0u, ROBOT_TELEMETRY_LINE_HEADING_BITS,
+        robot_field_from_signed(target_deg, ROBOT_TELEMETRY_LINE_HEADING_BITS));
+    payload.second =
+        robot_field_put(payload.second, ROBOT_TELEMETRY_LINE_HEADING_SHIFT,
+                        ROBOT_TELEMETRY_LINE_HEADING_BITS,
+                        robot_field_from_signed(
+                            heading_deg, ROBOT_TELEMETRY_LINE_HEADING_BITS));
+    return payload;
+}
+
+/**
+ * @brief Build a barcode telemetry payload.
+ * @param p_text Decoded text; only the first 10 characters are sent, and
+ * a character the car cannot decode ends it.
+ * @param b_reversed Read backwards.
+ * @return Payload for telemetry_queue_push().
+ */
+static inline robot_telemetry_payload_t
+robot_telemetry_barcode (char const * p_text, bool b_reversed)
+{
+    robot_telemetry_payload_t payload = {(uint32_t)ROBOT_TELEMETRY_BARCODE, 0u,
+                                         0u};
+
+    for (uint32_t i = 0u; (i < ROBOT_TELEMETRY_BARCODE_CHARS) &&
+                          (robot_barcode_char_code(p_text[i]) != 0u);
+         i++)
+    {
+        uint32_t const place = i % ROBOT_TELEMETRY_BARCODE_CHARS_PER_WORD;
+        uint32_t const code = robot_barcode_char_code(p_text[i])
+                              << (place * ROBOT_BARCODE_MAP_CHAR_BITS);
+
+        if (i < ROBOT_TELEMETRY_BARCODE_CHARS_PER_WORD)
+        {
+            payload.first |= code;
+        }
+        else
+        {
+            payload.second |= code;
+        }
+    }
+    if (b_reversed)
+    {
+        payload.first |= ROBOT_TELEMETRY_BARCODE_REVERSED;
+    }
+    return payload;
+}
+
+/**
+ * @brief Encode the car status.
+ * @param p_in Unpacked status; values saturate at their field limits and
+ * the two request counts keep their low bits.
+ * @param p_words Destination, ROBOT_STATUS_WORDS long.
+ */
+static inline void
+robot_status_pack (robot_status_t const * p_in, uint32_t * p_words)
+{
+    uint32_t word = robot_field_put(
+        0u, ROBOT_STATUS_DISTANCE_SHIFT, ROBOT_STATUS_DISTANCE_BITS,
+        robot_field_from_signed(p_in->distance_mm, ROBOT_STATUS_DISTANCE_BITS));
+    p_words[0] = robot_field_put(word, ROBOT_STATUS_HUMPS_SHIFT,
+                                 ROBOT_STATUS_COUNT_BITS, p_in->humps);
+
+    word = robot_field_put(
+        0u, ROBOT_STATUS_SPEED_SHIFT, ROBOT_STATUS_SPEED_BITS,
+        robot_field_from_signed(p_in->speed_mm_s, ROBOT_STATUS_SPEED_BITS));
+    word = robot_field_put(
+        word, ROBOT_STATUS_LEFT_SHIFT, ROBOT_STATUS_SPEED_BITS,
+        robot_field_from_signed(p_in->left_mm_s, ROBOT_STATUS_SPEED_BITS));
+    word = robot_field_put(word, ROBOT_STATUS_MODE_SHIFT,
+                           ROBOT_STATUS_MODE_BITS, p_in->mode);
+    word = robot_field_put(word, ROBOT_STATUS_OBSTACLE_SHIFT,
+                           ROBOT_STATUS_OBSTACLE_BITS, p_in->obstacle);
+    p_words[1] = robot_field_put(word, ROBOT_STATUS_AVOID_SHIFT,
+                                 ROBOT_STATUS_AVOID_BITS, p_in->avoid);
+
+    word = robot_field_put(
+        0u, ROBOT_STATUS_RIGHT_SHIFT, ROBOT_STATUS_SPEED_BITS,
+        robot_field_from_signed(p_in->right_mm_s, ROBOT_STATUS_SPEED_BITS));
+    word = robot_field_put(word, ROBOT_STATUS_WIDTH_SHIFT,
+                           ROBOT_STATUS_WIDTH_BITS, p_in->width_mm);
+    p_words[2] = robot_field_put(word, ROBOT_STATUS_RANGE_SHIFT,
+                                 ROBOT_STATUS_RANGE_BITS, p_in->range_mm);
+
+    word = robot_field_put(
+        0u, ROBOT_STATUS_HEADING_SHIFT, ROBOT_STATUS_HEADING_BITS,
+        robot_field_from_signed(p_in->heading_deg, ROBOT_STATUS_HEADING_BITS));
+    word = robot_field_put(
+        word, ROBOT_STATUS_PITCH_SHIFT, ROBOT_STATUS_ANGLE_BITS,
+        robot_field_from_signed(p_in->pitch_ddeg, ROBOT_STATUS_ANGLE_BITS));
+    p_words[3] = robot_field_put(word, ROBOT_STATUS_CALIB_SHIFT,
+                                 ROBOT_STATUS_CALIB_BITS, p_in->calibration);
+
+    word = robot_field_put(
+        0u, ROBOT_STATUS_ROLL_SHIFT, ROBOT_STATUS_ANGLE_BITS,
+        robot_field_from_signed(p_in->roll_ddeg, ROBOT_STATUS_ANGLE_BITS));
+    word = robot_field_put(
+        word, ROBOT_STATUS_TURN_SHIFT, ROBOT_STATUS_TURN_BITS,
+        robot_field_from_signed(p_in->turn_dps, ROBOT_STATUS_TURN_BITS));
+    p_words[4] =
+        robot_field_put(word, ROBOT_STATUS_REQUESTS_SHIFT,
+                        ROBOT_STATUS_COUNT_BITS, p_in->requests & 0xFFu);
+
+    word = robot_field_put(0u, ROBOT_STATUS_COLLISIONS_SHIFT,
+                           ROBOT_STATUS_COUNT_BITS, p_in->collisions);
+    p_words[5] = robot_field_put(word, ROBOT_STATUS_TAKEN_SHIFT,
+                                 ROBOT_STATUS_COUNT_BITS, p_in->taken & 0xFFu);
 }
 
 #endif /* ROBOT_TYPES_H */

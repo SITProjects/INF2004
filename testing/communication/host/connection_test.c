@@ -120,6 +120,10 @@ mqtt_publish (mqtt_client_t * c, const char * topic, const void * data,
               u16_t len, u8_t qos, u8_t retain, mqtt_request_cb_t cb,
               void * arg)
 {
+    if (strcmp(topic, MQTT_TOPIC "/status") == 0)
+    {
+        return ERR_OK;
+    }
     assert(c == handle && strcmp(topic, MQTT_TOPIC) == 0);
     assert(qos == 0 && retain == 0 && len < sizeof(payload));
     memcpy(payload, data, len);
@@ -129,6 +133,12 @@ mqtt_publish (mqtt_client_t * c, const char * topic, const void * data,
         cb(arg, ERR_OK);
     return publish_error;
 }
+void
+car_status_encode (uint32_t * p_words)
+{
+    memset(p_words, 0, ROBOT_STATUS_WORDS * sizeof(uint32_t));
+}
+
 int
 main (void)
 {

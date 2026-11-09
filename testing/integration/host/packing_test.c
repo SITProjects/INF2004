@@ -254,6 +254,118 @@ test_edge_word (void)
                      (a & ROBOT_BARCODE_EDGE_TIME_MASK)) == 6u);
 }
 
+static void
+test_telemetry (void)
+{
+    robot_telemetry_payload_t payload =
+        robot_telemetry_obstacle(255u, 255u, 511u);
+    check("obstacle record max",
+          (payload.first & 0xFFFFu) == 0xFFFFu &&
+              (robot_field_get(payload.first,
+                               ROBOT_TELEMETRY_OBSTACLE_WIDTH_SHIFT,
+                               ROBOT_TELEMETRY_OBSTACLE_WIDTH_BITS) == 511u));
+    payload = robot_telemetry_obstacle(0u, 0u, 512u);
+    check("obstacle width one past saturates",
+          (robot_field_get(payload.first, ROBOT_TELEMETRY_OBSTACLE_WIDTH_SHIFT,
+                           ROBOT_TELEMETRY_OBSTACLE_WIDTH_BITS) == 511u) &&
+              ((payload.first & 0xFFFFu) == 0u));
+
+    payload = robot_telemetry_avoid(16u, 3u);
+    check("avoid state one past saturates and leaves the other",
+          (robot_field_get(payload.first, 0u,
+                           ROBOT_TELEMETRY_AVOID_STATE_BITS) == 15u) &&
+              (robot_field_get(payload.first, ROBOT_TELEMETRY_AVOID_TO_SHIFT,
+                               ROBOT_TELEMETRY_AVOID_STATE_BITS) == 3u));
+
+    payload = robot_telemetry_line(3u, true, 3u, 524288, 32768, -32769);
+    check("line record one past saturates",
+          (robot_field_to_signed(
+               robot_field_get(payload.first,
+                               ROBOT_TELEMETRY_LINE_DISTANCE_SHIFT,
+                               ROBOT_TELEMETRY_LINE_DISTANCE_BITS),
+               ROBOT_TELEMETRY_LINE_DISTANCE_BITS) == 524287) &&
+              (robot_field_to_signed(
+                   robot_field_get(payload.second, 0u,
+                                   ROBOT_TELEMETRY_LINE_HEADING_BITS),
+                   ROBOT_TELEMETRY_LINE_HEADING_BITS) == 32767) &&
+              (robot_field_to_signed(
+                   robot_field_get(payload.second,
+                                   ROBOT_TELEMETRY_LINE_HEADING_SHIFT,
+                                   ROBOT_TELEMETRY_LINE_HEADING_BITS),
+                   ROBOT_TELEMETRY_LINE_HEADING_BITS) == -32768));
+    payload = robot_telemetry_line(0u, false, 0u, -1, 0, 0);
+    check("negative distance leaves the mode and turn",
+          (robot_field_get(payload.first, 0u,
+                           ROBOT_TELEMETRY_LINE_MODE_BITS) == 0u) &&
+              ((payload.first & ROBOT_TELEMETRY_LINE_JUNCTION) == 0u) &&
+              (robot_field_get(payload.first, ROBOT_TELEMETRY_LINE_TURN_SHIFT,
+                               ROBOT_TELEMETRY_LINE_TURN_BITS) == 0u));
+
+    payload = robot_telemetry_barcode("ABCDEFGHIJKL", true);
+    check("barcode text stops at ten characters",
+          (robot_field_get(payload.second, 4u * ROBOT_BARCODE_MAP_CHAR_BITS,
+                           ROBOT_BARCODE_MAP_CHAR_BITS) ==
+           robot_barcode_char_code('J')));
+    check("reversed leaves the text",
+          ((payload.first & ROBOT_TELEMETRY_BARCODE_REVERSED) != 0u) &&
+              (robot_field_get(payload.first,
+                               4u * ROBOT_BARCODE_MAP_CHAR_BITS,
+                               ROBOT_BARCODE_MAP_CHAR_BITS) ==
+               robot_barcode_char_code('E')));
+    payload = robot_telemetry_barcode("a", false);
+    check("a character outside Code 39 ends the text", payload.first == 0u);
+    check("every Code 39 character has a 6-bit code",
+          (robot_barcode_char_code('0') == 1u) &&
+              (robot_barcode_char_code('%') == 42u) &&
+              (robot_barcode_char_code('a') == 0u) &&
+              (robot_barcode_char_code(' ') == 0u));
+}
+
+static void
+test_status (void)
+{
+    robot_status_t status = {0};
+    uint32_t words[ROBOT_STATUS_WORDS];
+    status.speed_mm_s = 1024;
+    status.left_mm_s = -1025;
+    status.width_mm = 512u;
+    status.range_mm = 4096u;
+    status.humps = 256u;
+    status.collisions = 256u;
+    status.pitch_ddeg = 2048;
+    status.distance_mm = 8388608;
+    robot_status_pack(&status, words);
+    check("status one past saturates",
+          (robot_field_get(words[1], ROBOT_STATUS_SPEED_SHIFT,
+                           ROBOT_STATUS_SPEED_BITS) == 1023u) &&
+              (robot_field_get(words[2], ROBOT_STATUS_WIDTH_SHIFT,
+                               ROBOT_STATUS_WIDTH_BITS) == 511u) &&
+              (robot_field_get(words[2], ROBOT_STATUS_RANGE_SHIFT,
+                               ROBOT_STATUS_RANGE_BITS) == 4095u) &&
+              (robot_field_get(words[0], ROBOT_STATUS_HUMPS_SHIFT,
+                               ROBOT_STATUS_COUNT_BITS) == 255u) &&
+              (robot_field_get(words[5], ROBOT_STATUS_COLLISIONS_SHIFT,
+                               ROBOT_STATUS_COUNT_BITS) == 255u));
+    check("status one below saturates",
+          robot_field_to_signed(
+              robot_field_get(words[1], ROBOT_STATUS_LEFT_SHIFT,
+                              ROBOT_STATUS_SPEED_BITS),
+              ROBOT_STATUS_SPEED_BITS) == -1024);
+    status = (robot_status_t){0};
+    status.requests = 0x1FFu;
+    status.taken = 0x1FFu;
+    robot_status_pack(&status, words);
+    check("request counts keep their low bits and leave their neighbours",
+          (robot_field_get(words[4], ROBOT_STATUS_REQUESTS_SHIFT,
+                           ROBOT_STATUS_COUNT_BITS) == 0xFFu) &&
+              (robot_field_get(words[5], ROBOT_STATUS_TAKEN_SHIFT,
+                               ROBOT_STATUS_COUNT_BITS) == 0xFFu) &&
+              (robot_field_get(words[5], ROBOT_STATUS_COLLISIONS_SHIFT,
+                               ROBOT_STATUS_COUNT_BITS) == 0u) &&
+              (robot_field_get(words[4], ROBOT_STATUS_TURN_SHIFT,
+                               ROBOT_STATUS_TURN_BITS) == 0u));
+}
+
 int
 main (void)
 {
@@ -263,6 +375,8 @@ main (void)
     test_geometry();
     test_control_and_watch();
     test_edge_word();
+    test_telemetry();
+    test_status();
     printf("%u failure(s)\n", failures);
     return (0u == failures) ? 0 : 1;
 }

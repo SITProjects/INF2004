@@ -155,8 +155,6 @@ static void log_watch (obstacle_avoid_input_t const * p_in);
 static void apply_actions (obstacle_avoid_action_t const * p_act);
 #if TM_MQTT
 static void publish_avoid (obstacle_avoid_action_t const * p_act);
-static void text_append (char * p_text, uint32_t * p_length,
-                         char const * p_part);
 #endif
 #endif
 
@@ -280,7 +278,7 @@ scan_task (INT stacd, void * p_exinf)
     uint32_t last_sample_ms = log_time_ms();
     uint32_t sample_ms = 0u;
     bool b_sample_pending = false;
-    UB sample_text[TELEMETRY_TEXT_SIZE];
+    robot_telemetry_payload_t sample_payload = {0u, 0u, 0u};
 #endif
     uint8_t last_sequence = 0u;
     uint8_t last_flags = 0u;
@@ -358,18 +356,15 @@ scan_task (INT stacd, void * p_exinf)
         {
             last_sample_ms = now_ms;
             sample_ms = now_ms;
-            (void)tm_sprintf(
-                sample_text,
-                (const UB *)"obstacle flags=%u edges=%u width_mm=%u",
-                (unsigned int)scan.flags, (unsigned int)scan.edges,
-                (unsigned int)scan.width_mm);
+            sample_payload =
+                robot_telemetry_obstacle(scan.flags, scan.edges, scan.width_mm);
             b_sample_pending = true;
         }
         if (b_sample_pending)
         {
             uint32_t sequence = 0u;
-            telemetry_enqueue_result_t queued = telemetry_queue_push(
-                sample_ms, (const char *)sample_text, &sequence);
+            telemetry_enqueue_result_t queued =
+                telemetry_queue_push(sample_ms, sample_payload, &sequence);
             if (queued != TELEMETRY_BUSY)
             {
                 b_sample_pending = false;
@@ -752,35 +747,16 @@ apply_actions (obstacle_avoid_action_t const * p_act)
 }
 
 #if TM_MQTT
-/* Queue "avoid FROM>TO reason" for MQTT, cut to the record size. A full or
- * busy queue drops it: the console line above is the full record. */
+/* Queue the bypass state change for MQTT. A full or busy queue drops it:
+ * the console line above is the full record, reason included. */
 static void
 publish_avoid (obstacle_avoid_action_t const * p_act)
 {
-    char text[TELEMETRY_TEXT_SIZE];
-    uint32_t length = 0u;
-    text[0] = '\0';
-    text_append(text, &length, "avoid ");
-    text_append(text, &length, obstacle_avoid_state_name(p_act->from));
-    text_append(text, &length, ">");
-    text_append(text, &length, obstacle_avoid_state_name(p_act->to));
-    text_append(text, &length, " ");
-    text_append(text, &length, p_act->p_reason);
     uint32_t sequence = 0u;
-    (void)telemetry_queue_push(log_time_ms(), text, &sequence);
-}
-
-/* Append p_part, keeping p_text terminated within TELEMETRY_TEXT_SIZE. */
-static void
-text_append (char * p_text, uint32_t * p_length, char const * p_part)
-{
-    while ((*p_part != '\0') && ((*p_length + 1u) < TELEMETRY_TEXT_SIZE))
-    {
-        p_text[*p_length] = *p_part;
-        ++*p_length;
-        ++p_part;
-    }
-    p_text[*p_length] = '\0';
+    (void)telemetry_queue_push(
+        log_time_ms(),
+        robot_telemetry_avoid((uint32_t)p_act->from, (uint32_t)p_act->to),
+        &sequence);
 }
 #endif
 #endif
