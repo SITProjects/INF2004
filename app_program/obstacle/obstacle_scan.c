@@ -99,10 +99,10 @@ static uint16_t right_end_echo_us;
 
 /* Watch mode: angle held (OBSTACLE_SCAN_WATCH_OFF when centred). */
 static int watch_angle = OBSTACLE_SCAN_WATCH_OFF;
-static obstacle_scan_watch_t watch;
+static uint32_t watch_word; /* robot_obstacle_watch_pack(). */
 
 /* Written only by publish_result(), so it always matches result. */
-static obstacle_scan_geometry_t published_geometry;
+static uint64_t published_geometry; /* robot_obstacle_geometry_pack(). */
 
 /* Corridor sweep: published copy, working copy and next grid index. */
 _Static_assert(OBSTACLE_SWEEP_POINTS == 9u, "finish_corridor() prints nine");
@@ -235,10 +235,10 @@ obstacle_scan_init (int trig_pin, int echo_pin, int servo_pin,
                                            ROBOT_OBSTACLE_EDGE_NONE),
         .width_mm = ROBOT_OBSTACLE_WIDTH_UNAVAILABLE,
         .sequence = 0u};
-    published_geometry = (obstacle_scan_geometry_t){0};
+    published_geometry = 0u;
     b_side_scans = true;
     watch_angle = OBSTACLE_SCAN_WATCH_OFF;
-    watch = (obstacle_scan_watch_t){0};
+    watch_word = 0u;
     corridor = (obstacle_scan_corridor_t){0};
     corridor_work = corridor;
     corridor_index = 0u;
@@ -396,7 +396,8 @@ obstacle_scan_update (void)
         test_snapshot.critical_flag_us = test_critical_flag_us;
         test_snapshot.critical_echo_us = test_critical_echo_us;
         test_snapshot.result = result;
-        test_snapshot.geometry = published_geometry;
+        test_snapshot.geometry =
+            robot_obstacle_geometry_unpack(published_geometry);
         test_snapshot.script_remaining =
             (uint8_t)(test_script_count - test_script_next);
         test_snapshot.corridor = corridor;
@@ -497,7 +498,7 @@ obstacle_scan_stop_requested (void)
 obstacle_scan_geometry_t
 obstacle_scan_geometry (void)
 {
-    return published_geometry;
+    return robot_obstacle_geometry_unpack(published_geometry);
 }
 
 uint8_t
@@ -564,8 +565,9 @@ obstacle_scan_set_watch (int angle)
     if (angle != watch_angle)
     {
         watch_angle = angle;
-        watch.b_active = true;
-        watch.echo_us = 0u;
+        watch_word =
+            robot_field_put(watch_word | ROBOT_WATCH_ACTIVE,
+                            ROBOT_WATCH_ECHO_SHIFT, ROBOT_WATCH_ECHO_BITS, 0u);
         move_sensor(angle);
         tm_printf((UB *)"[%lu ms]obstacle: watching at %d deg\n",
                   (unsigned long)now_ms(), angle);
@@ -575,7 +577,7 @@ obstacle_scan_set_watch (int angle)
 obstacle_scan_watch_t
 obstacle_scan_watch (void)
 {
-    return watch;
+    return robot_obstacle_watch_unpack(watch_word);
 }
 
 obstacle_scan_corridor_t
@@ -1173,7 +1175,7 @@ publish_result (robot_obstacle_status_t status,
         .width_mm = width.width_mm,
         .sequence = (uint8_t)(result.sequence + 1u)};
     published_geometry =
-        (p_geometry != NULL) ? *p_geometry : (obstacle_scan_geometry_t){0};
+        (p_geometry != NULL) ? robot_obstacle_geometry_pack(p_geometry) : 0u;
 }
 
 /* Range from the pivot, rounded and saturated; 0 if none or unusable. */
@@ -1345,8 +1347,10 @@ read_watch (ultrasonic_result_t measurement, uint16_t echo_us)
     {
         last_usable_centre_ms = now_ms(); /* The sensor still answers. */
     }
-    watch.echo_us = (measurement == ULTRASONIC_VALID) ? echo_us : 0u;
-    ++watch.sequence;
+    robot_obstacle_watch_t reading = robot_obstacle_watch_unpack(watch_word);
+    reading.echo_us = (measurement == ULTRASONIC_VALID) ? echo_us : 0u;
+    reading.sequence = (uint8_t)(reading.sequence + 1u);
+    watch_word = robot_obstacle_watch_pack(&reading);
     state_set(SCAN_PHASE_MASK, SCAN_PHASE_SHIFT, SCAN_READY);
 }
 
@@ -1360,8 +1364,9 @@ end_watch (void)
                   (unsigned long)now_ms());
     }
     watch_angle = OBSTACLE_SCAN_WATCH_OFF;
-    watch.b_active = false;
-    watch.echo_us = 0u;
+    watch_word =
+        robot_field_put(watch_word & ~ROBOT_WATCH_ACTIVE,
+                        ROBOT_WATCH_ECHO_SHIFT, ROBOT_WATCH_ECHO_BITS, 0u);
 }
 
 /* A faulted position stays invalid; NO_ECHO is a usable zero. */

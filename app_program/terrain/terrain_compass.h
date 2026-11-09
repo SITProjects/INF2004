@@ -38,7 +38,7 @@ typedef struct
     int16_t heading_ddeg; /**< Tenths of a degree, 0 to 3599,
                                counter-clockwise from magnetic north (+ is
                                left), TERRAIN_MAG_OFFSET_* removed. */
-    uint16_t samples;     /**< Samples read since start-up; wraps. */
+    uint8_t samples;      /**< Samples read since start-up; wraps. */
 } terrain_compass_t;
 
 /**

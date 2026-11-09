@@ -27,11 +27,6 @@
 
 /* Private types, constants, and macros. */
 
-/* Packed status word of motion_get_status(). */
-#define STATUS_MODE_MASK 0x07u
-#define STATUS_DONE_SHIFT 3u
-#define STATUS_DONE_MASK 0x03u
-
 #if APP_TEST
 /* Packed line word of motion_test_set_line(). */
 #define LINE_SEEN 0x00010000u
@@ -86,7 +81,7 @@ static volatile bool b_line_control =
     MOTION_COMMAND_ACTUATION_ENABLED && !APP_TEST;
 
 /* Written by tMotion only; read by any task as one word. */
-static volatile uint32_t status_word;
+static volatile uint8_t status_word;
 
 #if APP_TEST
 /* Test line input (MOT-U36). Written by the test task, read by tMotion. */
@@ -100,7 +95,8 @@ static volatile uint32_t line_word;
  * order, so volatile access order is the order the other core sees.
  */
 static volatile uint32_t odometry_sequence;
-static volatile motion_shared_odometry_t shared_odometry;
+static volatile uint32_t shared_odometry[ROBOT_ODOMETRY_WORDS];
+static uint8_t odometry_updates; /* 0 until the first publish. */
 
 /* Written by tMotion; read by the test task only while held. */
 static motion_task_timing_t timing;
@@ -171,7 +167,7 @@ motion_init (void)
         return cyc_motion;
     }
 
-    status_word = (uint32_t)ROBOT_MOTION_MODE_STOPPED;
+    status_word = (uint8_t)ROBOT_MOTION_MODE_STOPPED;
     timing.inhibit_brake_us = TIMER_NONE;
     timing_reset();
     return motion_command_init();
@@ -211,12 +207,13 @@ motion_start (void)
 motion_task_status_t
 motion_get_status (void)
 {
-    uint32_t word = status_word;
+    uint32_t const word = status_word;
     motion_task_status_t status;
 
-    status.mode = (robot_motion_mode_t)(word & STATUS_MODE_MASK);
-    status.done =
-        (robot_motion_done_t)((word >> STATUS_DONE_SHIFT) & STATUS_DONE_MASK);
+    status.mode = (robot_motion_mode_t)robot_field_get(
+        word, ROBOT_MOTION_STATUS_MODE_SHIFT, ROBOT_MOTION_STATUS_MODE_BITS);
+    status.done = (robot_motion_done_t)robot_field_get(
+        word, ROBOT_MOTION_STATUS_DONE_SHIFT, ROBOT_MOTION_STATUS_DONE_BITS);
     return status;
 }
 
@@ -233,14 +230,15 @@ motion_get_odometry (motion_shared_odometry_t * p_odometry)
 
         if (0u == (before & 1u))
         {
-            p_odometry->updates = shared_odometry.updates;
-            p_odometry->distance_mm = shared_odometry.distance_mm;
-            p_odometry->heading_deg = shared_odometry.heading_deg;
-            p_odometry->speed_mm_s = shared_odometry.speed_mm_s;
-            p_odometry->left_speed_mm_s = shared_odometry.left_speed_mm_s;
-            p_odometry->right_speed_mm_s = shared_odometry.right_speed_mm_s;
+            uint32_t words[ROBOT_ODOMETRY_WORDS];
+
+            for (UINT word = 0u; word < ROBOT_ODOMETRY_WORDS; word++)
+            {
+                words[word] = shared_odometry[word];
+            }
             if (odometry_sequence == before)
             {
+                *p_odometry = robot_odometry_unpack(words);
                 return true;
             }
         }
@@ -575,8 +573,11 @@ publish_status (bool b_inhibited)
                                 : (uint32_t)motion_move_get_state();
     uint32_t done = (uint32_t)motion_move_get_done_reason();
 
-    status_word = (mode & STATUS_MODE_MASK) |
-                  ((done & STATUS_DONE_MASK) << STATUS_DONE_SHIFT);
+    uint32_t word = robot_field_put(0u, ROBOT_MOTION_STATUS_MODE_SHIFT,
+                                    ROBOT_MOTION_STATUS_MODE_BITS, mode);
+
+    status_word = (uint8_t)robot_field_put(word, ROBOT_MOTION_STATUS_DONE_SHIFT,
+                                           ROBOT_MOTION_STATUS_DONE_BITS, done);
 }
 
 /* Copy this update's odometry for motion_get_odometry(). */
@@ -589,13 +590,24 @@ publish_odometry (void)
     {
         return;
     }
+    /* Skip 0 on the wrap: 0 means nothing has been published yet. */
+    odometry_updates =
+        (UINT8_MAX == odometry_updates) ? 1u : (uint8_t)(odometry_updates + 1u);
+    robot_odometry_t const unpacked = {
+        .updates = odometry_updates,
+        .distance_mm = odometry.distance_mm,
+        .heading_deg = odometry.heading_deg,
+        .speed_mm_s = odometry.speed_mm_s,
+        .left_speed_mm_s = odometry.left_speed_mm_s,
+        .right_speed_mm_s = odometry.right_speed_mm_s};
+    uint32_t words[ROBOT_ODOMETRY_WORDS];
+
+    robot_odometry_pack(&unpacked, words);
     odometry_sequence++; /* Odd: readers retry. */
-    shared_odometry.updates++;
-    shared_odometry.distance_mm = odometry.distance_mm;
-    shared_odometry.heading_deg = odometry.heading_deg;
-    shared_odometry.speed_mm_s = odometry.speed_mm_s;
-    shared_odometry.left_speed_mm_s = odometry.left_speed_mm_s;
-    shared_odometry.right_speed_mm_s = odometry.right_speed_mm_s;
+    for (UINT word = 0u; word < ROBOT_ODOMETRY_WORDS; word++)
+    {
+        shared_odometry[word] = words[word];
+    }
     odometry_sequence++; /* Even: whole again. */
 }
 

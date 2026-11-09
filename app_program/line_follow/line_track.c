@@ -18,6 +18,7 @@
 #include "line_track.h"
 #include <stddef.h>
 #include "line_follow_config.h"
+#include "../robot_types.h"
 
 /* Private types, constants, and macros. */
 #define SIDE_LEFT 0u
@@ -49,6 +50,8 @@ _Static_assert(LINE_CURVE_TOUCH_MM > 0, "Invalid bend window");
 _Static_assert(LINE_CONFIRM_SAMPLES > 0u, "Invalid debounce");
 _Static_assert(LINE_SEARCH_DONE_DEG < LINE_SEARCH_MAX_DEG,
                "Search must turn further than its end band");
+_Static_assert(LINE_BARCODE_REVERSE_MM <= ROBOT_LINE_REQ_REVERSE_MAX_MM,
+               "Reverse distance must fit its request field");
 _Static_assert(LINE_MODE_STOP <= 3, "Line mode must fit two bits");
 _Static_assert((LINE_JUNCTION_SKEW_MM >= 0) && (LINE_JUNCTION_CENTRE_MM > 0),
                "Invalid junction geometry");

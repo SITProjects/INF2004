@@ -11,6 +11,7 @@
 #include <bsp/libbsp.h>
 #include "barcode_config.h"
 #include "barcode_scan.h"
+#include "../robot_types.h"
 #include "../obstacle/drv_gpio_irq.h"
 
 /* Private types, constants, and macros. */
@@ -20,7 +21,7 @@ _Static_assert((BARCODE_EDGE_QUEUE_SIZE & QUEUE_MASK) == 0u,
                "Edge queue size must be a power of two");
 
 /* Static data. */
-static barcode_edge_t queue[BARCODE_EDGE_QUEUE_SIZE];
+static uint32_t queue[BARCODE_EDGE_QUEUE_SIZE]; /* Edge words, robot_types.h. */
 static volatile uint32_t head; /* Written by the edge handler only. */
 static volatile uint32_t tail; /* Written by the barcode task only. */
 static volatile uint32_t overflows;
@@ -54,7 +55,9 @@ drv_barcode_pop (barcode_edge_t * p_edge)
     {
         return false;
     }
-    *p_edge = queue[index & QUEUE_MASK];
+    uint32_t const word = queue[index & QUEUE_MASK];
+    p_edge->time_us = word & ROBOT_BARCODE_EDGE_TIME_MASK;
+    p_edge->b_black = (word & ROBOT_BARCODE_EDGE_BLACK) != 0u;
     tail = index + 1u;
     return true;
 }
@@ -103,7 +106,7 @@ sensor_edges (uint32_t events, uint32_t now_us)
         overflows++;
         return;
     }
-    queue[index & QUEUE_MASK] =
-        (barcode_edge_t){.time_us = now_us, .b_black = b_black};
+    queue[index & QUEUE_MASK] = (now_us & ROBOT_BARCODE_EDGE_TIME_MASK) |
+                                (b_black ? ROBOT_BARCODE_EDGE_BLACK : 0u);
     head = index + 1u;
 }

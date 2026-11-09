@@ -23,21 +23,8 @@ typedef struct
     uint16_t settle_margin_ms;
 } obstacle_servo_timing_t;
 
-/**
- * Geometry published with one result: zeros unless that result is a
- * finished sweep (PATH_FOUND or BLOCKED). Every range is from the servo
- * pivot (obstacle_width_range_mm()); lateral offsets are + left.
- */
-typedef struct
-{
-    uint16_t centre_mm;    /**< Servo pivot to obstacle face, 0 if none. */
-    int16_t left_x_mm;     /**< Left boundary, lateral mm from pivot. */
-    int16_t right_x_mm;    /**< Right boundary, lateral mm from pivot. */
-    bool b_left_clear;     /**< The first (30 degree) end was clear. */
-    bool b_right_clear;    /**< The last (150 degree) end was clear. */
-    uint16_t left_end_mm;  /**< Range at the 30 degree end, 0 if none. */
-    uint16_t right_end_mm; /**< Range at the 150 degree end, 0 if none. */
-} obstacle_scan_geometry_t;
+/** Geometry published with one result; layout in robot_types.h. */
+typedef robot_obstacle_geometry_t obstacle_scan_geometry_t;
 
 /**
  * One stationary corridor sweep: every grid position from 50 to 130
@@ -55,13 +42,8 @@ typedef struct
 /** No watch: obstacle_scan_set_watch() argument that centres the sensor. */
 #define OBSTACLE_SCAN_WATCH_OFF (-1)
 
-/** Latest reading while the sensor is held at a watch angle. */
-typedef struct
-{
-    uint8_t sequence; /**< Advances once per reading taken while watching. */
-    uint16_t echo_us; /**< Echo of that reading; 0 = none or unusable. */
-    bool b_active;    /**< The sensor is held at a watch angle. */
-} obstacle_scan_watch_t;
+/** Latest reading at a watch angle; layout in robot_types.h. */
+typedef robot_obstacle_watch_t obstacle_scan_watch_t;
 
 /* Public function declarations. */
 

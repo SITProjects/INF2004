@@ -8,15 +8,13 @@
  */
 
 #include "remote_command.h"
+#include "../robot_types.h"
 #include "../line_follow/line_follow_config.h"
 
 /* Private types, constants, and macros. */
-#define BITS_PER_CHAR 8u
-#define TEXT_MASK 0x00FFFFFFu
-#define TURN_SHIFT 24u
 #define MAX_WORDS 3u
 
-_Static_assert(REMOTE_TEXT_MAX * BITS_PER_CHAR <= TURN_SHIFT,
+_Static_assert(REMOTE_TEXT_MAX == ROBOT_BARCODE_MAP_CHARS,
                "An entry's text must fit below its action");
 
 /** @brief One word of a message. */
@@ -39,6 +37,7 @@ static volatile uint32_t table[REMOTE_MAP_SIZE];
 
 /* Private function declarations. */
 static bool find_entry (char const * p_text, uint32_t * p_entry);
+static uint32_t char_code (char symbol);
 static uint32_t split_words (char const * p_text, uint32_t length,
                              word_t * p_words);
 static bool word_is (word_t const * p_word, char const * p_expected);
@@ -112,8 +111,11 @@ line_turn_t
 remote_command_turn (char const * p_text)
 {
     uint32_t entry = 0u;
-    return find_entry(p_text, &entry) ? (line_turn_t)(entry >> TURN_SHIFT)
-                                      : LINE_JUNCTION_DEFAULT_TURN;
+    return find_entry(p_text, &entry)
+               ? (line_turn_t)robot_field_get(entry,
+                                              ROBOT_BARCODE_MAP_TURN_SHIFT,
+                                              ROBOT_BARCODE_MAP_TURN_BITS)
+               : LINE_JUNCTION_DEFAULT_TURN;
 }
 
 bool
@@ -124,6 +126,21 @@ remote_command_mapped (char const * p_text)
 }
 
 /* Private function definitions. */
+
+/* A character's 6-bit code, 1 to 42; 0 if it is not a Code 39 character. */
+static uint32_t
+char_code (char symbol)
+{
+    static char const symbols[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-.$/+%";
+    for (uint32_t i = 0u; i < (sizeof(symbols) - 1u); i++)
+    {
+        if (symbols[i] == symbol)
+        {
+            return i + 1u;
+        }
+    }
+    return 0u;
+}
 
 /* The table entry for a barcode; false if it has none. */
 static bool
@@ -140,7 +157,7 @@ find_entry (char const * p_text, uint32_t * p_entry)
         for (uint32_t i = 0u; i < REMOTE_MAP_SIZE; i++)
         {
             uint32_t const entry = table[i];
-            if ((entry & TEXT_MASK) == key)
+            if ((entry & ROBOT_BARCODE_MAP_TEXT_MASK) == key)
             {
                 *p_entry = entry;
                 return true;
@@ -201,7 +218,12 @@ text_key (char const * p_text, uint32_t length, uint32_t * p_key)
     uint32_t key = 0u;
     for (uint32_t i = 0u; i < length; i++)
     {
-        key |= (uint32_t)(uint8_t)p_text[i] << (i * BITS_PER_CHAR);
+        uint32_t const code = char_code(p_text[i]);
+        if (0u == code)
+        {
+            return false;
+        }
+        key |= code << (i * ROBOT_BARCODE_MAP_CHAR_BITS);
     }
     *p_key = key;
     return true;
@@ -238,7 +260,7 @@ map_barcode (word_t const * p_text, word_t const * p_action)
     for (uint32_t i = 0u; i < REMOTE_MAP_SIZE; i++)
     {
         uint32_t const entry = table[i];
-        if ((entry & TEXT_MASK) == key)
+        if ((entry & ROBOT_BARCODE_MAP_TEXT_MASK) == key)
         {
             slot = i;
             break;
@@ -252,6 +274,7 @@ map_barcode (word_t const * p_text, word_t const * p_action)
     {
         return REMOTE_COMMAND_FULL;
     }
-    table[slot] = key | ((uint32_t)turn << TURN_SHIFT);
+    table[slot] = robot_field_put(key, ROBOT_BARCODE_MAP_TURN_SHIFT,
+                                  ROBOT_BARCODE_MAP_TURN_BITS, (uint32_t)turn);
     return REMOTE_COMMAND_OK;
 }

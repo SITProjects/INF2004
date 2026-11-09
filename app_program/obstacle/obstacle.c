@@ -78,7 +78,12 @@ ID obstacle_flg_event;
  * compiler moving its copy across the counter accesses.
  */
 static volatile uint32_t state_sequence;
-static obstacle_shared_state_t shared_state;
+static struct
+{
+    robot_obstacle_result_t result;
+    uint16_t control;  /* robot_obstacle_control_pack(). */
+    uint64_t geometry; /* robot_obstacle_geometry_pack(). */
+} shared_state;
 
 #if AVOID_ACTIVE
 static const obstacle_avoid_config_t avoid_config = {
@@ -209,10 +214,22 @@ obstacle_get_state (obstacle_shared_state_t * p_state)
         if ((before & 1u) == 0u)
         {
             STATE_BARRIER(); /* Copy only after reading the counter. */
-            *p_state = shared_state;
+            robot_obstacle_result_t const result = shared_state.result;
+            uint16_t const control = shared_state.control;
+            uint64_t const geometry = shared_state.geometry;
             STATE_BARRIER(); /* Finish the copy before checking again. */
             if (state_sequence == before)
             {
+                p_state->result = result;
+                p_state->geometry = robot_obstacle_geometry_unpack(geometry);
+                p_state->b_stop_requested =
+                    (control & ROBOT_OBSTACLE_CONTROL_STOP) != 0u;
+                p_state->avoid_state = (uint8_t)robot_field_get(
+                    control, ROBOT_OBSTACLE_CONTROL_STATE_SHIFT,
+                    ROBOT_OBSTACLE_CONTROL_STATE_BITS);
+                p_state->fault_reason = (uint8_t)robot_field_get(
+                    control, ROBOT_OBSTACLE_CONTROL_FAULT_SHIFT,
+                    ROBOT_OBSTACLE_CONTROL_FAULT_BITS);
                 return true;
             }
         }
@@ -386,7 +403,10 @@ publish_state (obstacle_shared_state_t const * p_state, bool b_new_result)
 
     state_sequence = state_sequence + 1u; /* Odd: readers retry. */
     STATE_BARRIER();
-    shared_state = *p_state;
+    shared_state.result = p_state->result;
+    shared_state.control = robot_obstacle_control_pack(
+        p_state->b_stop_requested, p_state->avoid_state, p_state->fault_reason);
+    shared_state.geometry = robot_obstacle_geometry_pack(&p_state->geometry);
     STATE_BARRIER();
     state_sequence = state_sequence + 1u; /* Even: whole again. */
 

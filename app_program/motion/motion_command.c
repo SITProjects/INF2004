@@ -33,8 +33,7 @@ _Static_assert(MOTION_COMMAND_FOLLOW_SPEED_MM_S > 0u &&
 typedef struct
 {
     uint32_t received_ms;
-    line_request_t request;
-    bool b_valid;
+    uint32_t request; /* robot_line_request_pack(). */
 } command_slot_t;
 
 /* Static data. */
@@ -73,6 +72,7 @@ static void latch_fault (motion_status_t status);
 #else
 static void report_request (void);
 #endif
+static bool slot_valid (void);
 
 /* Public function definitions. */
 
@@ -116,7 +116,8 @@ motion_command_start (void)
 ER
 motion_command_submit (line_request_t const * p_request)
 {
-    command_slot_t slot = {.request = {.mode = LINE_MODE_STOP}};
+    command_slot_t slot = {.request = robot_line_request_pack(
+                               (uint32_t)LINE_MODE_STOP, 0u, 0u, 0)};
     bool const b_mode_valid =
         (p_request == NULL) ||
         ((unsigned int)p_request->mode <= (unsigned int)LINE_MODE_STOP);
@@ -124,8 +125,14 @@ motion_command_submit (line_request_t const * p_request)
 
     if ((p_request != NULL) && b_mode_valid)
     {
-        slot.request = *p_request;
-        slot.b_valid = true;
+        uint32_t const flags =
+            ROBOT_LINE_REQ_VALID |
+            (p_request->b_seen ? ROBOT_LINE_REQ_SEEN : 0u) |
+            (p_request->b_junction ? ROBOT_LINE_REQ_JUNCTION : 0u) |
+            (p_request->b_slow ? ROBOT_LINE_REQ_SLOW : 0u);
+        slot.request = robot_line_request_pack((uint32_t)p_request->mode, flags,
+                                               p_request->reverse_mm,
+                                               p_request->target_heading_deg);
     }
     if (!b_ready)
     {
@@ -159,7 +166,7 @@ motion_command_service (bool b_control_enabled)
     if (!b_clock || ((uint32_t)((uint32_t)now.lo - active_slot.received_ms) >=
                      MOTION_LINE_TIMEOUT_MS))
     {
-        active_slot.b_valid = false;
+        active_slot.request &= ~ROBOT_LINE_REQ_VALID;
     }
 #if ACTUATION_ACTIVE
     bool const b_take_over = b_control_enabled && !b_control_previous;
@@ -170,9 +177,10 @@ motion_command_service (bool b_control_enabled)
         b_reverse_active = false;
         /* External MOVE/TURN stop-at-line still receives current visibility,
          * but no line request may replace the queued command or inhibit. */
-        if (b_new && active_slot.b_valid)
+        if (b_new && slot_valid())
         {
-            (void)motion_move_set_line(active_slot.request.b_seen);
+            (void)motion_move_set_line(
+                (active_slot.request & ROBOT_LINE_REQ_SEEN) != 0u);
         }
         return;
     }
@@ -195,6 +203,12 @@ motion_command_service (bool b_control_enabled)
 }
 
 /* Private function definitions. */
+
+static bool
+slot_valid (void)
+{
+    return (active_slot.request & ROBOT_LINE_REQ_VALID) != 0u;
+}
 
 /* Copy the latest request, if there is a new one. */
 static bool
@@ -236,7 +250,7 @@ update_controller (bool b_new)
     if (!b_fault_latched)
     {
         motion_status_t status = MOTION_OK;
-        if (!active_slot.b_valid)
+        if (!slot_valid())
         {
             b_search_active = false;
             if (motion_move_is_busy())
@@ -260,28 +274,31 @@ update_controller (bool b_new)
 static motion_status_t
 apply_request (void)
 {
-    line_request_t const * p_request = &active_slot.request;
-    motion_status_t status = motion_move_set_line(p_request->b_seen);
+    uint32_t const request = active_slot.request;
+    uint16_t const reverse_mm = robot_line_request_get_reverse(request);
+    int32_t const target_deg = robot_line_request_get_heading(request);
+    motion_status_t status =
+        motion_move_set_line((request & ROBOT_LINE_REQ_SEEN) != 0u);
     if (status != MOTION_OK)
     {
         return status;
     }
-    if (p_request->reverse_mm > 0u)
+    if (reverse_mm > 0u)
     {
         /* One move; the line task moves on when it has ended. */
         b_search_active = false;
         if (!b_reverse_active)
         {
             b_reverse_active = true;
-            status = motion_move_backward(p_request->reverse_mm);
+            status = motion_move_backward(reverse_mm);
         }
         return status;
     }
     b_reverse_active = false;
-    uint16_t const speed_mm_s = p_request->b_slow
+    uint16_t const speed_mm_s = ((request & ROBOT_LINE_REQ_SLOW) != 0u)
                                     ? MOTION_COMMAND_SLOW_SPEED_MM_S
                                     : MOTION_COMMAND_FOLLOW_SPEED_MM_S;
-    switch (p_request->mode)
+    switch ((line_mode_t)robot_line_request_get_mode(request))
     {
         case LINE_MODE_TRACK:
             b_search_active = false;
@@ -290,18 +307,16 @@ apply_request (void)
                          : motion_move_set_follow_speed(speed_mm_s);
             if (status == MOTION_OK)
             {
-                status = motion_move_set_follow_heading(
-                    p_request->target_heading_deg);
+                status = motion_move_set_follow_heading(target_deg);
             }
             break;
 
         case LINE_MODE_SEARCH_LEFT:
         case LINE_MODE_SEARCH_RIGHT:
             /* One pivot per target; the line task moves the target on. */
-            if (!b_search_active ||
-                (search_target_deg != p_request->target_heading_deg))
+            if (!b_search_active || (search_target_deg != target_deg))
             {
-                status = start_search(p_request->target_heading_deg);
+                status = start_search(target_deg);
             }
             break;
 
@@ -366,17 +381,22 @@ report_request (void)
 {
     static line_mode_t previous = LINE_MODE_STOP;
     static bool b_previous_valid;
+    bool const b_valid = slot_valid();
     line_mode_t const mode =
-        active_slot.b_valid ? active_slot.request.mode : LINE_MODE_STOP;
+        b_valid ? (line_mode_t)robot_line_request_get_mode(active_slot.request)
+                : LINE_MODE_STOP;
     /* Log transitions only, so the dry run does not flood the console. */
-    if ((mode != previous) || (active_slot.b_valid != b_previous_valid))
+    if ((mode != previous) || (b_valid != b_previous_valid))
     {
         tm_printf((UB *)"motion: %s target=%d seen=%u valid=%u (dry run)\n",
                   line_track_mode_name(mode),
-                  (INT)active_slot.request.target_heading_deg,
-                  (UINT)active_slot.request.b_seen, (UINT)active_slot.b_valid);
+                  (INT)robot_line_request_get_heading(active_slot.request),
+                  (UINT)(((active_slot.request & ROBOT_LINE_REQ_SEEN) != 0u)
+                             ? 1u
+                             : 0u),
+                  (UINT)b_valid);
         previous = mode;
-        b_previous_valid = active_slot.b_valid;
+        b_previous_valid = b_valid;
     }
 }
 #endif /* ACTUATION_ACTIVE */
