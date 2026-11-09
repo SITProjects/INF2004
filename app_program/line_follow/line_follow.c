@@ -38,13 +38,13 @@ static line_track_t track;
 static int32_t last_distance_mm;
 static int32_t last_heading_deg;
 /* Written by any task, read and cleared by the line task. */
-static volatile line_turn_t pending_turn = LINE_JUNCTION_DEFAULT_TURN;
+static volatile uint8_t pending_turn = (uint8_t)LINE_JUNCTION_DEFAULT_TURN;
 static bool b_was_junction; /* Line task only. */
 /* Set by the barcode task, read and cleared by the line task. */
 static volatile bool b_barcode_ahead;
 static volatile bool b_barcode_done;
 /* Written by the line task, read by the barcode task. */
-static volatile line_barcode_phase_t barcode_phase = LINE_BARCODE_NONE;
+static volatile uint8_t barcode_phase = (uint8_t)LINE_BARCODE_NONE;
 
 /* Private function declarations. */
 static void sense_task (INT stacd, void * p_exinf);
@@ -79,7 +79,7 @@ line_follow_start (void)
 void
 line_follow_set_turn (line_turn_t turn)
 {
-    pending_turn = turn;
+    pending_turn = (uint8_t)turn;
 }
 
 void
@@ -97,7 +97,7 @@ line_follow_barcode_done (void)
 line_barcode_phase_t
 line_follow_barcode_phase (void)
 {
-    return barcode_phase;
+    return (line_barcode_phase_t)barcode_phase;
 }
 
 /* Private function definitions. */
@@ -126,11 +126,11 @@ sense_task (INT stacd, void * p_exinf)
     {
         in = take_input();
         line_request_t const request = line_track_update(&track, &in);
-        barcode_phase = line_track_barcode_phase(&track);
+        barcode_phase = (uint8_t)line_track_barcode_phase(&track);
         if (request.b_junction && !b_was_junction)
         {
             /* The junction has taken this instruction. */
-            pending_turn = LINE_JUNCTION_DEFAULT_TURN;
+            pending_turn = (uint8_t)LINE_JUNCTION_DEFAULT_TURN;
         }
         b_was_junction = request.b_junction;
         ER const submission = motion_command_submit(&request);
@@ -160,7 +160,7 @@ take_input (void)
                              .b_control = motion_line_control_active(),
                              .b_turning = (ROBOT_MOTION_MODE_TURN == mode),
                              .b_moving = (ROBOT_MOTION_MODE_MOVE == mode),
-                             .turn = pending_turn,
+                             .turn = (line_turn_t)pending_turn,
                              .b_barcode = b_barcode_ahead,
                              .b_barcode_done = b_barcode_done,
                              .b_hump = terrain_monitor_on_hump()};
@@ -269,7 +269,12 @@ report (line_request_t const * p_request, line_track_input_t const * p_in)
     SYSTIM now;
     uint32_t const now_ms = (tk_get_otm(&now) == E_OK) ? (uint32_t)now.lo : 0u;
     /* A full or busy queue drops it: the console line is the record. */
-    (void)telemetry_queue_push(now_ms, text, &sequence);
+    (void)telemetry_queue_push(
+        now_ms,
+        robot_telemetry_line((uint32_t)p_request->mode, b_junction,
+                             (uint32_t)p_in->turn, p_in->distance_mm,
+                             p_request->target_heading_deg, p_in->heading_deg),
+        &sequence);
 #endif
 }
 

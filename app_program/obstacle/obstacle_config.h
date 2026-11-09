@@ -379,8 +379,8 @@
 #define OBSTACLE_AVOID_SEND_TIMEOUT_MS 200u
 
 /*
- * Temporary: the dashboard's Reverse backs the stopped car up this far per
- * press, to bring it back between test passes. The limit is a backstop: the
+ * Temporary: the "reverse" command backs the stopped car up this far each
+ * time, to bring it back between test passes. The limit is a backstop: the
  * move takes under 1 s at MOTION_MOVE_SPEED_MM_S.
  */
 #define OBSTACLE_REMOTE_REVERSE_MM 200u

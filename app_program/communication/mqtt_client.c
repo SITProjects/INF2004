@@ -13,6 +13,8 @@
 #include <stdint.h>
 #include "remote_command.h"
 #include "telemetry_queue.h"
+#include "car_status.h"
+#include "../robot_types.h"
 #include "../console_mirror/console_mirror_mqtt.h"
 #include "lwip/apps/mqtt.h"
 #include "lwip/ip_addr.h"
@@ -27,6 +29,9 @@
 #define TELEMETRY_RETRY_MS 1000u
 #define TELEMETRY_DRAIN_MS 100u
 #define COMMAND_TOPIC MQTT_TOPIC "/cmd"
+#define STATUS_TOPIC MQTT_TOPIC "/status"
+#define STATUS_PERIOD_MS 500u
+#define STATUS_ENABLED (!APP_TEST && !IR_CALIBRATION_ONLY)
 #define COMMAND_MAX 40u
 
 /* Static data. */
@@ -51,6 +56,9 @@ static void telemetry_service (uint32_t now_ms);
 static void telemetry_request_cb (void * p_arg, err_t result);
 static void telemetry_disconnected (void);
 static void telemetry_complete (void);
+#if STATUS_ENABLED
+static void status_service (uint32_t now_ms);
+#endif
 static void command_subscribe (void);
 static void subscribe_cb (void * p_arg, err_t result);
 static void command_topic_cb (void * p_arg, char const * p_topic,
@@ -88,6 +96,9 @@ mqtt_client_service (bool b_network_up)
             command_subscribe();
         }
         telemetry_service(now_ms);
+#if STATUS_ENABLED
+        status_service(now_ms);
+#endif
         return;
     }
 
@@ -180,6 +191,24 @@ telemetry_request_cb (void * p_arg, err_t result)
     }
 }
 
+#if STATUS_ENABLED
+/* Twice a second, best effort: the next one is half a second away. */
+static void
+status_service (uint32_t now_ms)
+{
+    static uint32_t last_ms;
+    if ((uint32_t)(now_ms - last_ms) < STATUS_PERIOD_MS)
+    {
+        return;
+    }
+    last_ms = now_ms;
+    uint32_t words[ROBOT_STATUS_WORDS];
+    car_status_encode(words);
+    (void)mqtt_publish(client, STATUS_TOPIC, words, (uint16_t)sizeof(words), 0,
+                       0, NULL, NULL);
+}
+#endif
+
 static void
 telemetry_service (uint32_t now_ms)
 {
@@ -193,30 +222,31 @@ telemetry_service (uint32_t now_ms)
     {
         return;
     }
-    UB payload[128];
-    int len = tm_sprintf(payload, (const UB *)"seq=%lu captured_ms=%lu %s",
-                         (unsigned long)record.sequence,
-                         (unsigned long)record.captured_ms, record.text);
-    telemetry_sequence = record.sequence;
+    telemetry_sequence =
+        robot_field_get(record.words[0], ROBOT_TELEMETRY_SEQUENCE_SHIFT,
+                        ROBOT_TELEMETRY_SEQUENCE_BITS);
     ++telemetry_token;
     /* Set before publish: even an immediate callback sees the current token. */
     b_telemetry_pending = true;
     telemetry_attempt_ms = now_ms;
     telemetry_wait_ms = TELEMETRY_DRAIN_MS;
-    err_t result =
-        mqtt_publish(client, TELEMETRY_TOPIC, payload, (uint16_t)len, 1, 0,
-                     telemetry_request_cb, (void *)telemetry_token);
+    err_t result = mqtt_publish(client, TELEMETRY_TOPIC, record.words,
+                                (uint16_t)sizeof(record.words), 1, 0,
+                                telemetry_request_cb, (void *)telemetry_token);
     if (result != ERR_OK)
     {
         b_telemetry_pending = false;
         telemetry_wait_ms = TELEMETRY_RETRY_MS;
         tm_printf((UB *)"telemetry: publish failed seq=%lu err=%d\n",
-                  (unsigned long)record.sequence, (int)result);
+                  (unsigned long)telemetry_sequence, (int)result);
     }
     else
     {
-        tm_printf((UB *)"telemetry: TX [%s] \"%s\"\n", TELEMETRY_TOPIC,
-                  payload);
+        tm_printf((UB *)"telemetry: TX [%s] seq=%lu type=%lu\n",
+                  TELEMETRY_TOPIC, (unsigned long)telemetry_sequence,
+                  (unsigned long)robot_field_get(record.words[0],
+                                                 ROBOT_TELEMETRY_TYPE_SHIFT,
+                                                 ROBOT_TELEMETRY_TYPE_BITS));
     }
 }
 

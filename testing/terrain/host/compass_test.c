@@ -122,6 +122,41 @@ main (void)
     check("CMP05 a failed read is no reading; set-up is retried after 1 s",
           b_failed && b_waited && b_retried && at(10.0f).b_valid);
 
+    next.x = 2047;
+    next.y = -2048;
+    next.z = -1;
+    terrain_compass_update();
+    (void)terrain_compass_get(&reading);
+    check("CMP06 the sensor's limits survive packing, neighbours untouched",
+          (2047 == reading.x) && (-2048 == reading.y) && (-1 == reading.z) &&
+              reading.b_valid);
+
+    next.x = -1;
+    next.y = 0;
+    next.z = 0;
+    terrain_compass_update();
+    (void)terrain_compass_get(&reading);
+    bool const b_x_alone = (-1 == reading.x) && (0 == reading.y);
+    next.x = 0;
+    next.y = -1;
+    terrain_compass_update();
+    (void)terrain_compass_get(&reading);
+    check("CMP08 X and Y stay out of each other's bits",
+          b_x_alone && (0 == reading.x) && (-1 == reading.y));
+
+    reading = at(45.0f);
+    uint8_t const start = reading.samples;
+    for (unsigned int i = 0u; i < 300u; i++)
+    {
+        (void)at(45.0f);
+    }
+    (void)terrain_compass_get(&reading);
+    check("CMP07 the 8-bit sample count wraps and leaves the axes alone",
+          ((uint8_t)(start + 300u) == reading.samples) &&
+              (OFF_X + lroundf(400.0f * sinf(45.0f * 3.14159265f / 180.0f)) ==
+               reading.x) &&
+              reading.b_valid);
+
     printf("%u failure(s)\n", failures);
     return (0u == failures) ? 0 : 1;
 }

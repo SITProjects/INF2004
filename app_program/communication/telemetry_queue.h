@@ -8,16 +8,15 @@
 /* Public includes. */
 #include <stdbool.h>
 #include <stdint.h>
+#include "../robot_types.h"
 
 /* Public types, constants, and macros. */
 #define TELEMETRY_QUEUE_CAPACITY 128u
-#define TELEMETRY_TEXT_SIZE 64u
 
+/** One packed record; layout in robot_types.h, sent as it is. */
 typedef struct
 {
-    uint32_t sequence;
-    uint32_t captured_ms;
-    char text[TELEMETRY_TEXT_SIZE];
+    uint32_t words[ROBOT_TELEMETRY_WORDS];
 } telemetry_record_t;
 
 typedef enum
@@ -34,18 +33,19 @@ typedef enum
  */
 int telemetry_queue_init (void);
 
-/** @brief Copy a nonempty NUL-terminated text (at most 63 bytes) into RAM.
+/** @brief Copy one packed payload into RAM.
  * @param captured_ms Capture uptime, independent of network state.
- * @param p_text Text copied before return; never a pointer retained by queue.
+ * @param payload Kind and words, from a robot_telemetry_*() helper.
  * @param p_sequence Optional output for the assigned sequence on QUEUED/FULL.
  * @return QUEUED, BUSY (retry same sample), FULL (newest rejected), or INVALID.
  * @note Task context on either core; never blocks. FULL consumes a sequence,
  * making dropped records visible as gaps. IDs identify records within a boot.
  * RAM survives network loss only. Caller must handle BUSY/FULL explicitly.
+ * Sequences are 8 bits and wrap: the queue holds fewer than 256 records.
  */
-telemetry_enqueue_result_t telemetry_queue_push (uint32_t captured_ms,
-                                                 const char * p_text,
-                                                 uint32_t * p_sequence);
+telemetry_enqueue_result_t
+telemetry_queue_push (uint32_t captured_ms, robot_telemetry_payload_t payload,
+                      uint32_t * p_sequence);
 
 /** @brief Radio task only: copy oldest record without removing it.
  * @return True when copied; false if empty, invalid output, or mutex busy.

@@ -132,10 +132,8 @@ typedef struct
 /** @brief Memory of terrain_detect_stopped_dead(); starts zeroed. */
 typedef struct
 {
-    int32_t kept_mm_s;  /* Speed last driven at; 0 when none to fall from. */
-    uint32_t age;       /* Samples since then. */
-    uint32_t off_level; /* Samples since the hump state left LEVEL. */
-    float peak_g;       /* Biggest recent push, fading, g. */
+    uint32_t word;      /* Kept speed mm/s 11, age 8, off-level count 8. */
+    uint16_t peak_x256; /* Biggest recent push, fading, 1/256 g. */
 } terrain_stopped_t;
 
 /* Largest sample count the 5-bit turn counter holds. */
@@ -360,6 +358,13 @@ terrain_speed_state_t terrain_detect_speed_state (uint32_t word);
 terrain_event_type_t terrain_detect_collision_step (
     uint32_t * p_word, terrain_collision_input_t const * p_in,
     terrain_collision_limits_t const * p_limits, uint32_t * p_value);
+
+/**
+ * @brief The fading peak push kept by terrain_detect_stopped_dead().
+ * @param p_state State from terrain_detect_stopped_dead().
+ * @return Peak in g.
+ */
+float terrain_detect_stopped_peak_g (terrain_stopped_t const * p_state);
 
 /**
  * @brief Whether the wheels have just fallen to half speed with nothing asking

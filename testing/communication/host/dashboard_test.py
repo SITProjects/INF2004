@@ -4,8 +4,11 @@
 The fake car connects, subscribes to <topic>/cmd and answers as the firmware
 does on <topic>/console. No hardware or browser needed.
 """
+import importlib.util
 import json
+import os
 import pathlib
+import re
 import socket
 import subprocess
 import sys
@@ -25,6 +28,73 @@ def check(name, ok):
     global failures
     print(("PASS " if ok else "FAIL ") + name)
     failures += 0 if ok else 1
+
+
+def load_wire():
+    """The bytes the firmware's own layouts produce (wire_fixture.c)."""
+    out = subprocess.run([os.environ["WIRE_FIXTURE"]], check=True,
+                         capture_output=True, text=True).stdout
+    return {name: bytes.fromhex(data)
+            for name, data in (line.split() for line in out.splitlines())}
+
+
+wire = load_wire()
+
+
+def load_dashboard():
+    sys.dont_write_bytecode = True  # Keep __pycache__ out of tools/.
+    spec = importlib.util.spec_from_file_location(
+        "car_dashboard", REPO / "tools" / "dashboard" / "car_dashboard.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_wire():
+    """Firmware-built records decode to the expected text and values."""
+    dash = load_dashboard()
+    expected = {
+        "obstacle": "seq=0 captured_ms=1230 obstacle flags=149 edges=33 "
+                    "width_mm=508",
+        "avoid": "seq=1 captured_ms=1240 avoid RUN_LEG>FAULT",
+        "line": "seq=2 captured_ms=1250 line SEARCH_L t=-90 h=32 d=-1234",
+        "junction": "seq=3 captured_ms=1260 line JUNCTION UTURN t=1 h=-1 "
+                    "d=524287",
+        "barcode_a": "seq=4 captured_ms=689470 barcode A rev",
+        "barcode_q": "seq=5 captured_ms=689480 barcode Q fwd",
+        "barcode_long": "seq=6 captured_ms=10 barcode ABCDE12345 fwd",
+        "barcode_symbols": "seq=7 captured_ms=20 barcode $/+%-. rev",
+    }
+    for name, text in expected.items():
+        check(f"W01 {name} record decodes",
+              dash.decode_telemetry(wire[name]) == text)
+    check("W02 a cut record is ignored",
+          dash.decode_telemetry(wire["obstacle"][:11]) is None)
+
+    limits = dash.decode_status(wire["status_limits"])
+    check("W03 status at every field's limits",
+          limits == {"v": -1024, "l": 1023, "r": -1, "d": -8388608,
+                     "h": 32767, "m": 7, "os": 7, "ow": 511, "od": 4095,
+                     "av": "FAULT", "p": -2048, "ro": 2047, "tr": -1024,
+                     "hu": 255, "co": 255, "rq": 255, "rt": 0, "cs": 7})
+    basic = dash.decode_status(wire["status_basic"])
+    check("W04 status fields stay apart",
+          basic == {"v": 80, "l": 70, "r": 90, "d": 1234, "h": -5, "m": 5,
+                    "os": 2, "ow": 208, "od": 159, "av": "IDLE", "p": 12,
+                    "ro": -3, "tr": 15, "hu": 1, "co": 2, "rq": 44, "rt": 43,
+                    "cs": 2})
+    check("W05 a cut status is ignored",
+          dash.decode_status(wire["status_basic"][:23]) is None)
+
+    header = (REPO / "app_program" / "obstacle" / "obstacle_avoid.h").read_text()
+    states = re.search(r"typedef enum\s*\{([^}]*OBSTACLE_AVOID_IDLE[^}]*)\}",
+                       header).group(1)
+    names = tuple(re.findall(r"OBSTACLE_AVOID_(\w+)", states))
+    check("W06 the bypass state names follow the firmware's order",
+          names == dash.AVOID_STATES)
+    track = (REPO / "app_program" / "line_follow" / "line_track.c").read_text()
+    check("W07 the line mode names follow the firmware's",
+          all(f'return "{name}";' in track for name in dash.LINE_MODES))
 
 
 def length_bytes(count):
@@ -63,10 +133,16 @@ class FakeCar:
                 + f"1000 {text}\n".encode())
         self.sock.sendall(b"\x30" + length_bytes(len(body)) + body)
 
-    def telemetry(self, text):
-        topic = f"{TOPIC}/telemetry".encode()
-        body = len(topic).to_bytes(2, "big") + topic + text.encode()
+    def binary(self, kind, payload):
+        topic = f"{TOPIC}/{kind}".encode()
+        body = len(topic).to_bytes(2, "big") + topic + payload
         self.sock.sendall(b"\x30" + length_bytes(len(body)) + body)
+
+    def telemetry(self, payload):
+        self.binary("telemetry", payload)
+
+    def status(self, payload):
+        self.binary("status", payload)
 
     def pump(self):
         """Read what the broker sent, answering as the firmware would."""
@@ -122,6 +198,7 @@ def settle(car):
 
 
 def main():
+    test_wire()
     with tempfile.TemporaryDirectory() as folder:
         folder = pathlib.Path(folder)
         server = subprocess.Popen(
@@ -166,11 +243,12 @@ def run(folder):
     check("D06 Stop reaches the car and the page shows it stopped",
           car.stopped and get_state()["run"] == "stopped")
 
-    post("/command", {"command": "reverse"})
+    refused = post("/command", {"command": "reverse"})[0]
     settle(car)
-    check("D19 Reverse reaches the car and it stays stopped",
-          ("reverse" in [m for _, m in car.received])
-          and get_state()["run"] == "stopped")
+    page = (REPO / "tools" / "dashboard" / "index.html").read_text()
+    check("D19 the dashboard has no Reverse and refuses the command",
+          (refused == 400) and ("reverse" not in page.lower())
+          and ("reverse" not in [m for _, m in car.received]))
 
     # A real pass from 2026-11-06: one quiet readout inside it, then stray.
     for kept in (2, 4, 6, 0, 3, 2, 0, 0, 0, 1, 0, 0, 0):
@@ -221,17 +299,15 @@ def run(folder):
     check("D13 a refused change leaves the saved actions alone",
           [r["action"] for r in saved] == ["UTURN", "RIGHT"])
 
-    line = ("CAR v=80 l=70 r=90 d=1234 h=-5 m=5 os=2 ow=208 od=159 av=IDLE "
-            "p=12 ro=-3 tr=15 hu=1 co=2")
-    car.console(line)
+    car.status(wire["status_basic"])
     settle(car)
     state = get_state()
     check("D16 a status line reaches the page as numbers and names",
           state["car"]["v"] == 80 and state["car"]["h"] == -5
           and state["car"]["av"] == "IDLE" and state["car_age_s"] < 2
           and state["last_obstacle"] == {"width_mm": 208, "range_mm": 159})
-    car.console(line.replace("ow=208", "ow=0").replace("od=159", "od=0"))
-    car.console("CAR v=1 cut")
+    car.status(wire["status_clear"])
+    car.status(wire["status_clear"][:7])
     settle(car)
     state = get_state()
     check("D17 the last width stays after the path clears, and a cut line "
@@ -256,7 +332,7 @@ def run(folder):
           and not any("hump ASCENDING" in e for e in events))
 
     # The console stopped after a stall on 2026-11-07: telemetry still came.
-    car.telemetry("seq=716 captured_ms=689470 barcode A rev")
+    car.telemetry(wire["barcode_a"])
     settle(car)
     state = get_state()
     check("D22 with no console, telemetry shows a read and its mapped action",
@@ -269,7 +345,7 @@ def run(folder):
           "and its action stands",
           state["barcode_action"] == "LEFT"
           and len([e for e in state["events"] if "barcode: A" in e]) == 1)
-    car.telemetry("seq=717 captured_ms=689470 barcode Q fwd")
+    car.telemetry(wire["barcode_q"])
     settle(car)
     state = get_state()
     check("D24 a barcode not listed goes straight on",

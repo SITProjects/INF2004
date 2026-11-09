@@ -50,7 +50,7 @@
     (OBSTACLE_EVT_STOP | OBSTACLE_EVT_CRITICAL | OBSTACLE_EVT_FAULT)
 
 #if AVOID_ACTIVE
-/** @brief Where a dashboard reverse has got to. */
+/** @brief Where a "reverse" command has got to. */
 typedef enum
 {
     REVERSE_IDLE = 0,  /**< Motors held, nothing asked for. */
@@ -78,7 +78,12 @@ ID obstacle_flg_event;
  * compiler moving its copy across the counter accesses.
  */
 static volatile uint32_t state_sequence;
-static obstacle_shared_state_t shared_state;
+static struct
+{
+    robot_obstacle_result_t result;
+    uint16_t control;  /* robot_obstacle_control_pack(). */
+    uint64_t geometry; /* robot_obstacle_geometry_pack(). */
+} shared_state;
 
 #if AVOID_ACTIVE
 static const obstacle_avoid_config_t avoid_config = {
@@ -150,8 +155,6 @@ static void log_watch (obstacle_avoid_input_t const * p_in);
 static void apply_actions (obstacle_avoid_action_t const * p_act);
 #if TM_MQTT
 static void publish_avoid (obstacle_avoid_action_t const * p_act);
-static void text_append (char * p_text, uint32_t * p_length,
-                         char const * p_part);
 #endif
 #endif
 
@@ -209,10 +212,22 @@ obstacle_get_state (obstacle_shared_state_t * p_state)
         if ((before & 1u) == 0u)
         {
             STATE_BARRIER(); /* Copy only after reading the counter. */
-            *p_state = shared_state;
+            robot_obstacle_result_t const result = shared_state.result;
+            uint16_t const control = shared_state.control;
+            uint64_t const geometry = shared_state.geometry;
             STATE_BARRIER(); /* Finish the copy before checking again. */
             if (state_sequence == before)
             {
+                p_state->result = result;
+                p_state->geometry = robot_obstacle_geometry_unpack(geometry);
+                p_state->b_stop_requested =
+                    (control & ROBOT_OBSTACLE_CONTROL_STOP) != 0u;
+                p_state->avoid_state = (uint8_t)robot_field_get(
+                    control, ROBOT_OBSTACLE_CONTROL_STATE_SHIFT,
+                    ROBOT_OBSTACLE_CONTROL_STATE_BITS);
+                p_state->fault_reason = (uint8_t)robot_field_get(
+                    control, ROBOT_OBSTACLE_CONTROL_FAULT_SHIFT,
+                    ROBOT_OBSTACLE_CONTROL_FAULT_BITS);
                 return true;
             }
         }
@@ -263,7 +278,7 @@ scan_task (INT stacd, void * p_exinf)
     uint32_t last_sample_ms = log_time_ms();
     uint32_t sample_ms = 0u;
     bool b_sample_pending = false;
-    UB sample_text[TELEMETRY_TEXT_SIZE];
+    robot_telemetry_payload_t sample_payload = {0u, 0u, 0u};
 #endif
     uint8_t last_sequence = 0u;
     uint8_t last_flags = 0u;
@@ -303,8 +318,8 @@ scan_task (INT stacd, void * p_exinf)
                                          .avoid_state = 0u,
                                          .fault_reason = 0u};
 #if AVOID_ACTIVE
-        state.avoid_state = (uint8_t)avoid.state;
-        state.fault_reason = (uint8_t)avoid.fault;
+        state.avoid_state = (uint8_t)obstacle_avoid_state_of(&avoid);
+        state.fault_reason = (uint8_t)obstacle_avoid_fault_of(&avoid);
 #endif
         publish_state(&state, new_result);
         if (new_result && (scan.width_mm != ROBOT_OBSTACLE_WIDTH_UNAVAILABLE))
@@ -341,18 +356,15 @@ scan_task (INT stacd, void * p_exinf)
         {
             last_sample_ms = now_ms;
             sample_ms = now_ms;
-            (void)tm_sprintf(
-                sample_text,
-                (const UB *)"obstacle flags=%u edges=%u width_mm=%u",
-                (unsigned int)scan.flags, (unsigned int)scan.edges,
-                (unsigned int)scan.width_mm);
+            sample_payload =
+                robot_telemetry_obstacle(scan.flags, scan.edges, scan.width_mm);
             b_sample_pending = true;
         }
         if (b_sample_pending)
         {
             uint32_t sequence = 0u;
-            telemetry_enqueue_result_t queued = telemetry_queue_push(
-                sample_ms, (const char *)sample_text, &sequence);
+            telemetry_enqueue_result_t queued =
+                telemetry_queue_push(sample_ms, sample_payload, &sequence);
             if (queued != TELEMETRY_BUSY)
             {
                 b_sample_pending = false;
@@ -386,7 +398,10 @@ publish_state (obstacle_shared_state_t const * p_state, bool b_new_result)
 
     state_sequence = state_sequence + 1u; /* Odd: readers retry. */
     STATE_BARRIER();
-    shared_state = *p_state;
+    shared_state.result = p_state->result;
+    shared_state.control = robot_obstacle_control_pack(
+        p_state->b_stop_requested, p_state->avoid_state, p_state->fault_reason);
+    shared_state.geometry = robot_obstacle_geometry_pack(&p_state->geometry);
     STATE_BARRIER();
     state_sequence = state_sequence + 1u; /* Even: whole again. */
 
@@ -507,7 +522,8 @@ log_watch (obstacle_avoid_input_t const * p_in)
     {
         tm_printf((UB *)"obstacle: watch %u us d=%ld h=%ld leg=%u\n",
                   (unsigned int)p_in->watch.echo_us, (long)p_in->distance_mm,
-                  (long)p_in->heading_deg, (unsigned int)avoid.leg);
+                  (long)p_in->heading_deg,
+                  (unsigned int)obstacle_avoid_leg_of(&avoid));
     }
 }
 
@@ -535,7 +551,7 @@ remote_hold (void)
     }
     else if (!b_stopped && b_held)
     {
-        if (avoid.state != OBSTACLE_AVOID_FAULT)
+        if (obstacle_avoid_state_of(&avoid) != OBSTACLE_AVOID_FAULT)
         {
             obstacle_avoid_init(&avoid, &avoid_config, log_time_ms());
             avoid_in = (obstacle_avoid_input_t){0};
@@ -570,7 +586,8 @@ remote_reverse (bool b_held)
     switch (phase)
     {
         case REVERSE_IDLE:
-            if (b_wanted && b_held && (avoid.state == OBSTACLE_AVOID_FAULT))
+            if (b_wanted && b_held &&
+                (obstacle_avoid_state_of(&avoid) == OBSTACLE_AVOID_FAULT))
             {
                 remote_command_reverse_done();
                 tm_printf((UB *)"[%lu ms]obstacle: reverse refused, fault "
@@ -730,35 +747,16 @@ apply_actions (obstacle_avoid_action_t const * p_act)
 }
 
 #if TM_MQTT
-/* Queue "avoid FROM>TO reason" for MQTT, cut to the record size. A full or
- * busy queue drops it: the console line above is the full record. */
+/* Queue the bypass state change for MQTT. A full or busy queue drops it:
+ * the console line above is the full record, reason included. */
 static void
 publish_avoid (obstacle_avoid_action_t const * p_act)
 {
-    char text[TELEMETRY_TEXT_SIZE];
-    uint32_t length = 0u;
-    text[0] = '\0';
-    text_append(text, &length, "avoid ");
-    text_append(text, &length, obstacle_avoid_state_name(p_act->from));
-    text_append(text, &length, ">");
-    text_append(text, &length, obstacle_avoid_state_name(p_act->to));
-    text_append(text, &length, " ");
-    text_append(text, &length, p_act->p_reason);
     uint32_t sequence = 0u;
-    (void)telemetry_queue_push(log_time_ms(), text, &sequence);
-}
-
-/* Append p_part, keeping p_text terminated within TELEMETRY_TEXT_SIZE. */
-static void
-text_append (char * p_text, uint32_t * p_length, char const * p_part)
-{
-    while ((*p_part != '\0') && ((*p_length + 1u) < TELEMETRY_TEXT_SIZE))
-    {
-        p_text[*p_length] = *p_part;
-        ++*p_length;
-        ++p_part;
-    }
-    p_text[*p_length] = '\0';
+    (void)telemetry_queue_push(
+        log_time_ms(),
+        robot_telemetry_avoid((uint32_t)p_act->from, (uint32_t)p_act->to),
+        &sequence);
 }
 #endif
 #endif

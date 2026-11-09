@@ -51,34 +51,34 @@ static code39_entry_t const table[] = {
 /* One character of a scan, in reading order. */
 typedef struct
 {
-    uint32_t const * p_widths;
+    uint16_t const * p_widths;
     uint32_t count;
     uint32_t first;
     bool b_reverse;
 } scan_view_t;
 
 /* Private function declarations. */
-static barcode_code39_status_t decode_direction (uint32_t const * p_widths,
+static barcode_code39_status_t decode_direction (uint16_t const * p_widths,
                                                  uint32_t count, bool b_reverse,
                                                  char * p_text,
                                                  uint32_t text_size);
-static barcode_code39_status_t read_character (uint32_t const * p_widths,
+static barcode_code39_status_t read_character (uint16_t const * p_widths,
                                                uint32_t count, bool b_reverse,
                                                uint32_t first, char * p_symbol);
-static char partial_symbol (uint32_t const * p_widths, uint32_t count,
+static char partial_symbol (uint16_t const * p_widths, uint32_t count,
                             bool b_reverse);
 static bool mark_wide (scan_view_t const * p_view, uint32_t start,
                        uint32_t wide, uint32_t * p_pattern);
 static bool bars_all_narrow (scan_view_t const * p_view);
 static uint32_t element_bit (uint32_t index);
 static uint32_t view_width (scan_view_t const * p_view, uint32_t index);
-static uint32_t element (uint32_t const * p_widths, uint32_t count,
+static uint32_t element (uint16_t const * p_widths, uint32_t count,
                          bool b_reverse, uint32_t index);
 
 /* Public function definitions. */
 
 barcode_code39_status_t
-barcode_code39_decode (uint32_t const * p_widths, uint32_t count, char * p_text,
+barcode_code39_decode (uint16_t const * p_widths, uint32_t count, char * p_text,
                        uint32_t text_size, bool * p_reversed)
 {
     if ((NULL == p_widths) || (NULL == p_text) || (0u == text_size) ||
@@ -120,7 +120,7 @@ barcode_code39_pattern (char symbol)
 }
 
 barcode_code39_status_t
-barcode_code39_decode_partial (uint32_t const * p_widths, uint32_t count,
+barcode_code39_decode_partial (uint16_t const * p_widths, uint32_t count,
                                char * p_text, uint32_t text_size,
                                bool * p_reversed)
 {
@@ -170,7 +170,7 @@ barcode_code39_status_name (barcode_code39_status_t status)
 /* Private function definitions. */
 
 static barcode_code39_status_t
-decode_direction (uint32_t const * p_widths, uint32_t count, bool b_reverse,
+decode_direction (uint16_t const * p_widths, uint32_t count, bool b_reverse,
                   char * p_text, uint32_t text_size)
 {
     if (((count + 1u) % CHARACTER_STRIDE) != 0u)
@@ -220,7 +220,7 @@ decode_direction (uint32_t const * p_widths, uint32_t count, bool b_reverse,
  * offsets from the first bar.
  */
 static char
-partial_symbol (uint32_t const * p_widths, uint32_t count, bool b_reverse)
+partial_symbol (uint16_t const * p_widths, uint32_t count, bool b_reverse)
 {
     char found = '\0';
     for (uint32_t first = 0u; (first + PARTIAL_MIN_ELEMENTS) <= count;
@@ -254,7 +254,7 @@ partial_symbol (uint32_t const * p_widths, uint32_t count, bool b_reverse)
  * has 2 wide bars and 1 wide space, or, for $ / + %, 3 wide spaces.
  */
 static barcode_code39_status_t
-read_character (uint32_t const * p_widths, uint32_t count, bool b_reverse,
+read_character (uint16_t const * p_widths, uint32_t count, bool b_reverse,
                 uint32_t first, char * p_symbol)
 {
     scan_view_t const view = {p_widths, count, first, b_reverse};
@@ -355,7 +355,7 @@ view_width (scan_view_t const * p_view, uint32_t index)
 
 /* Width @p index of the scan, read backwards when @p b_reverse. */
 static uint32_t
-element (uint32_t const * p_widths, uint32_t count, bool b_reverse,
+element (uint16_t const * p_widths, uint32_t count, bool b_reverse,
          uint32_t index)
 {
     return b_reverse ? p_widths[count - 1u - index] : p_widths[index];

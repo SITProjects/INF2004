@@ -13,6 +13,20 @@
 
 static unsigned int failures;
 static uint32_t widths[MAX_WIDTHS];
+static uint16_t stored[MAX_WIDTHS];
+
+/* @p p_us widths as barcode_scan_t stores them. */
+static uint16_t const *
+as_stored (uint32_t const * p_us, uint32_t count)
+{
+    for (uint32_t i = 0u; i < count; i++)
+    {
+        uint32_t const units =
+            (p_us[i] + (BARCODE_WIDTH_UNIT_US / 2u)) / BARCODE_WIDTH_UNIT_US;
+        stored[i] = (units > UINT16_MAX) ? UINT16_MAX : (uint16_t)units;
+    }
+    return stored;
+}
 static uint32_t random_state = 12345u;
 
 static void
@@ -69,7 +83,7 @@ reverse (uint32_t count)
 static barcode_code39_status_t
 decode (uint32_t count, char * p_text, uint32_t size, bool * p_reversed)
 {
-    return barcode_code39_decode(widths, count, p_text, size, p_reversed);
+    return barcode_code39_decode(as_stored(widths, count), count, p_text, size, p_reversed);
 }
 
 static void
@@ -187,7 +201,7 @@ partial_is (uint32_t const * p_tenths, uint32_t count, char const * p_expected,
         widths[i] = p_tenths[i] * 100u;
     }
     barcode_code39_status_t const status = barcode_code39_decode_partial(
-        widths, count, text, sizeof(text), &b_reversed);
+        as_stored(widths, count), count, text, sizeof(text), &b_reversed);
     if ('\0' == p_expected[0])
     {
         return status != BARCODE_CODE39_OK;
@@ -231,7 +245,7 @@ test_partial (void)
     uint32_t const two = encode("*AB*", RATIO_X10, 0u);
     bool const b_long = BARCODE_CODE39_ERR_LENGTH ==
                         barcode_code39_decode_partial(
-                            widths, two, text, sizeof(text), &b_reversed);
+                            as_stored(widths, two), two, text, sizeof(text), &b_reversed);
     check("BT14 a longer barcode is never read partially", b_long);
 }
 
@@ -257,7 +271,7 @@ test_scan_assembly (void)
          barcode_scan_poll(&scan, end + BARCODE_QUIET_MAX_US + 1u));
     bool const b_widths =
         (scan.count == count) &&
-        (0 == memcmp(scan.widths, sent, count * sizeof(uint32_t)));
+        (0 == memcmp(scan.widths, as_stored(sent, count), count * sizeof(uint16_t)));
     bool const b_decoded = (BARCODE_CODE39_OK ==
                             barcode_code39_decode(scan.widths, scan.count, text,
                                                   sizeof(text), &b_reversed)) &&
@@ -278,7 +292,7 @@ test_scan_assembly (void)
         (BARCODE_SCAN_BUSY ==
          barcode_scan_edge(&scan, first_end + BARCODE_QUIET_MAX_US + 1000u,
                            true)) &&
-        scan.b_active && (0u == scan.count);
+        barcode_scan_flag(&scan, BARCODE_SCAN_F_ACTIVE) && (0u == scan.count);
     check("BT05 the next symbol's first bar ends the previous scan",
           b_split && b_restart);
 
@@ -287,7 +301,7 @@ test_scan_assembly (void)
     (void)barcode_scan_edge(&scan, 1000u, true);
     (void)barcode_scan_edge(&scan, 2000u, true);
     (void)barcode_scan_edge(&scan, 1000u + NARROW_US, false);
-    bool const b_glitch = (1u == scan.count) && (NARROW_US == scan.widths[0]);
+    bool const b_glitch = (1u == scan.count) && (*as_stored(&(uint32_t){NARROW_US}, 1u) == scan.widths[0]);
     (void)barcode_scan_edge(&scan, 2000u + NARROW_US * 2u, true);
     bool const b_ended =
         (BARCODE_SCAN_DONE ==
@@ -295,7 +309,7 @@ test_scan_assembly (void)
                                       BARCODE_QUIET_MAX_US + 1u));
     check("BT06 a repeated level is ignored; an over-long bar ends the scan "
           "at the last bar",
-          b_glitch && b_ended && scan.b_long_black && (1u == scan.count));
+          b_glitch && b_ended && barcode_scan_flag(&scan, BARCODE_SCAN_F_LONG_BLACK) && (1u == scan.count));
 
     /* Bars merge partway through: the part before still has to reach the
      * decoder, whether the black is still going or has just ended. */
@@ -312,7 +326,7 @@ test_scan_assembly (void)
             (0u == pass) ? barcode_scan_poll(&scan, late)
                          : barcode_scan_edge(&scan, late, false);
         bool const b_read =
-            (BARCODE_SCAN_DONE == ended) && scan.b_long_black &&
+            (BARCODE_SCAN_DONE == ended) && barcode_scan_flag(&scan, BARCODE_SCAN_F_LONG_BLACK) &&
             ((cut - 1u) == scan.count) &&
             (BARCODE_CODE39_OK ==
              barcode_code39_decode_partial(scan.widths, scan.count, text,
@@ -342,7 +356,7 @@ test_scan_assembly (void)
     (void)barcode_scan_edge(&scan, after + BARCODE_QUIET_MAX_US + 2u, false);
     (void)barcode_scan_edge(&scan, after + BARCODE_QUIET_MAX_US + 3u, true);
     check("BT17 the next bar after a long black starts a new scan",
-          scan.b_active && !scan.b_long_black && (0u == scan.count));
+          barcode_scan_flag(&scan, BARCODE_SCAN_F_ACTIVE) && !barcode_scan_flag(&scan, BARCODE_SCAN_F_LONG_BLACK) && (0u == scan.count));
 }
 
 static void
@@ -542,7 +556,7 @@ test_chatter (void)
           "the barcode decodes",
           (BARCODE_SCAN_DONE == done) && b_count &&
               (BARCODE_CODE39_OK == status) && (0 == strcmp("INF2004", text)) &&
-              (scan.narrowest_us >= NARROW_US - 100u));
+              (((uint32_t)scan.narrowest * BARCODE_WIDTH_UNIT_US) >= NARROW_US - 100u));
 
     /* A speck: black and back inside one burst, then a real bar. */
     barcode_filter_t filter;
@@ -611,7 +625,7 @@ test_chatter (void)
         widths[i] = car_scan[i] * 100u;
     }
     barcode_code39_status_t const car_status = barcode_code39_decode(
-        widths, car_count, text, sizeof(text), &b_reversed);
+        as_stored(widths, car_count), car_count, text, sizeof(text), &b_reversed);
     check("BT11 a real scan reads *F* forwards, comparing bars with bars",
           (BARCODE_CODE39_OK == car_status) && (0 == strcmp("F", text)) &&
               !b_reversed);

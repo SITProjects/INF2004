@@ -169,12 +169,13 @@ take_edge (barcode_edge_t const * p_edge, line_barcode_phase_t phase)
 static void
 finish_scan (void)
 {
-    if (scan.b_long_black && (scan.count >= SHORT_SCAN_MIN_ELEMENTS))
+    if (barcode_scan_flag(&scan, BARCODE_SCAN_F_LONG_BLACK) &&
+        (scan.count >= SHORT_SCAN_MIN_ELEMENTS))
     {
         tm_printf((UB *)"barcode: long black ended the scan, elements=%u\n",
                   (UINT)scan.count);
     }
-    if (scan.b_overflow)
+    if (barcode_scan_flag(&scan, BARCODE_SCAN_F_OVERFLOW))
     {
         tm_printf((UB *)"barcode: FAIL too many elements\n");
     }
@@ -200,8 +201,8 @@ finish_scan (void)
             tm_printf((UB *)"barcode: %s dir=%s elements=%u narrow=%u us "
                             "turn=%s%s\n",
                       text, b_reversed ? "rev" : "fwd", (UINT)scan.count,
-                      (UINT)scan.narrowest_us, line_track_turn_name(turn),
-                      b_partial ? " partial" : "");
+                      (UINT)((uint32_t)scan.narrowest * BARCODE_WIDTH_UNIT_US),
+                      line_track_turn_name(turn), b_partial ? " partial" : "");
 #if TM_MQTT
             publish(text, b_reversed);
 #endif
@@ -210,9 +211,9 @@ finish_scan (void)
         {
             tm_printf((UB *)"barcode: FAIL %s elements=%u narrow=%u us\n",
                       barcode_code39_status_name(status), (UINT)scan.count,
-                      (UINT)scan.narrowest_us);
+                      (UINT)((uint32_t)scan.narrowest * BARCODE_WIDTH_UNIT_US));
             trace_widths();
-            if (!scan.b_long_black)
+            if (!barcode_scan_flag(&scan, BARCODE_SCAN_F_LONG_BLACK))
             {
                 /* The barcode has passed; after a long black, more follows. */
                 line_follow_barcode_done();
@@ -244,7 +245,9 @@ trace_widths (void)
     tm_printf((UB *)"barcode: widths");
     for (uint32_t i = 0u; i < count; i++)
     {
-        tm_printf((UB *)" %u", (UINT)(scan.widths[i] / US_PER_TENTH_MS));
+        tm_printf((UB *)" %u",
+                  (UINT)(((uint32_t)scan.widths[i] * BARCODE_WIDTH_UNIT_US) /
+                         US_PER_TENTH_MS));
     }
     tm_printf((UB *)"\n");
 #endif
@@ -290,12 +293,10 @@ now_us (void)
 static void
 publish (char const * p_text, bool b_reversed)
 {
-    char record[TELEMETRY_TEXT_SIZE];
     SYSTIM now;
     uint32_t sequence = 0u;
-    (void)tm_sprintf((UB *)record, (const UB *)"barcode %s %s", p_text,
-                     b_reversed ? "rev" : "fwd");
     uint32_t const now_ms = (tk_get_otm(&now) == E_OK) ? (uint32_t)now.lo : 0u;
-    (void)telemetry_queue_push(now_ms, record, &sequence);
+    (void)telemetry_queue_push(
+        now_ms, robot_telemetry_barcode(p_text, b_reversed), &sequence);
 }
 #endif

@@ -36,6 +36,10 @@
 /** Elements one scan can hold: 25 characters of 10 elements. */
 #define BARCODE_MAX_ELEMENTS 250u
 
+/* One stored width step: 16 bits of these reach about 1 s, longer than any
+ * element at the slowest pass; the 16 us rounding is under 1% of a narrow bar. */
+#define BARCODE_WIDTH_UNIT_US 16u
+
 /** Characters of decoded text, including the '*' start and stop. */
 #define BARCODE_MAX_TEXT 25u
 

@@ -15,6 +15,7 @@
 #include "terrain_compass.h"
 #include <math.h>
 #include <stddef.h>
+#include "../robot_types.h"
 #include "drv_imu.h"
 #include "terrain_config.h"
 #include "terrain_platform.h"
@@ -30,7 +31,7 @@
 /* Static data. */
 
 /* Shared with other tasks; access only under terrain_platform_lock(). */
-static terrain_compass_t latest;
+static uint32_t latest[ROBOT_COMPASS_WORDS];
 
 /* Terrain task only. */
 static bool b_ready = false;
@@ -43,6 +44,7 @@ static int16_t car_axis (int16_t const * p_board, int32_t from, int32_t sign);
 static int16_t heading_ddeg (int16_t x, int16_t y);
 static void track_range (int16_t x, int16_t y);
 static void publish (terrain_compass_t const * p_reading);
+static terrain_compass_t unpack (void);
 
 /* Public function definitions. */
 
@@ -78,7 +80,7 @@ terrain_compass_update (void)
     }
 
     imu_mag_raw_t raw = {0, 0, 0};
-    terrain_compass_t reading = latest; /* Only this task writes it. */
+    terrain_compass_t reading = unpack(); /* Only this task writes it. */
     if (imu_mag_read(&raw) != IMU_OK)
     {
         b_ready = false;
@@ -88,7 +90,7 @@ terrain_compass_update (void)
         return;
     }
 
-    reading.samples++;
+    reading.samples = (uint8_t)(reading.samples + 1u);
     if ((IMU_MAG_OVERFLOW == raw.x) || (IMU_MAG_OVERFLOW == raw.y) ||
         (IMU_MAG_OVERFLOW == raw.z))
     {
@@ -116,7 +118,7 @@ terrain_compass_get (terrain_compass_t * p_out)
         return false;
     }
     uint32_t const saved = terrain_platform_lock();
-    *p_out = latest;
+    *p_out = unpack();
     terrain_platform_unlock(saved);
     return p_out->b_valid;
 }
@@ -177,7 +179,50 @@ track_range (int16_t x, int16_t y)
 static void
 publish (terrain_compass_t const * p_reading)
 {
+    uint32_t first = robot_field_put(
+        0u, ROBOT_COMPASS_X_SHIFT, ROBOT_COMPASS_AXIS_BITS,
+        robot_field_from_signed(p_reading->x, ROBOT_COMPASS_AXIS_BITS));
+    first = robot_field_put(
+        first, ROBOT_COMPASS_Y_SHIFT, ROBOT_COMPASS_AXIS_BITS,
+        robot_field_from_signed(p_reading->y, ROBOT_COMPASS_AXIS_BITS));
+    first = robot_field_put(first, ROBOT_COMPASS_SAMPLES_SHIFT,
+                            ROBOT_COMPASS_SAMPLES_BITS, p_reading->samples);
+    uint32_t second = robot_field_put(
+        p_reading->b_valid ? ROBOT_COMPASS_VALID : 0u, ROBOT_COMPASS_Z_SHIFT,
+        ROBOT_COMPASS_AXIS_BITS,
+        robot_field_from_signed(p_reading->z, ROBOT_COMPASS_AXIS_BITS));
+    second = robot_field_put(second, ROBOT_COMPASS_HEADING_SHIFT,
+                             ROBOT_COMPASS_HEADING_BITS,
+                             (uint32_t)p_reading->heading_ddeg);
+
     uint32_t const saved = terrain_platform_lock();
-    latest = *p_reading;
+    latest[0] = first;
+    latest[1] = second;
     terrain_platform_unlock(saved);
+}
+
+/* The latest reading, decoded. */
+static terrain_compass_t
+unpack (void)
+{
+    terrain_compass_t out;
+
+    out.b_valid = (latest[1] & ROBOT_COMPASS_VALID) != 0u;
+    out.x = (int16_t)robot_field_to_signed(
+        robot_field_get(latest[0], ROBOT_COMPASS_X_SHIFT,
+                        ROBOT_COMPASS_AXIS_BITS),
+        ROBOT_COMPASS_AXIS_BITS);
+    out.y = (int16_t)robot_field_to_signed(
+        robot_field_get(latest[0], ROBOT_COMPASS_Y_SHIFT,
+                        ROBOT_COMPASS_AXIS_BITS),
+        ROBOT_COMPASS_AXIS_BITS);
+    out.z = (int16_t)robot_field_to_signed(
+        robot_field_get(latest[1], ROBOT_COMPASS_Z_SHIFT,
+                        ROBOT_COMPASS_AXIS_BITS),
+        ROBOT_COMPASS_AXIS_BITS);
+    out.heading_ddeg = (int16_t)robot_field_get(
+        latest[1], ROBOT_COMPASS_HEADING_SHIFT, ROBOT_COMPASS_HEADING_BITS);
+    out.samples = (uint8_t)robot_field_get(
+        latest[0], ROBOT_COMPASS_SAMPLES_SHIFT, ROBOT_COMPASS_SAMPLES_BITS);
+    return out;
 }

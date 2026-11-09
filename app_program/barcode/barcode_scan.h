@@ -15,6 +15,7 @@
 /* Public includes. */
 #include <stdbool.h>
 #include <stdint.h>
+#include "../robot_types.h"
 #include "barcode_config.h"
 
 /* Public types, constants, and macros. */
@@ -34,30 +35,49 @@ typedef struct
     bool b_settled;   /**< Level read at that edge. */
 } barcode_filter_t;
 
+/* barcode_scan_t.flags. */
+#define BARCODE_SCAN_F_ACTIVE 0x01u     /* Inside a scan. */
+#define BARCODE_SCAN_F_BLACK 0x02u      /* Level since last_us. */
+#define BARCODE_SCAN_F_OVERFLOW 0x04u   /* Too many elements. */
+#define BARCODE_SCAN_F_LONG_BLACK 0x08u /* Ended by an over-long black. */
+
 /** @brief Scan state; callers allocate it and read widths/count. */
 typedef struct
 {
-    uint32_t widths[BARCODE_MAX_ELEMENTS]; /**< Element widths, in us. */
-    uint32_t count;                        /**< Widths collected. */
-    bool b_active;                         /**< Inside a scan. */
-    bool b_black;                          /**< Level since last_us. */
-    bool b_overflow;                       /**< Too many elements. */
-    bool b_long_black;                     /**< Ended by an over-long black. */
+    uint16_t widths[BARCODE_MAX_ELEMENTS]; /**< Element widths, in steps of
+                                                BARCODE_WIDTH_UNIT_US. */
+    uint16_t narrowest;                    /**< Narrowest width so far. */
+    uint8_t count;                         /**< Widths collected. */
+    uint8_t flags;                         /**< BARCODE_SCAN_F_*. */
     uint32_t last_us;                      /**< Time of the last edge. */
-    uint32_t narrowest_us;                 /**< Narrowest width so far. */
 } barcode_scan_t;
+
+/* barcode_trigger_t.bits: 6 of 8 bits, each field "shift, bits". */
+#define BARCODE_TRIGGER_NEXT 0u, 2u  /* Oldest edge, to overwrite. */
+#define BARCODE_TRIGGER_COUNT 2u, 2u /* Edges held. */
+#define BARCODE_TRIGGER_F_HELD 0x10u /* hold_until_us applies. */
+#define BARCODE_TRIGGER_F_HUMP 0x20u /* On a hump at the last poll. */
 
 /** @brief Spots a barcode from its edges; see barcode_trigger_edge(). */
 typedef struct
 {
     uint32_t edges_us[BARCODE_TRIGGER_EDGES - 1u]; /**< The edges before. */
-    uint32_t next;                                 /**< Oldest, to overwrite. */
-    uint32_t count;                                /**< Edges held. */
     uint32_t hold_until_us; /**< No trigger before this. */
-    bool b_held;            /**< hold_until_us applies. */
-    bool b_hump;            /* On a hump at the last poll. */
-    uint32_t hump_start_us; /* When that hump began. */
+    uint32_t hump_start_us; /**< When that hump began. */
+    uint8_t bits;           /**< BARCODE_TRIGGER_*. */
 } barcode_trigger_t;
+
+/**
+ * @brief Read one BARCODE_SCAN_F_* fact.
+ * @param p_scan Scan state.
+ * @param flag One BARCODE_SCAN_F_* bit.
+ * @return true if that fact holds.
+ */
+static inline bool
+barcode_scan_flag (barcode_scan_t const * p_scan, uint32_t flag)
+{
+    return (p_scan->flags & flag) != 0u;
+}
 
 /* Public function declarations. */
 

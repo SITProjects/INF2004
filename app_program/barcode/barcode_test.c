@@ -67,7 +67,7 @@ barcode_test (void)
 static BOOL
 decodes_both_ways (void)
 {
-    static uint32_t widths[SELF_TEST_ELEMENTS];
+    static uint16_t widths[SELF_TEST_ELEMENTS];
     char const symbols[] = SELF_TEST_TEXT;
     uint32_t count = 0u;
     for (uint32_t c = 0u; c < SELF_TEST_CHARACTERS; c++)

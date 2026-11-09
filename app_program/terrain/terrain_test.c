@@ -228,8 +228,8 @@ terrain_test (void)
     (void)tk_dly_tsk(SAMPLE_WINDOW_MS);
     bool const b_compass = terrain_compass_get(&compass_after);
     TEST_CHECK("TER-U29",
-               b_compass && ((uint16_t)(compass_after.samples -
-                                        compass_before.samples) >= MIN_SAMPLES),
+               b_compass && ((uint8_t)(compass_after.samples -
+                                       compass_before.samples) >= MIN_SAMPLES),
                "compass delivers readings at about 100 Hz");
 
     /* TER-U02: calibration becomes VALID within 5 s of power-up. */

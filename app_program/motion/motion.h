@@ -71,16 +71,7 @@
  * Odometry as of tMotion's last update (IF-05, motion -> terrain). Units as
  * motion_move_get_odometry(); + is forward and left.
  */
-typedef struct
-{
-    uint32_t updates;         /**< tMotion updates published since start-up;
-                                   stops rising when tMotion stops. */
-    int32_t distance_mm;      /**< Mean of both wheels' travel. */
-    int32_t heading_deg;      /**< Total turn, not wrapped. */
-    int16_t speed_mm_s;       /**< Mean of the two wheel speeds. */
-    int16_t left_speed_mm_s;  /**< Left wheel speed. */
-    int16_t right_speed_mm_s; /**< Right wheel speed. */
-} motion_shared_odometry_t;
+typedef robot_odometry_t motion_shared_odometry_t;
 
 /** Mode and done reason as of tMotion's last update. */
 typedef struct

@@ -11,16 +11,19 @@
 #define CAR_STATUS_H
 
 /* Public includes. */
+#include <stdint.h>
 
 /* Public types, constants, and macros. */
 
 /* Public function declarations. */
 
 /**
- * @brief Print the status line.
- * Call from one task, about twice a second. Every read is a lock-free copy
- * that never waits. A value that cannot be read prints as 0.
+ * @brief Read the car's state and pack it for the dashboard.
+ * Call from the radio task. Every read is a copy that never waits. A value
+ * that cannot be read is sent as 0.
+ * @param p_words Destination, ROBOT_STATUS_WORDS long; layout in
+ * robot_types.h.
  */
-void car_status_print (void);
+void car_status_encode (uint32_t * p_words);
 
 #endif /* CAR_STATUS_H */

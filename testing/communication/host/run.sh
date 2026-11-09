@@ -52,3 +52,12 @@ cc -std=c11 -Wall -Wextra -Werror -DTM_MQTT=1 \
     "$repo_root/app_program/line_follow/line_track.c" \
     -o "$test_dir/remote_command_test"
 "$test_dir/remote_command_test"
+
+cc -std=c11 -Wall -Wextra -Werror \
+    -I"$repo_root/app_program/communication" \
+    "$repo_root/testing/communication/host/wire_fixture.c" \
+    "$repo_root/app_program/communication/telemetry_queue.c" \
+    "$repo_root/testing/communication/host/queue_port_stub.c" \
+    -o "$test_dir/wire_fixture"
+WIRE_FIXTURE="$test_dir/wire_fixture" \
+    python3 "$repo_root/testing/communication/host/dashboard_test.py"

@@ -81,6 +81,32 @@ main (void)
           b_refused && remote_command_stopped() &&
               (LINE_TURN_STRAIGHT == remote_command_turn("F")));
 
+    bool const b_symbols = (REMOTE_COMMAND_OK == send("map $/+ LEFT")) &&
+                           (REMOTE_COMMAND_OK == send("map %-. UTURN")) &&
+                           (REMOTE_COMMAND_OK == send("map 09Z RIGHT")) &&
+                           (LINE_TURN_LEFT == remote_command_turn("$/+")) &&
+                           (LINE_TURN_UTURN == remote_command_turn("%-.")) &&
+                           (LINE_TURN_RIGHT == remote_command_turn("09Z"));
+    bool const b_outside = (REMOTE_COMMAND_BAD == send("map f LEFT")) &&
+                           (REMOTE_COMMAND_BAD == send("map A# LEFT")) &&
+                           (LINE_TURN_STRAIGHT == remote_command_turn("f"));
+    (void)send("clear");
+    check("RC10 three Code 39 characters fit an entry; others are refused",
+          b_symbols && b_outside);
+
+    /* Z's code has the top bit of its field set: the turn must not touch it. */
+    bool const b_keep = (REMOTE_COMMAND_OK == send("map ZZZ STRAIGHT")) &&
+                        remote_command_mapped("ZZZ") &&
+                        (LINE_TURN_STRAIGHT == remote_command_turn("ZZZ")) &&
+                        (REMOTE_COMMAND_OK == send("map ZZZ LEFT")) &&
+                        (LINE_TURN_LEFT == remote_command_turn("ZZZ")) &&
+                        (REMOTE_COMMAND_OK == send("map ZZZ RIGHT")) &&
+                        (LINE_TURN_RIGHT == remote_command_turn("ZZZ")) &&
+                        (REMOTE_COMMAND_OK == send("map ZZZ UTURN")) &&
+                        (LINE_TURN_UTURN == remote_command_turn("ZZZ"));
+    (void)send("clear");
+    check("RC11 every turn leaves the last character untouched", b_keep);
+
     bool const b_unknown = !remote_command_mapped("F");
     (void)send("map F STRAIGHT");
     (void)send("map A LEFT");

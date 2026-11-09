@@ -251,62 +251,185 @@ typedef enum
     OBSTACLE_AVOID_LEG_STRAIGHTEN /**< Not a bypass leg: before the sweep. */
 } obstacle_avoid_leg_t;
 
-/** State machine context; fields are private to obstacle_avoid.c. */
+/* obstacle_avoid_t.flags, one bit per fact. */
+#define OBSTACLE_AVOID_F_PLAN_SEQUENCE 0x00000001u /* plan_sequence is used. */
+#define OBSTACLE_AVOID_F_LEG_STARTED 0x00000002u /* remaining is this leg's. */
+#define OBSTACLE_AVOID_F_TO_FOLLOW 0x00000004u   /* RELEASING ends in FOLLOW. */
+#define OBSTACLE_AVOID_F_NEED_PREPARE                                          \
+    0x00000008u /* Rearm before translating. */
+#define OBSTACLE_AVOID_F_RETRY_USED 0x00000010u
+#define OBSTACLE_AVOID_F_BACKOFF 0x00000020u /* Command is a back-off. */
+#define OBSTACLE_AVOID_F_REPLAN_PENDING                                        \
+    0x00000040u                                 /* Re-sweep after the turn. */
+#define OBSTACLE_AVOID_F_WATCHING 0x00000080u   /* Sensor held to the side. */
+#define OBSTACLE_AVOID_F_WATCH_SEEN 0x00000100u /* The watch saw something. */
+#define OBSTACLE_AVOID_F_WATCH_DONE 0x00000200u /* Do not restart the watch. */
+#define OBSTACLE_AVOID_F_WATCH_WIDENED 0x00000400u /* This leg was widened. */
+#define OBSTACLE_AVOID_F_SHIFT 0x00000800u         /* RETRY_WAIT for a shift. */
+#define OBSTACLE_AVOID_F_BLOCKED 0x00001000u /* blocked_since is running. */
+#define OBSTACLE_AVOID_F_REARM_KNOWN 0x00002000u
+#define OBSTACLE_AVOID_F_CORRIDOR_STARTED 0x00004000u
+#define OBSTACLE_AVOID_F_ORIGIN_VALID 0x00008000u /* origin_heading was read. */
+#define OBSTACLE_AVOID_F_HOME_RIGHT 0x00010000u   /* TURN_HOME turns right. */
+#define OBSTACLE_AVOID_F_STRAIGHTEN_DUE                                        \
+    0x00020000u /* Line heading awaits stop. */
+#define OBSTACLE_AVOID_F_MEASURE_AGAIN                                         \
+    0x00040000u /* Discard any sweep so far. */
+
+/* obstacle_avoid_t.fields, each "shift, bits": 20 of 32 bits. */
+#define OBSTACLE_AVOID_FIELD_STATE 0u, 4u
+#define OBSTACLE_AVOID_FIELD_FAULT 4u, 4u
+#define OBSTACLE_AVOID_FIELD_LEG 8u, 4u
+#define OBSTACLE_AVOID_FIELD_SIDESTEPS 12u, 2u
+#define OBSTACLE_AVOID_FIELD_BACKOFFS 14u, 2u
+#define OBSTACLE_AVOID_FIELD_TREND_NEXT 16u, 2u
+#define OBSTACLE_AVOID_FIELD_TREND_COUNT 18u, 2u
+
+/* obstacle_avoid_t.plan_bits: 13 of 16 bits. */
+#define OBSTACLE_AVOID_PLAN_STATUS 0u, 2u
+#define OBSTACLE_AVOID_PLAN_ANGLE 2u, 7u
+#define OBSTACLE_AVOID_PLAN_F_GAP_RIGHT 0x0200u
+#define OBSTACLE_AVOID_PLAN_F_EDGE_UNKNOWN 0x0400u
+#define OBSTACLE_AVOID_PLAN_F_LIMITED 0x0800u
+#define OBSTACLE_AVOID_PLAN_F_NO_FIT 0x1000u
+
+/**
+ * State machine context; fields are private to obstacle_avoid.c. Distance
+ * marks keep the low 16 bits of the odometry distance; a mark is only read
+ * during the leg or bypass that set it, so it cannot go stale.
+ */
 typedef struct
 {
     obstacle_avoid_config_t const * p_config;
-    obstacle_avoid_state_t state;
-    obstacle_avoid_fault_t fault;
     uint32_t entered_ms; /* Time the current state was entered. */
-    obstacle_avoid_plan_t plan;
-    bool b_plan_sequence;  /* plan_sequence holds a used result. */
-    uint8_t plan_sequence; /* Result the current plan came from. */
-    obstacle_avoid_leg_t leg;
-    bool b_leg_started;   /* remaining holds this leg's remainder. */
-    uint32_t remaining;   /* Of the current leg, mm or degrees. */
-    uint32_t part;        /* Of the command in flight, mm or degrees. */
-    uint32_t cmd;         /* Pending or running command. */
-    bool b_to_follow;     /* RELEASING ends with FOLLOW. */
-    bool b_need_prepare;  /* Rearm before the next translate. */
-    uint16_t sidestep_mm; /* Current sidestep target. */
-    uint32_t lateral_mm;  /* Total sideways offset completed. */
-    uint32_t forward_mm;  /* Progress along the line from diagonals. */
-    uint8_t sidesteps;    /* Sidesteps completed. */
-    bool b_retry_used;
-    bool b_backoff;          /* The command in flight is a back-off. */
-    uint8_t backoffs;        /* Back-offs this bypass. */
-    bool b_replan_pending;   /* Re-sweep once the turn back is done. */
-    uint16_t escaped_mm;     /* Reversed so far to look again. */
-    bool b_watching;         /* Sensor held toward the obstacle side. */
-    bool b_watch_seen;       /* The watch has seen something in range. */
-    bool b_watch_done;       /* Watch ended this bypass; do not restart it. */
-    bool b_watch_widened;    /* This leg was widened already. */
-    uint16_t watch_shift_mm; /* Widening added by the watch this bypass. */
-    bool b_shift;            /* RETRY_WAIT holds for a watch shift, no retry. */
-    uint8_t watch_sequence;  /* Last watch reading used. */
-    int32_t watch_seen_mm;   /* Odometry distance at the last sighting. */
-    uint16_t watch_ahead_mm; /* How far ahead of the pivot it was. */
-    int16_t watch_angle;     /* Scan angle the watch holds. */
-    bool b_blocked;          /* blocked_since_ms is running. */
     uint32_t blocked_since_ms;
-    bool b_rearm_known;
+    uint32_t cmd;    /* Pending or running command. */
+    uint32_t flags;  /* OBSTACLE_AVOID_F_*. */
+    uint32_t fields; /* OBSTACLE_AVOID_FIELD_*. */
+    uint16_t plan_bits;
+    uint16_t plan_sidestep_mm; /* First sideways offset. */
+    uint16_t plan_pass_mm;     /* Axle travel along the line. */
+    uint16_t plan_reverse_mm;  /* Reverse first. */
+    uint16_t remaining;        /* Of the current leg, mm or degrees. */
+    uint16_t part;             /* Of the command in flight, mm or degrees. */
+    uint16_t sidestep_mm;      /* Current sidestep target. */
+    uint16_t lateral_mm;       /* Total sideways offset completed. */
+    uint16_t forward_mm;       /* Progress along the line from diagonals. */
+    uint16_t escaped_mm;       /* Reversed so far to look again. */
+    uint16_t watch_shift_mm;   /* Widening added by the watch this bypass. */
+    uint16_t watch_ahead_mm;   /* How far ahead of the pivot it was. */
+    uint16_t leg_timeout_10ms; /* Leg time limit, ticks of 10 ms. */
+    int16_t watch_seen_mm;     /* Odometry distance at the last sighting. */
+    int16_t watch_angle;       /* Scan angle the watch holds. */
+    int16_t start_distance_mm; /* Odometry when the command was sent. */
+    int16_t start_heading_deg;
+    int16_t origin_heading_deg; /* Heading when the car stopped. */
+    int16_t trend_deg[OBSTACLE_AVOID_TREND_SLOTS]; /* Headings kept. */
+    int16_t trend_mm;         /* Odometry distance at the latest of them. */
+    int16_t line_heading_deg; /* The line's heading as the car was stopped. */
+    uint8_t plan_sequence;    /* Result the current plan came from. */
+    uint8_t watch_sequence;   /* Last watch reading used. */
     uint8_t rearm_sequence;
-    bool b_corridor_started;
     uint8_t corridor_sequence; /* Corridor sequence when VERIFY began. */
-    int32_t start_distance_mm; /* Odometry when the command was sent. */
-    int32_t start_heading_deg;
-    uint32_t leg_timeout_ms;
-    bool b_origin_valid;        /* origin_heading_deg was read. */
-    int32_t origin_heading_deg; /* Heading when the car stopped. */
-    bool b_home_right;          /* TURN_HOME or STRAIGHTEN turns right. */
-    int32_t trend_deg[OBSTACLE_AVOID_TREND_SLOTS]; /* Headings kept. */
-    uint32_t trend_next;      /* Oldest of them, the next to replace. */
-    uint32_t trend_count;     /* How many are filled. */
-    int32_t trend_mm;         /* Odometry distance at the latest of them. */
-    bool b_straighten_due;    /* line_heading_deg is waiting for the stop. */
-    int32_t line_heading_deg; /* The line's heading as the car was stopped. */
-    bool b_measure_again;     /* Straightened: discard any sweep so far. */
 } obstacle_avoid_t;
+
+/**
+ * @brief Read one OBSTACLE_AVOID_F_* fact.
+ * @param p_ctx Context.
+ * @param flag One OBSTACLE_AVOID_F_* bit.
+ * @return true if that fact holds.
+ */
+static inline bool
+obstacle_avoid_flag (obstacle_avoid_t const * p_ctx, uint32_t flag)
+{
+    return (p_ctx->flags & flag) != 0u;
+}
+
+/**
+ * @brief Read an OBSTACLE_AVOID_FIELD_* value.
+ * @param p_ctx Context.
+ * @param shift With @p bits, one OBSTACLE_AVOID_FIELD_* macro.
+ * @param bits See @p shift.
+ * @return Field value.
+ */
+static inline uint32_t
+obstacle_avoid_field (obstacle_avoid_t const * p_ctx, uint32_t shift,
+                      uint32_t bits)
+{
+    return robot_field_get(p_ctx->fields, shift, bits);
+}
+
+/**
+ * @brief Read the current state.
+ * @param p_ctx Context.
+ * @return Current state.
+ */
+static inline obstacle_avoid_state_t
+obstacle_avoid_state_of (obstacle_avoid_t const * p_ctx)
+{
+    return (obstacle_avoid_state_t)obstacle_avoid_field(
+        p_ctx, OBSTACLE_AVOID_FIELD_STATE);
+}
+
+/**
+ * @brief Read why FAULT was latched.
+ * @param p_ctx Context.
+ * @return Fault reason, OBSTACLE_AVOID_FAULT_NONE if none.
+ */
+static inline obstacle_avoid_fault_t
+obstacle_avoid_fault_of (obstacle_avoid_t const * p_ctx)
+{
+    return (obstacle_avoid_fault_t)obstacle_avoid_field(
+        p_ctx, OBSTACLE_AVOID_FIELD_FAULT);
+}
+
+/**
+ * @brief Read the current leg.
+ * @param p_ctx Context.
+ * @return Current leg.
+ */
+static inline obstacle_avoid_leg_t
+obstacle_avoid_leg_of (obstacle_avoid_t const * p_ctx)
+{
+    return (obstacle_avoid_leg_t)obstacle_avoid_field(p_ctx,
+                                                      OBSTACLE_AVOID_FIELD_LEG);
+}
+
+/**
+ * @brief Read one OBSTACLE_AVOID_PLAN_F_* fact of the stored plan.
+ * @param p_ctx Context.
+ * @param flag One OBSTACLE_AVOID_PLAN_F_* bit.
+ * @return true if that fact holds.
+ */
+static inline bool
+obstacle_avoid_plan_flag (obstacle_avoid_t const * p_ctx, uint32_t flag)
+{
+    return (p_ctx->plan_bits & flag) != 0u;
+}
+
+/**
+ * @brief Read the stored plan's status.
+ * @param p_ctx Context.
+ * @return Plan status.
+ */
+static inline obstacle_avoid_plan_status_t
+obstacle_avoid_plan_status_of (obstacle_avoid_t const * p_ctx)
+{
+    return (obstacle_avoid_plan_status_t)robot_field_get(
+        p_ctx->plan_bits, OBSTACLE_AVOID_PLAN_STATUS);
+}
+
+/**
+ * @brief Read the stored plan's turn angle.
+ * @param p_ctx Context.
+ * @return Turn angle in degrees.
+ */
+static inline uint8_t
+obstacle_avoid_plan_angle (obstacle_avoid_t const * p_ctx)
+{
+    return (uint8_t)robot_field_get(p_ctx->plan_bits,
+                                    OBSTACLE_AVOID_PLAN_ANGLE);
+}
 
 /* Public function declarations. */
 

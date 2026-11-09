@@ -14,6 +14,16 @@
 static void end_scan (barcode_scan_t * p_scan);
 static void append (barcode_scan_t * p_scan, uint32_t width_us);
 
+static void scan_flag_set (barcode_scan_t * p_scan, uint32_t flag, bool b_set);
+static uint16_t width_units (uint32_t width_us);
+static bool trigger_flag (barcode_trigger_t const * p_trigger, uint32_t flag);
+static void trigger_flag_set (barcode_trigger_t * p_trigger, uint32_t flag,
+                              bool b_set);
+static uint32_t trigger_field (barcode_trigger_t const * p_trigger,
+                               uint32_t shift, uint32_t bits);
+static void trigger_field_set (barcode_trigger_t * p_trigger, uint32_t shift,
+                               uint32_t bits, uint32_t value);
+
 /* Public function definitions. */
 
 void
@@ -41,36 +51,36 @@ barcode_filter_edge (barcode_filter_t * p_filter, uint32_t edge_us,
 void
 barcode_trigger_init (barcode_trigger_t * p_trigger)
 {
-    p_trigger->next = 0u;
-    p_trigger->count = 0u;
-    p_trigger->b_held = false;
-    p_trigger->b_hump = false;
+    trigger_field_set(p_trigger, BARCODE_TRIGGER_NEXT, 0u);
+    trigger_field_set(p_trigger, BARCODE_TRIGGER_COUNT, 0u);
+    trigger_flag_set(p_trigger, BARCODE_TRIGGER_F_HELD, false);
+    trigger_flag_set(p_trigger, BARCODE_TRIGGER_F_HUMP, false);
     p_trigger->hump_start_us = 0u;
 }
 
 void
 barcode_trigger_hold (barcode_trigger_t * p_trigger, uint32_t until_us)
 {
-    p_trigger->next = 0u;
-    p_trigger->count = 0u;
+    trigger_field_set(p_trigger, BARCODE_TRIGGER_NEXT, 0u);
+    trigger_field_set(p_trigger, BARCODE_TRIGGER_COUNT, 0u);
     p_trigger->hold_until_us = until_us;
-    p_trigger->b_held = true;
+    trigger_flag_set(p_trigger, BARCODE_TRIGGER_F_HELD, true);
 }
 
 void
 barcode_trigger_hump (barcode_trigger_t * p_trigger, bool b_hump,
                       uint32_t now_us)
 {
-    if (b_hump && !p_trigger->b_hump)
+    if (b_hump && !trigger_flag(p_trigger, BARCODE_TRIGGER_F_HUMP))
     {
         p_trigger->hump_start_us = now_us;
     }
-    p_trigger->b_hump = b_hump;
+    trigger_flag_set(p_trigger, BARCODE_TRIGGER_F_HUMP, b_hump);
     if (b_hump &&
         ((now_us - p_trigger->hump_start_us) < BARCODE_TRIGGER_HUMP_MAX_US))
     {
         uint32_t const until_us = now_us + BARCODE_TRIGGER_HUMP_US;
-        if (!p_trigger->b_held ||
+        if (!trigger_flag(p_trigger, BARCODE_TRIGGER_F_HELD) ||
             ((int32_t)(until_us - p_trigger->hold_until_us) > 0))
         {
             barcode_trigger_hold(p_trigger, until_us);
@@ -81,29 +91,36 @@ barcode_trigger_hump (barcode_trigger_t * p_trigger, bool b_hump,
 bool
 barcode_trigger_edge (barcode_trigger_t * p_trigger, uint32_t edge_us)
 {
-    if (p_trigger->b_held)
+    if (trigger_flag(p_trigger, BARCODE_TRIGGER_F_HELD))
     {
         if ((int32_t)(edge_us - p_trigger->hold_until_us) < 0)
         {
             return false;
         }
-        p_trigger->b_held = false;
+        trigger_flag_set(p_trigger, BARCODE_TRIGGER_F_HELD, false);
     }
     /* The ring holds the edges before this one, oldest at next. */
-    bool const b_trigger = (p_trigger->count == (BARCODE_TRIGGER_EDGES - 1u)) &&
-                           ((edge_us - p_trigger->edges_us[p_trigger->next]) <=
+    bool const b_trigger = (trigger_field(p_trigger, BARCODE_TRIGGER_COUNT) ==
+                            (BARCODE_TRIGGER_EDGES - 1u)) &&
+                           ((edge_us - p_trigger->edges_us[trigger_field(
+                                           p_trigger, BARCODE_TRIGGER_NEXT)]) <=
                             BARCODE_TRIGGER_WINDOW_US);
     if (b_trigger)
     {
-        p_trigger->next = 0u;
-        p_trigger->count = 0u;
+        trigger_field_set(p_trigger, BARCODE_TRIGGER_NEXT, 0u);
+        trigger_field_set(p_trigger, BARCODE_TRIGGER_COUNT, 0u);
         return true;
     }
-    p_trigger->edges_us[p_trigger->next] = edge_us;
-    p_trigger->next = (p_trigger->next + 1u) % (BARCODE_TRIGGER_EDGES - 1u);
-    if (p_trigger->count < (BARCODE_TRIGGER_EDGES - 1u))
+    p_trigger->edges_us[trigger_field(p_trigger, BARCODE_TRIGGER_NEXT)] =
+        edge_us;
+    trigger_field_set(p_trigger, BARCODE_TRIGGER_NEXT,
+                      (trigger_field(p_trigger, BARCODE_TRIGGER_NEXT) + 1u) %
+                          (BARCODE_TRIGGER_EDGES - 1u));
+    if (trigger_field(p_trigger, BARCODE_TRIGGER_COUNT) <
+        (BARCODE_TRIGGER_EDGES - 1u))
     {
-        p_trigger->count++;
+        trigger_field_set(p_trigger, BARCODE_TRIGGER_COUNT,
+                          trigger_field(p_trigger, BARCODE_TRIGGER_COUNT) + 1u);
     }
     return false;
 }
@@ -111,16 +128,16 @@ barcode_trigger_edge (barcode_trigger_t * p_trigger, uint32_t edge_us)
 void
 barcode_scan_sync (barcode_scan_t * p_scan, bool b_black)
 {
-    if (!p_scan->b_active)
+    if (!barcode_scan_flag(p_scan, BARCODE_SCAN_F_ACTIVE))
     {
-        p_scan->b_black = b_black;
+        scan_flag_set(p_scan, BARCODE_SCAN_F_BLACK, b_black);
     }
 }
 
 void
 barcode_scan_init (barcode_scan_t * p_scan, bool b_black, uint32_t now_us)
 {
-    p_scan->b_black = b_black;
+    scan_flag_set(p_scan, BARCODE_SCAN_F_BLACK, b_black);
     p_scan->last_us = now_us;
     barcode_scan_reset(p_scan);
 }
@@ -129,21 +146,21 @@ void
 barcode_scan_reset (barcode_scan_t * p_scan)
 {
     p_scan->count = 0u;
-    p_scan->b_active = false;
-    p_scan->b_overflow = false;
-    p_scan->b_long_black = false;
-    p_scan->narrowest_us = UINT32_MAX;
+    scan_flag_set(p_scan, BARCODE_SCAN_F_ACTIVE, false);
+    scan_flag_set(p_scan, BARCODE_SCAN_F_OVERFLOW, false);
+    scan_flag_set(p_scan, BARCODE_SCAN_F_LONG_BLACK, false);
+    p_scan->narrowest = UINT16_MAX;
 }
 
 barcode_scan_result_t
 barcode_scan_edge (barcode_scan_t * p_scan, uint32_t edge_us, bool b_black)
 {
-    if (b_black == p_scan->b_black)
+    if (b_black == barcode_scan_flag(p_scan, BARCODE_SCAN_F_BLACK))
     {
         return BARCODE_SCAN_BUSY;
     }
     uint32_t const width = edge_us - p_scan->last_us;
-    if (p_scan->b_active)
+    if (barcode_scan_flag(p_scan, BARCODE_SCAN_F_ACTIVE))
     {
         if (width > BARCODE_QUIET_MAX_US)
         {
@@ -156,13 +173,13 @@ barcode_scan_edge (barcode_scan_t * p_scan, uint32_t edge_us, bool b_black)
     }
     else if (b_black)
     {
-        p_scan->b_active = true;
+        scan_flag_set(p_scan, BARCODE_SCAN_F_ACTIVE, true);
     }
     else
     {
         /* White after a black outside a scan: wait for the next bar. */
     }
-    p_scan->b_black = b_black;
+    scan_flag_set(p_scan, BARCODE_SCAN_F_BLACK, b_black);
     p_scan->last_us = edge_us;
     return BARCODE_SCAN_BUSY;
 }
@@ -170,7 +187,7 @@ barcode_scan_edge (barcode_scan_t * p_scan, uint32_t edge_us, bool b_black)
 barcode_scan_result_t
 barcode_scan_poll (barcode_scan_t * p_scan, uint32_t now_us)
 {
-    if (!p_scan->b_active)
+    if (!barcode_scan_flag(p_scan, BARCODE_SCAN_F_ACTIVE))
     {
         return BARCODE_SCAN_BUSY;
     }
@@ -196,9 +213,9 @@ barcode_scan_poll (barcode_scan_t * p_scan, uint32_t now_us)
 static void
 end_scan (barcode_scan_t * p_scan)
 {
-    if (p_scan->b_black)
+    if (barcode_scan_flag(p_scan, BARCODE_SCAN_F_BLACK))
     {
-        p_scan->b_long_black = true;
+        scan_flag_set(p_scan, BARCODE_SCAN_F_LONG_BLACK, true);
         if (p_scan->count > 0u)
         {
             p_scan->count--;
@@ -211,13 +228,60 @@ append (barcode_scan_t * p_scan, uint32_t width_us)
 {
     if (p_scan->count >= BARCODE_MAX_ELEMENTS)
     {
-        p_scan->b_overflow = true;
+        scan_flag_set(p_scan, BARCODE_SCAN_F_OVERFLOW, true);
         return;
     }
-    p_scan->widths[p_scan->count] = width_us;
+    uint16_t const width = width_units(width_us);
+    p_scan->widths[p_scan->count] = width;
     p_scan->count++;
-    if (width_us < p_scan->narrowest_us)
+    if (width < p_scan->narrowest)
     {
-        p_scan->narrowest_us = width_us;
+        p_scan->narrowest = width;
     }
+}
+
+static void
+scan_flag_set (barcode_scan_t * p_scan, uint32_t flag, bool b_set)
+{
+    p_scan->flags = b_set ? (uint8_t)(p_scan->flags | flag)
+                          : (uint8_t)(p_scan->flags & (uint8_t)~flag);
+}
+
+/* A width in stored steps, rounded and saturated; never 0, so an element
+ * still counts however short. */
+static uint16_t
+width_units (uint32_t width_us)
+{
+    uint32_t const units =
+        (width_us + (BARCODE_WIDTH_UNIT_US / 2u)) / BARCODE_WIDTH_UNIT_US;
+
+    return (0u == units) ? 1u : robot_clamp_u16(units);
+}
+
+static bool
+trigger_flag (barcode_trigger_t const * p_trigger, uint32_t flag)
+{
+    return (p_trigger->bits & flag) != 0u;
+}
+
+static void
+trigger_flag_set (barcode_trigger_t * p_trigger, uint32_t flag, bool b_set)
+{
+    p_trigger->bits = b_set ? (uint8_t)(p_trigger->bits | flag)
+                            : (uint8_t)(p_trigger->bits & (uint8_t)~flag);
+}
+
+static uint32_t
+trigger_field (barcode_trigger_t const * p_trigger, uint32_t shift,
+               uint32_t bits)
+{
+    return robot_field_get(p_trigger->bits, shift, bits);
+}
+
+static void
+trigger_field_set (barcode_trigger_t * p_trigger, uint32_t shift, uint32_t bits,
+                   uint32_t value)
+{
+    p_trigger->bits =
+        (uint8_t)robot_field_put(p_trigger->bits, shift, bits, value);
 }
