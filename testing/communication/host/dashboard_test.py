@@ -42,6 +42,7 @@ wire = load_wire()
 
 
 def load_dashboard():
+    sys.dont_write_bytecode = True  # Keep __pycache__ out of tools/.
     spec = importlib.util.spec_from_file_location(
         "car_dashboard", REPO / "tools" / "dashboard" / "car_dashboard.py")
     module = importlib.util.module_from_spec(spec)
@@ -242,11 +243,12 @@ def run(folder):
     check("D06 Stop reaches the car and the page shows it stopped",
           car.stopped and get_state()["run"] == "stopped")
 
-    post("/command", {"command": "reverse"})
+    refused = post("/command", {"command": "reverse"})[0]
     settle(car)
-    check("D19 Reverse reaches the car and it stays stopped",
-          ("reverse" in [m for _, m in car.received])
-          and get_state()["run"] == "stopped")
+    page = (REPO / "tools" / "dashboard" / "index.html").read_text()
+    check("D19 the dashboard has no Reverse and refuses the command",
+          (refused == 400) and ("reverse" not in page.lower())
+          and ("reverse" not in [m for _, m in car.received]))
 
     # A real pass from 2026-11-06: one quiet readout inside it, then stray.
     for kept in (2, 4, 6, 0, 3, 2, 0, 0, 0, 1, 0, 0, 0):

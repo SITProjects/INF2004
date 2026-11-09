@@ -50,7 +50,7 @@
     (OBSTACLE_EVT_STOP | OBSTACLE_EVT_CRITICAL | OBSTACLE_EVT_FAULT)
 
 #if AVOID_ACTIVE
-/** @brief Where a dashboard reverse has got to. */
+/** @brief Where a "reverse" command has got to. */
 typedef enum
 {
     REVERSE_IDLE = 0,  /**< Motors held, nothing asked for. */

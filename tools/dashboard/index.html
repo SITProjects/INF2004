@@ -42,7 +42,6 @@ button.big { padding: 20px 0; font-size: 1.25rem; font-weight: 700;
   color: #fff; border: 0; }
 #start { background: var(--go); }
 #stop { background: var(--stop); }
-#reverse { grid-column: 1 / -1; background: #5b6470; }
 .notice { background: var(--warn-bg); color: var(--warn); border-radius: 8px;
   padding: 8px 12px; font-size: .92rem; }
 .facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
@@ -83,8 +82,6 @@ li { overflow-wrap: anywhere; color: var(--muted); }
     <div class="controls">
       <button id="start" class="big" disabled>Start</button>
       <button id="stop" class="big" disabled>Stop</button>
-      <button id="reverse" class="big" disabled
-        title="Backs a stopped car up 20 cm. Nothing watches behind it.">Reverse 20 cm</button>
     </div>
     <p id="offline" class="notice" hidden>The car isn't connected, so these
       buttons can't reach it. Use the car's power switch to stop it.</p>
@@ -252,7 +249,6 @@ function show(state) {
   $("run").className = "pill " + ({running: "on", stopped: "off"}[state.run] || "");
   $("start").disabled = !online || state.run === "running";
   $("stop").disabled = !online;
-  $("reverse").disabled = !online || state.run !== "stopped";
   $("offline").hidden = online;
   $("barcode").textContent = state.barcode || "None yet";
   $("action").textContent = state.barcode_action || "–";
@@ -278,14 +274,12 @@ async function poll() {
     $("link").className = "pill off";
     $("start").disabled = true;
     $("stop").disabled = true;
-    $("reverse").disabled = true;
   }
   setTimeout(poll, 500);
 }
 
 $("start").onclick = () => command("start");
 $("stop").onclick = () => command("stop");
-$("reverse").onclick = () => command("reverse");
 $("add").onclick = () => addRow().focus();
 poll();
 </script>
