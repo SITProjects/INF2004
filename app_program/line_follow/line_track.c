@@ -157,15 +157,15 @@ line_track_init (line_track_t * p_track, line_track_input_t const * p_in)
         black_set(p_track, side, false);
         change_set(p_track, side, 0u);
     }
-    field_set(p_track, LINE_TRACK_FIELD_LAST_SIDE, (uint32_t)(SIDE_NONE));
-    field_set(p_track, LINE_TRACK_FIELD_PIVOT_SIDE, (uint32_t)(SIDE_NONE));
+    field_set(p_track, LINE_TRACK_FIELD_LAST_SIDE, (uint32_t)SIDE_NONE);
+    field_set(p_track, LINE_TRACK_FIELD_PIVOT_SIDE, (uint32_t)SIDE_NONE);
     p_track->last_heading_deg = robot_clamp_i16(p_in->heading_deg);
     flag_set(p_track, LINE_TRACK_F_REJOIN, false);
-    field_set(p_track, LINE_TRACK_FIELD_BARS_SIDE, (uint32_t)(SIDE_NONE));
+    field_set(p_track, LINE_TRACK_FIELD_BARS_SIDE, (uint32_t)SIDE_NONE);
     p_track->rejoin_mm = robot_mark16(p_in->distance_mm - LINE_REJOIN_MM);
-    field_set(p_track, LINE_TRACK_FIELD_JUNCTION_COUNT, (uint32_t)(0u));
+    field_set(p_track, LINE_TRACK_FIELD_JUNCTION_COUNT, (uint32_t)0u);
     field_set(p_track, LINE_TRACK_FIELD_BARCODE_PHASE,
-              (uint32_t)(LINE_BARCODE_NONE));
+              (uint32_t)LINE_BARCODE_NONE);
     p_track->line_deg = robot_clamp_i16(p_in->heading_deg);
     p_track->brake_mm = robot_mark16(p_in->distance_mm);
     flag_set(p_track, LINE_TRACK_F_RETRACE, false);
@@ -229,7 +229,7 @@ line_track_update (line_track_t * p_track, line_track_input_t const * p_in)
     }
     if (!b_both)
     {
-        field_set(p_track, LINE_TRACK_FIELD_JUNCTION_COUNT, (uint32_t)(0u));
+        field_set(p_track, LINE_TRACK_FIELD_JUNCTION_COUNT, (uint32_t)0u);
     }
     else if (field_get(p_track, LINE_TRACK_FIELD_JUNCTION_COUNT) <
              LINE_JUNCTION_SAMPLES)
@@ -242,7 +242,7 @@ line_track_update (line_track_t * p_track, line_track_input_t const * p_in)
     {
         /* Someone else drives: start again from wherever it leaves us. */
         field_set(p_track, LINE_TRACK_FIELD_BARCODE_PHASE,
-                  (uint32_t)(LINE_BARCODE_NONE));
+                  (uint32_t)LINE_BARCODE_NONE);
         flag_set(p_track, LINE_TRACK_F_REJOIN,
                  line_track_flag(p_track, LINE_TRACK_F_REJOIN) ||
                      p_in->b_turning);
@@ -511,7 +511,7 @@ note_bars (line_track_t * p_track, bool const * p_was_black)
     if ((field_get(p_track, LINE_TRACK_FIELD_BARS_SIDE) != SIDE_NONE) &&
         !is_black(p_track, field_get(p_track, LINE_TRACK_FIELD_BARS_SIDE)))
     {
-        field_set(p_track, LINE_TRACK_FIELD_BARS_SIDE, (uint32_t)(SIDE_NONE));
+        field_set(p_track, LINE_TRACK_FIELD_BARS_SIDE, (uint32_t)SIDE_NONE);
     }
     if ((SIDE_NONE == field_get(p_track, LINE_TRACK_FIELD_BARS_SIDE)) &&
         (LINE_BARCODE_CREEP == (line_barcode_phase_t)field_get(
@@ -523,8 +523,7 @@ note_bars (line_track_t * p_track, bool const * p_was_black)
             if (is_black(p_track, side) && !p_was_black[side] &&
                 p_was_black[other] && is_black(p_track, other))
             {
-                field_set(p_track, LINE_TRACK_FIELD_BARS_SIDE,
-                          (uint32_t)(side));
+                field_set(p_track, LINE_TRACK_FIELD_BARS_SIDE, (uint32_t)side);
             }
         }
     }
@@ -533,7 +532,7 @@ note_bars (line_track_t * p_track, bool const * p_was_black)
         is_black(p_track, SIDE_LEFT) && is_black(p_track, SIDE_RIGHT))
     {
         field_set(p_track, LINE_TRACK_FIELD_BARS_SIDE,
-                  (uint32_t)(RETRACE_BARS_SIDE));
+                  (uint32_t)RETRACE_BARS_SIDE);
     }
 }
 
@@ -643,12 +642,12 @@ static void
 restart_tracking (line_track_t * p_track, line_track_input_t const * p_in,
                   int32_t target_deg)
 {
-    field_set(p_track, LINE_TRACK_FIELD_MODE, (uint32_t)(LINE_MODE_TRACK));
+    field_set(p_track, LINE_TRACK_FIELD_MODE, (uint32_t)LINE_MODE_TRACK);
     p_track->target_deg = robot_clamp_i16(target_deg);
-    field_set(p_track, LINE_TRACK_FIELD_TOUCH_SIDE, (uint32_t)(SIDE_NONE));
+    field_set(p_track, LINE_TRACK_FIELD_TOUCH_SIDE, (uint32_t)SIDE_NONE);
     p_track->touch_mm = robot_mark16(p_in->distance_mm);
     flag_set(p_track, LINE_TRACK_F_CURVE, false);
-    field_set(p_track, LINE_TRACK_FIELD_COUNTER_SIDE, (uint32_t)(SIDE_NONE));
+    field_set(p_track, LINE_TRACK_FIELD_COUNTER_SIDE, (uint32_t)SIDE_NONE);
     flag_set(p_track, LINE_TRACK_F_CROSS_HOLD, false);
     flag_set(p_track, LINE_TRACK_F_RETRACE, false);
     flag_set(p_track, LINE_TRACK_F_SETTLE, false);
@@ -656,7 +655,7 @@ restart_tracking (line_track_t * p_track, line_track_input_t const * p_in,
     {
         p_track->trend_deg[slot] = robot_clamp_i16(p_in->heading_deg);
     }
-    field_set(p_track, LINE_TRACK_FIELD_TREND_NEXT, (uint32_t)(0u));
+    field_set(p_track, LINE_TRACK_FIELD_TREND_NEXT, (uint32_t)0u);
     p_track->trend_mm = robot_mark16(p_in->distance_mm);
     p_track->white_start_mm = robot_mark16(p_in->distance_mm);
     p_track->lost_start_mm = robot_mark16(p_in->distance_mm);
@@ -669,7 +668,7 @@ restart_tracking (line_track_t * p_track, line_track_input_t const * p_in,
     p_track->search_samples = 0u;
     flag_set(p_track, LINE_TRACK_F_SEARCH_HIT, false);
     field_set(p_track, LINE_TRACK_FIELD_JUNCTION_PHASE,
-              (uint32_t)(JUNCTION_NONE));
+              (uint32_t)JUNCTION_NONE);
     start_episode(p_track, p_in);
 }
 
@@ -699,7 +698,7 @@ follow_episode (line_track_t * p_track, line_track_input_t const * p_in,
     {
         /* Over the crossing line. */
         field_set(p_track, LINE_TRACK_FIELD_JUNCTION_PHASE,
-                  (uint32_t)(JUNCTION_NONE));
+                  (uint32_t)JUNCTION_NONE);
     }
     if (b_left && b_right)
     {
@@ -732,7 +731,7 @@ start_episode (line_track_t * p_track, line_track_input_t const * p_in)
     bool const b_right = is_black(p_track, SIDE_RIGHT);
     if (b_left == b_right)
     {
-        field_set(p_track, LINE_TRACK_FIELD_ENTRY_SIDE, (uint32_t)(SIDE_NONE));
+        field_set(p_track, LINE_TRACK_FIELD_ENTRY_SIDE, (uint32_t)SIDE_NONE);
     }
     else
     {
@@ -760,7 +759,7 @@ start_junction (line_track_t * p_track, line_track_input_t const * p_in)
         (LINE_TURN_UTURN != p_in->turn))
     {
         field_set(p_track, LINE_TRACK_FIELD_JUNCTION_PHASE,
-                  (uint32_t)(JUNCTION_CROSS));
+                  (uint32_t)JUNCTION_CROSS);
         p_track->junction_mm = robot_mark16(p_in->distance_mm);
         p_track->junction_deg = robot_clamp_i16(p_track->entry_deg);
         flag_set(p_track, LINE_TRACK_F_CROSS_HOLD,
@@ -768,7 +767,7 @@ start_junction (line_track_t * p_track, line_track_input_t const * p_in)
         return;
     }
     field_set(p_track, LINE_TRACK_FIELD_JUNCTION_PHASE,
-              (uint32_t)(JUNCTION_DRIVE));
+              (uint32_t)JUNCTION_DRIVE);
     field_set(p_track, LINE_TRACK_FIELD_JUNCTION_TURN, (uint32_t)(p_in->turn));
     p_track->junction_mm = p_track->entry_mm;
     p_track->junction_deg = robot_clamp_i16(p_track->entry_deg);
@@ -807,9 +806,9 @@ drive_junction (line_track_t * p_track, line_track_input_t const * p_in)
             return;
     }
     field_set(p_track, LINE_TRACK_FIELD_JUNCTION_PHASE,
-              (uint32_t)(JUNCTION_PIVOT));
+              (uint32_t)JUNCTION_PIVOT);
     p_track->search_samples = 0u;
-    field_set(p_track, LINE_TRACK_FIELD_LAST_SIDE, (uint32_t)(side));
+    field_set(p_track, LINE_TRACK_FIELD_LAST_SIDE, (uint32_t)side);
     field_set(p_track, LINE_TRACK_FIELD_MODE,
               (uint32_t)((SIDE_LEFT == side) ? LINE_MODE_SEARCH_LEFT
                                              : LINE_MODE_SEARCH_RIGHT));
@@ -849,7 +848,7 @@ back_up (line_track_t * p_track, line_track_input_t const * p_in)
         if (p_track->barcode_samples >= LINE_BARCODE_BRAKE_SAMPLES)
         {
             field_set(p_track, LINE_TRACK_FIELD_BARCODE_PHASE,
-                      (uint32_t)(LINE_BARCODE_BACK));
+                      (uint32_t)LINE_BARCODE_BACK);
             p_track->barcode_samples = 0u;
             flag_set(p_track, LINE_TRACK_F_BACK_STARTED, false);
         }
@@ -863,7 +862,7 @@ back_up (line_track_t * p_track, line_track_input_t const * p_in)
         (p_track->barcode_samples >= LINE_BARCODE_BACK_SAMPLES))
     {
         field_set(p_track, LINE_TRACK_FIELD_BARCODE_PHASE,
-                  (uint32_t)(LINE_BARCODE_CREEP));
+                  (uint32_t)LINE_BARCODE_CREEP);
         p_track->barcode_mm = robot_mark16(p_in->distance_mm);
         restart_tracking(p_track, p_in, p_in->heading_deg);
     }
@@ -933,7 +932,7 @@ watch_barcode (line_track_t * p_track, line_track_input_t const * p_in)
              field_get(p_track, LINE_TRACK_FIELD_JUNCTION_PHASE)))
         {
             field_set(p_track, LINE_TRACK_FIELD_BARCODE_PHASE,
-                      (uint32_t)(LINE_BARCODE_BRAKE));
+                      (uint32_t)LINE_BARCODE_BRAKE);
             p_track->barcode_samples = 0u;
             p_track->line_deg = robot_clamp_i16(line_heading(p_track, p_in));
             p_track->brake_mm = robot_mark16(p_in->distance_mm);
@@ -948,7 +947,7 @@ watch_barcode (line_track_t * p_track, line_track_input_t const * p_in)
     {
         /* The heading now: odometry drifts over a creep. */
         field_set(p_track, LINE_TRACK_FIELD_BARCODE_PHASE,
-                  (uint32_t)(LINE_BARCODE_NONE));
+                  (uint32_t)LINE_BARCODE_NONE);
         p_track->line_deg = robot_clamp_i16(line_heading(p_track, p_in));
         flag_set(p_track, LINE_TRACK_F_SETTLE, true);
         p_track->settle_end_mm =
@@ -985,10 +984,10 @@ pivot_junction (line_track_t * p_track, line_track_input_t const * p_in,
     }
     else if (p_track->search_samples >= SEARCH_TIMEOUT_SAMPLES)
     {
-        field_set(p_track, LINE_TRACK_FIELD_MODE, (uint32_t)(LINE_MODE_STOP));
+        field_set(p_track, LINE_TRACK_FIELD_MODE, (uint32_t)LINE_MODE_STOP);
         p_track->target_deg = robot_clamp_i16(p_in->heading_deg);
         field_set(p_track, LINE_TRACK_FIELD_JUNCTION_PHASE,
-                  (uint32_t)(JUNCTION_NONE));
+                  (uint32_t)JUNCTION_NONE);
     }
     else
     {
@@ -1150,9 +1149,9 @@ track_edge (line_track_t * p_track, line_track_input_t const * p_in,
         {
             /* Black too long to be the car ahead of a bend. */
             flag_set(p_track, LINE_TRACK_F_CURVE, false);
-            field_set(p_track, LINE_TRACK_FIELD_TOUCH_SIDE, (uint32_t)(side));
+            field_set(p_track, LINE_TRACK_FIELD_TOUCH_SIDE, (uint32_t)side);
         }
-        field_set(p_track, LINE_TRACK_FIELD_LAST_SIDE, (uint32_t)(side));
+        field_set(p_track, LINE_TRACK_FIELD_LAST_SIDE, (uint32_t)side);
         if ((p_in->distance_mm -
              mark_mm(p_in, p_track->black_start_mm[side])) >= LINE_EDGE_MAX_MM)
         {
@@ -1176,17 +1175,16 @@ track_edge (line_track_t * p_track, line_track_input_t const * p_in,
             {
                 /* The tape was last on this side, not the bend's. */
                 flag_set(p_track, LINE_TRACK_F_CURVE, false);
-                field_set(p_track, LINE_TRACK_FIELD_LAST_SIDE,
-                          (uint32_t)(side));
+                field_set(p_track, LINE_TRACK_FIELD_LAST_SIDE, (uint32_t)side);
             }
             field_set(p_track, LINE_TRACK_FIELD_COUNTER_SIDE,
-                      (uint32_t)(SIDE_NONE));
+                      (uint32_t)SIDE_NONE);
         }
         if (!straight_pass(p_track) && crossed_out(p_track, p_in, side))
         {
             /* A bend on this side: the other sensor still ends it. */
             flag_set(p_track, LINE_TRACK_F_CURVE, true);
-            field_set(p_track, LINE_TRACK_FIELD_TOUCH_SIDE, (uint32_t)(side));
+            field_set(p_track, LINE_TRACK_FIELD_TOUCH_SIDE, (uint32_t)side);
             p_track->touch_mm = robot_mark16(p_in->distance_mm);
         }
         p_track->target_deg =
@@ -1232,13 +1230,12 @@ note_counter (line_track_t * p_track, line_track_input_t const * p_in,
 {
     if (counters_bend(p_track, p_in, side))
     {
-        field_set(p_track, LINE_TRACK_FIELD_COUNTER_SIDE, (uint32_t)(side));
+        field_set(p_track, LINE_TRACK_FIELD_COUNTER_SIDE, (uint32_t)side);
         p_track->counter_mm = robot_mark16(p_in->distance_mm);
     }
     else if (side == field_get(p_track, LINE_TRACK_FIELD_COUNTER_SIDE))
     {
-        field_set(p_track, LINE_TRACK_FIELD_COUNTER_SIDE,
-                  (uint32_t)(SIDE_NONE));
+        field_set(p_track, LINE_TRACK_FIELD_COUNTER_SIDE, (uint32_t)SIDE_NONE);
     }
     else
     {
@@ -1303,7 +1300,7 @@ note_touch (line_track_t * p_track, line_track_input_t const * p_in,
     {
         /* Too long ago to be the same bend. */
     }
-    field_set(p_track, LINE_TRACK_FIELD_TOUCH_SIDE, (uint32_t)(side));
+    field_set(p_track, LINE_TRACK_FIELD_TOUCH_SIDE, (uint32_t)side);
     p_track->touch_mm = robot_mark16(p_in->distance_mm);
 }
 
@@ -1312,9 +1309,9 @@ start_search (line_track_t * p_track, line_track_input_t const * p_in,
               uint32_t side)
 {
     p_track->search_start_deg = robot_clamp_i16(p_in->heading_deg);
-    field_set(p_track, LINE_TRACK_FIELD_SEARCH_PHASE, (uint32_t)(0u));
+    field_set(p_track, LINE_TRACK_FIELD_SEARCH_PHASE, (uint32_t)0u);
     p_track->search_samples = 0u;
-    field_set(p_track, LINE_TRACK_FIELD_LAST_SIDE, (uint32_t)(side));
+    field_set(p_track, LINE_TRACK_FIELD_LAST_SIDE, (uint32_t)side);
     aim_search(p_track, side);
 }
 
@@ -1322,7 +1319,7 @@ start_search (line_track_t * p_track, line_track_input_t const * p_in,
 static void
 aim_search (line_track_t * p_track, uint32_t side)
 {
-    field_set(p_track, LINE_TRACK_FIELD_SEARCH_SIDE, (uint32_t)(side));
+    field_set(p_track, LINE_TRACK_FIELD_SEARCH_SIDE, (uint32_t)side);
     flag_set(p_track, LINE_TRACK_F_SEARCH_HIT, false);
     field_set(p_track, LINE_TRACK_FIELD_MODE,
               (uint32_t)((SIDE_LEFT == side) ? LINE_MODE_SEARCH_LEFT
@@ -1347,7 +1344,7 @@ search (line_track_t * p_track, line_track_input_t const * p_in)
     {
         /* The tape swept across this side's sensor and is between them. */
         restart_tracking(p_track, p_in, p_in->heading_deg);
-        field_set(p_track, LINE_TRACK_FIELD_LAST_SIDE, (uint32_t)(side));
+        field_set(p_track, LINE_TRACK_FIELD_LAST_SIDE, (uint32_t)side);
         return;
     }
     else
@@ -1367,18 +1364,18 @@ search (line_track_t * p_track, line_track_input_t const * p_in)
                              LINE_SEARCH_DONE_DEG);
     if (p_track->search_samples >= SEARCH_TIMEOUT_SAMPLES)
     {
-        field_set(p_track, LINE_TRACK_FIELD_MODE, (uint32_t)(LINE_MODE_STOP));
+        field_set(p_track, LINE_TRACK_FIELD_MODE, (uint32_t)LINE_MODE_STOP);
         p_track->target_deg = robot_clamp_i16(p_in->heading_deg);
     }
     else if (b_reached &&
              (0u == field_get(p_track, LINE_TRACK_FIELD_SEARCH_PHASE)))
     {
-        field_set(p_track, LINE_TRACK_FIELD_SEARCH_PHASE, (uint32_t)(1u));
+        field_set(p_track, LINE_TRACK_FIELD_SEARCH_PHASE, (uint32_t)1u);
         aim_search(p_track, other);
     }
     else if (b_reached)
     {
-        field_set(p_track, LINE_TRACK_FIELD_MODE, (uint32_t)(LINE_MODE_STOP));
+        field_set(p_track, LINE_TRACK_FIELD_MODE, (uint32_t)LINE_MODE_STOP);
         p_track->target_deg = robot_clamp_i16(p_in->heading_deg);
     }
     else
