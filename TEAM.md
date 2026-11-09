@@ -17,8 +17,9 @@ subsystem, ask its owner or open a pull request for them to review.
 |---|---|---|---|---|---|
 | obstacle | Ultrasonic sensor on a servo scans for a clear path | | Kitsuneez | `app_program/obstacle/` | `testing/obstacle/` |
 | motion | Two H-bridge DC motors and wheel encoders: speed loop, distance moves, turns and line following in `tMotion` | | felicia-chuaxy | `app_program/motion/` | `testing/motion/` |
-| line_follow | Two IR sensors → line commands (dry run, no motors) | | kaiwenteoo | `app_program/line_follow/` | `testing/line_follow/` |
-| terrain | GY-511 accelerometer, calibration and corrected readings | | ann | `app_program/terrain/` | `testing/terrain/` |
+| line_follow | Two digital IR sensors → target headings (turn while black) and searches for `tMotion` | | kaiwenteoo | `app_program/line_follow/` | `testing/line_follow/` |
+| barcode | Third digital IR sensor → Code 39 text (uses the `tBarcode` slot reserved under line_follow) | | *kaiwenteoo, to confirm* | `app_program/barcode/` | `testing/barcode/` |
+| terrain | GY-511 accelerometer, calibration and corrected readings; magnetometer as a compass | | ann | `app_program/terrain/` | `testing/terrain/` |
 | communication | Wi-Fi connection status | | Jerome-4469 | `app_program/communication/` | `testing/communication/` |
 
 Shared files (`app_program/app_main.c`, `app_program/app.h`,
@@ -70,9 +71,9 @@ fixed.
 | GP20 | | |
 | GP21 | | |
 | GP22 | | |
-| GP26 | line_follow | left IR sensor (ADC0), set to analogue by the kernel ADC driver at boot |
-| GP27 | line_follow | right IR sensor (ADC1), set to analogue by the kernel ADC driver at boot |
-| GP28 | | (ADC2 capable) |
+| GP26 | line_follow | left IR sensor DO (digital input; the kernel ADC driver leaves it alone) |
+| GP27 | line_follow | right IR sensor DO (digital input; the kernel ADC driver leaves it alone) |
+| GP28 | barcode | barcode IR sensor DO (digital input, edge interrupt) |
 
 Application settings live in `app_program/obstacle/obstacle_config.h`.
 Shared application payloads live in `app_program/robot_types.h`; their sweep
@@ -116,9 +117,9 @@ the drivers have no locking to stop it.
 | I2C1 | | | |
 | SPI0 | | | |
 | SPI1 | | | |
-| ADC | line_follow | `line_follow_task` (kernel driver `"adca"`) | GP26, GP27 (GP28 free) |
+| ADC | | (kernel driver `"adca"` still built, no pin set up; the IR sensors are digital) | |
 | PWM slices (list) | obstacle: slice 6. motion: slices 4, 5 | obstacle: `obstacle_scan_task`. motion: `tMotion` (`motion_start()` configures them braked, then hands them over) | GP12 (obstacle); GP8–GP11 (motion) |
-| GPIO bank interrupt (`IO_IRQ_BANK0`, all GPIOs) | obstacle | `obstacle_scan_task`, core 0 only | GP17 echo edges. Ask the obstacle owner before enabling any other GPIO interrupt |
+| GPIO bank interrupt (`IO_IRQ_BANK0`, all GPIOs) | obstacle | dispatcher `obstacle/drv_gpio_irq.c`, core 0 only; each pin is attached from its own core-0 task | GP17 echo edges (`obstacle_scan_task`), GP28 barcode edges (`tBarcode`). Attach other pins through `drv_gpio_irq_attach()`, never `tk_def_int()`; ask the obstacle owner first |
 | PIO0 | motion | `tMotion` (`motion_start()` loads the encoder program; only `tMotion` reads the counts, as `encoder_get_count()` empties the FIFO) | GP2, GP3, GP13, GP14 (inputs). The program fills instruction slots 0–23 and uses state machines 2 and 3; slots 24–31 and state machines 0 and 1 are free. 2 and 3, not 0 and 1, because the SDK allocator hands out state machine 0 first and places programs at the top slots, so a fallback to PIO0 would not collide. `encoder_init()` fails if any PIO0 state machine is already running |
 | PIO1 | *kernel*; planned RGB LED | `cyw43_utk_task` (gSPI to the radio: 6 instructions, 1 state machine). Proposed: the WS2812 LED program (4 instructions) goes here too, leaving PIO0 to the encoders; the LED's owner must confirm | GP23–25, GP29; GP18 |
 | TIMER (free-running 1 MHz counter) | *shared, read only* | any | — Read by obstacle and terrain; never write it |
@@ -177,7 +178,8 @@ Change it only by team agreement. Write down every task you create.
 |---|---|---|
 | *safety (unassigned)* | 5 | *tSafety – 5 (reserved)* |
 | motion | 6 | `tMotion` – 6 – core 1 (`TP_PRC2`; nothing above it runs there, NFR1) |
-| line_follow | 7–8 | `line_follow_task` (tLine) – 7 – any; *tBarcode – 8 (reserved)* |
+| line_follow | 7 | `line_follow_task` (tLine) – 7 – any |
+| barcode | 8 | `tBarcode` – 8 – core 0 (`TP_PRC1`; the GPIO interrupt is on core 0) |
 | terrain | 9 | `terrain_task` (tImu) – 9 – any |
 | *mission (unassigned)* | 10 | *tMission – 10 (reserved)* |
 | obstacle | 11–12 | `obstacle_scan_task` (tScan) – 11 – core 0 (`TP_PRC1`; the echo interrupt is on core 0); its test helper task 12; with the bypass on, it also holds INHIBIT from start-up and sends motion commands (IF-06) |
@@ -191,18 +193,20 @@ Every arrow between two subsystems is listed here. The **provider** creates
 the kernel object and publishes its ID in its own `<name>.h`; the **user**
 only sends to it or waits on it. Agree on the data format before coding.
 
-Rows marked *proposed* or *interim* are not agreed yet; the line commands
-are still TODOs.
+Rows marked *proposed* or *interim* are not agreed yet.
 
 | ID | From → To | Mechanism | Object ID name | Data / meaning | Agreed by |
 |---|---|---|---|---|---|
 | IF-01 | tMission → motion | Message buffer | `motion_mbf_cmd` (MBF_MOTION_CMD) | one `uint32_t` command word, packed with the `robot_motion_cmd_` helpers in `robot_types.h` (22-bit layout, Tribunal 1; stop-at-line acquires fresh current visibility) | proposed by motion; tMission owner to agree |
 | IF-02 | tSafety → motion | Event flag | `motion_flg_ctrl` (FLG_MOTION), bit `MOTION_FLG_INHIBIT` | set: brake at once and discard commands; clear: back to STOPPED | proposed by motion; tSafety owner to agree |
 | IF-03 | motion → tMission | Event flag + status word | `motion_flg_event` (`MOTION_EVT_` bits), `motion_get_status()` | MOVE_DONE (reason in status), STALL, ENC_FAULT, REJECTED, FOLLOW_ENDED; mode 3 bits. The status is published before any event bit is set, so a reader that sees an event and then reads the status gets that command's done reason | interim until FLG_MISSION exists |
-| IF-04 | line_follow → motion | Function (one 32-bit store) | `motion_set_line_input()` | signed line error −1000..+1000 and line-seen, every reading | interim until `line_state_t` under MTX_LINE; kaiwenteoo to agree |
+| IF-04 | line_follow ↔ motion | Latest-value slots, double-buffered (no lock, never waits); reads of IF-05 and one status byte | `motion_command_submit()`; `motion_get_odometry()`, `motion_line_control_active()`, `motion_get_status()` | `line_request_t` every 10 ms: mode (TRACK, SEARCH_LEFT/RIGHT, STOP), absolute target heading (odometry degrees), line seen (for stop-at-line), junction (a cross being taken). TRACK holds the heading at follow speed; SEARCH pivots to it. Older than 100 ms stops following | owners agreed (digital rewrite, 2026-11-05) |
 | IF-05 | motion → terrain | Shared copy, sequence-checked (no lock, never waits) | `motion_get_odometry()` | `motion_shared_odometry_t`: update count, distance mm and heading deg (`int32`), speed and both wheel speeds mm/s (`int16`); + forward and left; updated every 20 ms | proposed by motion; ann to agree; moves into `telemetry_t` under MTX_TELEM in step 8 |
 | IF-06 | obstacle → motion | Uses IF-01, IF-02, IF-03 | `motion_mbf_cmd`, `motion_flg_ctrl` (`MOTION_FLG_INHIBIT`), `motion_flg_event` | interim tMission/tSafety for obstacles, only while `OBSTACLE_AVOID_ENABLED`: INHIBIT from start-up until a confirmed clear path and on every stop; box-bypass commands; FOLLOW to resume; a latched FAULT keeps INHIBIT until reboot. The only task that sets or clears INHIBIT and the only consumer of MOVE_DONE (clears every `MOTION_EVT_` bit before each command); hands both to tSafety/tMission when they exist | proposed by obstacle; felicia-chuaxy to agree |
+| IF-08 | barcode → line_follow | One word, latest value (no lock, never waits) | `line_follow_set_turn()`, `line_follow_barcode_ahead()`, `line_follow_barcode_done()`, `line_follow_barcode_phase()` | Slow pass: on `ahead` the car brakes, backs up and tracks at 30 mm/s until `done`; the reader drops edges during BRAKE and BACK. `line_turn_t` for the next cross junction: STRAIGHT (default), LEFT, RIGHT, UTURN; set on each decoded barcode, used by one junction then STRAIGHT again. The barcode-to-turn table comes from the dashboard (IF-10) | *proposed* (2026-11-06) |
 | IF-07 | obstacle → any | Event flag + shared copy, sequence-checked (no lock, never waits) | `obstacle_flg_event` (FLG_OBSTACLE), `obstacle_get_state()` | STOP, CRITICAL and FAULT levels; RESULT edge on a new result sequence (one consumer clears it); `obstacle_shared_state_t`: packed result, its geometry (mm from the servo pivot), stop request, bypass state and fault reason | proposed by obstacle |
+| IF-09 | terrain → any | Shared copy under the terrain spin lock (held for a struct copy, never waits) | `terrain_compass_get()` (`app_program/terrain/terrain_compass.h`); `terrain_monitor_on_hump()` (`terrain_monitor.h`): holds the barcode trigger, slows line following | `terrain_compass_t`: valid flag, raw field on the car's X, Y, Z (counts), heading in tenths of a degree counter-clockwise from magnetic north (+ is left, like IF-05), sample count; updated every 10 ms by `terrain_task`. Read by line_follow for its trace only (not steering) | *proposed* (2026-11-06) |
+| IF-10 | dashboard → car | MQTT topic `<MQTT_TOPIC>/cmd`, read in the radio task; results lock-free, one flag and one word per table entry, never waits | `remote_command_handle()`, `remote_command_stopped()`, `remote_command_turn()` (`app_program/communication/remote_command.h`) | Text messages `start`, `stop`, `clear`, `map <barcode> <STRAIGHT\|LEFT\|RIGHT\|UTURN>`. MQTT builds boot stopped; obstacle holds INHIBIT while stopped and restarts its bypass logic on Start (a latched FAULT stays). Barcode reads the table for IF-08. The car reports back with a `CAR` console line twice a second (`car_status.c`). Dashboard: `tools/dashboard/car_dashboard.py` | *proposed* (2026-11-06) |
 
 Each interface is tested by at least one integration test
 (`testing/integration/TEST_LOG.md`).
@@ -212,18 +216,18 @@ Each interface is tested by at least one integration test
 Limits are set in `config/config.h`. If the team needs more, raise the
 limit there.
 
-| Object | Limit | obstacle | motion | line_follow | terrain | communication |
-|---|---|---|---|---|---|---|
-| Task | 32 | 1 | 1 | 1 | 1 | 1 |
-| Semaphore | 16 | | | | | |
-| Event flag | 16 | 1 | 2 | | | |
-| Mailbox | 12 | | | | | |
-| Mutex | 12 | | | | | |
-| Message buffer | 12 | | 1 | | | |
-| Fixed memory pool | 12 | | | | | |
-| Variable memory pool | 12 | | | | | |
-| Cyclic handler | 12 | | 1 | | | |
-| Alarm handler | 12 | | | | | |
+| Object | Limit | obstacle | motion | line_follow | barcode | terrain | communication |
+|---|---|---|---|---|---|---|---|
+| Task | 32 | 1 | 1 | 1 | 1 | 1 | 1 |
+| Semaphore | 16 | | | | | | |
+| Event flag | 16 | 1 | 2 | | | | |
+| Mailbox | 12 | | | | | | |
+| Mutex | 12 | | | | | | |
+| Message buffer | 12 | | 1 | | | | |
+| Fixed memory pool | 12 | | | | | | |
+| Variable memory pool | 12 | | | | | | |
+| Cyclic handler | 12 | | 1 | | | | |
+| Alarm handler | 12 | | | | | | |
 
 (The kernel's USB and WiFi service tasks, and its I2C and ADC drivers, also
 use a few of these.)

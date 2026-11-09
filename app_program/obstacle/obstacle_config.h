@@ -39,6 +39,20 @@
 #define OBSTACLE_CENTRE_INDEX                                                  \
     ((OBSTACLE_CENTRE_DEG - OBSTACLE_SWEEP_FIRST_DEG) / OBSTACLE_SWEEP_STEP_DEG)
 
+/* Scan angles the sensor holds to watch the obstacle side while passing:
+ * 30 degrees off the heading, inside the 50..130 degree sweep. */
+#define OBSTACLE_WATCH_LEFT_DEG 60u
+#define OBSTACLE_WATCH_RIGHT_DEG 120u
+
+/*
+ * On the sidestep the sensor faces back along the line at the obstacle's
+ * front, the turn's angle round from ahead, within these servo limits. A sweep
+ * from standing cannot tell 11, 16 and 21 cm apart (2026-11-08), but crossing
+ * the front, the face's echo should end at its edge however wide the beam.
+ */
+#define OBSTACLE_WATCH_MIN_DEG 30
+#define OBSTACLE_WATCH_MAX_DEG 150
+
 /* Side positions retain the median of nonzero samples. */
 #define OBSTACLE_PINGS_PER_ANGLE 3u
 
@@ -116,6 +130,9 @@
  * millimetre values; the echo equivalents are derived.
  *
  * Detection: 150 mm -> 989 us. A nearer centre reading requests a stop.
+ * 250 mm was tried on 2026-11-07: the beam reaches well past the obstacle's
+ * edges from there, and the width read 267 and 328 mm, against 161 to 219 at
+ * 150 mm. The bypass was quicker, needing no reverse and second sweep.
  */
 #define OBSTACLE_DETECT_DISTANCE_MM 150u
 #define OBSTACLE_DETECT_ECHO_US                                                \
@@ -137,10 +154,21 @@
 
 /*
  * Width sweep: a VALID reading is on the obstacle (HIT) when it is nearer
- * than the centre echo plus this margin, 466 us (about 80 mm). A flat face
- * 300 mm ahead reads 271 us farther at 30 degrees, so it still counts.
+ * than a flat face square to the heading at the centre range would read at
+ * that angle (centre echo / cos of the angle off centre) plus this margin,
+ * 466 us (about 80 mm). Without the cosine a wide wall 300 mm ahead would
+ * read 534 us farther at the 50 and 130 degree ends and look clear.
  */
 #define OBSTACLE_EDGE_JUMP_US 466u
+
+/*
+ * An end hit this far behind that flat face, with the other end clear, is
+ * something beside the obstacle: on 2026-11-07 ends 125 and 157 us behind it
+ * read a 16 cm obstacle as 256 and 259 mm. The width walks on inward, and the
+ * end stays blocked for choosing a side. Ends on the obstacle read 30 to
+ * 245 us in front of it.
+ */
+#define OBSTACLE_END_BEHIND_US 100u
 
 /*
  * Servo timing: preserve the existing uncalibrated one-second wait.
@@ -152,18 +180,31 @@
 #define OBSTACLE_SERVO_SETTLE_MARGIN_MS 150u
 
 /*
- * Width geometry, provisional. Pivot offset is not measured yet (zero).
- * Pivot offset is signed, along the sensor's radial measurement axis.
+ * Width geometry from OBS-U71 (2026-11-06, 210 mm obstacle at 150, 200 and
+ * 250 mm from the servo shaft). Pivot offset is signed, along the sensor's
+ * radial measurement axis: 14 mm puts all three ranges within 1 mm. A ruler
+ * gives about 20 mm (sensor 80 mm, servo about 60 mm from the axle); the
+ * fit stays, as it also absorbs the provisional OBSTACLE_ECHO_OFFSET_MM.
  * A lateral mounting offset needs a separate coordinate transform.
  * A found edge lies half a step outside its hit; the edge correction then
- * moves it toward the obstacle centre (beam spread). The 11 degree value is
- * a single-case estimate (160 mm object at 300 mm, 2026-11-03_width_300.txt)
- * that reads 155..159 mm; refit with OBS-U33 after OBS-U28/U29/U30 and the
- * pivot measurement. Corrections above the maximum make the width
- * unavailable.
+ * moves it toward the obstacle centre. On a flat face at these ranges the
+ * echoes stop at or inside the true edge, so no correction is needed: 0
+ * gives +5, -33 and +9 mm where 11 gave -69, -115 and -91 mm. The -33 mm at
+ * 200 mm is the 10 degree grid. Corrections above the maximum make the
+ * width unavailable.
  */
-#define OBSTACLE_SENSOR_RADIAL_OFFSET_MM 0.0f
-#define OBSTACLE_EDGE_CORRECTION_DEG 11.0f
+#define OBSTACLE_SENSOR_RADIAL_OFFSET_MM 14.0f
+#define OBSTACLE_EDGE_CORRECTION_DEG 0.0f
+/*
+ * Close up, both edges echo out to the same grid angle whatever the width: 16
+ * and 21 cm both hit 60 and 120 degrees at the 150 mm stop and read 211 mm
+ * (2026-11-07). The echo there comes from the corner, so the range gives its
+ * place: obstacle_width_close_up(). Only within this range, in mm, and with
+ * both edges this far off centre, in grid steps: further away the outer hits
+ * are the face, not the corners, and it read a 210 mm obstacle as 117.
+ */
+#define OBSTACLE_WIDTH_CLOSE_MAX_MM 200.0f
+#define OBSTACLE_WIDTH_CLOSE_STEPS 3u
 #define OBSTACLE_EDGE_CORRECTION_MAX_DEG 15.0f
 
 /*
@@ -201,7 +242,7 @@
 
 /*
  * Worst case for one fine angle: a one-step move, every allowed trigger,
- * then the last transaction and one tick: 1000 + 3 * 70 + 25 + 10 = 1245 ms.
+ * then the last transaction and one tick: 170 + 3 * 70 + 25 + 10 = 415 ms.
  */
 #define OBSTACLE_FINE_POSITION_WORST_MS                                        \
     (OBSTACLE_SETTLE_MS(OBSTACLE_SWEEP_STEP_DEG) +                             \
@@ -211,8 +252,8 @@
 
 /*
  * Worst case for both fine walks: every index between an end and the
- * centre (5 per side), plus the longest cross move, from 120 degrees to the
- * first left index: 10 * 1245 + 1000 = 13450 ms today.
+ * centre (3 per side), plus the longest cross move, from 130 degrees to the
+ * first left index: 6 * 415 + 290 = 2780 ms today.
  */
 #define OBSTACLE_FINE_SCAN_WORST_MS                                            \
     ((2u * (OBSTACLE_CENTRE_INDEX - 1u) * OBSTACLE_FINE_POSITION_WORST_MS) +   \
@@ -223,7 +264,7 @@
  * Worst case for a side scan: centre-to-left move, left position,
  * left-to-right move, right position, then both fine walks. The return to
  * centre happens after the result is published.
- * Today: 1000 + 1000 + 2 * 385 + 13450 = 16220 ms.
+ * Today: 230 + 310 + 2 * 385 + 2780 = 4090 ms.
  */
 #define OBSTACLE_SIDE_SCAN_WORST_MS                                            \
     (OBSTACLE_SETTLE_MS(OBSTACLE_CENTRE_DEG - OBSTACLE_SWEEP_FIRST_DEG) +      \
@@ -232,9 +273,9 @@
 
 /*
  * Worst case for a corridor sweep (bypass verification): the move from
- * centre to 60 degrees, then every grid position as a side position, with
+ * centre to 50 degrees, then every grid position as a side position, with
  * a one-step move before each after the first.
- * Today: 1000 + 12 * 1000 + 13 * 385 = 18005 ms.
+ * Today: 230 + 8 * 170 + 9 * 385 = 5055 ms.
  */
 #define OBSTACLE_CORRIDOR_WORST_MS                                             \
     (OBSTACLE_SETTLE_MS(OBSTACLE_CENTRE_DEG - OBSTACLE_SWEEP_FIRST_DEG) +      \
@@ -245,7 +286,7 @@
 /*
  * Watchdog limits. The stop acknowledgement timeout belongs to the motion
  * handshake (integration). The side-scan timeout is twice the worst case,
- * 32440 ms today. It is a fail-safe bound, not a performance target.
+ * 8180 ms today. It is a fail-safe bound, not a performance target.
  */
 #define OBSTACLE_STOP_ACK_TIMEOUT_MS 500u
 #define OBSTACLE_SCAN_TIMEOUT_MS (2u * OBSTACLE_SIDE_SCAN_WORST_MS)
@@ -259,12 +300,16 @@
  * motion commands.
  */
 #define OBSTACLE_AVOID_ENABLED 1
-/* The car's own body shows in the sensor's view at about 5 cm, at the
- * 60-70 degree end of the sweep. Side and watch readings nearer than this
- * distance, at or below this angle, count as no echo; every other reading
- * is used as measured. Centre readings are not affected. */
+/* The car's own body shows in the sensor's view at about 5 cm, at servo
+ * commands 60-70 (before trim). Side readings nearer than this distance,
+ * at a servo command at or below SELF_MAX_DEG or at or above SELF_MIN_DEG,
+ * count as no echo; every other reading is used as measured. Centre
+ * readings, and so CRITICAL, are not affected. Refit both angles with
+ * calibration mode 5 (TODO(calibrate): check the 50-130 sweep against the
+ * car); 181 turns the upper range off. */
 #define OBSTACLE_SIDE_SELF_DISTANCE_MM 60u
 #define OBSTACLE_SIDE_SELF_MAX_DEG 70
+#define OBSTACLE_SIDE_SELF_MIN_DEG 181
 #define OBSTACLE_SIDE_SELF_ECHO_US                                             \
     OBSTACLE_MM_TO_ECHO_US(OBSTACLE_SIDE_SELF_DISTANCE_MM)
 /* Reverse this far when CRITICAL holds a forward bypass move, at most
@@ -275,19 +320,49 @@
 #define OBSTACLE_AVOID_MIN_ROOM_MM 200u
 #define OBSTACLE_AVOID_MAX_BACKOFFS 2u
 #define OBSTACLE_AVOID_BACKOFF_DELAY_MS 300u
-#define OBSTACLE_CAR_WIDTH_MM 127u        /* W, 12.7 cm, ruler. */
-#define OBSTACLE_CAR_AXLE_TO_PIVOT_MM 20u /* Axle midpoint to servo pivot. */
+/*
+ * W, as twice the wider half: 12.7 cm by ruler, and the left side sticks out
+ * 2 cm more than the right (user, 2026-11-06). The bypass treats the car as
+ * symmetrical, so both sides get the left side's clearance.
+ */
+#define OBSTACLE_CAR_WIDTH_MM 167u
+#define OBSTACLE_CAR_AXLE_TO_PIVOT_MM 60u /* Axle midpoint to servo pivot. */
 #define OBSTACLE_CAR_REAR_MM 162u         /* Axle midpoint to rear bumper. */
+#define OBSTACLE_AVOID_LINE_OVERSHOOT_MM 130u /* IR row to axle, 13 cm. */
+/*
+ * Coming back, black under the IR row counts as the line only once the row
+ * is planned to be this close to it. On 2026-11-07 both bypasses stopped for
+ * black with the row planned 140 to 200 mm short of the line, probably a
+ * cross tape. The pass can drift toward the line, 70 mm in one of those runs,
+ * so this must stay above that or the row crosses the line unseen.
+ */
+#define OBSTACLE_AVOID_LINE_GATE_MM 100u
 #define OBSTACLE_AVOID_MARGIN_MM 60u
 #define OBSTACLE_AVOID_DEPTH_MM 200u /* Largest test obstacle's depth. */
 #define OBSTACLE_AVOID_SIDESTEP_MIN_MM 100u
 #define OBSTACLE_AVOID_SIDESTEP_MAX_MM 400u
+/* An obstacle on the line reaches at least this far out on the side the car
+ * passes, whatever the sweep says: half the widest test obstacle, 230 mm. On
+ * 2026-11-08 two sidesteps planned from an edge read 0 and 30 mm off the line
+ * left the car's side 60 and 89 mm off it, and it hit a centred obstacle. */
+#define OBSTACLE_AVOID_EDGE_MIN_MM 115u
 #define OBSTACLE_AVOID_LATERAL_MAX_MM 500u
 #define OBSTACLE_AVOID_PASS_MAX_MM 1500u
 #define OBSTACLE_AVOID_RETURN_EXTRA_MM 150u
 #define OBSTACLE_AVOID_MAX_SIDESTEPS 3u /* First plus two extra. */
 #define OBSTACLE_AVOID_RESUME_MIN_MM 10u
 #define OBSTACLE_AVOID_RESUME_MIN_DEG 3u
+/* Stopped more than RESUME_MIN_DEG off the line's heading, the car turns back
+ * onto it and measures from there. The heading is the car's, averaged over the
+ * last 3 steps of travel and the moment it was stopped, as a barcode's creep
+ * does. Stopped this long first, so the brake has finished. A car further off
+ * than the maximum, or that turned that much over those steps, is in a bend or
+ * a pivot and has no line's heading to go by; 0 never straightens. Off for now:
+ * on 2026-11-08 the average lagged a correction and turned the car away from
+ * the obstacle's face, whose nearest echo was 25 to 30 degrees off centre. */
+#define OBSTACLE_AVOID_STRAIGHTEN_SETTLE_MS 250u
+#define OBSTACLE_AVOID_STRAIGHTEN_STEP_MM 32u
+#define OBSTACLE_AVOID_STRAIGHTEN_MAX_DEG 0u
 /* 0: one sweep at the stop, then drive the whole path without the corridor
  * sweep or forward re-checks; only CRITICAL holds the car on the way. 1:
  * re-check before each move and verify the corridor (slower). */
@@ -302,6 +377,15 @@
  * blocked bypass may re-sweep the corridor, so its wait exceeds one sweep.
  */
 #define OBSTACLE_AVOID_SEND_TIMEOUT_MS 200u
+
+/*
+ * Temporary: the dashboard's Reverse backs the stopped car up this far per
+ * press, to bring it back between test passes. The limit is a backstop: the
+ * move takes under 1 s at MOTION_MOVE_SPEED_MM_S.
+ */
+#define OBSTACLE_REMOTE_REVERSE_MM 200u
+#define OBSTACLE_REMOTE_REVERSE_LIMIT_MS 3000u
+
 #define OBSTACLE_AVOID_PREPARE_TIMEOUT_MS                                      \
     (OBSTACLE_SCAN_TIMEOUT_MS +                                                \
      OBSTACLE_SETTLE_MS(OBSTACLE_SWEEP_LAST_DEG - OBSTACLE_SWEEP_FIRST_DEG))
@@ -314,13 +398,14 @@
 
 /*
  * Calibration uses the scan task instead of normal obstacle scanning.
- * Keep OFF in committed configuration; select 1..4 only for bench runs.
+ * Keep OFF in committed configuration; select 1..5 only for bench runs.
  */
 #define OBSTACLE_CAL_MODE_OFF 0u
 #define OBSTACLE_CAL_MODE_RANGING 1u    /* Fixed 90 degree ping bursts. */
 #define OBSTACLE_CAL_MODE_TRIM_SWEEP 2u /* 80..100 degrees, one degree steps. */
 #define OBSTACLE_CAL_MODE_SETTLE 3u /* Settling trials in either direction. */
 #define OBSTACLE_CAL_MODE_ANGLES 4u /* Holds, including 60 to 120 moves. */
+#define OBSTACLE_CAL_MODE_WIDE 5u   /* The sweep, five degree steps. */
 
 #define OBSTACLE_CALIBRATION_MODE OBSTACLE_CAL_MODE_OFF
 #define OBSTACLE_CAL_PINGS 20u
@@ -334,6 +419,21 @@
 
 /* Signed command correction: physical centre command minus 90 degrees. */
 #define OBSTACLE_SERVO_TRIM_DEG 0
+
+/*
+ * Servo direction. Scan angles below 90 are left of the heading (+x). Set
+ * 1 if the servo is mounted so that a command below 90 faces right: check
+ * with calibration mode 5 and an object on the car's left. 0 keeps the
+ * commands equal to the scan angles. This car needs 1: its 60 degree command
+ * faces right (seen on 2026-11-04). At 0 the sweep's sides were swapped, and
+ * on 2026-11-08 the car went round a lopsided scan into the obstacle.
+ */
+#define OBSTACLE_SERVO_MIRRORED 1
+/* Servo command, before trim, that points the sensor at a scan angle. */
+#define OBSTACLE_SERVO_PHYSICAL_DEG(angle)                                     \
+    (OBSTACLE_SERVO_MIRRORED ? (180 - (int)(angle)) : (int)(angle))
+#define OBSTACLE_SERVO_COMMAND_DEG(angle)                                      \
+    (OBSTACLE_SERVO_PHYSICAL_DEG(angle) + OBSTACLE_SERVO_TRIM_DEG)
 
 /* Compile-time consistency checks. */
 
@@ -449,12 +549,23 @@
 #error "Settle margin must outlast an in-flight measurement (drain rule)"
 #endif
 
+#if (OBSTACLE_WATCH_LEFT_DEG < OBSTACLE_SWEEP_FIRST_DEG) ||                    \
+    (OBSTACLE_WATCH_LEFT_DEG >= OBSTACLE_CENTRE_DEG) ||                        \
+    (OBSTACLE_WATCH_RIGHT_DEG != (180u - OBSTACLE_WATCH_LEFT_DEG)) ||          \
+    (OBSTACLE_WATCH_RIGHT_DEG > OBSTACLE_SWEEP_LAST_DEG)
+#error "Watch angles must mirror each other inside the sweep, off centre"
+#endif
+
+#if (OBSTACLE_SERVO_MIRRORED != 0) && (OBSTACLE_SERVO_MIRRORED != 1)
+#error "OBSTACLE_SERVO_MIRRORED must be 0 or 1"
+#endif
+
 #if OBSTACLE_TICK_MS != CNF_TIMER_PERIOD
 #error "Tick must match CNF_TIMER_PERIOD in config/config.h"
 #endif
 
 #if (OBSTACLE_CALIBRATION_MODE < OBSTACLE_CAL_MODE_OFF) ||                     \
-    (OBSTACLE_CALIBRATION_MODE > OBSTACLE_CAL_MODE_ANGLES)
+    (OBSTACLE_CALIBRATION_MODE > OBSTACLE_CAL_MODE_WIDE)
 #error "OBSTACLE_CALIBRATION_MODE must be one of the OBSTACLE_CAL_MODE_ values"
 #endif
 
@@ -492,6 +603,14 @@
     (OBSTACLE_AVOID_PASS_MAX_MM > 65535u) ||                                   \
     (OBSTACLE_CAR_WIDTH_MM > 65535u) || (OBSTACLE_AVOID_RESUME_MIN_DEG > 255u)
 #error "Bypass distances must fit 16 bits"
+#endif
+#if (OBSTACLE_AVOID_EDGE_MIN_MM + (OBSTACLE_CAR_WIDTH_MM / 2u) +               \
+     OBSTACLE_AVOID_MARGIN_MM) > OBSTACLE_AVOID_SIDESTEP_MAX_MM
+#error "The largest sidestep must clear OBSTACLE_AVOID_EDGE_MIN_MM"
+#endif
+#if (OBSTACLE_AVOID_STRAIGHTEN_MAX_DEG > 255u) ||                              \
+    (OBSTACLE_AVOID_STRAIGHTEN_STEP_MM > 65535u)
+#error "Straightening limits must fit their fields"
 #endif
 #if OBSTACLE_AVOID_BLOCK_WAIT_MS <= OBSTACLE_CORRIDOR_WORST_MS
 #error "A blocked bypass must be able to wait through one corridor sweep"

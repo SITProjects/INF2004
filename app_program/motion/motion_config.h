@@ -145,8 +145,10 @@
  * equal counts. The encoders cannot see this: with 0 they read 0 degrees
  * while the car curves left. MOT-U25 (2026-11-05): 85-140 mm left over 1 m
  * with sync on, mean 112 mm, is 2 * 112 * track / 1000^2 = 0.025.
- * Used only by this loop: turns and the odometry heading ignore it, so the
- * heading of a straight 1 m move reads about -13 degrees.
+ * Used by this loop and by line following's heading hold, which curved left
+ * the same way until 2026-11-07: the right sensor then did all the
+ * correcting. Turns and the odometry heading ignore it, so the heading of a
+ * straight 1 m move or held line reads about -13 degrees.
  * TODO(calibrate): confirm with MOT-U25 and the MOT-U26 reverse. Raise it if
  * the car still curves left, lower it if it curves right.
  */
@@ -164,42 +166,44 @@
 /*
  * Chassis speed of line following, in mm/s. The MBF_MOTION_CMD packing
  * has no speed field, so tMotion follows at this speed.
- * TODO(calibrate) with MOT-U31: start slow; raise only once the line gains
- * hold the tightest curve of the course.
+ * 120 since 2026-11-07, the user's choice after driving it, back from 80.
+ * The car model rates bends lower here: with healthy sensors a left U passes
+ * 85 of 324 cases against 259 at 80, and fails from 0.35 s of turn lag.
+ * TODO(calibrate) with MOT-U31: confirm on the tightest curve of the course.
  */
 #define MOTION_FOLLOW_SPEED_MM_S 120u
 
 /*
- * Line PD loop of line following (plan step 6b). It turns the line error
- * (-MOTION_LINE_ERROR_MAX to MOTION_LINE_ERROR_MAX, + is line to the
- * left) into a turn rate for both wheels' setpoints. KP: deg/s per unit of
- * error, so 0.1 turns at 100 deg/s with the line at one side. KD: deg/s per
- * unit of error per second (in seconds).
- * TODO(calibrate) with MOT-U31 on a straight, then the tightest curve:
- * with KD 0, raise KP until the car weaves along a straight line, then
- * halve it; then raise KD until the weave dies within about one swing.
+ * Heading PI loop of line following. It turns the error between the
+ * target heading (set by the line task: leading the car while a sensor
+ * reads black, held while both read white) and the odometry heading into
+ * a turn rate for both wheels' setpoints, so the car arcs while it
+ * corrects and runs straight otherwise. KP: deg/s per deg of error. KI:
+ * deg/s per deg of error per second.
+ * TODO(calibrate) with MOT-U41/U42, then on a 2 m straight: raise KP until
+ * a held heading settles within about 40 mm without overshoot; raise KI
+ * only if the car holds a steady offset from the target.
+ * These apply at MOTION_FOLLOW_SPEED_MM_S and scale with speed, so they
+ * change with it: tuned as 4.0 and 0.5 at 80 mm/s. That keeps the steering
+ * per mm of travel, and the 30 mm/s barcode pass, as tuned.
  */
-/* Validated on the robot at 120 mm/s on straights and both curve directions. */
-#define MOTION_FOLLOW_KP 0.3f
-#define MOTION_FOLLOW_KD 0.006f
+#define MOTION_FOLLOW_KP 6.0f
+#define MOTION_FOLLOW_KI 0.75f
 
 /*
- * Largest turn rate the line loop asks for, in deg/s. Each wheel's
- * setpoint changes by rate * track / 2 (about 113 mm/s at 120 deg/s), so
- * at MOTION_FOLLOW_SPEED_MM_S the inner wheel nearly stops. Following
- * also caps the rate at 2 * speed / track (128 deg/s at 120 mm/s), so the
- * inner wheel never reverses at a slower follow speed or a wider track.
- * TODO(calibrate): at least the follow speed / the tightest curve radius
- * (in rad/s), so the car can hold that curve (MOT-U31).
+ * Largest turn rate the heading loop asks for, in deg/s: the tightest arc
+ * while a sensor reads black. Each wheel's setpoint changes by
+ * rate * track / 2 (about 84 mm/s at 90 deg/s). Following also caps the
+ * rate at 2 * speed / track (82 deg/s at 80 mm/s), where the inner wheel
+ * stops. The 2026-11-06 curve (about 200 mm radius, sensors 130 mm ahead)
+ * needs about 30 deg/s at 80 mm/s.
  */
-/* Bound the combined proportional and damping correction: the
- * 2 * speed / track limit at 120 mm/s, for the tightest test curves. */
-#define MOTION_FOLLOW_MAX_DEG_S 128.0f
+#define MOTION_FOLLOW_MAX_DEG_S 90.0f
 
 /*
- * Following stops (state STOPPED) when the last line error is older than
- * this, so the car never drives on with stale steering. About five of the
- * line task's 20 ms readings. A multiple of MOTION_UPDATE_PERIOD_MS.
+ * Following stops (state STOPPED) when the last line reading is older
+ * than this, so the car never drives on without the line task.
+ * A multiple of MOTION_UPDATE_PERIOD_MS.
  */
 #define MOTION_LINE_TIMEOUT_MS 100u
 
@@ -219,22 +223,23 @@
 #define MOTION_UPDATE_PERIOD_MS 20u
 
 /*
- * Chassis speed of distance moves, in mm/s. The MBF_MOTION_CMD packing
- * has no speed field, so every move uses this speed.
+ * Chassis speed of distance moves, in mm/s, which the obstacle bypass
+ * drives on: 300 chosen on the car from 200, 400 and 600 (2026-11-06). The
+ * MBF_MOTION_CMD packing has no speed field, so every move uses this speed.
  */
-#define MOTION_MOVE_SPEED_MM_S 200
+#define MOTION_MOVE_SPEED_MM_S 300
 
 /*
  * Millimetres to brake before a move's target, for the coast after
  * braking. The coast grows with speed, so this holds only at
  * MOTION_MOVE_SPEED_MM_S; measure again if that changes. The target is
  * checked once per update, so a move also brakes up to one update's
- * travel (4 mm at 200 mm/s) late.
- * MOT-U08/U09 (2026-11-05): with MOTION_FF_OFFSET 0.05, 9 mm ends 1 m moves
- * at 996-998 mm and 10 cm reverses at 99-102 mm by odometry; the ruler
- * agreed by eye. It depends on that offset as well as on the speed.
+ * travel (6 mm at 300 mm/s) late.
+ * MOT-U08/U09 (2026-11-05): with MOTION_FF_OFFSET 0.05, 9 mm ended moves
+ * within 4 mm at 200 mm/s. 20 mm scales that by speed squared for 300 mm/s
+ * and is not measured. It depends on that offset as well as on the speed.
  */
-#define MOTION_MOVE_STOP_EARLY_MM 9.0f
+#define MOTION_MOVE_STOP_EARLY_MM 20.0f
 
 /*
  * Turn rate of turns in place, in degrees per second; each wheel moves at
@@ -244,6 +249,15 @@
  * without stalling (MOT-U11); slower skids and overshoots less.
  */
 #define MOTION_TURN_SPEED_DEG_S 90
+
+/*
+ * During a turn, a wheel faster than this many times the turn speed has
+ * run away: its wound-up speed loop is dropped. A wheel that sticks winds
+ * the loop up, then breaks free far too fast (2026-11-06 dash5: 186 mm/s
+ * for 87, turning at 195 deg/s), which slips and throws the heading off.
+ * Above any overshoot of a normal turn (under 1.2 on the same logs).
+ */
+#define MOTION_TURN_OVERSPEED 1.3f
 
 /*
  * Degrees to brake before a turn's target, for the coast after braking.
@@ -275,6 +289,15 @@
  * A multiple of MOTION_UPDATE_PERIOD_MS.
  */
 #define MOTION_STALL_TIMEOUT_MS 300u
+
+/*
+ * A wheel set slower than this, in mm/s, may rightly sit still: it cannot
+ * always overcome its own stiction. Steering at the 30 mm/s barcode speed
+ * takes the inner wheel that low, and all 5 stalls logged on 2026-11-06 were
+ * that, stopping the car partway over a barcode. The other wheel is still
+ * checked, and a straight 30 mm/s is above this.
+ */
+#define MOTION_STALL_MIN_SPEED_MM_S 25.0f
 
 /*
  * Commands MBF_MOTION_CMD holds before a sender waits; tMotion empties it
@@ -323,10 +346,11 @@
 #define MOTION_SYNC_TESTS 0
 
 /*
- * Set 1 to add the manual line-following steps (MOT-U28..U30) to make
- * TEST=1. They spin the lifted car's wheels, then drive it on the floor
- * with hand-fed line errors, and block the test run for about a minute and
- * a half; keep this 0 except during a motion test session.
+ * Set 1 to add the manual line-following steps (MOT-U41, MOT-U29,
+ * MOT-U42) to make TEST=1. They spin the lifted car's wheels, then drive
+ * it on the floor with hand-set target headings, and block the test run
+ * for about a minute and a half; keep this 0 except during a motion test
+ * session.
  */
 #define MOTION_FOLLOW_TESTS 0
 

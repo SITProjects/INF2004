@@ -94,10 +94,13 @@ typedef enum
     ROBOT_OBSTACLE_DIR_RIGHT_120 = 3
 } robot_obstacle_direction_t;
 
-/* Shared angular grid used to interpret packed edge indices. */
-#define ROBOT_OBSTACLE_SWEEP_FIRST_DEG 60u
-#define ROBOT_OBSTACLE_SWEEP_LAST_DEG 120u
-#define ROBOT_OBSTACLE_SWEEP_STEP_DEG 5u
+/* Shared angular grid used to interpret packed edge indices: 50 to 130
+ * degrees in 10 degree steps (9 points, index 0 at 50). The direction
+ * codes keep their names; LEFT_60 and RIGHT_120 now mean the 50 and 130
+ * degree ends. */
+#define ROBOT_OBSTACLE_SWEEP_FIRST_DEG 50u
+#define ROBOT_OBSTACLE_SWEEP_LAST_DEG 130u
+#define ROBOT_OBSTACLE_SWEEP_STEP_DEG 10u
 #define ROBOT_OBSTACLE_SWEEP_POINTS                                            \
     (((ROBOT_OBSTACLE_SWEEP_LAST_DEG - ROBOT_OBSTACLE_SWEEP_FIRST_DEG) /       \
       ROBOT_OBSTACLE_SWEEP_STEP_DEG) +                                         \

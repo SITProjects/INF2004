@@ -118,11 +118,16 @@ mqtt_set_inpub_callback (mqtt_client_t * c, mqtt_incoming_publish_cb_t pub,
     incoming_cb = pub;
     data_cb = data;
 }
+void
+console_mirror_mqtt_service (mqtt_client_t * c)
+{
+    (void)c;
+}
 err_t
 mqtt_sub_unsub (mqtt_client_t * c, const char * topic, u8_t qos,
                 mqtt_request_cb_t cb, void * arg, u8_t sub)
 {
-    assert(c == handle && strcmp(topic, MQTT_TOPIC) == 0);
+    assert(c == handle && strcmp(topic, MQTT_TOPIC "/cmd") == 0);
     assert(qos == 0 && sub == 1);
     subscriptions++;
     if (subscribe_error == ERR_OK)

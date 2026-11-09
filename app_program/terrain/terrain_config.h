@@ -35,6 +35,49 @@
 #endif
 
 /*
+ * Magnetometer (compass) rate and range, as imu_mag_odr_t and
+ * imu_mag_gain_t values from drv_imu.h. 75 Hz gives most 10 ms updates a
+ * fresh sample. +/-1.3 gauss covers the Earth's field (0.25 to 0.65
+ * gauss) with room for the car's own; raise it if readings overflow.
+ */
+#ifndef TERRAIN_MAG_ODR
+#define TERRAIN_MAG_ODR IMU_MAG_ODR_75HZ
+#endif
+#ifndef TERRAIN_MAG_GAIN
+#define TERRAIN_MAG_GAIN IMU_MAG_GAIN_1_3_GAUSS
+#endif
+
+/*
+ * Hard-iron offset, in car axes and magnetometer counts: the field of the
+ * car's own magnets (motors, speaker), which turns with the car. Measure
+ * it with the calibration spin (TER-U28): the "centre" values printed
+ * after two slow full turns. Measure it again if anything magnetic on
+ * the car moves. Current values: TER-U28, 2026-11-06, motors off (spans
+ * 956 and 904 counts, so the Earth's field is about 0.42 gauss here).
+ * With the motors running the field the compass sees changes by up to
+ * half of that (TER-U31), so the heading is not yet good for steering.
+ */
+#ifndef TERRAIN_MAG_OFFSET_X
+#define TERRAIN_MAG_OFFSET_X (-347)
+#endif
+#ifndef TERRAIN_MAG_OFFSET_Y
+#define TERRAIN_MAG_OFFSET_Y (-96)
+#endif
+
+/*
+ * Print the compass (raw X, Y, Z, heading and the X/Y centre and span
+ * seen so far) this often, in ms; 0 never. On in the IR_CALIBRATION=1
+ * image, where the motors stay off, for the calibration spin.
+ */
+#ifndef TERRAIN_COMPASS_PRINT_MS
+#if IR_CALIBRATION_ONLY
+#define TERRAIN_COMPASS_PRINT_MS 250
+#else
+#define TERRAIN_COMPASS_PRINT_MS 0
+#endif
+#endif
+
+/*
  * Accelerometer data rate, as an imu_accel_odr_t value from drv_imu.h.
  * Matches the 100 Hz update rate.
  */
@@ -128,18 +171,19 @@
  * applied, of the car standing still on a floor checked to be flat.
  * Boot calibration compares against it to decide whether the car is
  * level. Record it again whenever the sensor is remounted.
- * Current values: bench reading with the loose sensor taped flat, chip
- * up, on a flat desk (TER-U06, 2026-11-03; 1.4 degrees from the
- * 2026-11-02 reading), before the sensor was mounted on the car.
+ * Current values: the mean of eight boots with the sensor mounted, on the
+ * floor (2026-11-09, all within 1.6 degrees of the mean), from the
+ * `terrain: calibration` line. The car had come to rest about 5 degrees
+ * further front to back than on 2026-11-07, and most boots read NOT_LEVEL.
  */
 #ifndef TERRAIN_LEVEL_REF_X
-#define TERRAIN_LEVEL_REF_X (-0.366f)
+#define TERRAIN_LEVEL_REF_X (-0.463f)
 #endif
 #ifndef TERRAIN_LEVEL_REF_Y
-#define TERRAIN_LEVEL_REF_Y (0.922f)
+#define TERRAIN_LEVEL_REF_Y (-1.765f)
 #endif
 #ifndef TERRAIN_LEVEL_REF_Z
-#define TERRAIN_LEVEL_REF_Z (8.522f)
+#define TERRAIN_LEVEL_REF_Z (8.373f)
 #endif
 
 /* Samples in one calibration attempt: 200 is 2 s at 100 Hz. */
@@ -183,9 +227,13 @@
  * Largest allowed angle, in degrees, between the measured gravity
  * direction and the level reference. Above it the car is not on level
  * ground and calibration stops with NOT_LEVEL.
+ * Calibration zeroes on the car as it stands, so this is what stops a car
+ * powered up on a slope from reading tilted for the whole run. Boots on the
+ * floor agree within 1 degree; 2 degrees left little room for a floor that
+ * is not quite flat, and NOT_LEVEL turns tilt and humps off.
  */
 #ifndef TERRAIN_LEVEL_MAX_DEG
-#define TERRAIN_LEVEL_MAX_DEG 2.0f
+#define TERRAIN_LEVEL_MAX_DEG 5.0f
 #endif
 
 /*
@@ -249,6 +297,42 @@
 #define TERRAIN_HUMP_LEVEL_DEG 1.1f
 #endif
 
+/*
+ * Humps are looked for only while following the line at this speed or more,
+ * in mm/s. 15 of 17 false humps on 2026-11-07 came from moves at 300 mm/s,
+ * pivots and the car being handled, and one more from pulling away. A slower
+ * car only pauses the search: braking for a hump dips below this, and ending
+ * the hump there cut every pass into short leans that never counted.
+ */
+#ifndef TERRAIN_HUMP_MIN_SPEED_MM_S
+#define TERRAIN_HUMP_MIN_SPEED_MM_S 20
+#endif
+
+/*
+ * A hump shorter than this, in mm of travel, is not counted. The course's
+ * 192 mm hump took 188 mm from climb to level on 2026-11-07, and at least 135
+ * in the model; the lean of steering took 34 to 122 mm. Travel, as time lets
+ * in leans of a slow car.
+ */
+#ifndef TERRAIN_HUMP_MIN_MM
+#define TERRAIN_HUMP_MIN_MM 130
+#endif
+
+/*
+ * A car at this speed or less as a hump ends slowed for it, in mm/s, and the
+ * hump needs only TERRAIN_HUMP_SLOW_MIN_MM of travel. Slow, the lean ends with
+ * little smoothing lag: the 192 mm hump took 66 to 116 mm on 15 logged slowed
+ * passes to 2026-11-09, against 150 or more at speed. A false lean is braked
+ * at once, so it covers far less: 55 mm or under on the same logs.
+ */
+#ifndef TERRAIN_HUMP_SLOW_MM_S
+#define TERRAIN_HUMP_SLOW_MM_S 60
+#endif
+
+#ifndef TERRAIN_HUMP_SLOW_MIN_MM
+#define TERRAIN_HUMP_SLOW_MIN_MM 60
+#endif
+
 /* Samples in a row to start a climb or a descent: 5 = 50 ms. */
 #ifndef TERRAIN_HUMP_ENTER_SAMPLES
 #define TERRAIN_HUMP_ENTER_SAMPLES 5u
@@ -288,13 +372,13 @@
 #endif
 
 /*
- * Roll smoothing for the hump height only, in seconds: lighter than
- * TERRAIN_TILT_TAU_S, whose 0.15 s can cut the short lean of a short ramp
- * and read it low. Lighter lets more motor vibration through, which can
- * read high. TODO(car day): tune over a measured ramp at race speed.
+ * Roll smoothing for the hump height only, in seconds. Lighter lets more
+ * motor vibration through, which reads high: 0.05 read the course's 10 mm hump
+ * as 16 mm at 120 mm/s on 2026-11-07. Its ramp is long enough for the tilt's
+ * 0.15 s, where the model reads 9 to 10 mm.
  */
 #ifndef TERRAIN_HUMP_HEIGHT_TAU_S
-#define TERRAIN_HUMP_HEIGHT_TAU_S 0.05f
+#define TERRAIN_HUMP_HEIGHT_TAU_S 0.15f
 #endif
 
 /*
@@ -318,6 +402,19 @@
 #endif
 
 /*
+ * A push counts only driving forward at this speed or more, in mm/s, and
+ * leaning less than this, in degrees. All 5 pushes of 1 g or more on
+ * 2026-11-07 were false: starts, reversing and a slow pass restarting, a hand
+ * on the stopped car, and the car lifted at a 24 degree lean.
+ */
+#ifndef TERRAIN_COLLISION_DRIVING_MM_S
+#define TERRAIN_COLLISION_DRIVING_MM_S 60
+#endif
+#ifndef TERRAIN_COLLISION_MAX_LEAN_DEG
+#define TERRAIN_COLLISION_MAX_LEAN_DEG 8.0f
+#endif
+
+/*
  * Samples to wait for the speed to halve: 12 = 120 ms, motion's 100 ms
  * speed average (5 x 20 ms updates) plus one update.
  */
@@ -332,9 +429,28 @@
 #endif
 
 /*
- * Below this speed, in mm/s, there is nothing to drop from (or the car
- * is standing and was hit): the push alone decides. Line following is
- * about 120 mm/s.
+ * A hit at line-following speed is a small push: three box hits on 2026-11-09
+ * read under 0.3, under 0.3 and 0.66 g, against 0.55 g just driving and 0.95 g
+ * on the hump. What marks one is the wheels: driving at this speed or more, in
+ * mm/s, the speed falling to half within TERRAIN_COLLISION_STOP_WINDOW_SAMPLES
+ * while still following. Slowing for a hump starts with the hump state leaving
+ * LEVEL and takes about 120 ms to halve the speed, so a lean up to
+ * TERRAIN_COLLISION_STOP_GRACE_SAMPLES old is taken for the hit itself.
+ */
+#ifndef TERRAIN_COLLISION_STOP_FROM_MM_S
+#define TERRAIN_COLLISION_STOP_FROM_MM_S 90
+#endif
+#ifndef TERRAIN_COLLISION_STOP_WINDOW_SAMPLES
+#define TERRAIN_COLLISION_STOP_WINDOW_SAMPLES 30u
+#endif
+#ifndef TERRAIN_COLLISION_STOP_GRACE_SAMPLES
+#define TERRAIN_COLLISION_STOP_GRACE_SAMPLES 5u
+#endif
+
+/*
+ * Below this speed, in mm/s, there is nothing to drop from, so the collision
+ * step lets the push alone decide. On the car such pushes never reach it:
+ * see TERRAIN_COLLISION_DRIVING_MM_S. Line following is about 120 mm/s.
  */
 #ifndef TERRAIN_COLLISION_MIN_SPEED_MM_S
 #define TERRAIN_COLLISION_MIN_SPEED_MM_S 40u
@@ -414,7 +530,7 @@
  * Every TERRAIN_SPEED_WINDOW_SAMPLES samples (10 = 100 ms, the same span
  * motion averages its speeds over) the speed is compared with the
  * previous check. Below TERRAIN_SPEED_STOP_MM_S is stopped (motion's
- * slowest drive is 80 mm/s); a rise or fall of at least
+ * slowest drive is 30 mm/s, over a barcode); a rise or fall of at least
  * TERRAIN_SPEED_CHANGE_MM_S is speeding up or slowing down (15 mm/s in
  * 100 ms is 150 mm/s^2); less is cruising. The state changes once the
  * same answer comes TERRAIN_SPEED_CONFIRM_CHECKS checks in a row

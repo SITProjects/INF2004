@@ -10,6 +10,7 @@
  * SPDX-License-Identifier: MIT
  */
 #include "drv_ultrasonic.h"
+#include "drv_gpio_irq.h"
 #include "obstacle_config.h"
 #include <stdint.h>
 #include <tk/tkernel.h>
@@ -22,29 +23,18 @@
 /* Bank-0 GPIOs on the RP2040. */
 #define GPIO_COUNT 30
 
-/* IO_IRQ_BANK0: one interrupt for every bank-0 GPIO (RP2040 datasheet). */
-#define INTNO_IO_BANK0 13u
-/* Same NVIC priority as the kernel's sample device drivers. */
-#define INTPRI_IO_BANK0 2
-
 /*
- * IO_BANK0 interrupt registers. Each 32-bit register covers 8 GPIOs with
- * 4 bits per GPIO: level low, level high, edge low, edge high. INTR holds
- * the raw edge latches (write 1 to clear); PROC0_INTE and PROC0_INTS are
- * core 0's enable and masked status.
+ * IO_BANK0 raw edge latches (write 1 to clear). Each 32-bit register
+ * covers 8 GPIOs with 4 bits per GPIO: level low, level high, edge low,
+ * edge high. The shared interrupt itself is drv_gpio_irq's.
  */
 #define IO_BANK0_INTR0 (IO_BANK0_BASE + 0x0F0u)
-#define IO_BANK0_PROC0_INTE0 (IO_BANK0_BASE + 0x100u)
-#define IO_BANK0_PROC0_INTS0 (IO_BANK0_BASE + 0x120u)
 #define GPIOS_PER_IRQ_REG 8u
 #define IRQ_BITS_PER_GPIO 4u
 #define IRQ_REG_BYTES 4u
-#define IRQ_EDGE_FALL 0x4u
-#define IRQ_EDGE_RISE 0x8u
-#define IRQ_EDGES (IRQ_EDGE_FALL | IRQ_EDGE_RISE)
-
-/* Atomic bit-set alias of an RP2040 peripheral register. */
-#define REG_ALIAS_SET 0x2000u
+#define IRQ_EDGE_FALL DRV_GPIO_IRQ_EDGE_FALL
+#define IRQ_EDGE_RISE DRV_GPIO_IRQ_EDGE_RISE
+#define IRQ_EDGES DRV_GPIO_IRQ_EDGES
 
 /* Packed driver_flags: ready 0, pending 1, echo active 2, triggered 3.
  * Bits 4..7 are unused. The result code remains a separate byte.
@@ -74,7 +64,7 @@ static T_SPLOCK ultrasonic_lock;
 
 /* Private function declarations. */
 static bool flag_is_set (uint8_t flag);
-static void ultrasonic_isr (UINT intno);
+static void echo_edges (uint32_t events, uint32_t now);
 static void invalidate_measurement (uint32_t now_us);
 static void complete_measurement (ultrasonic_result_t result,
                                   uint16_t pulse_us);
@@ -116,14 +106,6 @@ ultrasonic_init (int trig_pin, int echo_pin)
         return 1;
     }
 
-    T_DINT dint;
-    dint.intatr = TA_HLNG;
-    dint.inthdr = (FP)ultrasonic_isr;
-    if (tk_def_int(INTNO_IO_BANK0, &dint) < E_OK)
-    {
-        return 1;
-    }
-
     echo_start_us = 0u;
     echo_pulse_us = 0u;
     trigger_start_us = 0u;
@@ -131,10 +113,8 @@ ultrasonic_init (int trig_pin, int echo_pin)
     driver_flags = 0u;
 
     acknowledge_edges();
-    out_w(IO_BANK0_PROC0_INTE0 + irq_reg_offset + REG_ALIAS_SET,
-          IRQ_EDGES << irq_shift);
-    EnableInt(INTNO_IO_BANK0, INTPRI_IO_BANK0);
-    return 0;
+    return (drv_gpio_irq_attach(ultrasonic_echo_pin, echo_edges) == E_OK) ? 0
+                                                                          : 1;
 }
 
 bool
@@ -232,16 +212,11 @@ flag_is_set (uint8_t flag)
     return (driver_flags & flag) != 0u;
 }
 
+/* Echo edges from drv_gpio_irq, already cleared; interrupt context. */
 static void
-ultrasonic_isr (UINT intno)
+echo_edges (uint32_t events, uint32_t now)
 {
-    (void)intno;
-
     UINT intsts = lock();
-    uint32_t events =
-        (in_w(IO_BANK0_PROC0_INTS0 + irq_reg_offset) >> irq_shift) & IRQ_EDGES;
-    uint32_t now = now_us();
-    out_w(IO_BANK0_INTR0 + irq_reg_offset, events << irq_shift);
     invalidate_measurement(now);
 
     /* Ignore late or unrelated edges without overwriting an unread result. */

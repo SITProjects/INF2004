@@ -17,6 +17,9 @@
 
 /* Detector word: hump state 2 | climb counter 4 | other counter 4 |
  * peak lean 8 | turning state 1 | turn counter 5 | spare 8. */
+/* A hit's push is kept for about 0.15 s: halves in 14 samples. */
+#define STOPPED_PEAK_FADE 0.95f
+
 #define HUMP_SHIFT 0u
 #define HUMP_BITS 2u
 #define CLIMB_SHIFT 2u
@@ -209,6 +212,40 @@ uint32_t
 terrain_detect_hump_clear (uint32_t word)
 {
     return word & ~HUMP_FIELDS_MASK;
+}
+
+bool
+terrain_detect_hump_lasted (int32_t start_mm, int32_t end_mm, int32_t min_mm)
+{
+    return (int32_t)((uint32_t)end_mm - (uint32_t)start_mm) >= min_mm;
+}
+
+int32_t
+terrain_detect_hump_min_mm (int32_t speed_mm_s, int32_t slow_mm_s,
+                            int32_t slow_min_mm, int32_t min_mm)
+{
+    return (speed_mm_s <= slow_mm_s) ? slow_min_mm : min_mm;
+}
+
+terrain_hump_sample_t
+terrain_detect_hump_sample (bool b_following, bool b_roll_held,
+                            int32_t speed_mm_s, int32_t min_speed_mm_s)
+{
+    if (!b_following)
+    {
+        return TERRAIN_HUMP_SAMPLE_DROP;
+    }
+    return (b_roll_held || (speed_mm_s < min_speed_mm_s))
+               ? TERRAIN_HUMP_SAMPLE_PAUSE
+               : TERRAIN_HUMP_SAMPLE_USE;
+}
+
+float
+terrain_detect_collision_push (float push_g, int32_t speed_mm_s, float lean_deg,
+                               int32_t driving_mm_s, float max_lean_deg)
+{
+    return ((speed_mm_s >= driving_mm_s) && (lean_deg < max_lean_deg)) ? push_g
+                                                                       : 0.0f;
 }
 
 terrain_event_type_t
@@ -406,6 +443,13 @@ terrain_detect_collision_step (uint32_t * p_word,
         /* COOLDOWN: the same hit may still be shaking the car. */
         cooldown--;
     }
+    else if (p_in->b_stopped_dead)
+    {
+        uint32_t const peak = terrain_process_encode_unsigned(
+            p_in->peak_g, DG_PER_G, PUSH_BITS, false);
+        biggest = (peak > biggest) ? peak : biggest;
+        b_hit = true;
+    }
     else if (check > 0u)
     {
         /* CHECKING: did the push stop the car, or was it a jolt? */
@@ -476,6 +520,68 @@ terrain_detect_collision_step (uint32_t * p_word,
     word = terrain_process_field_put(word, PUSH_SHIFT, PUSH_BITS, biggest);
     *p_word = word;
     return b_hit ? TERRAIN_EVENT_COLLISION : TERRAIN_EVENT_NONE;
+}
+
+bool
+terrain_detect_stopped_dead (terrain_stopped_t * p_state, int32_t speed_mm_s,
+                             float push_g, bool b_driving,
+                             terrain_hump_state_t hump,
+                             terrain_stopped_limits_t const * p_limits)
+{
+    if ((p_state == NULL) || (p_limits == NULL))
+    {
+        return false;
+    }
+
+    float const faded = p_state->peak_g * STOPPED_PEAK_FADE;
+    p_state->peak_g = (push_g > faded) ? push_g : faded;
+
+    if (hump == TERRAIN_HUMP_LEVEL)
+    {
+        p_state->off_level = 0u;
+    }
+    else if (p_state->off_level <= p_limits->grace_samples)
+    {
+        p_state->off_level++;
+    }
+    else
+    {
+        /* Long enough off level: no need to count further. */
+    }
+
+    bool b_hit = false;
+    if (!b_driving || (p_state->off_level > p_limits->grace_samples))
+    {
+        p_state->kept_mm_s = 0;
+        p_state->age = 0u;
+    }
+    else if (speed_mm_s >= p_limits->from_mm_s)
+    {
+        p_state->kept_mm_s = speed_mm_s;
+        p_state->age = 0u;
+    }
+    else if (p_state->kept_mm_s > 0)
+    {
+        p_state->age++;
+        if (p_state->age > p_limits->window_samples)
+        {
+            p_state->kept_mm_s = 0;
+        }
+        else if ((speed_mm_s * 2) <= p_state->kept_mm_s)
+        {
+            p_state->kept_mm_s = 0;
+            b_hit = true;
+        }
+        else
+        {
+            /* Still falling. */
+        }
+    }
+    else
+    {
+        /* Not driving fast enough to have anything to fall from. */
+    }
+    return b_hit;
 }
 
 /* Private function definitions. */

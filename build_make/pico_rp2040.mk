@@ -106,7 +106,7 @@ ifeq ($(TEST),1)
 TEST_SUFFIX := _test
 endif
 
-# Only the ADC-owning line task runs while measuring mounted IR sensors.
+# Only the IR sensor tasks run (motors off) while setting the DO thresholds.
 IR_CALIBRATION ?= 0
 ifneq ($(filter $(IR_CALIBRATION),0 1),$(IR_CALIBRATION))
 $(error IR_CALIBRATION must be 0 or 1)
@@ -485,6 +485,11 @@ MQTT_CORE_OBJS := ./mtkernel_3/lwip/apps/mqtt/mqtt.o
 # Leave the old mqtt_utk.c demo unlinked; keep the upstream protocol client.
 
 CFLAGS += -DTM_MQTT=1
+# console_mirror: every console write also goes to MQTT (topic /console);
+# the larger lwIP output buffer holds a 512-byte console batch beside a
+# telemetry record.
+LFLAGS += -Wl,--wrap=tm_snd_dat
+CFLAGS += -DMQTT_OUTPUT_RINGBUF_SIZE=1024
 
 OBJS += $(MQTT_CORE_OBJS)
 C_DEPS += $(MQTT_CORE_OBJS:.o=.d)

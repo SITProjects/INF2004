@@ -4,10 +4,14 @@
  *
  * The bypass turns by an angle toward the gap, drives diagonally out, turns
  * back parallel to the line, verifies the corridor ahead, passes the
- * obstacle, then looks for a line while turning inward and driving back.
- * A confirmed line ends the detour and hands alignment to the line follower;
- * it may be the original line behind the obstacle or another line. The
- * outward and pass legs do not acquire lines. The turn angle is as shallow
+ * obstacle, then looks for a line on the second half of the turn inward
+ * and while driving back. On a confirmed line it drives the axle onto it
+ * and turns back to the heading it stopped on, then hands over to the line
+ * follower; every turn only changes the heading, and every move is
+ * straight. The outward and pass legs, and the first half of the turn in,
+ * do not acquire lines. Before any of this, a car stopped off the line's
+ * heading turns back onto it and measures again, so the sweep is square to
+ * the line. The turn angle is as shallow
  * as the room in front of the obstacle allows, never below angle_min_deg;
  * at 90 degrees the path is a box.
  *
@@ -36,6 +40,9 @@
 
 /* Public types, constants, and macros. */
 
+/** Headings kept while following, for the line's heading at a stop. */
+#define OBSTACLE_AVOID_TREND_SLOTS 3u
+
 /** Car dimensions and bypass limits; production passes the config macros. */
 typedef struct
 {
@@ -46,9 +53,15 @@ typedef struct
     uint16_t depth_mm;         /**< Assumed obstacle depth (not measured). */
     uint16_t sidestep_min_mm;  /**< Smallest first sidestep. */
     uint16_t sidestep_max_mm;  /**< Largest first sidestep. */
+    uint16_t edge_min_mm;      /**< The obstacle reaches at least this far off
+                                    the line on the side passed; 0 trusts the
+                                    sweep. */
     uint16_t lateral_max_mm;   /**< Largest total offset from the line. */
     uint16_t pass_max_mm;      /**< Largest pass distance accepted. */
     uint16_t return_extra_mm;  /**< Drive past the offset to find the line. */
+    uint16_t overshoot_mm;     /**< IR row to axle; 0 skips that leg. */
+    uint16_t line_gate_mm;     /**< Accept a line only with the IR row
+                                    planned this close to it; 0 anywhere. */
     uint8_t angle_min_deg;     /**< Shallowest turn, 5..90 degrees. */
     uint16_t backoff_mm;       /**< Reverse when CRITICAL holds a move. */
     uint8_t max_backoffs;      /**< Back-offs per bypass; 0 never. */
@@ -97,11 +110,14 @@ typedef struct
     uint32_t retry_delay_ms;   /**< Held before the one retry. */
     uint32_t backoff_delay_ms; /**< CRITICAL hold before backing off. */
     uint32_t resweep_ms; /**< Without re-checks: held this long, re-sweep. */
-    uint16_t move_speed_mm_s;  /**< MOTION_MOVE_SPEED_MM_S, nonzero. */
-    uint16_t turn_speed_deg_s; /**< MOTION_TURN_SPEED_DEG_S, nonzero. */
-    uint16_t resume_min_mm;    /**< Smaller remainders count as done. */
-    uint8_t resume_min_deg;    /**< Smaller turn remainders count as done. */
-    uint8_t max_sidesteps;     /**< First sidestep plus extra ones, >= 1. */
+    uint32_t straighten_settle_ms; /**< Stop to the check of the heading. */
+    uint16_t straighten_step_mm;   /**< Travel between headings kept. */
+    uint8_t straighten_max_deg;    /**< Further off is a bend; 0 never. */
+    uint16_t move_speed_mm_s;      /**< MOTION_MOVE_SPEED_MM_S, nonzero. */
+    uint16_t turn_speed_deg_s;     /**< MOTION_TURN_SPEED_DEG_S, nonzero. */
+    uint16_t resume_min_mm;        /**< Smaller remainders count as done. */
+    uint8_t resume_min_deg; /**< Smaller turn remainders count as done. */
+    uint8_t max_sidesteps;  /**< First sidestep plus extra ones, >= 1. */
     /** true: rearm before each move and verify the corridor. false: drive
      *  the planned path from the first sweep; only CRITICAL holds the car,
      *  and it resumes once CRITICAL clears, without re-measuring. */
@@ -207,6 +223,8 @@ typedef struct
     int16_t watch_angle;   /**< Servo angle, or OBSTACLE_SCAN_WATCH_OFF. */
     bool b_send;           /**< Clear the motion events, then send cmd. */
     uint32_t cmd;          /**< MBF_MOTION_CMD word when b_send. */
+    bool b_skew_known;     /**< The stopped car's heading was just checked. */
+    int16_t skew_deg;      /**< Line's heading - car's; + is to the left. */
     obstacle_avoid_state_t from; /**< State before this step. */
     obstacle_avoid_state_t to;   /**< State after this step. */
     char const * p_reason;       /**< Static text when the state changed. */
@@ -219,14 +237,18 @@ typedef struct
 typedef enum
 {
     OBSTACLE_AVOID_LEG_REVERSE,   /**< Back away to min_room_mm first. */
-    OBSTACLE_AVOID_LEG_TURN_OUT,  /**< Turn toward the gap. */
+    OBSTACLE_AVOID_LEG_TURN_OUT,  /**< Turn 90 degrees toward the gap. */
     OBSTACLE_AVOID_LEG_SIDESTEP,  /**< Move sideways off the line. */
     OBSTACLE_AVOID_LEG_TURN_BACK, /**< Turn back parallel to the line. */
     OBSTACLE_AVOID_LEG_VERIFY,    /**< Corridor sweep. */
     OBSTACLE_AVOID_LEG_PASS,      /**< Move past the obstacle. */
-    OBSTACLE_AVOID_LEG_TURN_IN,   /**< Past obstacle: turn, acquiring a line. */
+    OBSTACLE_AVOID_LEG_TURN_IN,   /**< Past obstacle: turn; second half
+                                       acquires a line. */
     OBSTACLE_AVOID_LEG_RETURN,    /**< Search back; acquire any line. */
-    OBSTACLE_AVOID_LEG_FOLLOW     /**< Line found: line following aligns. */
+    OBSTACLE_AVOID_LEG_OVERSHOOT, /**< Put the axle on the line. */
+    OBSTACLE_AVOID_LEG_TURN_HOME, /**< Back to the heading at the stop. */
+    OBSTACLE_AVOID_LEG_FOLLOW,    /**< Resume line following. */
+    OBSTACLE_AVOID_LEG_STRAIGHTEN /**< Not a bypass leg: before the sweep. */
 } obstacle_avoid_leg_t;
 
 /** State machine context; fields are private to obstacle_avoid.c. */
@@ -258,11 +280,13 @@ typedef struct
     bool b_watching;         /* Sensor held toward the obstacle side. */
     bool b_watch_seen;       /* The watch has seen something in range. */
     bool b_watch_done;       /* Watch ended this bypass; do not restart it. */
-    bool b_watch_widened;    /* This command's diagonal was lengthened. */
+    bool b_watch_widened;    /* This leg was widened already. */
+    uint16_t watch_shift_mm; /* Widening added by the watch this bypass. */
     bool b_shift;            /* RETRY_WAIT holds for a watch shift, no retry. */
     uint8_t watch_sequence;  /* Last watch reading used. */
     int32_t watch_seen_mm;   /* Odometry distance at the last sighting. */
     uint16_t watch_ahead_mm; /* How far ahead of the pivot it was. */
+    int16_t watch_angle;     /* Scan angle the watch holds. */
     bool b_blocked;          /* blocked_since_ms is running. */
     uint32_t blocked_since_ms;
     bool b_rearm_known;
@@ -272,6 +296,16 @@ typedef struct
     int32_t start_distance_mm; /* Odometry when the command was sent. */
     int32_t start_heading_deg;
     uint32_t leg_timeout_ms;
+    bool b_origin_valid;        /* origin_heading_deg was read. */
+    int32_t origin_heading_deg; /* Heading when the car stopped. */
+    bool b_home_right;          /* TURN_HOME or STRAIGHTEN turns right. */
+    int32_t trend_deg[OBSTACLE_AVOID_TREND_SLOTS]; /* Headings kept. */
+    uint32_t trend_next;      /* Oldest of them, the next to replace. */
+    uint32_t trend_count;     /* How many are filled. */
+    int32_t trend_mm;         /* Odometry distance at the latest of them. */
+    bool b_straighten_due;    /* line_heading_deg is waiting for the stop. */
+    int32_t line_heading_deg; /* The line's heading as the car was stopped. */
+    bool b_measure_again;     /* Straightened: discard any sweep so far. */
 } obstacle_avoid_t;
 
 /* Public function declarations. */
@@ -327,15 +361,15 @@ uint16_t obstacle_avoid_next_part (uint32_t remaining_mm);
 /**
  * @brief Check a corridor sweep against the path the car will pass along.
  *
- * Each usable non-zero echo at angle 60 + 5 i degrees gives a point at
+ * Each usable non-zero echo at angle 50 + 10 i degrees gives a point at
  * x = r cos(angle), y = axle_to_pivot + r sin(angle) from the axle. Points
  * with y below pass_mm + axle_to_pivot are in range. Let g be x measured
  * toward the gap. A point in range with |x| < half_width + margin is in the
  * path; the shift is the largest g + half_width + margin over those, which
  * puts each one on the far side. A point in range on the gap side outside
  * the path (g >= half_width + margin) limits the shift to
- * g - half_width - margin. The 60-120 degree sweep cannot see beside the
- * front wheels; the first sweep's edges cover that area, this does not.
+ * g - half_width - margin. The 50-130 degree sweep sees little beside
+ * the front wheels; the first sweep's edges cover that area, this does not.
  *
  * @param p_corridor Non-null corridor sweep, taken with the car stopped.
  * @param p_width Non-null range corrections.
@@ -372,8 +406,9 @@ void obstacle_avoid_init (obstacle_avoid_t * p_ctx,
  *
  * Never blocks. Any failed INHIBIT set or clear, failed event clear or send
  * error latches FAULT, as do encoder faults, rejected commands, missing
- * odometry, a late scanner and a second stall, timeout or missed line in
- * one bypass. FAULT keeps INHIBIT set and ignores every later input.
+ * odometry, a late scanner and a second stall or timeout in one bypass; a
+ * second missed line hands over to line following instead. FAULT keeps
+ * INHIBIT set and ignores every later input.
  * @param p_ctx Context from obstacle_avoid_init().
  * @param p_in Non-null inputs for this loop.
  * @return Actions to carry out now, in the order documented above.

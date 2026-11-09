@@ -7,6 +7,7 @@
  */
 
 #include "communication.h"
+#include "car_status.h"
 #include "connectivity.h"
 #if TM_MQTT
 #include "telemetry_queue.h"
@@ -53,6 +54,9 @@ wifi_task (INT stacd, void * p_exinf)
     for (;;)
     {
         connectivity_update();
+#if TM_MQTT && !APP_TEST && !IR_CALIBRATION_ONLY
+        car_status_print();
+#endif
         (void)tk_dly_tsk(POLL_PERIOD_MS);
     }
 }
