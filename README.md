@@ -4,23 +4,45 @@ The team's vehicle controller, built on the course's micro T-Kernel 3.0
 project template: the kernel runs on **both cores** of the Pico W's RP2040,
 with a USB serial console and the WiFi driver built in.
 
+The car follows a black line and reads the Code 39 barcodes beside it to
+choose its turn at the next junction. It stops for obstacles, measures them
+and drives around them, and counts humps and collisions. It reports to a web
+dashboard over MQTT, which also starts and stops it.
+
 ## INF2004 at a glance
 
-Five subsystems, one folder each in `app_program/` (owners, pins,
-priorities and peripherals are in **`TEAM.md`**):
+Six subsystems, one folder each in `app_program/` (owners, pins,
+priorities, peripherals and interfaces are in **`TEAM.md`**):
 
-| Subsystem | Feature | Hardware | Task |
+| Subsystem | Feature | Hardware | Task (priority, core) |
 |---|---|---|---|
-| `obstacle/` | Obstacle detection: scans left and right when blocked | ultrasonic sensor GP2/GP3, servo GP12 | `obstacle_scan_task`, core 0 |
-| `motion/` | Motion: open-loop differential drive, held braked for now | motors GP8–GP11 | none yet |
-| `line_follow/` | Line following: digital IR edges → target headings (turn while black) and searches for `tMotion` | IR sensor DO GP26/GP27 | `line_follow_task` |
-| `barcode/` | Code 39 barcodes beside the line, read in either direction | IR sensor DO GP28 (edge interrupt) | `tBarcode`, core 0 |
-| `terrain/` | Terrain: GY-511 accelerometer, calibration at power-up | I2C0 GP4/GP5 (Grove 3) | `terrain_task` |
-| `communication/` | Communication: Wi-Fi connection status | Pico W radio (kernel-owned) | `communication_task` |
+| `obstacle/` | Stops for an obstacle, sweeps it for width, then drives the bypass around it and back to the line | ultrasonic trigger GP16, echo GP17; servo GP12 | `obstacle_scan_task` (11, core 0) |
+| `motion/` | Closed-loop drive: a speed loop on each wheel, moves and turns by the encoders, odometry, and following a target heading | motors GP8–GP11; encoders GP2/GP3 and GP13/GP14 (PIO0) | `tMotion` (6, core 1) |
+| `line_follow/` | Two digital IR edges become target headings, line searches and junction turns | IR sensor DO GP26/GP27 | `line_follow_task` (7, any) |
+| `barcode/` | Code 39 barcodes beside the line, read in either direction | IR sensor DO GP28 (edge interrupt) | `tBarcode` (8, core 0) |
+| `terrain/` | GY-511: calibration at each start, tilt, humps and their height, collisions, compass and a run summary | I2C0 GP4/GP5 (Grove 3) | `terrain_task` (9, any) |
+| `communication/` | Wi-Fi status; with `MQTT=1`, status, telemetry, the console and dashboard commands | Pico W radio (kernel-owned) | `communication_task` (13, any) |
 
-The subsystems run independently for now; the interfaces between them (for
-example obstacle results and line commands driving the motors) are still to
-be designed and recorded in `TEAM.md` section 5.
+How they work together:
+
+- `line_follow` sends `motion` a target heading every 10 ms; `motion` never
+  reads the line sensors.
+- `barcode` decodes each barcode, and the action the dashboard set for that
+  text becomes the turn at the next junction. The car slows to 30 mm/s to
+  read it.
+- `obstacle` holds the motors when something is ahead, measures it, and
+  sends `motion` the bypass moves.
+- `terrain` reads the wheel speeds from `motion`. A hump slows following,
+  and humps and collisions are counted.
+
+Every interface is listed in `TEAM.md` section 5. For each subsystem's
+logic, files and known limits, read
+[`docs/architecture/subsystems.md`](docs/architecture/subsystems.md).
+
+**Minimum-bit data.** Everything stored, shared between tasks or sent uses
+only the bits its range needs, packed with masks and shifts and clamped at
+the field limits. The layouts are in `app_program/robot_types.h`, and
+`docs/architecture/subsystems.md` section 7 lists each one with its range.
 
 Before the first build, create your local Wi-Fi settings (section 2.2). A
 plain `make` builds with `NET=lwip`, so the Pico joins that network at
@@ -132,6 +154,10 @@ ignored by git: never commit it. The credentials are compiled into the
 firmware, so do not share a `.uf2` built with private credentials. To build
 without joining a network, use `make NET=none`.
 
+The same file holds the MQTT settings used by `MQTT=1` builds (section 4):
+set `MQTT_BROKER_IP` to the address of the computer that will run the
+dashboard. Keep `MQTT_BROKER_PORT` at 1884, the dashboard's default.
+
 **2.3 Build**
 
 ```sh
@@ -167,10 +193,18 @@ screen /dev/ttyACM0 115200            # Linux
 ```
 
 On Windows, use PuTTY or the VS Code *Serial Monitor* on the new COM port.
-You should see the kernel banner, one start-up line per subsystem, then each
-subsystem's reports: scan results (`obstacle: CLEAR, angle 90`), IR readings
-every 200 ms (`Left AO: … | Right AO: … | Command: …`), the IMU calibration
-state, and `Wi-Fi connected` with the IP address.
+You should see the kernel banner, one start-up line per subsystem and
+`all subsystems started`, then `Wi-Fi connected` and the IMU calibration
+result (`terrain: calibration VALID tilt …`). While the car runs, each
+subsystem reports its events, for example `line JUNCTION …`,
+`barcode: A dir=… elements=29 …`, `obstacle: width …` and
+`terrain: hump LEVEL height … mm`.
+
+> ⚠️ **A plain `make` image drives on its own.** It has no dashboard to
+> wait for: the motors are released as soon as the ultrasonic sensor
+> confirms the path ahead is clear. Put the car on the line, or lift it,
+> before you power it up. An `MQTT=1` image waits for Start on the
+> dashboard (section 4).
 
 **2.6 Write your own code**
 
@@ -180,12 +214,15 @@ subfolders, is compiled automatically.
 - **`app_main.c` → `usermain()` is where the program starts.** It first calls
   every subsystem's `<name>_init()` (create kernel objects), then every
   `<name>_start()` (start tasks). Read its comments first.
-- **One folder per student:** `app_program/obstacle/`, `motion/`,
-  `line_follow/`, `terrain/`, `communication/`.
+- **One folder per subsystem:** `app_program/obstacle/`, `motion/`,
+  `line_follow/`, `barcode/`, `terrain/`, `communication/`.
+  `console_mirror/` copies the console to MQTT in `MQTT=1` builds.
 - `<name>.h` is that subsystem's public interface: the object IDs and
   data formats the other subsystems may use. `<name>.c` holds
   `<name>_init()` and `<name>_start()`; `<name>_test.c` holds the tests.
-- `app.h` holds the definitions shared by the whole team.
+- `app.h` holds the definitions shared by the whole team, and
+  `robot_types.h` every packed layout that crosses a subsystem boundary or
+  goes over MQTT, with its masks, shifts and clamp helpers.
 - **Drivers go in your subsystem folder too**, as a `drv_<name>.c` /
   `drv_<name>.h` pair, e.g. `obstacle/drv_ultrasonic.c`. They are compiled
   automatically. Do not add drivers under `device/`: that folder holds the
@@ -200,6 +237,22 @@ between subsystems in **`TEAM.md`**, and record every test in
 that runs all the subsystem tests at power-up. Short videos of tests and
 demos are shared as unlisted YouTube links, listed in **`videos/`**.
 
+**Host tests.** The pure logic also builds and runs on your computer, with
+no Pico: the line tracker, barcode decoder, bypass state machine, hump,
+collision and compass code, motion's command slot and line adapter,
+dashboard commands and decoding, and the packed layouts. They need a host C
+compiler with the address and undefined-behaviour sanitizer libraries
+(`libasan` and `libubsan`), `python3`, and `PICO_SDK_PATH` for the lwIP
+headers; the Dev Container has all of them. Each subsystem has its own
+suite; run them all from the repository root before you open a PR:
+
+```sh
+for t in testing/*/host/run.sh; do sh "$t" || echo "FAILED: $t"; done
+```
+
+A host test checks the logic, not the sensors: changes in behaviour still
+need a run on the car, recorded in that subsystem's `TEST_LOG.md`.
+
 Pins: use **GP0–GP22 and GP26–GP28**. GP0/GP1 are free unless your team
 builds with `CRASH_REPORT=1` (section 3), which needs them. Never use
 GP23/GP24/GP25/GP29: they are wired to the Pico W radio. The Pico W's
@@ -209,16 +262,17 @@ After editing, run `make -j8` again in `build_make` and copy the new `.uf2`.
 
 ---
 
-## 3. Build options: `SMP`, `CONSOLE`, `WIFI`, `NET`, `TEST`, `CRASH_REPORT`
+## 3. Build options: `SMP`, `CONSOLE`, `WIFI`, `NET`, `MQTT`, `TEST`, `CRASH_REPORT`
 
 `make` on its own uses the defaults. To build differently, put options
 after `make`. They can be combined in any order:
 
 ```sh
-make -j8                          # defaults: SMP=1 CONSOLE=usb_cdc WIFI=cyw43 NET=lwip TEST=0 CRASH_REPORT=0
+make -j8                          # defaults: SMP=1 CONSOLE=usb_cdc WIFI=cyw43 NET=lwip MQTT=0 TEST=0 CRASH_REPORT=0
 make SMP=0 -j8                    # single-core build
 make NET=none -j8                 # radio on, but no network stack: does not join Wi-Fi
 make CONSOLE=uart WIFI=none -j8   # no USB console, radio off (no Pico SDK needed)
+make MQTT=1 -j8                   # the dashboard build used on the course (section 4)
 make TEST=1 -j8                   # firmware with the subsystem self-tests
 make CRASH_REPORT=1 -j8           # also see crash reports, on GP0/GP1 (uses those pins)
 ```
@@ -241,8 +295,16 @@ Any option you leave out keeps its default (here `CONSOLE=usb_cdc`,
 | `CONSOLE` | **`usb_cdc`**, `uart` | where `tm_printf` output goes. `usb_cdc` = USB cable; `uart` = UART0 only (GP0 TX / GP1 RX, needs a USB-serial adapter) | `_usb_cdc` / `_uart` | `TM_CONSOLE_USB_CDC` |
 | `WIFI` | **`cyw43`**, `none` | `cyw43` powers up the Pico W radio and its driver task; `none` leaves the radio off | `_wifi` / *(nothing)* | `TM_WIFI_CYW43` |
 | `NET` | **`lwip`** (with `WIFI=cyw43`), `none` | `lwip` adds the lwIP network stack to the radio task, which joins the network in `config/wifi_secrets.h` (needs that file). Defaults to `none` when `WIFI=none` | `_lwip` / *(nothing)* | `TM_NET_LWIP` |
+| `MQTT` | **`0`**, `1` | `1` adds the MQTT client (needs `NET=lwip`): status, telemetry and the console go to the dashboard, and the car waits for its Start (section 4) | `_mqtt` / *(nothing)* | `TM_MQTT` |
 | `TEST` | **`0`**, `1` | `1` compiles every `<name>_test.c` and runs the tests at power-up | `_test` / *(nothing)* | `APP_TEST` (1 or 0) |
 | `CRASH_REPORT` | **`0`**, `1` | `1` also copies the console to UART0 on **GP0 (TX) / GP1 (RX)**, 115200 baud, so you can see the last messages and the kernel's crash report (see below). **Uses GP0/GP1.** `CONSOLE=uart` always does this. | `_crash` / *(nothing)* | `TM_CONSOLE_UART` (1 or 0) |
+
+Two more options are for setting up the IR sensors:
+
+| Option | Values (**default**) | What it does | Image name | C macro |
+|---|---|---|---|---|
+| `IR_CALIBRATION` | **`0`**, `1` | `1` runs only the line and barcode sensor tasks and the compass, with the motors off, while you set each sensor's DO threshold and do the compass calibration spin | `_ir_calibration` | `IR_CALIBRATION_ONLY` |
+| `IR_MOTOR_TEST` | **`0`**, `1` | `1` runs only line following and motion, following the line with no time limit; needs `IR_CALIBRATION=0` and `TEST=0` | `_ir_motor_test` | `IR_MOTOR_TEST` |
 
 **Why `CRASH_REPORT` exists.** USB output is not sent the moment you call
 `tm_printf`: it waits in a buffer until the kernel's USB task sends it. If the
@@ -285,7 +347,7 @@ Each option goes through the same steps:
 | 3. Image-name suffix | `NAME_SUFFIX :=` and the `EXE_FILE :=` line | `TEST_SUFFIX := _test` |
 | 4. C macro for the code | a `CFLAGS += -D...` line | `CFLAGS += -DAPP_TEST=$(TEST)` |
 | 5. Rebuild on change | the `PROFILE_ID :=` line | `...-test$(TEST)` |
-| 6. Extra source files (`CONSOLE`, `WIFI`, `NET` only) | an `ifeq ($(CONSOLE),usb_cdc)`, `ifeq ($(WIFI),cyw43)` or `ifeq ($(NET),lwip)` block that adds the USB/radio/network files and SDK include paths | — |
+| 6. Extra source files (`CONSOLE`, `WIFI`, `NET`, `MQTT` only) | an `ifeq ($(CONSOLE),usb_cdc)`, `ifeq ($(WIFI),cyw43)`, `ifeq ($(NET),lwip)` or `ifeq ($(MQTT),1)` block that adds the USB/radio/network/MQTT files and SDK include paths | — |
 
 - **Changing a default:** edit the `?=` line from step 1, e.g.
   `CONSOLE ?= uart`. Every `make` without that option then uses the new value.
@@ -297,19 +359,65 @@ Each option goes through the same steps:
   mailboxes are not make options. They are in `config/config.h` (`CNF_MAX_...`).
   Which kernel device drivers start at boot is in `config/config_device.h`.
 
-The makefile also has `MQTT=1` (MQTT over the `NET=lwip` stack). It reads the
-broker address and topic from the same `config/wifi_secrets.h`. This guide
-does not cover it, except for one thing: with `MQTT=1`, everything printed
-on the console is also published, line by line with the uptime in ms, to
-`<topic>/console` (`app_program/console_mirror/`), so a run needs no USB
-cable. Every image then joins Wi-Fi, calibration images included, and a
-`TEST=1` image waits up to 20 s for the broker before its tests start.
+---
 
-With `MQTT=1` the car waits for Start on the dashboard. Run
-`python3 tools/dashboard/car_dashboard.py <log file>`, which is the car's
-broker and log, and open http://localhost:8080 on the same computer to start
-and stop the car and set what each barcode does at a junction. The dashboard
-needs the car's Wi-Fi network; the Stop button is not an emergency stop.
+## 4. Run the car with the dashboard (`MQTT=1`)
+
+On the course the car runs an `MQTT=1` image and needs no USB cable:
+everything goes over Wi-Fi to `tools/dashboard/car_dashboard.py`, which is
+the car's MQTT broker, its log and a web page in one script. It needs only
+`python3`.
+
+**4.1 Build and flash**
+
+Set `MQTT_BROKER_IP` in `config/wifi_secrets.h` to your computer's address
+on the car's Wi-Fi network (section 2.2), then:
+
+```sh
+cd build_make
+make MQTT=1 -j8      # -> mtk3pico_smp1_usb_cdc_wifi_lwip_mqtt.uf2
+```
+
+Flash it as in section 2.4.
+
+**4.2 Start the dashboard, then power the car**
+
+From the repository root, on the computer whose address you set:
+
+```sh
+python3 tools/dashboard/car_dashboard.py testing/system/logs/YYYY-MM-DD_<name>_mqtt.txt
+```
+
+Open <http://localhost:8080> on the same computer. When the car connects,
+the page shows its status, and the log gains a `connect from …` line.
+
+- **Barcode actions.** Set what each barcode does at the next junction
+  (`STRAIGHT`, `LEFT`, `RIGHT` or `UTURN`; up to 8 barcodes of up to 3
+  characters). The dashboard saves them in `tools/dashboard/barcode_map.json`
+  and sends them again every time the car connects, because the car forgets
+  them on reset. A barcode with no action goes straight on.
+- **Start and Stop.** The car waits, motors held, until you press Start.
+  Start is never sent by itself, so a car that resets stays still. Stop
+  holds the motors, but it travels over Wi-Fi and is **not an emergency
+  stop**.
+
+The topics, each under `MQTT_TOPIC` from `config/wifi_secrets.h`:
+
+| Topic | Direction | Content |
+|---|---|---|
+| `/status` | car → dashboard | Six packed words, twice a second: speeds, distance, heading, tilt and turn rate, modes, obstacle range and width, hump and collision counts |
+| `/telemetry` | car → dashboard | Packed records for obstacle, bypass, line and barcode events |
+| `/console` | car → dashboard | Every console line, with the uptime in ms |
+| `/cmd` | dashboard → car | `start`, `stop`, `clear`, `map <barcode> <action>` |
+
+The packed layouts are in `app_program/robot_types.h`. The dashboard
+decodes them and writes readable lines to the log, so one text file holds the
+whole run. Keep logs under `testing/<subsystem>/logs/` and name them after
+the test.
+
+Every `MQTT=1` image joins Wi-Fi, calibration images included. A
+`TEST=1 MQTT=1` image waits up to 20 s for the broker before its tests
+start, so their results reach the log.
 
 ---
 
