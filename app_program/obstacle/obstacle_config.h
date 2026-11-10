@@ -424,11 +424,12 @@
  * Servo direction. Scan angles below 90 are left of the heading (+x). Set
  * 1 if the servo is mounted so that a command below 90 faces right: check
  * with calibration mode 5 and an object on the car's left. 0 keeps the
- * commands equal to the scan angles. This car needs 1: its 60 degree command
- * faces right (seen on 2026-11-04). At 0 the sweep's sides were swapped, and
- * on 2026-11-08 the car went round a lopsided scan into the obstacle.
+ * commands equal to the scan angles. This car needs 0. At 1 (2026-11-08 to
+ * 11-10) an obstacle 30% left and 70% right of the line read with its edges
+ * swapped, about 6 to 9 cm on the right and over 13 cm on the left, and the
+ * car went round its wider side every time (OBS-U80).
  */
-#define OBSTACLE_SERVO_MIRRORED 1
+#define OBSTACLE_SERVO_MIRRORED 0
 /* Servo command, before trim, that points the sensor at a scan angle. */
 #define OBSTACLE_SERVO_PHYSICAL_DEG(angle)                                     \
     (OBSTACLE_SERVO_MIRRORED ? (180 - (int)(angle)) : (int)(angle))

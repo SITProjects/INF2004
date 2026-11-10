@@ -1801,9 +1801,9 @@ watch_step (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
 }
 
 /*
- * Where the watch looks. Unmirrored, the servo's 60 degree command faces right
- * of the heading (hardware, 2026-11-04), so a left bypass watches at 60. With
- * OBSTACLE_SERVO_MIRRORED the scan angles are true sides. On the pass it looks
+ * Where the watch looks, as a scan angle: the scan turns it into a servo
+ * command, mirrored or not, so the sides here are always true. A right
+ * bypass leaves the obstacle on the left, below 90. On the pass it looks
  * ahead along the obstacle side; on the sidestep back along the line at the
  * obstacle's front, as far as the servo goes.
  */
@@ -1811,8 +1811,7 @@ static int16_t
 watch_angle_for (obstacle_avoid_t const * p_ctx, obstacle_avoid_leg_t leg)
 {
     bool const b_high =
-        obstacle_avoid_plan_flag(p_ctx, OBSTACLE_AVOID_PLAN_F_GAP_RIGHT) !=
-        (OBSTACLE_SERVO_MIRRORED != 0);
+        !obstacle_avoid_plan_flag(p_ctx, OBSTACLE_AVOID_PLAN_F_GAP_RIGHT);
     if (leg != OBSTACLE_AVOID_LEG_SIDESTEP)
     {
         return b_high ? (int16_t)OBSTACLE_WATCH_RIGHT_DEG
