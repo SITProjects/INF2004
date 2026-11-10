@@ -41,8 +41,9 @@ logic, files and known limits, read
 
 **Minimum-bit data.** Everything stored, shared between tasks or sent uses
 only the bits its range needs, packed with masks and shifts and clamped at
-the field limits. The layouts are in `app_program/robot_types.h`, and
-`docs/architecture/subsystems.md` section 7 lists each one with its range.
+the field limits. The layouts are in `app_program/robot_types.h`. Section 5
+gives the Tribunal 1 evidence: every field with its range and bits, RAM use,
+message sizes, and the tests and car runs behind it.
 
 Before the first build, create your local Wi-Fi settings (section 2.2). A
 plain `make` builds with `NET=lwip`, so the Pico joins that network at
@@ -418,6 +419,334 @@ the test.
 Every `MQTT=1` image joins Wi-Fi, calibration images included. A
 `TEST=1 MQTT=1` image waits up to 20 s for the broker before its tests
 start, so their results reach the log.
+
+---
+
+## 5. Tribunal 1: minimum-bit data representation
+
+**The rule.** Data that is stored, shared between tasks or sent uses only the
+bits its range needs. Each field is packed with masks and shifts and saturates
+at its limit, so an out-of-range value can never spill into the next field.
+Calculations unpack first and work at full size. Every shared and sent layout
+is in [`app_program/robot_types.h`](app_program/robot_types.h), with its pack
+and unpack functions and the helpers they use: `robot_field_put()`,
+`robot_field_get()`, `robot_field_from_signed()` and `robot_mark16()`.
+[`docs/architecture/subsystems.md`](docs/architecture/subsystems.md)
+section 7 explains why each range was chosen.
+
+All figures are for the final implementation: the car image
+(`make MQTT=1`) built from `main` on 2026-11-10.
+
+### 5.1 Data representation table
+
+A *word* is a `uint32_t`; bit 0 is the least significant. Signed fields are
+two's complement within their bits.
+
+**Motion command** (IF-01 and IF-06, obstacle → motion): one word, 22 bits,
+bits 22–31 always zero.
+
+| Field | Valid range | Bits | Representation |
+|---|---|---|---|
+| Type | STOP, MOVE, TURN, FOLLOW (0–3) | 2 | bits 0–1 |
+| Stop at the line | 0 or 1 | 1 | bit 2 |
+| Reverse (a move backward, a turn right) | 0 or 1 | 1 | bit 3 |
+| Distance | 0–1023 mm | 10 | bits 4–13 |
+| Angle | 0–180° | 8 | bits 14–21 |
+
+**Motion status** (IF-03, motion → obstacle, line following, terrain and
+status): one byte, 5 bits.
+
+| Field | Valid range | Bits | Representation |
+|---|---|---|---|
+| Mode | 7 modes (0–6) | 3 | bits 0–2 |
+| Why the last move ended | NONE, DIST, LINE (0–2) | 2 | bits 3–4 |
+
+**Line request** (IF-04, line following → motion): one word, 30 bits.
+
+| Field | Valid range | Bits | Representation |
+|---|---|---|---|
+| Mode | TRACK, SEARCH_L, SEARCH_R, STOP (0–3) | 2 | bits 0–1 |
+| Line seen, junction, slow, valid | 0 or 1 each | 4 | bits 2–5 |
+| Reverse distance | 0–255 mm (the barcode back-up is 170 mm) | 8 | bits 6–13 |
+| Target heading | −32,768 to 32,767°, not wrapped (about 91 turns) | 16 signed | bits 14–29 |
+
+**Odometry** (IF-05, motion → terrain, obstacle and line following): three
+words, 81 bits.
+
+| Field | Valid range | Bits | Representation |
+|---|---|---|---|
+| Distance | ±8,388,607 mm (about 8.4 km) | 24 signed | word 0, bits 0–23 |
+| Update count | 1–255, wraps; 0 before the first | 8 | word 0, bits 24–31 |
+| Heading | −32,768 to 32,767°, not wrapped | 16 signed | word 1, bits 0–15 |
+| Mean speed | −1024 to 1023 mm/s (the car tops out at 620) | 11 signed | word 1, bits 16–26 |
+| Left and right wheel speed | −1024 to 1023 mm/s | 11 signed each | word 2, bits 0–10 and 11–21 |
+
+**Obstacle result** (IF-07, scanner → bypass and telemetry): 33 bits in a
+6-byte structure.
+
+| Field | Valid range | Bits | Representation |
+|---|---|---|---|
+| Status | SCANNING, CLEAR, PATH_FOUND, BLOCKED, UNKNOWN (0–4) | 3 | flags byte, bits 0–2 |
+| Direction | NONE, LEFT, CENTRE, RIGHT (0–3) | 2 | flags byte, bits 3–4 |
+| Left and right edge found | 0 or 1 each | 2 | flags byte, bits 5–6 |
+| Critically close | 0 or 1 | 1 | flags byte, bit 7 |
+| Left and right edge | sweep index 0–8 (50–130° in 10° steps), 15 none | 4 each | edges byte, bits 0–3 and 4–7 |
+| Width | 0–511 mm, 0 unavailable | 9 | `uint16_t`, saturated at 511 |
+| Sequence | 0–255, wraps | 8 | `uint8_t` |
+
+**Obstacle geometry** (IF-07): one 64-bit word.
+
+| Field | Valid range | Bits | Representation |
+|---|---|---|---|
+| Range to the face | 0–4095 mm (the sensor's 4 m limit) | 12 | bits 0–11 |
+| Left and right edge, sideways | ±4,095 mm | 13 signed each | bits 12–24 and 25–37 |
+| Range at each end of the sweep | 0–4095 mm | 12 each | bits 38–49 and 50–61 |
+| Each end clear | 0 or 1 each | 1 each | bits 62 and 63 |
+
+**Obstacle control** (obstacle → others): one half-word, 9 bits.
+
+| Field | Valid range | Bits | Representation |
+|---|---|---|---|
+| Stop requested | 0 or 1 | 1 | bit 0 |
+| Bypass state | 13 states (0–12) | 4 | bits 1–4 |
+| Fault | 9 reasons (0–8) | 4 | bits 5–8 |
+
+**Watch reading** (scanner → bypass, while passing the obstacle): one word,
+24 bits.
+
+| Field | Valid range | Bits | Representation |
+|---|---|---|---|
+| Echo | 0–32,767 µs, 0 none | 15 | bits 0–14 |
+| Sequence | 0–255, wraps | 8 | bits 15–22 |
+| Sensor held to the side | 0 or 1 | 1 | bit 23 |
+
+**Barcode turn and pass phase** (IF-08, barcode → line following): one byte
+each, each written by one task only, so neither needs a lock.
+
+| Field | Valid range | Bits | Representation |
+|---|---|---|---|
+| Turn at the next junction | STRAIGHT, LEFT, RIGHT, UTURN (0–3) | 2 | `uint8_t` |
+| Slow pass phase | NONE, BRAKE, BACK, CREEP (0–3) | 2 | `uint8_t` |
+
+**Compass** (IF-09, terrain → any): two words, 57 bits.
+
+| Field | Valid range | Bits | Representation |
+|---|---|---|---|
+| X, Y and Z field | −2048 to 2047 counts (the sensor's own range) | 12 signed each | word 0, bits 0–11 and 12–23; word 1, bits 0–11 |
+| Samples read since start-up | 0–255, wraps | 8 | word 0, bits 24–31 |
+| Heading | 0–3599 tenths of a degree | 12 | word 1, bits 12–23 |
+| Valid | 0 or 1 | 1 | word 1, bit 24 |
+
+**Barcode map entry** (IF-10, dashboard → car, 8 entries): one word, 20 bits,
+so one write replaces an entry with no lock.
+
+| Field | Valid range | Bits | Representation |
+|---|---|---|---|
+| Barcode text, up to 3 characters | Code 39 symbol + 1 (1–43); 0 ends the text | 6 each | bits 0–5, 6–11 and 12–17 |
+| Turn | STRAIGHT, LEFT, RIGHT, UTURN (0–3) | 2 | bits 18–19 |
+
+**Barcode edge** (GP28 interrupt → `tBarcode`, 64-entry queue): one word.
+
+| Field | Valid range | Bits | Representation |
+|---|---|---|---|
+| Level after the edge | 0 or 1 | 1 | bit 0 |
+| Time | the 1 MHz timer in 2 µs steps, 0 to 2³¹−1 | 31 | bits 1–31; differences still work across the timer's wrap |
+
+**Terrain event** (terrain monitor → terrain task, 16-entry queue): one word.
+
+| Field | Valid range | Bits | Representation |
+|---|---|---|---|
+| Type | 11 events (0–10) | 4 | bits 0–3 |
+| Value (for example a hump's height in mm) | 0–4095 | 12 | bits 4–15 |
+| Time | 0–65,535 ticks of 10 ms, wraps | 16 | bits 16–31 |
+
+**Telemetry record** (MQTT `<topic>/telemetry`): three words, 12 bytes.
+
+| Field | Valid range | Bits | Representation |
+|---|---|---|---|
+| Type | OBSTACLE, AVOID, LINE, BARCODE (1–4) | 4 | word 0, bits 0–3 |
+| Sequence | 0–255, wraps | 8 | word 0, bits 4–11 |
+| Capture time | 0–1,048,575 ticks of 10 ms (2.9 h), wraps | 20 | word 0, bits 12–31 |
+| OBSTACLE: flags, edges, width | as the obstacle result | 8, 8, 9 | word 1, bits 0–7, 8–15 and 16–24 |
+| AVOID: from and to state | 0–12 each | 4 each | word 1, bits 0–3 and 4–7 |
+| LINE: mode, junction, turn | 0–3, 0 or 1, 0–3 | 2, 1, 2 | word 1, bits 0–1, 2 and 3–4 |
+| LINE: distance | ±524,287 mm (about 524 m) | 20 signed | word 1, bits 5–24 |
+| LINE: target heading and heading | −32,768 to 32,767° | 16 signed each | word 2, bits 0–15 and 16–31 |
+| BARCODE: text, up to 10 characters | Code 39 symbol + 1 (1–43); 0 ends | 6 each | five per word, words 1 and 2 |
+| BARCODE: read backwards | 0 or 1 | 1 | word 1, bit 30 |
+
+**Car status** (MQTT `<topic>/status`, twice a second): six words, 174 bits,
+24 bytes.
+
+| Field | Valid range | Bits | Representation |
+|---|---|---|---|
+| Distance | ±8,388,607 mm | 24 signed | word 0, bits 0–23 |
+| Humps counted | 0–255 | 8 | word 0, bits 24–31 |
+| Speed, left and right wheel | −1024 to 1023 mm/s | 11 signed each | word 1, bits 0–10 and 11–21; word 2, bits 0–10 |
+| Motion mode | 0–6 | 3 | word 1, bits 22–24 |
+| Obstacle status | 0–4 | 3 | word 1, bits 25–27 |
+| Bypass state | 0–12 | 4 | word 1, bits 28–31 |
+| Obstacle width | 0–511 mm | 9 | word 2, bits 11–19 |
+| Range to the obstacle | 0–4095 mm | 12 | word 2, bits 20–31 |
+| Heading | −32,768 to 32,767° | 16 signed | word 3, bits 0–15 |
+| Pitch and roll | ±204.7°, in tenths | 12 signed each | word 3, bits 16–27; word 4, bits 0–11 |
+| IMU calibration state | 0–7 | 3 | word 3, bits 28–30 |
+| Turn rate | −1024 to 1023 °/s | 11 signed | word 4, bits 12–22 |
+| Line requests sent and taken | low 8 bits of each count | 8 each | word 4, bits 23–30; word 5, bits 8–15 |
+| Collisions counted | 0–255 | 8 | word 5, bits 0–7 |
+
+**State kept inside a subsystem** is packed the same way:
+
+| Data | Representation |
+|---|---|
+| Line tracker (`line_track_t`, 64 bytes) | 14 yes/no facts in one flags word, 16 small values in 30 bits, distance marks and headings 16 bits each |
+| Bypass (`obstacle_avoid_t`, 76 bytes) | 19 yes/no facts in one flags word, 7 small values in 20 bits, the plan in 13 bits, distances 16 bits |
+| Barcode scan (`barcode_scan_t`) | Element widths 16 bits each, in 16 µs steps (up to about 1 s) |
+| Barcode trigger | Index, count and two flags in one byte |
+| Stopped-car check | Speed 11, age 8 and off-level count 8 in one word; the peak push 16 bits in 1/256 g |
+
+A 16-bit distance mark is read as the value nearest the current travel, which
+is exact within 32 m either way. The line tracker also ages its marks, so one
+left unused never wraps round and reads as recent.
+
+**Left full size on purpose:** calculations and single-sample inputs, the
+kernel clock stamps and sequence counters that guard shared copies (a
+narrower counter could let a torn read through), compile-time settings,
+tests, the upstream kernel, lwIP and TinyUSB, and the console text and its
+MQTT mirror, which is the only debug view without a cable.
+
+### 5.2 RAM usage
+
+Static RAM of the final car image, from `arm-none-eabi-size`:
+
+| Section | Bytes |
+|---|---|
+| RAM vector table | 192 |
+| `.data` | 1,196 |
+| `.bss` | 102,856 |
+| **Total** | **104,244 of 270,336 (38.6%)** |
+
+The application's six task stacks, 2,048 bytes each, come from the kernel's
+memory area above this.
+
+By owner, from the symbol table (`arm-none-eabi-nm -S -l`):
+
+| Owner | Bytes |
+|---|---|
+| lwIP network stack | 57,359 |
+| Console mirror (debug copy of the console to MQTT) | 16,993 |
+| micro T-Kernel | 15,932 |
+| TinyUSB | 6,112 |
+| CYW43 radio driver | 2,532 |
+| Communication | 1,660 |
+| Other library code | 1,240 |
+| Barcode | 821 |
+| Terrain | 486 |
+| Motion | 440 |
+| Obstacle | 407 |
+| Line following | 92 |
+
+The six subsystems use 3,906 bytes between them. Their largest buffers are
+all packed:
+
+| Buffer | Bytes |
+|---|---|
+| Telemetry queue, 128 records of 12 bytes | 1,536 |
+| Barcode scan widths | 508 |
+| Barcode edge queue, 64 edges of 4 bytes | 256 |
+| Bypass state | 76 |
+| Terrain event queue, 16 events of 4 bytes and a bookkeeping word | 68 |
+| Line tracker | 64 |
+| Barcode map, 8 entries of 4 bytes | 32 |
+| Line request slots and motion's copy | 24 |
+| Obstacle result, control and geometry | 16 |
+| Odometry | 12 |
+
+To measure it again:
+
+```sh
+cd build_make
+make MQTT=1 -j8
+arm-none-eabi-size -A -d mtk3pico_smp1_usb_cdc_wifi_lwip_mqtt.elf
+arm-none-eabi-nm -S -l --size-sort -t d mtk3pico_smp1_usb_cdc_wifi_lwip_mqtt.elf
+```
+
+### 5.3 Message sizes
+
+| Message | From → to | Transport | Bits used | Bytes per message | Rate and buffer |
+|---|---|---|---|---|---|
+| Motion command | obstacle → motion | kernel message buffer | 22 | 4 | Per bypass leg; 4 deep |
+| Motion status | motion → others | status byte and event flag | 5 | 1 | On change |
+| Line request | line following → motion | two latest-value slots | 30 | 4, plus a 4-byte receive time | 50 a second |
+| Odometry | motion → terrain, obstacle, line following | sequence-checked copy | 81 | 12 | 50 a second |
+| Obstacle result, control and geometry | obstacle → any | one sequence-checked copy | 33 + 9 + 64 | 16 | Per scan |
+| Watch reading | scanner → bypass | one word | 24 | 4 | Per reading while passing |
+| Barcode turn and phase | barcode → line following | one byte each | 2 + 2 | 1 + 1 | Per barcode |
+| Compass | terrain → any | copy under a spin lock | 57 | 8 | Per sample |
+| Barcode map entry | radio task → barcode and line following | one word each | 20 | 4 | Per dashboard change; 8 entries |
+| Barcode edge | GP28 interrupt → `tBarcode` | queue | 32 | 4 | Per edge; 64 deep |
+| Terrain event | terrain monitor → terrain task | queue | 32 | 4 | Per event; 16 deep |
+| Telemetry record | any task → MQTT `/telemetry` | queue, then MQTT | 96 | 12 | Per event; 128 deep |
+| Car status | → MQTT `/status` | built when sent | 174 | 24 | Twice a second |
+
+Dashboard commands on `/cmd` arrive as short text (`start`, `stop`,
+`clear`, `map <barcode> <action>`), and the car stores the result packed: one
+flag for start and stop, and a 20-bit word per barcode.
+
+### 5.4 Correctness and performance
+
+**No loss of required functionality.**
+
+- **Layouts.** Each field reads back at its minimum and maximum, saturates
+  one past them, and leaves its neighbours alone (INT-18,
+  `sh testing/integration/host/run.sh`, 67 checks).
+- **Packed state.** The line tracker's marks are tested across the 16-bit
+  wrap (`testing/line_follow/host`, 525 checks). The bypass's packed state is
+  checked field by field (AS01–AS10 in `testing/obstacle/host`), and the
+  barcode widths at their limits (`testing/barcode/host`, 33 checks).
+- **Sent data.** The dashboard decodes telemetry and status records built by
+  the firmware's own pack functions (`testing/communication/host`, 62 checks,
+  W01–W07).
+- **Same behaviour.** The packed line tracker, bypass and collision rule gave
+  identical outputs to the unpacked code on 8 million, 6 million and
+  20 million random inputs. Bugs planted in every layout were caught.
+- **On the car**, with the minimum-bit firmware on 2026-11-09 and 2026-11-10:
+  - line following with junction turns and a U-turn;
+  - barcodes A, Z and F decoded and their turns taken;
+  - humps counted;
+  - obstacle bypasses finished and rejoined the line, six of them on
+    2026-11-09 (INT-16);
+  - the dashboard showed live status and barcode reads.
+
+Run every host suite with:
+
+```sh
+for t in testing/*/host/run.sh; do sh "$t" || echo "FAILED: $t"; done
+```
+
+**No unacceptable loss of timing or performance.**
+
+- **Cost of packing.** Compiled for the Cortex-M0+ at `-O2`, as the firmware
+  is, packing and unpacking take at most these instructions:
+
+  | Message | Pack | Unpack |
+  |---|---|---|
+  | Line request | 31 | 10 |
+  | Odometry | 84 | 42 |
+  | Obstacle geometry | 62 | 35 |
+  | Watch reading | 15 | 10 |
+  | Car status | 183 | (dashboard) |
+
+  At 125 MHz each takes under 3 µs. The busiest work is the line request, sent
+  50 times a second, and the odometry, written 50 times a second and read
+  about 300 times a second. Together they cost under 20,000 instructions a
+  second, about 0.03% of one core.
+- **Rates on the car.** While following, motion received line requests at a
+  steady 50 a second: 25 in every half-second status interval, with the 10th
+  to 90th percentile at 25–26, over 343 intervals in the 2026-11-09 and
+  2026-11-10 runs. Status records arrived every 0.5 s.
+- **Memory.** The final image uses 38.6% of RAM, and its code
+  (414,894 bytes) fits easily in the 2 MB of flash.
 
 ---
 
