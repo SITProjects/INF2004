@@ -122,6 +122,16 @@ preferred. Otherwise the clear side needing the shorter sidestep is taken.
 | Turn angle | `atan(sidestep / (room - margin))`, rounded up to 5 degrees, between 30 and 90 |
 | Pass distance | Room, plus axle-to-pivot 60 mm, depth 200 mm, tail 162 mm and the margin, at most 1500 mm. With a known edge a shorter tail clearance is used |
 
+**Squaring up.** A flat face stops echoing about 25 degrees off square, so from
+a car stopped askew the far end of the face reads short, and the near half of
+the face itself looks less clear. After reversing for room, the corridor sweep
+finds the face's bearing: the middle of the run of echoes within 1/32 of the
+nearest. If that is more than 3 and at most 20 degrees off
+(`OBSTACLE_AVOID_SQUARE_MAX_DEG`), and nothing is critically close, the car
+turns to face it, then stops and measures again from there. Once per obstacle.
+On 2026-11-10 a car 10 degrees off square went round the long side of an
+obstacle (OBS-U80); the same sweep now turns it 10 degrees first (OBS-U81).
+
 **The legs, in order.**
 
 | Leg | What the car does |
@@ -137,6 +147,7 @@ preferred. Otherwise the clear side needing the shorter sidestep is taken.
 | `OVERSHOOT` | Drives 130 mm on, putting the axle (not the sensors) on the line |
 | `TURN_HOME` | Turns to the heading the car stopped on |
 | `FOLLOW` | Hands back to line following |
+| `STRAIGHTEN` | Not a bypass leg: turns square to the face, then the car stops and measures again |
 
 **The states** (`obstacle_avoid_state_t`).
 
@@ -153,7 +164,7 @@ preferred. Otherwise the clear side needing the shorter sidestep is taken.
 | `VERIFY` | Corridor sweep after a sidestep |
 | `BLOCKED_WAIT` | Off the line, held, path blocked |
 | `RETRY_WAIT` | Off the line, held, before one retry |
-| `REPLAN` | Re-sweeping after back-offs failed |
+| `REPLAN` | Re-sweeping: after reversing for room, or after back-offs failed |
 | `FAULT` | Latched until reboot, motors held |
 
 A critical reading during a move backs the car off 50 mm, up to twice, and then
@@ -394,8 +405,10 @@ are only read inside the leg or bypass that set them.
 - **Junction just before an obstacle.** The bypass knows nothing about line
   tape. An obstacle just past a cross makes the car back up onto the junction
   before it turns out, so the sidestep can run along the cross's arm.
-- **Squaring up.** The car does not yet square up to the obstacle's face before
-  measuring. The heading-based straighten leg lagged and is switched off
+- **Squaring up.** The car squares up to the face only after reversing for
+  room, from nine points 10 degrees apart, so the turn comes in 5 degree steps
+  and a face more than 20 degrees off is left as it is. Not yet run on the car.
+  The heading-based straighten lagged and stays off
   (`OBSTACLE_AVOID_STRAIGHTEN_MAX_DEG` is 0).
 - **Collision rule.** Counts real hits, including a 3.4 g one on the car, but it
   also counts small pushes that were not hits. On 2026-11-09 the car counted

@@ -118,6 +118,7 @@ typedef struct
     uint16_t resume_min_mm;        /**< Smaller remainders count as done. */
     uint8_t resume_min_deg; /**< Smaller turn remainders count as done. */
     uint8_t max_sidesteps;  /**< First sidestep plus extra ones, >= 1. */
+    uint8_t square_max_deg; /**< Face further off is not squared; 0 never. */
     /** true: rearm before each move and verify the corridor. false: drive
      *  the planned path from the first sweep; only CRITICAL holds the car,
      *  and it resumes once CRITICAL clears, without re-measuring. */
@@ -275,6 +276,8 @@ typedef enum
     0x00020000u /* Line heading awaits stop. */
 #define OBSTACLE_AVOID_F_MEASURE_AGAIN                                         \
     0x00040000u /* Discard any sweep so far. */
+#define OBSTACLE_AVOID_F_SQUARED                                               \
+    0x00080000u /* Turned square to this obstacle's face. */
 
 /* obstacle_avoid_t.fields, each "shift, bits": 20 of 32 bits. */
 #define OBSTACLE_AVOID_FIELD_STATE 0u, 4u
@@ -510,6 +513,24 @@ obstacle_avoid_check_corridor (obstacle_scan_corridor_t const * p_corridor,
                                obstacle_avoid_geometry_t const * p_geometry,
                                uint16_t pass_mm, bool b_gap_right,
                                uint16_t * p_shift_mm);
+
+/**
+ * @brief Bearing of the obstacle's face from a corridor sweep.
+ *
+ * A flat face is nearest along its normal, and the sensor's beam keeps
+ * finding that nearest point for a few positions either side of it. Take
+ * the nearest non-zero echo, widen to the neighbouring positions within
+ * 1/32 of it, and return the middle of that run, as degrees right of
+ * straight ahead. The run must not reach either end of the sweep, where
+ * the face may carry on beyond it.
+ *
+ * @param p_corridor Corridor sweep, taken with the car stopped.
+ * @param p_offset_deg Non-null; set to the bearing (+ right, - left), or 0.
+ * @return True with a bearing; false for NULL, an invalid position, no
+ *         echo, or a run that reaches an end of the sweep.
+ */
+bool obstacle_avoid_face_offset (obstacle_scan_corridor_t const * p_corridor,
+                                 int32_t * p_offset_deg);
 
 /**
  * @brief Start the state machine in WAIT_CLEAR with INHIBIT assumed set.

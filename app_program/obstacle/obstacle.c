@@ -116,6 +116,7 @@ static const obstacle_avoid_config_t avoid_config = {
                .straighten_settle_ms = OBSTACLE_AVOID_STRAIGHTEN_SETTLE_MS,
                .straighten_step_mm = OBSTACLE_AVOID_STRAIGHTEN_STEP_MM,
                .straighten_max_deg = OBSTACLE_AVOID_STRAIGHTEN_MAX_DEG,
+               .square_max_deg = OBSTACLE_AVOID_SQUARE_MAX_DEG,
                .move_speed_mm_s = MOTION_MOVE_SPEED_MM_S,
                .turn_speed_deg_s = MOTION_TURN_SPEED_DEG_S,
                .resume_min_mm = OBSTACLE_AVOID_RESUME_MIN_MM,

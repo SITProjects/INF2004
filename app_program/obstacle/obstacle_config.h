@@ -363,6 +363,12 @@
 #define OBSTACLE_AVOID_STRAIGHTEN_SETTLE_MS 250u
 #define OBSTACLE_AVOID_STRAIGHTEN_STEP_MM 32u
 #define OBSTACLE_AVOID_STRAIGHTEN_MAX_DEG 0u
+/* After reversing for room, the corridor sweep's nearest echoes give the
+ * bearing of the obstacle's face. Off by more than RESUME_MIN_DEG and at most
+ * this, the car turns to face it squarely, once per obstacle, and measures
+ * again: on 2026-11-10 a car about 10 degrees off square read the far end of
+ * an obstacle short and went round its long side (OBS-U80). 0 never. */
+#define OBSTACLE_AVOID_SQUARE_MAX_DEG 20u
 /* 0: one sweep at the stop, then drive the whole path without the corridor
  * sweep or forward re-checks; only CRITICAL holds the car on the way. 1:
  * re-check before each move and verify the corridor (slower). */
@@ -612,6 +618,9 @@
 #if (OBSTACLE_AVOID_STRAIGHTEN_MAX_DEG > 255u) ||                              \
     (OBSTACLE_AVOID_STRAIGHTEN_STEP_MM > 65535u)
 #error "Straightening limits must fit their fields"
+#endif
+#if (OBSTACLE_AVOID_SQUARE_MAX_DEG > 40u)
+#error "OBSTACLE_AVOID_SQUARE_MAX_DEG must stay inside the 50..130 sweep"
 #endif
 #if OBSTACLE_AVOID_BLOCK_WAIT_MS <= OBSTACLE_CORRIDOR_WORST_MS
 #error "A blocked bypass must be able to wait through one corridor sweep"

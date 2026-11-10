@@ -153,12 +153,81 @@ test_marks (void)
               (INT16_MIN == robot_clamp_i16(-32769)));
 }
 
+/* Corridor sweep from nine echoes, 50 to 130 degrees; 0 is no echo. */
+static obstacle_scan_corridor_t
+corridor_of (uint16_t const * p_echo_us)
+{
+    obstacle_scan_corridor_t corridor = {
+        .sequence = 1u,
+        .valid_mask = (uint16_t)((1u << OBSTACLE_SWEEP_POINTS) - 1u)};
+    for (uint32_t i = 0u; i < OBSTACLE_SWEEP_POINTS; i++)
+    {
+        corridor.echo_us[i] = p_echo_us[i];
+    }
+    return corridor;
+}
+
+static bool
+face_is (uint16_t const * p_echo_us, bool b_found, int32_t offset_deg)
+{
+    obstacle_scan_corridor_t const corridor = corridor_of(p_echo_us);
+    int32_t got = 99;
+    return (b_found == obstacle_avoid_face_offset(&corridor, &got)) &&
+           (got == offset_deg);
+}
+
+static void
+test_face (void)
+{
+    /* 2026-11-10, OBS-U80: run 2, about 10 degrees off square, and run 1,
+     * nearly square. */
+    static uint16_t const run2[] = {4342u, 4699u, 1312u, 1200u, 1166u,
+                                    1151u, 1159u, 1190u, 0u};
+    static uint16_t const run1[] = {4195u, 1473u, 1306u, 1290u, 1205u,
+                                    1206u, 1301u, 1313u, 5454u};
+    static uint16_t const mirror[] = {0u,    1190u, 1159u, 1151u, 1166u,
+                                      1200u, 1312u, 4699u, 4342u};
+    static uint16_t const square[] = {0u,    0u,    1300u, 1180u, 1160u,
+                                      1180u, 1300u, 0u,    0u};
+    /* 1600 us allows 50 more: 1650 joins the face, 1651 does not. */
+    static uint16_t const limit[] = {0u,    0u, 0u, 1651u, 1600u,
+                                     1650u, 0u, 0u, 0u};
+    static uint16_t const at_end[] = {1150u, 1160u, 1300u, 0u, 0u,
+                                      0u,    0u,    0u,    0u};
+    static uint16_t const gap[] = {0u, 0u, 1160u, 0u, 1150u, 1700u, 0u, 0u, 0u};
+    static uint16_t const none[] = {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u};
+
+    check("AS11 face 10 degrees right on the skewed 2026-11-10 sweep",
+          face_is(run2, true, 10));
+    check("AS12 face 5 degrees right on the nearly square sweep",
+          face_is(run1, true, 5));
+    check("AS13 the mirror image reads left, a square face 0",
+          face_is(mirror, true, -10) && face_is(square, true, 0));
+    check("AS14 a neighbour 1/32 farther joins the face, one more does not",
+          face_is(limit, true, 5));
+    check("AS15 a run reaching the end of the sweep is no bearing",
+          face_is(at_end, false, 0));
+    check("AS16 no echo between ends the run", face_is(gap, true, 0));
+
+    obstacle_scan_corridor_t invalid = corridor_of(run2);
+    invalid.valid_mask &= (uint16_t) ~(1u << 8u);
+    int32_t got = 99;
+    bool const b_invalid =
+        !obstacle_avoid_face_offset(&invalid, &got) && (0 == got);
+    got = 99;
+    bool const b_null = !obstacle_avoid_face_offset(NULL, &got) && (0 == got);
+    check("AS17 no echo, an invalid position or NULL is no bearing",
+          face_is(none, false, 0) && b_invalid && b_null &&
+              !obstacle_avoid_face_offset(&invalid, NULL));
+}
+
 int
 main (void)
 {
     test_fields();
     test_plan();
     test_marks();
+    test_face();
     printf("%u failure(s)\n", failures);
     return (0u == failures) ? 0 : 1;
 }
