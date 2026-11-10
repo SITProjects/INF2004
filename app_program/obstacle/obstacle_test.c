@@ -2865,7 +2865,7 @@ avoid_watch_front_valid (void)
         ok = ok && sim_until(OBSTACLE_AVOID_RUN_LEG,
                              OBSTACLE_AVOID_LEG_SIDESTEP, 50u);
         int32_t const turn = (int32_t)obstacle_avoid_plan_angle(&sim.ctx);
-        bool const b_high = (right != 0u) != (OBSTACLE_SERVO_MIRRORED != 0);
+        bool const b_high = (0u == right); /* The obstacle's side. */
         int32_t front = b_high ? (90 + turn) : (90 - turn);
         front =
             (front < OBSTACLE_WATCH_MIN_DEG) ? OBSTACLE_WATCH_MIN_DEG : front;

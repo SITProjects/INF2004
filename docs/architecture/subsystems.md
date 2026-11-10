@@ -387,8 +387,13 @@ are only read inside the leg or bypass that set them.
   sensor's beam reaches past the edges of small obstacles: 16 and 21 cm obstacles
   have read about the same. Stopping at 250 mm was tried and was worse. Width is
   not yet reliable at this beam width.
-- **Scan side.** `OBSTACLE_SERVO_MIRRORED` is set so the sensor should swing to
-  the car's left first. This has not been confirmed on the car.
+- **Scan side.** `OBSTACLE_SERVO_MIRRORED` is 0 since 2026-11-10: at 1, an
+  obstacle 30% left and 70% right of the line read with its sides swapped, and
+  the car went round its wider side (OBS-U80). The bypass on the car with 0 is
+  still to be run.
+- **Junction just before an obstacle.** The bypass knows nothing about line
+  tape. An obstacle just past a cross makes the car back up onto the junction
+  before it turns out, so the sidestep can run along the cross's arm.
 - **Squaring up.** The car does not yet square up to the obstacle's face before
   measuring. The heading-based straighten leg lagged and is switched off
   (`OBSTACLE_AVOID_STRAIGHTEN_MAX_DEG` is 0).
