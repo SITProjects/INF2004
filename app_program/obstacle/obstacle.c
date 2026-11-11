@@ -34,6 +34,7 @@
 #include "../communication/remote_command.h"
 #include "../motion/motion.h"
 #include "../motion/motion_config.h"
+#include "../terrain/terrain_monitor.h"
 #endif
 
 #define TELEMETRY_SAMPLE_PERIOD_MS 1000u
@@ -529,7 +530,8 @@ log_watch (obstacle_avoid_input_t const * p_in)
 
 /*
  * The dashboard's Stop holds the motors and pauses the bypass logic, so a
- * stop is never taken for an obstacle. Start begins again from the power-on
+ * stop is never taken for an obstacle. A lift or overturn found by terrain
+ * (IF-11) stops the car the same way. Start begins again from the power-on
  * state, wherever the car stands: the next clear path releases it. A latched
  * FAULT survives that, so Start cannot clear it.
  * Returns true while stopped.
@@ -538,6 +540,17 @@ static bool
 remote_hold (void)
 {
     static bool b_held = false;
+    static uint8_t lifts_seen = 0u;
+    uint8_t const lifts = terrain_monitor_lift_count();
+    if (lifts != lifts_seen)
+    {
+        /* Lifted or overturned (IF-11): as the dashboard's Stop. */
+        lifts_seen = lifts;
+        remote_command_stop();
+        tm_printf((UB *)"[%lu ms]obstacle: car lifted, motors stopped until "
+                        "Start\n",
+                  (unsigned long)log_time_ms());
+    }
     bool const b_stopped = remote_command_stopped();
     remote_reverse(b_held);
     if (b_stopped && !b_held)

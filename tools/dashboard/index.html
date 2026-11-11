@@ -116,7 +116,7 @@ li { overflow-wrap: anywhere; color: var(--muted); }
         <div class="fact"><span>Tilt (pitch, roll)</span><strong id="tilt">–</strong></div>
         <div class="fact"><span>Turn rate</span><strong id="turn">–</strong></div>
         <div class="fact"><span>Humps</span><strong id="humps">–</strong></div>
-        <div class="fact"><span>Collisions</span><strong id="collisions">–</strong></div>
+        <div class="fact"><span>Lifts</span><strong id="lifts">–</strong></div>
       </div>
     </div>
   </section>
@@ -237,7 +237,7 @@ function showCar(state) {
     : CALIBRATION[car.cs] || "Not calibrated";
   $("turn").textContent = `${car.tr}°/s`;
   $("humps").textContent = b_calibrated ? car.hu : "Not running";
-  $("collisions").textContent = car.co;
+  $("lifts").textContent = car.lf;
 }
 
 function show(state) {

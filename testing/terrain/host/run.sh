@@ -18,3 +18,10 @@ ${CC:-cc} -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -g \
     "$repo_root/app_program/terrain/terrain_process.c" \
     -lm -o "$test_tmp/hump"
 "$test_tmp/hump"
+
+${CC:-cc} -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -g \
+    "$repo_root/testing/terrain/host/lift_test.c" \
+    "$repo_root/app_program/terrain/terrain_detect.c" \
+    "$repo_root/app_program/terrain/terrain_process.c" \
+    -lm -o "$test_tmp/lift"
+"$test_tmp/lift"

@@ -54,7 +54,7 @@ car_status_encode (uint32_t * p_words)
         .range_mm = obstacle.geometry.centre_mm,
         .calibration = (uint32_t)terrain_monitor_data_calib_state(&terrain),
         .humps = terrain_monitor_summary_hump_count(&summary),
-        .collisions = terrain_monitor_summary_collisions(&summary),
+        .lifts = terrain_monitor_lift_count(),
         .requests = requests,
         .taken = taken};
 

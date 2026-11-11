@@ -1,7 +1,7 @@
 /**
  * @file terrain_detect.h
- * @brief Terrain detectors: the hump, collision, turning and speed state
- *        machines.
+ * @brief Terrain detectors: the hump, turning and speed state machines,
+ *        and the lift and overturn check.
  *
  * Pure C with no kernel calls, so it can be tested on a PC. Each step
  * takes its machine's word and one sample and returns the event it found,
@@ -26,17 +26,10 @@
  * Turning is found from the turn rate (from motion's wheel speeds), not
  * the accelerometer: see terrain_detect_turn_step().
  *
- * Collisions are found from the horizontal push (forward/back and
- * sideways): a wall shoves the car back or sideways, a wheel landing
- * mostly pushes up. A push that might be a jolt is confirmed by the
- * car's speed dropping; see terrain_detect_collision_step().
- *
- * Collision word, masks and shifts, bit 0 first; all zero is READY:
- *   cooldown 6 | check countdown 4 | speed at the push 8 |
- *   biggest push 7 | spare 7
- * Cooldown and countdown are in samples (0 to 63, 0 to 15); the speed in
- * 4 mm/s steps, 0 to 1020 mm/s (stops there); the push in 0.1 g steps, 0
- * to 12.7 g (stops there; two axes of +/-8 g give at most 11.3 g).
+ * Lifting and overturning are found from the mean of the last 100 ms of
+ * samples against the level reading from calibration: a lift pushes up
+ * harder than driving does, and an overturned car reads gravity from the
+ * side or below; see terrain_detect_lift_step().
  *
  * The speed state is found from the wheel speed (from motion's wheel
  * speeds), not the accelerometer: see terrain_detect_speed_step().
@@ -63,6 +56,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "terrain_monitor.h"
+#include "terrain_process.h"
 
 /* Public types, constants, and macros. */
 
@@ -84,57 +78,33 @@ typedef struct
                                 TERRAIN_DETECT_COUNT_MAX. */
 } terrain_hump_limits_t;
 
-/* Largest check countdown and cooldown the collision word holds. */
-#define TERRAIN_DETECT_CHECK_MAX 15u
-#define TERRAIN_DETECT_COOLDOWN_MAX 63u
+/* Samples averaged by the lift check: 100 ms at 100 Hz. */
+#define TERRAIN_DETECT_LIFT_WINDOW 10u
 
-/* Largest push the collision word and event value hold, 0.1 g. */
-#define TERRAIN_DETECT_PUSH_MAX_DG 127u
-
-/** @brief Limits of the collision state machine. */
+/** @brief Limits of the lift and overturn check. */
 typedef struct
 {
-    float limit_g;            /**< Push at least this may be a collision:
-                                   check the speed. */
-    float sure_g;             /**< Push at least this is a collision at
-                                   once; at or above limit_g. */
-    float min_speed_mm_s;     /**< Below this speed there is nothing to
-                                   drop from: the push alone decides. */
-    uint8_t check_samples;    /**< Samples to wait for the speed to halve,
-                                   1 to TERRAIN_DETECT_CHECK_MAX. */
-    uint8_t cooldown_samples; /**< Samples after a collision before the
-                                   next one, 1 to
-                                   TERRAIN_DETECT_COOLDOWN_MAX. */
-} terrain_collision_limits_t;
+    float up_ratio;           /**< Upward acceleration, as a share of the
+                                   level reading, above this is a lift. */
+    float over_deg;           /**< Tilt from level above this ... */
+    uint8_t over_samples;     /**< ... for this many samples in a row is
+                                   overturned; 0 counts as 1. */
+    uint8_t cooldown_samples; /**< Samples after an event before the next;
+                                   0 counts as 1. */
+} terrain_lift_limits_t;
 
-/** @brief One sample's input to the collision state machine. */
+/**
+ * @brief Memory of the lift check; starts zeroed.
+ *
+ * The window keeps the last samples in cm/s^2, 16 bits per axis (the
+ * sensor's +/-8 g needs 14). Word, bit 0 first: next slot 4 | samples
+ * held 4 | over-tilt run 8 | cooldown 8 | overturn reported 1 | spare 7.
+ */
 typedef struct
 {
-    float push_g;              /**< Horizontal push, g: the size of the
-                                       forward/back and sideways parts of
-                                       the corrected acceleration. */
-    terrain_hump_state_t hump; /**< Hump state after this sample. */
-    bool b_speed_known;        /**< speed_mm_s is valid. */
-    int32_t speed_mm_s;        /**< Car speed, mm/s; either sign. */
-    bool b_stopped_dead;       /**< terrain_detect_stopped_dead() said so. */
-    float peak_g;              /**< Its recent biggest push, g, reported as
-                                    the size of that hit. */
-} terrain_collision_input_t;
-
-/** @brief Limits of terrain_detect_stopped_dead(). */
-typedef struct
-{
-    int32_t from_mm_s;       /**< Driving at this or faster can stop dead. */
-    uint32_t window_samples; /**< Longest fall to half speed, samples. */
-    uint32_t grace_samples;  /**< A lean this new may be the hit itself. */
-} terrain_stopped_limits_t;
-
-/** @brief Memory of terrain_detect_stopped_dead(); starts zeroed. */
-typedef struct
-{
-    uint32_t word;      /* Kept speed mm/s 11, age 8, off-level count 8. */
-    uint16_t peak_x256; /* Biggest recent push, fading, 1/256 g. */
-} terrain_stopped_t;
+    int16_t window[TERRAIN_DETECT_LIFT_WINDOW][3];
+    uint32_t word;
+} terrain_lift_t;
 
 /* Largest sample count the 5-bit turn counter holds. */
 #define TERRAIN_DETECT_TURN_COUNT_MAX 31u
@@ -257,21 +227,6 @@ terrain_hump_sample_t terrain_detect_hump_sample (bool b_following,
                                                   int32_t min_speed_mm_s);
 
 /**
- * @brief The push to judge: none unless driving forward and not lifted.
- * @param push_g Horizontal push, in g.
- * @param speed_mm_s Ground speed; + is forward.
- * @param lean_deg Size of the roll, in degrees.
- * @param driving_mm_s TERRAIN_COLLISION_DRIVING_MM_S.
- * @param max_lean_deg TERRAIN_COLLISION_MAX_LEAN_DEG.
- * @return @p push_g, or 0.
- * @note A hit under way still counts as the car slows through the limit: its
- *       check needs only the speed.
- */
-float terrain_detect_collision_push (float push_g, int32_t speed_mm_s,
-                                     float lean_deg, int32_t driving_mm_s,
-                                     float max_lean_deg);
-
-/**
  * @brief Run the turning state machine on one sample.
  * @param p_word Detector word; start from 0.
  * @param turn_dps Turn rate for this sample, deg/s; either sign. Only its
@@ -331,61 +286,30 @@ terrain_detect_speed_step (uint32_t * p_word, float wheel_mm_s,
 terrain_speed_state_t terrain_detect_speed_state (uint32_t word);
 
 /**
- * @brief Run the collision state machine on one sample.
- * @param p_word Collision word; start from 0.
- * @param p_in This sample's push, hump state and speed.
- * @param p_limits Limits; sample counts of 0 count as 1, and counts over
- *        the field limits are cut to them.
- * @param p_value Receives the event value when COLLISION is returned:
- *        the biggest push of the collision, 0.1 g, 0 to
- *        TERRAIN_DETECT_PUSH_MAX_DG. Unchanged otherwise.
- * @return COLLISION or NONE. NONE, with nothing changed, if a pointer is
- *         NULL.
- *
- * Three states, read from the two countdowns:
- * READY -> COLLISION at once (to COOLDOWN) for a push of at least sure_g,
- * or at least limit_g when the speed is unknown or below min_speed_mm_s.
- * READY -> CHECKING (no event) for a push of at least limit_g otherwise;
- * the speed then is kept.
- * CHECKING -> COLLISION (to COOLDOWN) once the speed is at most half the
- * kept speed, the speed becomes unknown, or a push reaches sure_g, within
- * check_samples samples; the biggest push so far is the value.
- * CHECKING -> READY (no event) when check_samples pass first (a jolt: the
- * car kept going), or the hump state leaves LEVEL.
- * COOLDOWN -> READY after cooldown_samples samples: one hit, one event.
- * Pushes count only in hump state LEVEL, so ramps never do.
- */
-terrain_event_type_t terrain_detect_collision_step (
-    uint32_t * p_word, terrain_collision_input_t const * p_in,
-    terrain_collision_limits_t const * p_limits, uint32_t * p_value);
-
-/**
- * @brief The fading peak push kept by terrain_detect_stopped_dead().
- * @param p_state State from terrain_detect_stopped_dead().
- * @return Peak in g.
- */
-float terrain_detect_stopped_peak_g (terrain_stopped_t const * p_state);
-
-/**
- * @brief Whether the wheels have just fallen to half speed with nothing asking
- *        them to: the mark of a hit at line-following speed.
- *
- * At 120 mm/s a hit is a small push, inside what driving and the hump give, so
- * the push cannot tell it. Everything that slows the car on purpose either
- * leaves following (a stop, a pivot) or starts with the hump state leaving
- * LEVEL and takes longer than the grace to halve the speed.
- *
- * @param p_state State, zeroed to start. Call once per sample.
- * @param speed_mm_s Car speed, mean of both wheels, mm/s.
- * @param push_g This sample's horizontal push, g.
- * @param b_driving Following the line, with speed_mm_s valid.
- * @param hump Hump state after this sample.
+ * @brief Run the lift and overturn check on one sample.
+ * @param p_state State, zeroed to start; zero it again after a new
+ *        calibration.
+ * @param p_sample Sample in car axes, m/s^2, gains applied, before the
+ *        bias.
+ * @param p_level Level reading from calibration (the bias plus 0, 0, g),
+ *        m/s^2.
  * @param p_limits Limits.
- * @return True once for each fall.
+ * @param p_value Receives the event value: for LIFTED the upward
+ *        acceleration in hundredths of the level reading, for OVERTURNED
+ *        the tilt in degrees. Unchanged otherwise.
+ * @return LIFTED, OVERTURNED or NONE. NONE, with nothing changed, if a
+ *         pointer is NULL or the level reading is zero.
+ *
+ * Both use the mean of the last TERRAIN_DETECT_LIFT_WINDOW samples, and
+ * nothing is decided until the window is full. LIFTED when the mean's part
+ * along the level reading is more than up_ratio of it. OVERTURNED when the
+ * angle between the mean and the level reading has been more than
+ * over_deg for over_samples samples in a row; once, until the angle falls
+ * back. After either, none for cooldown_samples samples.
  */
-bool terrain_detect_stopped_dead (terrain_stopped_t * p_state,
-                                  int32_t speed_mm_s, float push_g,
-                                  bool b_driving, terrain_hump_state_t hump,
-                                  terrain_stopped_limits_t const * p_limits);
+terrain_event_type_t terrain_detect_lift_step (
+    terrain_lift_t * p_state, terrain_vec3_t const * p_sample,
+    terrain_vec3_t const * p_level, terrain_lift_limits_t const * p_limits,
+    uint32_t * p_value);
 
 #endif /* TERRAIN_DETECT_H */

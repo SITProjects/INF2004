@@ -6,10 +6,11 @@
  * retrying while the sensor is missing, then calls
  * terrain_monitor_update() every 10 ms and reports calibration and IMU
  * fault changes. It is the one reader of the event queue: it prints every
- * hump, collision, turning and speed event as it happens (the LEVEL line
- * carries the hump's height, the COLLISION line the push) and any events
- * dropped from a full queue. After a LEVEL, COLLISION or TURNING event it
- * prints the run summary and its packed message.
+ * hump, lift, turning and speed event as it happens (the LEVEL line
+ * carries the hump's height, the LIFTED line the upward push, the
+ * OVERTURNED line the tilt) and any events dropped from a full queue.
+ * After a LEVEL, LIFTED, OVERTURNED or TURNING event it prints the run
+ * summary and its packed message.
  * With TERRAIN_DEBUG_PRINT_MS set it also prints pitch, roll, the hump
  * state, the turn rate and the speed state, or the calibration progress
  * until calibrated.
@@ -31,6 +32,10 @@
 #define TENTHS_PER_UNIT 10
 #define US_PER_MS 1000u
 #define HUNDREDTHS_PER_UNIT 100
+/* Lift capture: samples per line, and room for the longest line: ten
+ * samples of up to 21 characters and a header of up to 48. */
+#define CAPTURE_PER_LINE 10u
+#define CAPTURE_LINE_MAX 320u
 
 /* Static data. */
 ID terrain_tid_monitor;
@@ -41,6 +46,9 @@ static bool print_events (void);
 static void print_event (terrain_event_t const * p_event);
 static void print_summary (void);
 static void print_calibration (terrain_calib_info_t const * p_info);
+#if TERRAIN_CAPTURE
+static void print_capture (void);
+#endif
 #if TERRAIN_COMPASS_PRINT_MS > 0
 static void print_compass (void);
 #endif
@@ -153,6 +161,9 @@ monitor_task (INT stacd, void * p_exinf)
             print_status();
         }
 #endif
+#if TERRAIN_CAPTURE
+        print_capture();
+#endif
 #if TERRAIN_COMPASS_PRINT_MS > 0
         uint64_t const compass_us = terrain_platform_time_us();
         if ((compass_us - last_compass_us) >=
@@ -188,8 +199,8 @@ print_events (void)
             return b_counted;
         }
         print_event(&event);
-        if ((type == TERRAIN_EVENT_LEVEL) ||
-            (type == TERRAIN_EVENT_COLLISION) ||
+        if ((type == TERRAIN_EVENT_LEVEL) || (type == TERRAIN_EVENT_LIFTED) ||
+            (type == TERRAIN_EVENT_OVERTURNED) ||
             (type == TERRAIN_EVENT_TURNING))
         {
             b_counted = true;
@@ -199,7 +210,7 @@ print_events (void)
 
 /*
  * The run summary in one line: hump count, the kept heights in order, the
- * highest, collisions and turns, then the packed message in hex, byte 0
+ * highest, lifts and turns, then the packed message in hex, byte 0
  * first, exactly as it would be sent.
  */
 static void
@@ -222,9 +233,9 @@ print_summary (void)
         tm_printf((UB *)" %d",
                   (INT)terrain_monitor_summary_hump_mm(&summary, i));
     }
-    tm_printf((UB *)") highest %d mm collisions %d turns %d msg",
+    tm_printf((UB *)") highest %d mm lifts %d turns %d msg",
               (INT)terrain_monitor_summary_highest_mm(&summary),
-              (INT)terrain_monitor_summary_collisions(&summary),
+              (INT)terrain_monitor_summary_lifts(&summary),
               (INT)terrain_monitor_summary_turns(&summary));
     for (uint32_t i = 0u; i < TERRAIN_SUMMARY_BYTES; i++)
     {
@@ -236,8 +247,9 @@ print_summary (void)
 /*
  * One line per event, with its time since boot in seconds (comes round
  * every 655.36 s). ASCENDING and DESCENDING carry the lean (size of roll)
- * then, LEVEL the hump's height, COLLISION the push in tenths of a g;
- * TURNING, STRAIGHT and the speed states carry nothing.
+ * then, LEVEL the hump's height, LIFTED the upward push in hundredths of
+ * the level reading (about a g), OVERTURNED the tilt in degrees; TURNING,
+ * STRAIGHT and the speed states carry nothing.
  */
 static void
 print_event (terrain_event_t const * p_event)
@@ -246,10 +258,14 @@ print_event (terrain_event_t const * p_event)
     INT const value = (INT)terrain_monitor_event_value(p_event);
     INT const time_10ms = (INT)terrain_monitor_event_time_10ms(p_event);
 
-    if (type == TERRAIN_EVENT_COLLISION)
+    if (type == TERRAIN_EVENT_LIFTED)
     {
-        tm_printf((UB *)"terrain: COLLISION push %d.%d g",
-                  value / TENTHS_PER_UNIT, value % TENTHS_PER_UNIT);
+        tm_printf((UB *)"terrain: LIFTED up %d.%02d g",
+                  value / HUNDREDTHS_PER_UNIT, value % HUNDREDTHS_PER_UNIT);
+    }
+    else if (type == TERRAIN_EVENT_OVERTURNED)
+    {
+        tm_printf((UB *)"terrain: OVERTURNED tilt %d deg", value);
     }
     else if (type == TERRAIN_EVENT_LEVEL)
     {
@@ -281,6 +297,48 @@ print_event (terrain_event_t const * p_event)
     tm_printf((UB *)" t %d.%02d s\n", time_10ms / HUNDREDTHS_PER_UNIT,
               time_10ms % HUNDREDTHS_PER_UNIT);
 }
+
+#if TERRAIN_CAPTURE
+/*
+ * Lift capture: one line per ten samples (100 ms), "terrain: IMU n=<index
+ * of the first> d=<lost so far> w=<wheel mm/s> x,y,z ..." in cm/s^2.
+ */
+static void
+print_capture (void)
+{
+    static terrain_capture_sample_t line[CAPTURE_PER_LINE];
+    static uint32_t filled = 0u;
+    static uint32_t index = 0u;
+    uint32_t dropped = 0u;
+    for (;;)
+    {
+        uint32_t const got = terrain_monitor_capture_take(
+            &line[filled], CAPTURE_PER_LINE - filled, &dropped);
+        if (0u == got)
+        {
+            return;
+        }
+        filled += got;
+        if (filled < CAPTURE_PER_LINE)
+        {
+            return;
+        }
+        static char text[CAPTURE_LINE_MAX];
+        INT used =
+            tm_sprintf((UB *)text, (UB *)"terrain: IMU n=%d d=%d w=%d",
+                       (INT)index, (INT)dropped, (INT)line[0].wheel_mm_s);
+        for (uint32_t i = 0u; i < CAPTURE_PER_LINE; i++)
+        {
+            used += tm_sprintf((UB *)&text[used], (UB *)" %d,%d,%d",
+                               (INT)line[i].x_cm_s2, (INT)line[i].y_cm_s2,
+                               (INT)line[i].z_cm_s2);
+        }
+        tm_printf((UB *)"%s\n", text);
+        index += CAPTURE_PER_LINE;
+        filled = 0u;
+    }
+}
+#endif
 
 #if TERRAIN_COMPASS_PRINT_MS > 0
 /*

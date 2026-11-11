@@ -45,8 +45,8 @@ TYPE_OBSTACLE, TYPE_AVOID, TYPE_LINE, TYPE_BARCODE = 1, 2, 3, 4
 BARCODE_TEXT = re.compile(r"^[0-9A-Z.$/+%-]{1,3}$")  # REMOTE_TEXT_MAX, no space
 SHOWN_EVENT = re.compile(
     r"remote: |barcode: FAIL|line (JUNCTION|SEARCH|STOP|BARCODE|HUMP)"
-    r"|obstacle: (stopped|started|avoid |width )|mqtt: "
-    r"|terrain: (COLLISION|calibration|hump LEVEL)")
+    r"|obstacle: (stopped|started|car lifted|avoid |width )|mqtt: "
+    r"|terrain: (LIFTED|OVERTURNED|calibration|hump LEVEL)")
 
 EDGE_READOUT = re.compile(r"barcode: B=\d raw=\d+ kept=(\d+)")
 READOUT_S = 0.5  # The car prints edge counts this often.
@@ -113,7 +113,7 @@ def decode_status(payload):
         "ro": field(words[4], 0, 12, True),
         "tr": field(words[4], 12, 11, True),
         "hu": field(words[0], 24, 8),
-        "co": field(words[5], 0, 8),
+        "lf": field(words[5], 0, 8),
         "rq": field(words[4], 23, 8),
         "rt": field(words[5], 8, 8),
         "cs": field(words[3], 28, 3),
@@ -216,6 +216,8 @@ def note_console(text):
         match = re.search(r"remote: (?:ready|.*state) (stopped|running)", message)
         if match:
             state["run"] = match.group(1)
+        if "obstacle: car lifted" in message:
+            state["run"] = "stopped"  # Lifted or overturned: Start resumes.
         match = re.search(r"barcode: (\S+) dir=\w+ .*turn=(\w+)", message)
         if match:
             note_scan(*match.groups(), message)

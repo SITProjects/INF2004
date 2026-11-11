@@ -1,7 +1,7 @@
 /**
  * @file terrain_process.h
  * @brief IMU processing: axis mapping, calibration, tilt, motion state,
- *        collisions, humps.
+ *        humps.
  *
  * Pure C with no Pico SDK or kernel calls, so the same file can run on
  * the car or be tested on a PC. Phase 1 adds axis mapping, Phase 2

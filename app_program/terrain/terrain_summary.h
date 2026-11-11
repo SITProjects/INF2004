@@ -1,6 +1,6 @@
 /**
  * @file terrain_summary.h
- * @brief Run summary: hump count and heights, collisions and turns,
+ * @brief Run summary: hump count and heights, lifts and turns,
  *        counted from the events as they are made.
  *
  * Pure C with no kernel calls, so it can be tested on a PC. The summary
@@ -9,7 +9,7 @@
  *
  * Summary words, masks and shifts, bit 0 first; all zero is an empty
  * summary:
- *   word 0: hump count 4 | highest 8 | collisions 4 | turns 7 | spare 9
+ *   word 0: hump count 4 | highest 8 | lifts 4 | turns 7 | spare 9
  *   word 1: heights of humps 1-4, 8 bits each, the first in bits 0-7
  *   word 2: heights of humps 5-8, the same way
  *
@@ -36,13 +36,13 @@
 
 /* Largest counts the fields hold; counts stop there. */
 #define TERRAIN_SUMMARY_HUMP_COUNT_MAX 15u
-#define TERRAIN_SUMMARY_COLLISION_MAX 15u
+#define TERRAIN_SUMMARY_LIFT_MAX 15u
 #define TERRAIN_SUMMARY_TURN_MAX 127u
 
 /* Public function declarations. */
 
 /**
- * @brief Empty a summary: no humps, collisions or turns.
+ * @brief Empty a summary: no humps, lifts or turns.
  * @param p_summary Summary; ignored if NULL.
  */
 void terrain_summary_reset (terrain_summary_t * p_summary);
@@ -50,8 +50,8 @@ void terrain_summary_reset (terrain_summary_t * p_summary);
 /**
  * @brief Count one event.
  * @param p_summary Summary; ignored if NULL.
- * @param type Kind of event. LEVEL counts a hump, COLLISION a collision
- *        and TURNING a turn; other kinds change nothing.
+ * @param type Kind of event. LEVEL counts a hump, LIFTED or OVERTURNED a
+ *        lift and TURNING a turn; other kinds change nothing.
  * @param value For LEVEL the hump's height, mm; heights over 255 are
  *        stored as 255. Ignored for other kinds.
  * Counts stop at their largest value. The first TERRAIN_SUMMARY_HUMPS
@@ -86,11 +86,11 @@ uint8_t terrain_summary_hump_mm (terrain_summary_t const * p_summary,
                                  uint32_t index);
 
 /**
- * @brief Collisions (COLLISION events).
+ * @brief Lifts (LIFTED and OVERTURNED events).
  * @param p_summary Summary.
- * @return 0 to TERRAIN_SUMMARY_COLLISION_MAX; 0 if NULL.
+ * @return 0 to TERRAIN_SUMMARY_LIFT_MAX; 0 if NULL.
  */
-uint8_t terrain_summary_collisions (terrain_summary_t const * p_summary);
+uint8_t terrain_summary_lifts (terrain_summary_t const * p_summary);
 
 /**
  * @brief Turns (TURNING events).

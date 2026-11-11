@@ -27,7 +27,8 @@ Shared by everyone: `app_main.c` (starts each subsystem), `app.h`,
  line sensors -> line_follow --line request--> motion <-- obstacle
  barcode sensor -> barcode --turn, slow pass-->   ^         | stop, bypass moves
  GY-511 -> terrain --hump, compass-->  line_follow|         | ultrasonic + servo
-                 ^-- wheel speeds, distance ------'
+             |   ^-- wheel speeds, distance ------'         ^
+             '-------------- lifted or overturned ----------'
 ```
 
 Each peripheral has one owning task, and tasks reach each other only through
@@ -261,19 +262,23 @@ valid.
   follows the size of the roll: climbing, top, then a drop from the peak. A
   slowed pass needs 60 mm of travel to count. Height comes from the peak lean
   and the track width.
-- **Collisions.** A hard push in level running, or, at line speed, the wheels
-  falling from at least 90 mm/s to half within 30 samples while still following.
-  A lean in the last 5 samples is taken for the hit itself; anything older is a
-  hump slowing the car.
+- **Lifted or overturned.** Lifting the car ends a demonstration run, so the
+  motors stop when the car is picked up or turned over. Both use the mean of
+  the last 100 ms of raw samples against the level reading taken at
+  calibration. Lifted: its upward part is more than 1.30 of that reading.
+  Overturned: it is tilted more than 60 degrees for 300 ms. Then none for 1 s.
+  Each adds one to a lift count (IF-11); the obstacle task sees the change and
+  stops the car as the dashboard's Stop does, and Start runs it again. This
+  replaced collision detection, which counted small pushes that were not hits.
 - **Other.** Turn rate from motion's wheel speeds, a compass from the
-  magnetometer, and a run summary of humps, heights, collisions and turns.
+  magnetometer, and a run summary of humps, heights, lifts and turns.
 
 | File | Purpose |
 |---|---|
 | `terrain.c/.h` | The task |
 | `terrain_monitor.c/.h` | Coordinator, calibration, published readings |
 | `terrain_process.c/.h` | Axis mapping, correction, tilt, field helpers |
-| `terrain_detect.c/.h` | Hump, collision, turning and speed state machines |
+| `terrain_detect.c/.h` | Hump, turning and speed state machines; lift and overturn check |
 | `terrain_height.c/.h` | Hump height |
 | `terrain_event.c/.h`, `terrain_summary.c/.h` | Event queue; run summary |
 | `terrain_hint.c/.h` | Movement hints taken from motion |
@@ -335,6 +340,7 @@ distance and read it back wrap-safely.
 | Turn and barcode phase (IF-08) | 8 each | One byte each, written by one task and read by another |
 | Compass (IF-09) | 57 in 2 words | Axes 12 (the sensor's own range), heading 12 (0 to 3599), count 8, valid 1 |
 | Barcode map entry (IF-10) | 20 | Three 6-bit Code 39 characters, turn 2. One word, so one write replaces an entry with no lock |
+| Lift count (IF-11) | 8 | Lifts and overturns since boot, wrapping; only a change matters |
 | Barcode edge | 32 | Level 1, time 31 in 2 us steps, keeping the clock's top bit so differences still work across its wrap |
 | Telemetry record | 96 | Type 4, sequence 8, time 20 (10 ms ticks, 2.9 h), payload 64 |
 | Car status | 174 in 6 words | Field list in `robot_types.h` |
@@ -347,7 +353,7 @@ distance and read it back wrap-safely.
 | `obstacle_avoid_t` | 19 facts in a flags word; 7 small values in 20 bits; plan in 13 bits and three 16-bit distances; distances 16 bits |
 | `barcode_scan_t` | Widths 16 bits in 16 us steps (up to about 1 s), count and flags 1 byte each |
 | `barcode_trigger_t` | Index, count and two flags in 1 byte |
-| `terrain_stopped_t` | Speed 11, age 8 and off-level count 8 in one word; peak push 16 bits in 1/256 g |
+| `terrain_lift_t` | Last 10 samples in cm/s^2, 16 bits per axis (the sensor's +/-8 g needs 14); window slot 4, count 4, tilt run 8, cooldown 8 and a reported flag in one word |
 
 **Why 16-bit distance marks are safe.** A mark is read as the value nearest the
 current travel, which is exact within 32 m either way. The line tracker's past
@@ -397,9 +403,11 @@ are only read inside the leg or bypass that set them.
 - **Squaring up.** The car does not yet square up to the obstacle's face before
   measuring. The heading-based straighten leg lagged and is switched off
   (`OBSTACLE_AVOID_STRAIGHTEN_MAX_DEG` is 0).
-- **Collision rule.** Counts real hits, including a 3.4 g one on the car, but it
-  also counts small pushes that were not hits. On 2026-11-09 the car counted
-  collisions of 0.1 to 0.5 g, some of them while slowing for a hump.
+- **Lift detection.** A lift must be brisk: a slow, gentle raise (1.09 of the
+  level reading on 2026-11-11) looks like driving and is not seen. The 1.30
+  limit is set from 43 s of floor driving (at most 1.17) and eight demo-style
+  lifts (1.42 to 1.63); the track's hump and junctions have not been recorded
+  at 100 Hz yet.
 - **Crossing and slow-pass fixes.** The wider crossing limit with a turn waiting
   and the rule against searching during a slow pass have host tests only. Neither
   has run on the car.

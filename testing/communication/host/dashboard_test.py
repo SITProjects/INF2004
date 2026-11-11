@@ -76,12 +76,12 @@ def test_wire():
           limits == {"v": -1024, "l": 1023, "r": -1, "d": -8388608,
                      "h": 32767, "m": 7, "os": 7, "ow": 511, "od": 4095,
                      "av": "FAULT", "p": -2048, "ro": 2047, "tr": -1024,
-                     "hu": 255, "co": 255, "rq": 255, "rt": 0, "cs": 7})
+                     "hu": 255, "lf": 255, "rq": 255, "rt": 0, "cs": 7})
     basic = dash.decode_status(wire["status_basic"])
     check("W04 status fields stay apart",
           basic == {"v": 80, "l": 70, "r": 90, "d": 1234, "h": -5, "m": 5,
                     "os": 2, "ow": 208, "od": 159, "av": "IDLE", "p": 12,
-                    "ro": -3, "tr": 15, "hu": 1, "co": 2, "rq": 44, "rt": 43,
+                    "ro": -3, "tr": 15, "hu": 1, "lf": 2, "rq": 44, "rt": 43,
                     "cs": 2})
     check("W05 a cut status is ignored",
           dash.decode_status(wire["status_basic"][:23]) is None)
@@ -242,6 +242,20 @@ def run(folder):
     settle(car)
     check("D06 Stop reaches the car and the page shows it stopped",
           car.stopped and get_state()["run"] == "stopped")
+
+    post("/command", {"command": "start"})
+    settle(car)
+    car.console("[9000 ms]obstacle: car lifted, motors stopped until Start")
+    car.console("terrain: LIFTED up 1.42 g t 9.00 s")
+    settle(car)
+    state = get_state()
+    check("D27 a lifted car shows stopped, so Start can run it again, and "
+          "the lift shows as an event",
+          state["run"] == "stopped"
+          and any("car lifted" in e for e in state["events"])
+          and any("terrain: LIFTED" in e for e in state["events"]))
+    post("/command", {"command": "stop"})
+    settle(car)
 
     refused = post("/command", {"command": "reverse"})[0]
     settle(car)

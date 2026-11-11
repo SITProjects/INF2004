@@ -1,7 +1,7 @@
 /**
  * @file terrain_process.c
  * @brief IMU processing: axis mapping, calibration, tilt, motion state,
- *        collisions, humps.
+ *        humps.
  *
  * Copyright (c) 2026 10x Slackers
  * SPDX-License-Identifier: MIT
