@@ -202,6 +202,14 @@ static uint32_t detect_word = 0u;  /* terrain_detect.h layout. */
 static int32_t hump_start_mm = 0;  /* Where the latest climb began. */
 static uint32_t collide_word = 0u; /* terrain_detect.h layout. */
 static terrain_stopped_t stopped;
+#if TERRAIN_CAPTURE
+/* Lift capture ring, oldest at capture_head. */
+#define CAPTURE_LEN 64u
+static terrain_capture_sample_t capture[CAPTURE_LEN];
+static uint32_t capture_head = 0u;
+static uint32_t capture_count = 0u;
+static uint32_t capture_dropped = 0u;
+#endif
 _Static_assert(TERRAIN_COLLISION_STOP_WINDOW_SAMPLES < 255u,
                "Collision window must fit the 8-bit age");
 _Static_assert(TERRAIN_COLLISION_STOP_GRACE_SAMPLES < 255u,
@@ -221,6 +229,9 @@ static bool take_recal_request (void);
 static void calib_start (void);
 static void calib_add (terrain_vec3_t const * p_sample);
 static void handle_fault (void);
+#if TERRAIN_CAPTURE
+static void capture_put (terrain_vec3_t const * p_sample, float wheel_mm_s);
+#endif
 static void detect_sample (terrain_vec3_t const * p_accel,
                            terrain_hint_t const * p_hint, uint32_t now_10ms);
 static void detect_hump (terrain_vec3_t const * p_accel,
@@ -348,6 +359,9 @@ terrain_monitor_update (void)
         int16_t const board[TERRAIN_AXES] = {buf[i].x, buf[i].y, buf[i].z};
         terrain_vec3_t sample =
             terrain_process_map_axes(&axis_map, board_gain, board, scale);
+#if TERRAIN_CAPTURE
+        capture_put(&sample, wheel_mm_s);
+#endif
 
         if (own_calib_state() == TERRAIN_CALIB_CALIBRATING)
         {
@@ -379,6 +393,32 @@ terrain_monitor_update (void)
 
     publish(&accel, turn_dps, count, b_overrun, now_10ms);
     return TERRAIN_OK;
+}
+
+uint32_t
+terrain_monitor_capture_take (terrain_capture_sample_t * p_out, uint32_t max,
+                              uint32_t * p_dropped)
+{
+    if ((p_out == NULL) || (p_dropped == NULL))
+    {
+        return 0u;
+    }
+#if TERRAIN_CAPTURE
+    uint32_t taken = 0u;
+    while ((taken < max) && (capture_count > 0u))
+    {
+        p_out[taken] = capture[capture_head];
+        capture_head = (capture_head + 1u) % CAPTURE_LEN;
+        --capture_count;
+        ++taken;
+    }
+    *p_dropped = capture_dropped;
+    return taken;
+#else
+    (void)max;
+    *p_dropped = 0u;
+    return 0u;
+#endif
 }
 
 terrain_status_t
@@ -1036,6 +1076,42 @@ handle_fault (void)
     }
     store_latest(&next);
 }
+
+#if TERRAIN_CAPTURE
+/* A float in [-32767, 32767] after scaling, rounded half away from 0. */
+static int16_t
+capture_round (float value)
+{
+    float const rounded = value + ((value < 0.0f) ? -0.5f : 0.5f);
+    if (!(rounded < (float)INT16_MAX))
+    {
+        return INT16_MAX;
+    }
+    if (!(rounded > (float)-INT16_MAX))
+    {
+        return (int16_t)-INT16_MAX;
+    }
+    return (int16_t)rounded;
+}
+
+/* Keep one sample for the capture; when full, count it lost. */
+static void
+capture_put (terrain_vec3_t const * p_sample, float wheel_mm_s)
+{
+    if (capture_count >= CAPTURE_LEN)
+    {
+        ++capture_dropped;
+        return;
+    }
+    terrain_capture_sample_t * const p_slot =
+        &capture[(capture_head + capture_count) % CAPTURE_LEN];
+    p_slot->x_cm_s2 = capture_round(p_sample->x * 100.0f);
+    p_slot->y_cm_s2 = capture_round(p_sample->y * 100.0f);
+    p_slot->z_cm_s2 = capture_round(p_sample->z * 100.0f);
+    p_slot->wheel_mm_s = capture_round(wheel_mm_s);
+    ++capture_count;
+}
+#endif
 
 /* Run the detectors on the newest sample: humps first, because the
  * collision check needs this sample's hump state. */

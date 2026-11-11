@@ -697,4 +697,28 @@ char const * terrain_monitor_speed_text (terrain_speed_state_t state);
  */
 char const * terrain_monitor_event_text (terrain_event_type_t type);
 
+/** One accelerometer sample kept for the lift capture (TERRAIN_CAPTURE). */
+typedef struct
+{
+    int16_t x_cm_s2;    /**< Forward, car axes, gains applied, no bias. */
+    int16_t y_cm_s2;    /**< Left. */
+    int16_t z_cm_s2;    /**< Up. */
+    int16_t wheel_mm_s; /**< Mean wheel speed size when it was read. */
+} terrain_capture_sample_t;
+
+/**
+ * @brief Take the oldest samples kept for the lift capture.
+ *
+ * Only with TERRAIN_CAPTURE set to 1; otherwise nothing is kept and this
+ * returns 0. Samples arrive at the accelerometer's 100 Hz.
+ * @param p_out Non-null; receives up to @p max samples, oldest first.
+ * @param max Room in @p p_out.
+ * @param p_dropped Non-null; set to the samples lost so far because the
+ *        capture was full.
+ * @return Samples written.
+ * Caller of terrain_monitor_update() only.
+ */
+uint32_t terrain_monitor_capture_take (terrain_capture_sample_t * p_out,
+                                       uint32_t max, uint32_t * p_dropped);
+
 #endif /* TERRAIN_MONITOR_H */

@@ -601,6 +601,17 @@
 #endif
 
 /*
+ * Lift capture: 1 prints every accelerometer sample, ten to a line
+ * ("terrain: IMU"), for recording lifts and normal driving to tune the
+ * lift detection. Car axes, gains applied, before the calibration bias,
+ * in cm/s^2, with the mean wheel speed size. About 2 KB a second over the
+ * console mirror; keep 0 in commits.
+ */
+#ifndef TERRAIN_CAPTURE
+#define TERRAIN_CAPTURE 0
+#endif
+
+/*
  * Bench tests: 1 adds TER-U06 (record the level reference) and TER-U07
  * (check the axes after mounting) to make TEST=1. They need a person to
  * move the car on cue and take about 40 s. Keep 0 in commits: the whole

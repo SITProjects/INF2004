@@ -31,6 +31,10 @@
 #define TENTHS_PER_UNIT 10
 #define US_PER_MS 1000u
 #define HUNDREDTHS_PER_UNIT 100
+/* Lift capture: samples per line, and room for the longest line: ten
+ * samples of up to 21 characters and a header of up to 48. */
+#define CAPTURE_PER_LINE 10u
+#define CAPTURE_LINE_MAX 320u
 
 /* Static data. */
 ID terrain_tid_monitor;
@@ -41,6 +45,9 @@ static bool print_events (void);
 static void print_event (terrain_event_t const * p_event);
 static void print_summary (void);
 static void print_calibration (terrain_calib_info_t const * p_info);
+#if TERRAIN_CAPTURE
+static void print_capture (void);
+#endif
 #if TERRAIN_COMPASS_PRINT_MS > 0
 static void print_compass (void);
 #endif
@@ -152,6 +159,9 @@ monitor_task (INT stacd, void * p_exinf)
             last_print_us = now_us;
             print_status();
         }
+#endif
+#if TERRAIN_CAPTURE
+        print_capture();
 #endif
 #if TERRAIN_COMPASS_PRINT_MS > 0
         uint64_t const compass_us = terrain_platform_time_us();
@@ -281,6 +291,48 @@ print_event (terrain_event_t const * p_event)
     tm_printf((UB *)" t %d.%02d s\n", time_10ms / HUNDREDTHS_PER_UNIT,
               time_10ms % HUNDREDTHS_PER_UNIT);
 }
+
+#if TERRAIN_CAPTURE
+/*
+ * Lift capture: one line per ten samples (100 ms), "terrain: IMU n=<index
+ * of the first> d=<lost so far> w=<wheel mm/s> x,y,z ..." in cm/s^2.
+ */
+static void
+print_capture (void)
+{
+    static terrain_capture_sample_t line[CAPTURE_PER_LINE];
+    static uint32_t filled = 0u;
+    static uint32_t index = 0u;
+    uint32_t dropped = 0u;
+    for (;;)
+    {
+        uint32_t const got = terrain_monitor_capture_take(
+            &line[filled], CAPTURE_PER_LINE - filled, &dropped);
+        if (0u == got)
+        {
+            return;
+        }
+        filled += got;
+        if (filled < CAPTURE_PER_LINE)
+        {
+            return;
+        }
+        static char text[CAPTURE_LINE_MAX];
+        INT used =
+            tm_sprintf((UB *)text, (UB *)"terrain: IMU n=%d d=%d w=%d",
+                       (INT)index, (INT)dropped, (INT)line[0].wheel_mm_s);
+        for (uint32_t i = 0u; i < CAPTURE_PER_LINE; i++)
+        {
+            used += tm_sprintf((UB *)&text[used], (UB *)" %d,%d,%d",
+                               (INT)line[i].x_cm_s2, (INT)line[i].y_cm_s2,
+                               (INT)line[i].z_cm_s2);
+        }
+        tm_printf((UB *)"%s\n", text);
+        index += CAPTURE_PER_LINE;
+        filled = 0u;
+    }
+}
+#endif
 
 #if TERRAIN_COMPASS_PRINT_MS > 0
 /*
