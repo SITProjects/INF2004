@@ -6,8 +6,9 @@ with a USB serial console and the WiFi driver built in.
 
 The car follows a black line and reads the Code 39 barcodes beside it to
 choose its turn at the next junction. It stops for obstacles, measures them
-and drives around them, and counts humps and collisions. It reports to a web
-dashboard over MQTT, which also starts and stops it.
+and drives around them, and counts humps. Lifting the car or turning it over
+stops the motors, which is how a run ends. It reports to a web dashboard over
+MQTT, which also starts and stops it.
 
 ## INF2004 at a glance
 
@@ -20,7 +21,7 @@ priorities, peripherals and interfaces are in **`TEAM.md`**):
 | `motion/` | Closed-loop drive: a speed loop on each wheel, moves and turns by the encoders, odometry, and following a target heading | motors GP8–GP11; encoders GP2/GP3 and GP13/GP14 (PIO0) | `tMotion` (6, core 1) |
 | `line_follow/` | Two digital IR edges become target headings, line searches and junction turns | IR sensor DO GP26/GP27 | `line_follow_task` (7, any) |
 | `barcode/` | Code 39 barcodes beside the line, read in either direction | IR sensor DO GP28 (edge interrupt) | `tBarcode` (8, core 0) |
-| `terrain/` | GY-511: calibration at each start, tilt, humps and their height, collisions, compass and a run summary | I2C0 GP4/GP5 (Grove 3) | `terrain_task` (9, any) |
+| `terrain/` | GY-511: calibration at each start, tilt, humps and their height, lifted or overturned, compass and a run summary | I2C0 GP4/GP5 (Grove 3) | `terrain_task` (9, any) |
 | `communication/` | Wi-Fi status; with `MQTT=1`, status, telemetry, the console and dashboard commands | Pico W radio (kernel-owned) | `communication_task` (13, any) |
 
 How they work together:
@@ -33,7 +34,8 @@ How they work together:
 - `obstacle` holds the motors when something is ahead, measures it, and
   sends `motion` the bypass moves.
 - `terrain` reads the wheel speeds from `motion`. A hump slows following,
-  and humps and collisions are counted.
+  and humps are counted. When the car is lifted or overturned, `obstacle`
+  holds the motors until Start.
 
 Every interface is listed in `TEAM.md` section 5. For each subsystem's
 logic, files and known limits, read
@@ -240,7 +242,7 @@ demos are shared as unlisted YouTube links, listed in **`videos/`**.
 
 **Host tests.** The pure logic also builds and runs on your computer, with
 no Pico: the line tracker, barcode decoder, bypass state machine, hump,
-collision and compass code, motion's command slot and line adapter,
+lift and compass code, motion's command slot and line adapter,
 dashboard commands and decoding, and the packed layouts. They need a host C
 compiler with the address and undefined-behaviour sanitizer libraries
 (`libasan` and `libubsan`), `python3`, and `PICO_SDK_PATH` for the lwIP
@@ -401,12 +403,16 @@ the page shows its status, and the log gains a `connect from …` line.
   Start is never sent by itself, so a car that resets stays still. Stop
   holds the motors, but it travels over Wi-Fi and is **not an emergency
   stop**.
+- **Lifting the car ends a run.** A brisk lift, or turning the car over,
+  stops the motors at once, with no Wi-Fi involved, and the page shows the
+  car stopped. Put it down and press Start to run again. A slow, gentle
+  raise is not noticed, so lift it with intent.
 
 The topics, each under `MQTT_TOPIC` from `config/wifi_secrets.h`:
 
 | Topic | Direction | Content |
 |---|---|---|
-| `/status` | car → dashboard | Six packed words, twice a second: speeds, distance, heading, tilt and turn rate, modes, obstacle range and width, hump and collision counts |
+| `/status` | car → dashboard | Six packed words, twice a second: speeds, distance, heading, tilt and turn rate, modes, obstacle range and width, hump and lift counts |
 | `/telemetry` | car → dashboard | Packed records for obstacle, bypass, line and barcode events |
 | `/console` | car → dashboard | Every console line, with the uptime in ms |
 | `/cmd` | dashboard → car | `start`, `stop`, `clear`, `map <barcode> <action>` |
@@ -435,7 +441,7 @@ and unpack functions and the helpers they use: `robot_field_put()`,
 section 7 explains why each range was chosen.
 
 All figures are for the final implementation: the car image
-(`make MQTT=1`) built from `main` on 2026-11-10.
+(`make MQTT=1`) with lift detection, built on 2026-11-11.
 
 ### 5.1 Data representation table
 
@@ -556,7 +562,7 @@ so one write replaces an entry with no lock.
 
 | Field | Valid range | Bits | Representation |
 |---|---|---|---|
-| Type | 11 events (0–10) | 4 | bits 0–3 |
+| Type | 12 events (0–11) | 4 | bits 0–3 |
 | Value (for example a hump's height in mm) | 0–4095 | 12 | bits 4–15 |
 | Time | 0–65,535 ticks of 10 ms, wraps | 16 | bits 16–31 |
 
@@ -593,7 +599,14 @@ so one write replaces an entry with no lock.
 | IMU calibration state | 0–7 | 3 | word 3, bits 28–30 |
 | Turn rate | −1024 to 1023 °/s | 11 signed | word 4, bits 12–22 |
 | Line requests sent and taken | low 8 bits of each count | 8 each | word 4, bits 23–30; word 5, bits 8–15 |
-| Collisions counted | 0–255 | 8 | word 5, bits 0–7 |
+| Lifts and overturns | 0–255, wraps | 8 | word 5, bits 0–7 |
+
+**Lift count** (IF-11, terrain → obstacle): one byte, written by the terrain
+task only, so it needs no lock.
+
+| Field | Valid range | Bits | Representation |
+|---|---|---|---|
+| Lifts and overturns since boot | 0–255, wraps; only a change matters | 8 | `uint8_t` |
 
 **State kept inside a subsystem** is packed the same way:
 
@@ -603,7 +616,7 @@ so one write replaces an entry with no lock.
 | Bypass (`obstacle_avoid_t`, 76 bytes) | 19 yes/no facts in one flags word, 7 small values in 20 bits, the plan in 13 bits, distances 16 bits |
 | Barcode scan (`barcode_scan_t`) | Element widths 16 bits each, in 16 µs steps (up to about 1 s) |
 | Barcode trigger | Index, count and two flags in one byte |
-| Stopped-car check | Speed 11, age 8 and off-level count 8 in one word; the peak push 16 bits in 1/256 g |
+| Lift check | The last 10 samples in cm/s², 16 bits per axis (the sensor's ±8 g needs 14); window slot 4, count 4, tilt run 8, cooldown 8 and a reported flag in one word |
 
 A 16-bit distance mark is read as the value nearest the current travel, which
 is exact within 32 m either way. The line tracker also ages its marks, so one
@@ -623,8 +636,8 @@ Static RAM of the final car image, from `arm-none-eabi-size`:
 |---|---|
 | RAM vector table | 192 |
 | `.data` | 1,196 |
-| `.bss` | 102,856 |
-| **Total** | **104,244 of 270,336 (38.6%)** |
+| `.bss` | 102,912 |
+| **Total** | **104,300 of 270,336 (38.6%)** |
 
 The application's six task stacks, 2,048 bytes each, come from the kernel's
 memory area above this.
@@ -641,12 +654,12 @@ By owner, from the symbol table (`arm-none-eabi-nm -S -l`):
 | Communication | 1,660 |
 | Other library code | 1,240 |
 | Barcode | 821 |
-| Terrain | 486 |
+| Terrain | 539 |
 | Motion | 440 |
-| Obstacle | 407 |
+| Obstacle | 408 |
 | Line following | 92 |
 
-The six subsystems use 3,906 bytes between them. Their largest buffers are
+The six subsystems use 3,960 bytes between them. Their largest buffers are
 all packed:
 
 | Buffer | Bytes |
@@ -686,6 +699,7 @@ arm-none-eabi-nm -S -l --size-sort -t d mtk3pico_smp1_usb_cdc_wifi_lwip_mqtt.elf
 | Barcode map entry | radio task → barcode and line following | one word each | 20 | 4 | Per dashboard change; 8 entries |
 | Barcode edge | GP28 interrupt → `tBarcode` | queue | 32 | 4 | Per edge; 64 deep |
 | Terrain event | terrain monitor → terrain task | queue | 32 | 4 | Per event; 16 deep |
+| Lift count | terrain → obstacle (IF-11) | one byte | 8 | 1 | Per lift or overturn |
 | Telemetry record | any task → MQTT `/telemetry` | queue, then MQTT | 96 | 12 | Per event; 128 deep |
 | Car status | → MQTT `/status` | built when sent | 174 | 24 | Twice a second |
 
@@ -705,11 +719,10 @@ flag for start and stop, and a 20-bit word per barcode.
   checked field by field (AS01–AS10 in `testing/obstacle/host`), and the
   barcode widths at their limits (`testing/barcode/host`, 33 checks).
 - **Sent data.** The dashboard decodes telemetry and status records built by
-  the firmware's own pack functions (`testing/communication/host`, 62 checks,
+  the firmware's own pack functions (`testing/communication/host`, 63 checks,
   W01–W07).
-- **Same behaviour.** The packed line tracker, bypass and collision rule gave
-  identical outputs to the unpacked code on 8 million, 6 million and
-  20 million random inputs. Bugs planted in every layout were caught.
+- **Same behaviour.** The packed line tracker and bypass gave identical
+  outputs to the unpacked code on 8 million and 6 million random inputs. Bugs planted in every layout were caught.
 - **On the car**, with the minimum-bit firmware on 2026-11-09 and 2026-11-10:
   - line following with junction turns and a U-turn;
   - barcodes A, Z and F decoded and their turns taken;
@@ -746,7 +759,7 @@ for t in testing/*/host/run.sh; do sh "$t" || echo "FAILED: $t"; done
   to 90th percentile at 25–26, over 343 intervals in the 2026-11-09 and
   2026-11-10 runs. Status records arrived every 0.5 s.
 - **Memory.** The final image uses 38.6% of RAM, and its code
-  (414,894 bytes) fits easily in the 2 MB of flash.
+  (414,762 bytes) fits easily in the 2 MB of flash.
 
 ---
 

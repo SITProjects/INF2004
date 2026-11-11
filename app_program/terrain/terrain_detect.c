@@ -1,7 +1,7 @@
 /**
  * @file terrain_detect.c
- * @brief Terrain detectors: the hump, collision, turning and speed state
- *        machines.
+ * @brief Terrain detectors: the hump, turning and speed state machines,
+ *        and the lift and overturn check.
  *
  * Copyright (c) 2026 10x Slackers
  * SPDX-License-Identifier: MIT
@@ -18,15 +18,6 @@
 
 /* Detector word: hump state 2 | climb counter 4 | other counter 4 |
  * peak lean 8 | turning state 1 | turn counter 5 | spare 8. */
-/* A hit's push is kept for about 0.15 s: halves in 14 samples. */
-#define STOPPED_PEAK_FADE 0.95f
-/* terrain_stopped_t: word fields "shift, bits", peak in 1/256 g. */
-#define STOPPED_KEPT 0u, 11u
-#define STOPPED_AGE 11u, 8u
-#define STOPPED_OFF_LEVEL 19u, 8u
-#define STOPPED_PEAK_SCALE 256.0f
-#define STOPPED_PEAK_MAX_G 255
-
 #define HUMP_SHIFT 0u
 #define HUMP_BITS 2u
 #define CLIMB_SHIFT 2u
@@ -43,21 +34,18 @@
 /* Lean and peak in tenths of a degree. */
 #define DDEG_PER_DEG 10.0f
 
-/* Collision word: cooldown 6 | check countdown 4 | speed at the push 8 |
- * biggest push 7. */
-#define COOLDOWN_SHIFT 0u
-#define COOLDOWN_BITS 6u
-#define CHECK_SHIFT 6u
-#define CHECK_BITS 4u
-#define SPEED_SHIFT 10u
-#define SPEED_BITS 8u
-#define PUSH_SHIFT 18u
-#define PUSH_BITS 7u
-
-/* Speed in 4 mm/s steps; push in tenths of a g. */
-#define SPEED_STEPS_PER_MM_S 0.25f
-#define SPEED_MM_S_PER_STEP 4.0f
-#define DG_PER_G 10.0f
+/* terrain_lift_t word fields, "shift, bits": next slot 4 | samples held 4 |
+ * over-tilt run 8 | cooldown 8 | overturn reported 1. */
+#define LIFT_NEXT 0u, 4u
+#define LIFT_HELD 4u, 4u
+#define LIFT_RUN 8u, 8u
+#define LIFT_COOLDOWN 16u, 8u
+#define LIFT_OVER_REPORTED 0x01000000u
+#define LIFT_COUNT_MAX 255u
+/* Window samples in cm/s^2, 16 bits; event values 12 bits. */
+#define CM_PER_M 100.0f
+#define LIFT_SAMPLE_BITS 16u
+#define LIFT_VALUE_BITS 12u
 
 /* Speed word: speed state 2 | window count 4 | candidate 2 |
  * confirm count 2 | speed at the last check 8 | spare 14. */
@@ -79,12 +67,8 @@ _Static_assert(TERRAIN_HUMP_DESCENDING < (1u << HUMP_BITS),
                "hump states must fit their field");
 _Static_assert(TERRAIN_DETECT_COUNT_MAX == ((1u << COUNT_BITS) - 1u),
                "count limit must match the counter width");
-_Static_assert(TERRAIN_DETECT_CHECK_MAX == ((1u << CHECK_BITS) - 1u),
-               "check limit must match the countdown width");
-_Static_assert(TERRAIN_DETECT_COOLDOWN_MAX == ((1u << COOLDOWN_BITS) - 1u),
-               "cooldown limit must match the cooldown width");
-_Static_assert(TERRAIN_DETECT_PUSH_MAX_DG == ((1u << PUSH_BITS) - 1u),
-               "push limit must match the push width");
+_Static_assert(TERRAIN_DETECT_LIFT_WINDOW < 16u,
+               "lift window must fit the 4-bit slot and count fields");
 _Static_assert(HUMP_FIELDS_MASK == ((1u << TURN_SHIFT) - 1u),
                "hump fields must end where the turn fields start");
 _Static_assert(TERRAIN_TURN_TURNING < (1u << TURN_BITS),
@@ -109,6 +93,7 @@ static uint32_t count_if (bool b_condition, uint32_t count, uint32_t width);
 static uint32_t samples_needed (uint8_t samples);
 static uint32_t samples_capped (uint8_t samples, uint32_t max);
 static uint32_t to_ddeg (float deg);
+static int16_t to_cm (float mps2);
 
 /* Public function definitions. */
 
@@ -245,14 +230,6 @@ terrain_detect_hump_sample (bool b_following, bool b_roll_held,
     return (b_roll_held || (speed_mm_s < min_speed_mm_s))
                ? TERRAIN_HUMP_SAMPLE_PAUSE
                : TERRAIN_HUMP_SAMPLE_USE;
-}
-
-float
-terrain_detect_collision_push (float push_g, int32_t speed_mm_s, float lean_deg,
-                               int32_t driving_mm_s, float max_lean_deg)
-{
-    return ((speed_mm_s >= driving_mm_s) && (lean_deg < max_lean_deg)) ? push_g
-                                                                       : 0.0f;
 }
 
 terrain_event_type_t
@@ -416,196 +393,103 @@ terrain_detect_speed_state (uint32_t word)
 }
 
 terrain_event_type_t
-terrain_detect_collision_step (uint32_t * p_word,
-                               terrain_collision_input_t const * p_in,
-                               terrain_collision_limits_t const * p_limits,
-                               uint32_t * p_value)
+terrain_detect_lift_step (terrain_lift_t * p_state,
+                          terrain_vec3_t const * p_sample,
+                          terrain_vec3_t const * p_level,
+                          terrain_lift_limits_t const * p_limits,
+                          uint32_t * p_value)
 {
-    if ((p_word == NULL) || (p_in == NULL) || (p_limits == NULL) ||
-        (p_value == NULL))
+    if ((p_state == NULL) || (p_sample == NULL) || (p_level == NULL) ||
+        (p_limits == NULL) || (p_value == NULL))
+    {
+        return TERRAIN_EVENT_NONE;
+    }
+    float const level_sq = (p_level->x * p_level->x) +
+                           (p_level->y * p_level->y) +
+                           (p_level->z * p_level->z);
+    if (!(level_sq > 0.0f))
     {
         return TERRAIN_EVENT_NONE;
     }
 
-    uint32_t word = *p_word;
-    uint32_t cooldown =
-        terrain_process_field_get(word, COOLDOWN_SHIFT, COOLDOWN_BITS);
-    uint32_t check = terrain_process_field_get(word, CHECK_SHIFT, CHECK_BITS);
-    uint32_t speed_code =
-        terrain_process_field_get(word, SPEED_SHIFT, SPEED_BITS);
-    uint32_t biggest = terrain_process_field_get(word, PUSH_SHIFT, PUSH_BITS);
+    uint32_t word = p_state->word;
+    uint32_t next = robot_field_get(word, LIFT_NEXT);
+    uint32_t held = robot_field_get(word, LIFT_HELD);
+    if (next >= TERRAIN_DETECT_LIFT_WINDOW)
+    {
+        next = 0u; /* Not a state this code writes: start the window again. */
+    }
+    p_state->window[next][0] = to_cm(p_sample->x);
+    p_state->window[next][1] = to_cm(p_sample->y);
+    p_state->window[next][2] = to_cm(p_sample->z);
+    next = (next + 1u) % TERRAIN_DETECT_LIFT_WINDOW;
+    held = (held < TERRAIN_DETECT_LIFT_WINDOW) ? (held + 1u) : held;
+    word = robot_field_put(word, LIFT_NEXT, next);
+    word = robot_field_put(word, LIFT_HELD, held);
+    if (held < TERRAIN_DETECT_LIFT_WINDOW)
+    {
+        p_state->word = word;
+        return TERRAIN_EVENT_NONE;
+    }
 
-    uint32_t const push = terrain_process_encode_unsigned(
-        p_in->push_g, DG_PER_G, PUSH_BITS, false);
-    float const speed = fabsf((float)p_in->speed_mm_s);
+    int32_t sum[3] = {0, 0, 0};
+    for (uint32_t slot = 0u; slot < TERRAIN_DETECT_LIFT_WINDOW; ++slot)
+    {
+        sum[0] += p_state->window[slot][0];
+        sum[1] += p_state->window[slot][1];
+        sum[2] += p_state->window[slot][2];
+    }
+    /* Divide, not multiply by a reciprocal: whole readings stay exact. */
+    float const divisor = CM_PER_M * (float)TERRAIN_DETECT_LIFT_WINDOW;
+    terrain_vec3_t const mean = {(float)sum[0] / divisor,
+                                 (float)sum[1] / divisor,
+                                 (float)sum[2] / divisor};
+    float const up = ((mean.x * p_level->x) + (mean.y * p_level->y) +
+                      (mean.z * p_level->z)) /
+                     level_sq;
+    float const tilt_deg = terrain_process_angle_deg(&mean, p_level);
 
-    /* Ramps push the car about too: only flat ground counts. */
-    bool const b_level = (p_in->hump == TERRAIN_HUMP_LEVEL);
-    bool const b_pushed = b_level && (p_in->push_g >= p_limits->limit_g);
-    bool const b_sure = b_level && (p_in->push_g >= p_limits->sure_g);
-    bool b_hit = false;
+    uint32_t run = robot_field_get(word, LIFT_RUN);
+    if (tilt_deg > p_limits->over_deg)
+    {
+        run = (run < LIFT_COUNT_MAX) ? (run + 1u) : run;
+    }
+    else
+    {
+        run = 0u;
+        word &= ~LIFT_OVER_REPORTED;
+    }
 
+    terrain_event_type_t event = TERRAIN_EVENT_NONE;
+    uint32_t cooldown = robot_field_get(word, LIFT_COOLDOWN);
     if (cooldown > 0u)
     {
-        /* COOLDOWN: the same hit may still be shaking the car. */
-        cooldown--;
+        --cooldown;
     }
-    else if (p_in->b_stopped_dead)
+    else if (up > p_limits->up_ratio)
     {
-        uint32_t const peak = terrain_process_encode_unsigned(
-            p_in->peak_g, DG_PER_G, PUSH_BITS, false);
-        biggest = (peak > biggest) ? peak : biggest;
-        b_hit = true;
+        event = TERRAIN_EVENT_LIFTED;
+        *p_value = terrain_process_encode_unsigned(up, CM_PER_M,
+                                                   LIFT_VALUE_BITS, false);
+        cooldown = samples_needed(p_limits->cooldown_samples);
     }
-    else if (check > 0u)
+    else if ((run >= samples_needed(p_limits->over_samples)) &&
+             ((word & LIFT_OVER_REPORTED) == 0u))
     {
-        /* CHECKING: did the push stop the car, or was it a jolt? */
-        if (!b_level)
-        {
-            check = 0u;
-        }
-        else
-        {
-            if (push > biggest)
-            {
-                biggest = push;
-            }
-            float const kept_mm_s = (float)speed_code * SPEED_MM_S_PER_STEP;
-            bool const b_halved =
-                !p_in->b_speed_known || ((speed * 2.0f) <= kept_mm_s);
-            if (b_sure || b_halved)
-            {
-                b_hit = true;
-            }
-            else
-            {
-                check--;
-            }
-        }
-    }
-    else if (b_pushed)
-    {
-        /* READY, and pushed hard enough to be a hit. */
-        biggest = push;
-        if (b_sure || !p_in->b_speed_known ||
-            (speed < p_limits->min_speed_mm_s))
-        {
-            /* Sure, or no speed to watch drop: the push decides. */
-            b_hit = true;
-        }
-        else
-        {
-            check = samples_capped(p_limits->check_samples,
-                                   TERRAIN_DETECT_CHECK_MAX);
-            speed_code = terrain_process_encode_unsigned(
-                speed, SPEED_STEPS_PER_MM_S, SPEED_BITS, false);
-        }
+        event = TERRAIN_EVENT_OVERTURNED;
+        *p_value = terrain_process_encode_unsigned(tilt_deg, 1.0f,
+                                                   LIFT_VALUE_BITS, false);
+        word |= LIFT_OVER_REPORTED;
+        cooldown = samples_needed(p_limits->cooldown_samples);
     }
     else
     {
-        /* READY, no hit. */
+        /* Nothing to report. */
     }
-
-    if (b_hit)
-    {
-        *p_value = biggest;
-        cooldown = samples_capped(p_limits->cooldown_samples,
-                                  TERRAIN_DETECT_COOLDOWN_MAX);
-        check = 0u;
-    }
-    if (check == 0u)
-    {
-        /* Not checking: nothing to remember, so the word rests at 0. */
-        speed_code = 0u;
-        biggest = 0u;
-    }
-
-    word = terrain_process_field_put(word, COOLDOWN_SHIFT, COOLDOWN_BITS,
-                                     cooldown);
-    word = terrain_process_field_put(word, CHECK_SHIFT, CHECK_BITS, check);
-    word = terrain_process_field_put(word, SPEED_SHIFT, SPEED_BITS, speed_code);
-    word = terrain_process_field_put(word, PUSH_SHIFT, PUSH_BITS, biggest);
-    *p_word = word;
-    return b_hit ? TERRAIN_EVENT_COLLISION : TERRAIN_EVENT_NONE;
-}
-
-bool
-terrain_detect_stopped_dead (terrain_stopped_t * p_state, int32_t speed_mm_s,
-                             float push_g, bool b_driving,
-                             terrain_hump_state_t hump,
-                             terrain_stopped_limits_t const * p_limits)
-{
-    if ((p_state == NULL) || (p_limits == NULL))
-    {
-        return false;
-    }
-
-    uint32_t kept = robot_field_get(p_state->word, STOPPED_KEPT);
-    uint32_t age = robot_field_get(p_state->word, STOPPED_AGE);
-    uint32_t off_level = robot_field_get(p_state->word, STOPPED_OFF_LEVEL);
-    float const faded =
-        terrain_detect_stopped_peak_g(p_state) * STOPPED_PEAK_FADE;
-    float const peak_g = (push_g > faded) ? push_g : faded;
-    p_state->peak_x256 = (peak_g >= (float)STOPPED_PEAK_MAX_G)
-                             ? UINT16_MAX
-                             : (uint16_t)((peak_g * STOPPED_PEAK_SCALE) + 0.5f);
-
-    if (hump == TERRAIN_HUMP_LEVEL)
-    {
-        off_level = 0u;
-    }
-    else if (off_level <= p_limits->grace_samples)
-    {
-        off_level++;
-    }
-    else
-    {
-        /* Long enough off level: no need to count further. */
-    }
-
-    bool b_hit = false;
-    if (!b_driving || (off_level > p_limits->grace_samples))
-    {
-        kept = 0u;
-        age = 0u;
-    }
-    else if (speed_mm_s >= p_limits->from_mm_s)
-    {
-        kept = (uint32_t)speed_mm_s;
-        age = 0u;
-    }
-    else if (kept > 0u)
-    {
-        age++;
-        if (age > p_limits->window_samples)
-        {
-            kept = 0u;
-        }
-        else if ((speed_mm_s * 2) <= (int32_t)kept)
-        {
-            kept = 0u;
-            b_hit = true;
-        }
-        else
-        {
-            /* Still falling. */
-        }
-    }
-    else
-    {
-        /* Not driving fast enough to have anything to fall from. */
-    }
-
-    uint32_t word = robot_field_put(0u, STOPPED_KEPT, kept);
-    word = robot_field_put(word, STOPPED_AGE, age);
-    p_state->word = robot_field_put(word, STOPPED_OFF_LEVEL, off_level);
-    return b_hit;
-}
-
-float
-terrain_detect_stopped_peak_g (terrain_stopped_t const * p_state)
-{
-    return (float)p_state->peak_x256 / STOPPED_PEAK_SCALE;
+    word = robot_field_put(word, LIFT_RUN, run);
+    word = robot_field_put(word, LIFT_COOLDOWN, cooldown);
+    p_state->word = word;
+    return event;
 }
 
 /* Private function definitions. */
@@ -629,6 +513,15 @@ to_ddeg (float deg)
 }
 
 /* A wait of 0 samples would fire with no sample at all: use 1. */
+/* A value in m/s^2 as cm/s^2 in 16 bits, rounded and clamped. */
+static int16_t
+to_cm (float mps2)
+{
+    return (int16_t)terrain_process_decode_signed(
+        terrain_process_encode_signed(mps2, CM_PER_M, LIFT_SAMPLE_BITS),
+        LIFT_SAMPLE_BITS);
+}
+
 static uint32_t
 samples_needed (uint8_t samples)
 {

@@ -203,138 +203,6 @@ drive_slowing (float (*p_roll)(float x_mm, float t_s))
     return pass;
 }
 
-static terrain_stopped_limits_t const stop_limits = {
-    TERRAIN_COLLISION_STOP_FROM_MM_S, TERRAIN_COLLISION_STOP_WINDOW_SAMPLES,
-    TERRAIN_COLLISION_STOP_GRACE_SAMPLES};
-
-/* @p samples at @p speed; returns the falls reported. */
-static unsigned int
-hold_speed (terrain_stopped_t * p_state, int speed, unsigned int samples,
-            bool b_driving, terrain_hump_state_t hump)
-{
-    unsigned int falls = 0u;
-    for (unsigned int i = 0u; i < samples; i++)
-    {
-        falls += terrain_detect_stopped_dead(p_state, speed, 0.1f, b_driving,
-                                             hump, &stop_limits)
-                     ? 1u
-                     : 0u;
-    }
-    return falls;
-}
-
-/* From @p from, @p step mm/s less each sample, down to 0. */
-static unsigned int
-fall_speed (terrain_stopped_t * p_state, int from, int step,
-            terrain_hump_state_t hump)
-{
-    unsigned int falls = 0u;
-    for (int speed = from; speed >= 0; speed -= step)
-    {
-        falls += hold_speed(p_state, speed, 1u, true, hump);
-    }
-    return falls;
-}
-
-/* 2026-11-09: three hits on a box read 120 mm/s to under 10 in under 0.5 s,
- * with pushes under 0.3, under 0.3 and 0.66 g. */
-static void
-test_stopped_dead (void)
-{
-    terrain_hump_state_t const level = TERRAIN_HUMP_LEVEL;
-    terrain_hump_state_t const climb = TERRAIN_HUMP_ASCENDING;
-
-    terrain_stopped_t state = {0};
-    unsigned int falls = hold_speed(&state, 120, 20u, true, level);
-    falls += fall_speed(&state, 120, 10, level);
-    bool const b_once = 1u == falls;
-    bool const b_stays = 0u == hold_speed(&state, 0, 50u, true, level);
-    (void)hold_speed(&state, 120, 20u, true, level);
-    bool const b_again = 1u == fall_speed(&state, 120, 10, level);
-    check("TH16 the wheels stopping dead while driving is one hit, and another "
-          "only after driving again",
-          b_once && b_stays && b_again);
-
-    state = (terrain_stopped_t){0};
-    (void)hold_speed(&state, 120, 20u, true, level);
-    check("TH17 falling to exactly half speed is enough",
-          1u == hold_speed(&state, 60, 1u, true, level));
-
-    state = (terrain_stopped_t){0};
-    (void)hold_speed(&state, 120, 20u, true, level);
-    check("TH18 a gradual slow-down is not a hit",
-          0u == fall_speed(&state, 120, 1, level));
-
-    state = (terrain_stopped_t){0};
-    (void)hold_speed(&state, 120, 20u, true, level);
-    falls = hold_speed(&state, 120, 6u, true, climb);
-    falls += fall_speed(&state, 120, 10, climb);
-    check("TH19 slowing for a hump, the lean comes first, is not a hit",
-          0u == falls);
-
-    state = (terrain_stopped_t){0};
-    (void)hold_speed(&state, 120, 20u, true, level);
-    falls = hold_speed(&state, 120, 2u, true, climb);
-    falls += hold_speed(&state, 30, 1u, true, climb);
-    bool const b_grace = 1u == falls;
-    state = (terrain_stopped_t){0};
-    (void)hold_speed(&state, 120, 20u, true, climb);
-    (void)hold_speed(&state, 120, 20u, true, level);
-    bool const b_after = 1u == fall_speed(&state, 120, 10, level);
-    check("TH20 a lean from the hit itself does not hide it, nor does an "
-          "earlier hump",
-          b_grace && b_after);
-
-    state = (terrain_stopped_t){0};
-    (void)hold_speed(&state, 120, 20u, false, level);
-    falls = hold_speed(&state, 0, 5u, false, level);
-    state = (terrain_stopped_t){0};
-    (void)hold_speed(&state, 120, 20u, true, level);
-    falls += hold_speed(&state, 120, 1u, false, level);
-    falls += hold_speed(&state, 0, 5u, true, level);
-    check("TH21 stopping on purpose, no longer following, is not a hit",
-          0u == falls);
-
-    state = (terrain_stopped_t){0};
-    (void)hold_speed(&state, 80, 20u, true, level);
-    check("TH22 a car under the driving speed has nothing to fall from",
-          0u == fall_speed(&state, 80, 10, level));
-
-    uint32_t word = 0u;
-    uint32_t value = 0u;
-    terrain_collision_limits_t const limits = {1.0f, 2.0f, 40.0f, 12u, 50u};
-    terrain_collision_input_t in = {
-        0.1f, TERRAIN_HUMP_LEVEL, true, 0, true, 0.66f};
-    bool const b_counts =
-        TERRAIN_EVENT_COLLISION ==
-        terrain_detect_collision_step(&word, &in, &limits, &value);
-    bool const b_size = 7u == value;
-    bool const b_cooldown =
-        TERRAIN_EVENT_NONE ==
-        terrain_detect_collision_step(&word, &in, &limits, &value);
-    check("TH23 that is a collision, sized by its push, and only one",
-          b_counts && b_size && b_cooldown);
-
-    state = (terrain_stopped_t){0};
-    (void)terrain_detect_stopped_dead(&state, 120, 0.66f, true, level,
-                                      &stop_limits);
-    (void)hold_speed(&state, 120, 8u, true, level);
-    check("TH24 the push is remembered for the moments before the speed falls",
-          terrain_detect_stopped_peak_g(&state) > 0.4f);
-
-    state = (terrain_stopped_t){0};
-    (void)terrain_detect_stopped_dead(&state, 0, 0.3f, false,
-                                      TERRAIN_HUMP_LEVEL, &stop_limits);
-    float const small_g = terrain_detect_stopped_peak_g(&state);
-    state = (terrain_stopped_t){0};
-    (void)terrain_detect_stopped_dead(&state, 0, 300.0f, false,
-                                      TERRAIN_HUMP_LEVEL, &stop_limits);
-    float const huge_g = terrain_detect_stopped_peak_g(&state);
-    check("TH25 the kept push is exact to 1/256 g and saturates",
-          (small_g > 0.296f) && (small_g < 0.304f) && (huge_g > 255.0f) &&
-              (huge_g < 256.0f));
-}
-
 int
 main (void)
 {
@@ -374,23 +242,6 @@ main (void)
           !terrain_detect_hump_lasted(1000, 700, TERRAIN_HUMP_MIN_MM) &&
               terrain_detect_hump_lasted(INT32_MAX - 50, INT32_MIN + 150,
                                          TERRAIN_HUMP_MIN_MM));
-
-    /* The five false pushes of 2026-11-07: g, speed, lean. */
-    float const limit = TERRAIN_COLLISION_MAX_LEAN_DEG;
-    int32_t const driving = TERRAIN_COLLISION_DRIVING_MM_S;
-    check("TH07 pushes while stopped, creeping or reversing are ignored",
-          (0.0f == terrain_detect_collision_push(1.3f, 0, 0.5f, driving,
-                                                 limit)) &&
-              (0.0f == terrain_detect_collision_push(1.2f, 33, 0.5f, driving,
-                                                     limit)) &&
-              (0.0f == terrain_detect_collision_push(1.9f, -236, 0.5f, driving,
-                                                     limit)));
-    check("TH08 so is a push with the car lifted",
-          0.0f == terrain_detect_collision_push(3.0f, 129, 23.8f, driving,
-                                                limit));
-    check("TH09 a push driving forward is judged",
-          1.5f == terrain_detect_collision_push(1.5f, 120, 1.0f, driving,
-                                                limit));
 
     /* Slowing for the hump, as the car does. */
     pass_t const slowed = drive_slowing(hump_roll);
@@ -435,8 +286,6 @@ main (void)
               (90 == terrain_detect_hump_min_mm(60, 60, 90, 130)) &&
               (130 == terrain_detect_hump_min_mm(61, 60, 90, 130)) &&
               (130 == terrain_detect_hump_min_mm(120, 60, 90, 130)));
-
-    test_stopped_dead();
 
     printf("%u failure(s)\n", failures);
     return (0u == failures) ? 0 : 1;

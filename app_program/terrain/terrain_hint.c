@@ -3,7 +3,7 @@
  * @brief Movement hints for the terrain module, from the motion
  *        subsystem's odometry (TEAM.md IF-05).
  *
- * Gives the distance driven, the ground speed (for collisions) and both
+ * Gives the distance driven, the ground speed (for the hump detector) and both
  * wheel speeds (for the turn rate). Whether the speed is changing, and
  * the turn hold, stay unknown, so tilt is never held; they come from the
  * same odometry later. Distance and speeds are unknown until tMotion has

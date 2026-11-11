@@ -87,7 +87,8 @@
 
 /*
  * Accelerometer range, as an imu_accel_range_t value from drv_imu.h.
- * +/-8 g so collisions do not clip; costs resolution (4 mg per count).
+ * +/-8 g so a lift or a knock does not clip; costs resolution (4 mg per
+ * count).
  */
 #ifndef TERRAIN_ACCEL_RANGE
 #define TERRAIN_ACCEL_RANGE IMU_ACCEL_RANGE_8G
@@ -382,98 +383,52 @@
 #endif
 
 /*
- * Collision detection (terrain_detect.h), from the horizontal push: the
- * forward/back and sideways acceleration, in tenths of a g (10 = 1 g,
- * the pull of gravity). Hard braking is about 0.3 g; leaning on an 11 mm
- * ramp about 0.1 g. A push of at least TERRAIN_COLLISION_LIMIT_DG may be
- * a collision: it counts if the car's speed (motion's odometry) then
- * drops to half or less within TERRAIN_COLLISION_CHECK_SAMPLES, so a
- * wheel jolting on a ramp edge, where the car keeps going, does not. A
- * push of at least TERRAIN_COLLISION_SURE_DG counts at once, for hits
- * where the wheels keep spinning and the speed never drops.
- * TODO(car day): set both from wall hits and ramp runs (TER-U21).
+ * Lifted and overturned (terrain_detect.h): the motors stop when the car is
+ * picked up or turned over; lifting it ends a demonstration run. Both use
+ * the mean of the last TERRAIN_DETECT_LIFT_WINDOW samples (100 ms), before
+ * the bias, against the level reading taken at calibration.
+ *
+ * Lifted: the upward acceleration, in hundredths of the level reading,
+ * goes above TERRAIN_LIFT_UP_CG. On 2026-11-11 (TER-U34) eight brisk lifts,
+ * moving and stopped, peaked at 142 to 163; 43 s of floor driving with
+ * starts, stops and bumps never passed 117. A slow, gentle lift (109) is
+ * not seen: no limit could catch it without stopping the car while driving.
  */
-#ifndef TERRAIN_COLLISION_LIMIT_DG
-#define TERRAIN_COLLISION_LIMIT_DG 10u
-#endif
-
-#ifndef TERRAIN_COLLISION_SURE_DG
-#define TERRAIN_COLLISION_SURE_DG 20u
+#ifndef TERRAIN_LIFT_UP_CG
+#define TERRAIN_LIFT_UP_CG 130u
 #endif
 
 /*
- * A push counts only driving forward at this speed or more, in mm/s, and
- * leaning less than this, in degrees. All 5 pushes of 1 g or more on
- * 2026-11-07 were false: starts, reversing and a slow pass restarting, a hand
- * on the stopped car, and the car lifted at a 24 degree lean.
+ * Overturned: tilted from level by more than TERRAIN_LIFT_OVER_DEG degrees
+ * for TERRAIN_LIFT_OVER_SAMPLES samples in a row (300 ms). On its side the
+ * car read 73 to 110 degrees, upside down 147 to 179; floor driving never
+ * passed 24.
  */
-#ifndef TERRAIN_COLLISION_DRIVING_MM_S
-#define TERRAIN_COLLISION_DRIVING_MM_S 60
+#ifndef TERRAIN_LIFT_OVER_DEG
+#define TERRAIN_LIFT_OVER_DEG 60u
 #endif
-#ifndef TERRAIN_COLLISION_MAX_LEAN_DEG
-#define TERRAIN_COLLISION_MAX_LEAN_DEG 8.0f
-#endif
-
-/*
- * Samples to wait for the speed to halve: 12 = 120 ms, motion's 100 ms
- * speed average (5 x 20 ms updates) plus one update.
- */
-#ifndef TERRAIN_COLLISION_CHECK_SAMPLES
-#define TERRAIN_COLLISION_CHECK_SAMPLES 12u
+#ifndef TERRAIN_LIFT_OVER_SAMPLES
+#define TERRAIN_LIFT_OVER_SAMPLES 30u
 #endif
 
-/* Samples after a collision before the next: 50 = 500 ms, one hit gives
- * one event. */
-#ifndef TERRAIN_COLLISION_COOLDOWN_SAMPLES
-#define TERRAIN_COLLISION_COOLDOWN_SAMPLES 50u
+/* Samples after a lift or overturn before the next: 100 = 1 s, so one lift
+ * gives one event. */
+#ifndef TERRAIN_LIFT_COOLDOWN_SAMPLES
+#define TERRAIN_LIFT_COOLDOWN_SAMPLES 100u
 #endif
 
-/*
- * A hit at line-following speed is a small push: three box hits on 2026-11-09
- * read under 0.3, under 0.3 and 0.66 g, against 0.55 g just driving and 0.95 g
- * on the hump. What marks one is the wheels: driving at this speed or more, in
- * mm/s, the speed falling to half within TERRAIN_COLLISION_STOP_WINDOW_SAMPLES
- * while still following. Slowing for a hump starts with the hump state leaving
- * LEVEL and takes about 120 ms to halve the speed, so a lean up to
- * TERRAIN_COLLISION_STOP_GRACE_SAMPLES old is taken for the hit itself.
- */
-#ifndef TERRAIN_COLLISION_STOP_FROM_MM_S
-#define TERRAIN_COLLISION_STOP_FROM_MM_S 90
+/* The counters are 8 bits; the limit fits the 12-bit event value. */
+#if (TERRAIN_LIFT_UP_CG < 105) || (TERRAIN_LIFT_UP_CG > 400)
+#error "TERRAIN_LIFT_UP_CG must be 105 to 400"
 #endif
-#ifndef TERRAIN_COLLISION_STOP_WINDOW_SAMPLES
-#define TERRAIN_COLLISION_STOP_WINDOW_SAMPLES 30u
+#if (TERRAIN_LIFT_OVER_DEG < 30) || (TERRAIN_LIFT_OVER_DEG > 170)
+#error "TERRAIN_LIFT_OVER_DEG must be 30 to 170"
 #endif
-#ifndef TERRAIN_COLLISION_STOP_GRACE_SAMPLES
-#define TERRAIN_COLLISION_STOP_GRACE_SAMPLES 5u
+#if (TERRAIN_LIFT_OVER_SAMPLES < 1) || (TERRAIN_LIFT_OVER_SAMPLES > 255)
+#error "TERRAIN_LIFT_OVER_SAMPLES must be 1 to 255"
 #endif
-
-/*
- * Below this speed, in mm/s, there is nothing to drop from, so the collision
- * step lets the push alone decide. On the car such pushes never reach it:
- * see TERRAIN_COLLISION_DRIVING_MM_S. Line following is about 120 mm/s.
- */
-#ifndef TERRAIN_COLLISION_MIN_SPEED_MM_S
-#define TERRAIN_COLLISION_MIN_SPEED_MM_S 40u
-#endif
-
-/* The push field stops at 12.7 g; the countdowns are 4 and 6 bits. */
-#if (TERRAIN_COLLISION_LIMIT_DG < 5) || (TERRAIN_COLLISION_LIMIT_DG > 80)
-#error "TERRAIN_COLLISION_LIMIT_DG must be 5 to 80 (0.5 to 8 g)"
-#endif
-#if (TERRAIN_COLLISION_SURE_DG < TERRAIN_COLLISION_LIMIT_DG) ||                \
-    (TERRAIN_COLLISION_SURE_DG > 127)
-#error "TERRAIN_COLLISION_SURE_DG must be TERRAIN_COLLISION_LIMIT_DG to 127"
-#endif
-#if (TERRAIN_COLLISION_CHECK_SAMPLES < 1) ||                                   \
-    (TERRAIN_COLLISION_CHECK_SAMPLES > 15)
-#error "TERRAIN_COLLISION_CHECK_SAMPLES must be 1 to 15"
-#endif
-#if (TERRAIN_COLLISION_COOLDOWN_SAMPLES < 1) ||                                \
-    (TERRAIN_COLLISION_COOLDOWN_SAMPLES > 63)
-#error "TERRAIN_COLLISION_COOLDOWN_SAMPLES must be 1 to 63"
-#endif
-#if TERRAIN_COLLISION_MIN_SPEED_MM_S > 1000
-#error "TERRAIN_COLLISION_MIN_SPEED_MM_S must be 0 to 1000"
+#if (TERRAIN_LIFT_COOLDOWN_SAMPLES < 1) || (TERRAIN_LIFT_COOLDOWN_SAMPLES > 255)
+#error "TERRAIN_LIFT_COOLDOWN_SAMPLES must be 1 to 255"
 #endif
 
 /*

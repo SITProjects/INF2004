@@ -371,7 +371,7 @@ typedef struct
  * Word 2: right 0..10, width 11..19, centre range 20..31.
  * Word 3: heading 0..15, pitch 16..27, calibration 28..30.
  * Word 4: roll 0..11, turn rate 12..22, requests 23..30.
- * Word 5: collisions 0..7, requests taken 8..15.
+ * Word 5: lifts and overturns 0..7, requests taken 8..15.
  * Speeds in mm/s, distance in mm, angles in tenths of a degree except
  * heading (degrees) and turn rate (degrees/s). Request counts are the low
  * 8 bits, enough to see them rise. The dashboard decodes these.
@@ -405,7 +405,7 @@ typedef struct
 #define ROBOT_STATUS_TURN_SHIFT 12u
 #define ROBOT_STATUS_TURN_BITS 11u
 #define ROBOT_STATUS_REQUESTS_SHIFT 23u
-#define ROBOT_STATUS_COLLISIONS_SHIFT 0u
+#define ROBOT_STATUS_LIFTS_SHIFT 0u
 #define ROBOT_STATUS_TAKEN_SHIFT 8u
 
 /** Car status, unpacked: robot_status_pack() fits it to the layout above. */
@@ -426,7 +426,7 @@ typedef struct
     uint32_t range_mm;
     uint32_t calibration;
     uint32_t humps;
-    uint32_t collisions;
+    uint32_t lifts;    /**< Lifts and overturns, low 8 bits (IF-11). */
     uint32_t requests; /**< Low bits only are sent. */
     uint32_t taken;    /**< Low bits only are sent. */
 } robot_status_t;
@@ -1266,8 +1266,8 @@ robot_status_pack (robot_status_t const * p_in, uint32_t * p_words)
         robot_field_put(word, ROBOT_STATUS_REQUESTS_SHIFT,
                         ROBOT_STATUS_COUNT_BITS, p_in->requests & 0xFFu);
 
-    word = robot_field_put(0u, ROBOT_STATUS_COLLISIONS_SHIFT,
-                           ROBOT_STATUS_COUNT_BITS, p_in->collisions);
+    word = robot_field_put(0u, ROBOT_STATUS_LIFTS_SHIFT,
+                           ROBOT_STATUS_COUNT_BITS, p_in->lifts);
     p_words[5] = robot_field_put(word, ROBOT_STATUS_TAKEN_SHIFT,
                                  ROBOT_STATUS_COUNT_BITS, p_in->taken & 0xFFu);
 }

@@ -1,6 +1,6 @@
 /**
  * @file terrain_summary.c
- * @brief Run summary: hump count and heights, collisions and turns.
+ * @brief Run summary: hump count and heights, lifts and turns.
  *
  * Copyright (c) 2026 10x Slackers
  * SPDX-License-Identifier: MIT
@@ -13,14 +13,14 @@
 
 /* Private types, constants, and macros. */
 
-/* Word 0: hump count 4 | highest 8 | collisions 4 | turns 7 | spare 9. */
+/* Word 0: hump count 4 | highest 8 | lifts 4 | turns 7 | spare 9. */
 #define W_COUNTS 0u
 #define HUMPS_SHIFT 0u
 #define HUMPS_BITS 4u
 #define HIGHEST_SHIFT 4u
 #define HEIGHT_BITS 8u
-#define COLLISIONS_SHIFT 12u
-#define COLLISIONS_BITS 4u
+#define LIFTS_SHIFT 12u
+#define LIFTS_BITS 4u
 #define TURNS_SHIFT 16u
 #define TURNS_BITS 7u
 
@@ -35,8 +35,8 @@
 
 _Static_assert(TERRAIN_SUMMARY_HUMP_COUNT_MAX == ((1u << HUMPS_BITS) - 1u),
                "hump count limit must match its field");
-_Static_assert(TERRAIN_SUMMARY_COLLISION_MAX == ((1u << COLLISIONS_BITS) - 1u),
-               "collision limit must match its field");
+_Static_assert(TERRAIN_SUMMARY_LIFT_MAX == ((1u << LIFTS_BITS) - 1u),
+               "lift limit must match its field");
 _Static_assert(TERRAIN_SUMMARY_TURN_MAX == ((1u << TURNS_BITS) - 1u),
                "turn limit must match its field");
 _Static_assert(TERRAIN_HEIGHT_MAX_MM == ((1u << HEIGHT_BITS) - 1u),
@@ -101,9 +101,10 @@ terrain_summary_add (terrain_summary_t * p_summary, terrain_event_type_t type,
                 p_summary->word[W_COUNTS], HIGHEST_SHIFT, HEIGHT_BITS, height);
         }
     }
-    else if (type == TERRAIN_EVENT_COLLISION)
+    else if ((type == TERRAIN_EVENT_LIFTED) ||
+             (type == TERRAIN_EVENT_OVERTURNED))
     {
-        count_add(p_summary, COLLISIONS_SHIFT, COLLISIONS_BITS);
+        count_add(p_summary, LIFTS_SHIFT, LIFTS_BITS);
     }
     else if (type == TERRAIN_EVENT_TURNING)
     {
@@ -141,9 +142,9 @@ terrain_summary_hump_mm (terrain_summary_t const * p_summary, uint32_t index)
 }
 
 uint8_t
-terrain_summary_collisions (terrain_summary_t const * p_summary)
+terrain_summary_lifts (terrain_summary_t const * p_summary)
 {
-    return (uint8_t)count_get(p_summary, COLLISIONS_SHIFT, COLLISIONS_BITS);
+    return (uint8_t)count_get(p_summary, LIFTS_SHIFT, LIFTS_BITS);
 }
 
 uint8_t

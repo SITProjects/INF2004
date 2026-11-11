@@ -6,7 +6,7 @@
  * axes. Phase 2: calibrate at every start, then correct every reading.
  * Phase 3: pitch and roll. Phase 4: hump state and an event queue. Phase
  * 5: turn rate and turning state, from motion's wheel speeds. Phase 7:
- * collisions. Phase 8: speed state. Phase 9: hump height. Phase 10: run
+ * lifted and overturned. Phase 8: speed state. Phase 9: hump height. Phase 10: run
  * summary.
  *
  * Call terrain_monitor_init() once, then terrain_monitor_update()
@@ -100,17 +100,18 @@ typedef enum
     TERRAIN_EVENT_ASCENDING,    /**< A climb started. */
     TERRAIN_EVENT_DESCENDING,   /**< A descent (or a dip) started. */
     TERRAIN_EVENT_LEVEL,        /**< Flat again after a descent. */
-    TERRAIN_EVENT_COLLISION,    /**< The car hit something. */
+    TERRAIN_EVENT_LIFTED,       /**< The car was picked up. */
     TERRAIN_EVENT_STATIONARY,   /**< The wheels stopped. */
     TERRAIN_EVENT_ACCELERATING, /**< The wheels started speeding up. */
     TERRAIN_EVENT_CRUISING,     /**< The wheels reached a steady speed. */
     TERRAIN_EVENT_DECELERATING, /**< The wheels started slowing down. */
     TERRAIN_EVENT_TURNING,      /**< The car started turning. */
-    TERRAIN_EVENT_STRAIGHT      /**< The car stopped turning. */
+    TERRAIN_EVENT_STRAIGHT,     /**< The car stopped turning. */
+    TERRAIN_EVENT_OVERTURNED    /**< The car is on its side or upside down. */
 } terrain_event_type_t;
 
 /* Number of event codes in use; codes from here up to 15 are spare. */
-#define TERRAIN_EVENT_TYPES 11u
+#define TERRAIN_EVENT_TYPES 12u
 
 /**
  * @brief One event, packed into one word: type 4 bits, value 12 bits,
@@ -204,7 +205,7 @@ typedef struct
 
 /**
  * @brief Run summary, packed: humps finished, the highest, the height of
- *        each of the first TERRAIN_SUMMARY_HUMPS, collisions and turns,
+ *        each of the first TERRAIN_SUMMARY_HUMPS, lifts and turns,
  *        all since init. Read it only through the terrain_monitor_summary_*()
  *        functions; the layout is private. An all-zero summary is empty.
  */
@@ -320,15 +321,16 @@ terrain_status_t terrain_monitor_recalibrate (void);
  * While roll is held (the car is turning), no hump events are found and
  * the height pauses: the held value is not a new reading.
  *
- * - COLLISION: in hump state LEVEL only (never on a ramp), a horizontal
- *   push (forward/back and sideways) of at least
- *   TERRAIN_COLLISION_LIMIT_DG, after which motion's ground speed
- *   dropped to half or less within TERRAIN_COLLISION_CHECK_SAMPLES. It
- *   counts at once for a push of at least TERRAIN_COLLISION_SURE_DG. Only
- *   pushes driving forward at TERRAIN_COLLISION_DRIVING_MM_S or more and
- *   leaning under TERRAIN_COLLISION_MAX_LEAN_DEG are judged.
- *   Then none for TERRAIN_COLLISION_COOLDOWN_SAMPLES. Value: the biggest
- *   push of the hit, tenths of a g, 0 to 127 (stops at 12.7 g).
+ * Lifted and overturned, from the mean of the last 100 ms of samples
+ * (before the bias) against the level reading from calibration, whatever
+ * the car is doing:
+ * - LIFTED: the mean's upward part was more than TERRAIN_LIFT_UP_CG
+ *   hundredths of the level reading. Value: that part, in hundredths.
+ * - OVERTURNED: the mean was tilted more than TERRAIN_LIFT_OVER_DEG from
+ *   level for TERRAIN_LIFT_OVER_SAMPLES samples in a row; once until it
+ *   comes back. Value: the tilt, degrees.
+ * After either, none for TERRAIN_LIFT_COOLDOWN_SAMPLES. Each also adds one
+ * to terrain_monitor_lift_count(), which stops the motors.
  *
  * In every calibration state (the turn rate comes from motion's wheel
  * speeds, not the accelerometer):
@@ -353,12 +355,22 @@ terrain_status_t terrain_monitor_recalibrate (void);
  *
  * The queue holds TERRAIN_EVENT_QUEUE_LEN events; when it is full the
  * oldest is dropped and counted (terrain_monitor_events_dropped()). A
- * recalibration resets the hump state to LEVEL and the collision check to
- * ready without an event, keeps the turning state, and keeps
+ * recalibration resets the hump state to LEVEL and the lift check
+ * without an event, keeps the turning state, and keeps
  * the events already queued. Only terrain_monitor_init() empties it.
  * Safe to call from other tasks while terrain_monitor_update() runs.
  */
 terrain_status_t terrain_monitor_poll_event (terrain_event_t * p_out);
+
+/**
+ * @brief Lifts and overturns found since init (IF-11).
+ * @return Count, wrapping at 256. Each LIFTED or OVERTURNED event adds one
+ *         as it is found, whether or not anyone polls the events; a change
+ *         means the car has been picked up or turned over since the last
+ *         read. 0 before init.
+ * Any task; never waits: one byte, written by the terrain task only.
+ */
+uint8_t terrain_monitor_lift_count (void);
 
 /**
  * @brief Events dropped because the queue was full, since init.
@@ -375,7 +387,7 @@ uint8_t terrain_monitor_events_dropped (void);
  *
  * Counted as the events are made, so it is up to date at any time,
  * whether or not anyone polls the events: each LEVEL event adds a hump
- * and its height, each COLLISION a collision, each TURNING a turn.
+ * and its height, each LIFTED or OVERTURNED a lift, each TURNING a turn.
  * Counts stop at their largest value. Only terrain_monitor_init() clears
  * it; a recalibration keeps it. Safe to call from other tasks while
  * terrain_monitor_update() runs.
@@ -414,12 +426,11 @@ uint8_t terrain_monitor_summary_hump_mm (terrain_summary_t const * p_summary,
                                          uint32_t index);
 
 /**
- * @brief Collisions in a summary.
+ * @brief Lifts (LIFTED and OVERTURNED events) in a summary.
  * @param p_summary Summary.
  * @return 0 to 15; stops at 15. 0 if @p p_summary is NULL.
  */
-uint8_t
-terrain_monitor_summary_collisions (terrain_summary_t const * p_summary);
+uint8_t terrain_monitor_summary_lifts (terrain_summary_t const * p_summary);
 
 /**
  * @brief Turns (TURNING events) in a summary.
@@ -433,7 +444,7 @@ uint8_t terrain_monitor_summary_turns (terrain_summary_t const * p_summary);
  * @param p_summary Summary.
  * @param p_bytes Receives TERRAIN_SUMMARY_BYTES bytes, little-endian:
  *        bytes 0-2 hold hump count (bits 0-3), highest hump in mm (bits
- *        4-11), collisions (bits 12-15) and turns (bits 16-22), bit 23 is
+ *        4-11), lifts (bits 12-15) and turns (bits 16-22), bit 23 is
  *        0; bytes 3-10 the height of humps 1 to 8 in mm, 0 if unused.
  * @return TERRAIN_OK; TERRAIN_ERR_PARAM, with @p p_bytes unchanged, if
  *         either pointer is NULL.

@@ -100,7 +100,7 @@
 
 /* Units of the packed fields. */
 #define DDEG_PER_DEG 10.0f
-#define DG_PER_G 10.0f
+#define CENTI_PER_UNIT 100.0f
 #define DPS_PER_STEP 1.0f
 #define WHEELS 2.0f
 #define MG_PER_STEP 4
@@ -155,14 +155,9 @@ static terrain_hump_limits_t const hump_limits = {
     TERRAIN_HUMP_LEVEL_DEG,   TERRAIN_HUMP_ENTER_SAMPLES,
     TERRAIN_HUMP_TOP_SAMPLES, TERRAIN_HUMP_LEVEL_SAMPLES};
 
-static terrain_stopped_limits_t const stopped_limits = {
-    TERRAIN_COLLISION_STOP_FROM_MM_S, TERRAIN_COLLISION_STOP_WINDOW_SAMPLES,
-    TERRAIN_COLLISION_STOP_GRACE_SAMPLES};
-static terrain_collision_limits_t const collision_limits = {
-    (float)TERRAIN_COLLISION_LIMIT_DG / DG_PER_G,
-    (float)TERRAIN_COLLISION_SURE_DG / DG_PER_G,
-    (float)TERRAIN_COLLISION_MIN_SPEED_MM_S, TERRAIN_COLLISION_CHECK_SAMPLES,
-    TERRAIN_COLLISION_COOLDOWN_SAMPLES};
+static terrain_lift_limits_t const lift_limits = {
+    (float)TERRAIN_LIFT_UP_CG / CENTI_PER_UNIT, (float)TERRAIN_LIFT_OVER_DEG,
+    TERRAIN_LIFT_OVER_SAMPLES, TERRAIN_LIFT_COOLDOWN_SAMPLES};
 
 static terrain_turn_limits_t const turn_limits = {
     (float)TERRAIN_TURN_ON_DPS, (float)TERRAIN_TURN_OFF_DPS,
@@ -198,10 +193,11 @@ static uint32_t own_state = 0u; /* OWN_* fields. */
 static terrain_calib_acc_t calib_acc;
 static terrain_vec3_t bias;
 static terrain_tilt_t tilt;
-static uint32_t detect_word = 0u;  /* terrain_detect.h layout. */
-static int32_t hump_start_mm = 0;  /* Where the latest climb began. */
-static uint32_t collide_word = 0u; /* terrain_detect.h layout. */
-static terrain_stopped_t stopped;
+static uint32_t detect_word = 0u; /* terrain_detect.h layout. */
+static int32_t hump_start_mm = 0; /* Where the latest climb began. */
+static terrain_lift_t lift;
+/* IF-11: one byte, written here only, read by any task without a lock. */
+static volatile uint8_t lift_count = 0u;
 #if TERRAIN_CAPTURE
 /* Lift capture ring, oldest at capture_head. */
 #define CAPTURE_LEN 64u
@@ -210,10 +206,6 @@ static uint32_t capture_head = 0u;
 static uint32_t capture_count = 0u;
 static uint32_t capture_dropped = 0u;
 #endif
-_Static_assert(TERRAIN_COLLISION_STOP_WINDOW_SAMPLES < 255u,
-               "Collision window must fit the 8-bit age");
-_Static_assert(TERRAIN_COLLISION_STOP_GRACE_SAMPLES < 255u,
-               "Collision grace must fit the 8-bit off-level count");
 static uint32_t speed_word = 0u; /* terrain_detect.h layout. */
 static terrain_height_t height;
 
@@ -236,8 +228,7 @@ static void detect_sample (terrain_vec3_t const * p_accel,
                            terrain_hint_t const * p_hint, uint32_t now_10ms);
 static void detect_hump (terrain_vec3_t const * p_accel,
                          terrain_hint_t const * p_hint, uint32_t now_10ms);
-static void detect_collision (terrain_vec3_t const * p_accel,
-                              terrain_hint_t const * p_hint, uint32_t now_10ms);
+static void detect_lift (terrain_vec3_t const * p_sample, uint32_t now_10ms);
 static void detect_turn (float turn_dps, uint32_t now_10ms);
 static void detect_speed (float wheel_mm_s, uint32_t now_10ms);
 static void queue_event (terrain_event_type_t type, uint32_t value,
@@ -384,6 +375,7 @@ terrain_monitor_update (void)
             terrain_process_tilt_update(&tilt, &accel, tilt_alpha, b_hold_pitch,
                                         b_hold_roll);
             detect_sample(&accel, &hint, now_10ms);
+            detect_lift(&sample, now_10ms);
         }
 
         /* Every calibration state: the wheels need no level reference. */
@@ -525,6 +517,12 @@ terrain_monitor_poll_event (terrain_event_t * p_out)
 }
 
 uint8_t
+terrain_monitor_lift_count (void)
+{
+    return lift_count;
+}
+
+uint8_t
 terrain_monitor_events_dropped (void)
 {
     if (!b_ready)
@@ -576,9 +574,9 @@ terrain_monitor_summary_hump_mm (terrain_summary_t const * p_summary,
 }
 
 uint8_t
-terrain_monitor_summary_collisions (terrain_summary_t const * p_summary)
+terrain_monitor_summary_lifts (terrain_summary_t const * p_summary)
 {
-    return terrain_summary_collisions(p_summary);
+    return terrain_summary_lifts(p_summary);
 }
 
 uint8_t
@@ -902,8 +900,10 @@ terrain_monitor_event_text (terrain_event_type_t type)
             return "DESCENDING";
         case TERRAIN_EVENT_LEVEL:
             return "LEVEL";
-        case TERRAIN_EVENT_COLLISION:
-            return "COLLISION";
+        case TERRAIN_EVENT_LIFTED:
+            return "LIFTED";
+        case TERRAIN_EVENT_OVERTURNED:
+            return "OVERTURNED";
         case TERRAIN_EVENT_STATIONARY:
             return "STATIONARY";
         case TERRAIN_EVENT_ACCELERATING:
@@ -995,12 +995,11 @@ calib_start (void)
     terrain_process_calib_reset(&calib_acc);
     terrain_process_tilt_reset(&tilt);
 
-    /* A hump or collision check cut short just ends: no event, queued
-     * events are kept. Turning and the speed state come from the wheels,
-     * not this calibration, so they carry on. */
+    /* A hump or lift check cut short just ends: no event, queued events
+     * are kept. Turning and the speed state come from the wheels, not this
+     * calibration, so they carry on. */
     detect_word = terrain_detect_hump_clear(detect_word);
-    collide_word = 0u;
-    stopped = (terrain_stopped_t){0};
+    lift = (terrain_lift_t){0};
     terrain_height_reset(&height);
 }
 
@@ -1113,8 +1112,7 @@ capture_put (terrain_vec3_t const * p_sample, float wheel_mm_s)
 }
 #endif
 
-/* Run the detectors on the newest sample: humps first, because the
- * collision check needs this sample's hump state. */
+/* Run the hump detector on the newest corrected sample. */
 static void
 detect_sample (terrain_vec3_t const * p_accel, terrain_hint_t const * p_hint,
                uint32_t now_10ms)
@@ -1135,7 +1133,6 @@ detect_sample (terrain_vec3_t const * p_accel, terrain_hint_t const * p_hint,
     {
         /* Paused. */
     }
-    detect_collision(p_accel, p_hint, now_10ms);
 }
 
 /*
@@ -1223,37 +1220,22 @@ detect_speed (float wheel_mm_s, uint32_t now_10ms)
 }
 
 /*
- * Run the collision state machine on the newest sample: the horizontal
- * push of the unsmoothed acceleration (a hit lasts about 50 ms, which the
- * tilt smoothing would flatten) and motion's ground speed.
+ * Run the lift and overturn check on the newest sample, before the bias,
+ * against the level reading from calibration. A find adds to the lift
+ * count before its event is queued, so the motors stop at once.
  */
 static void
-detect_collision (terrain_vec3_t const * p_accel, terrain_hint_t const * p_hint,
-                  uint32_t now_10ms)
+detect_lift (terrain_vec3_t const * p_sample, uint32_t now_10ms)
 {
-    float const push_g =
-        sqrtf((p_accel->x * p_accel->x) + (p_accel->y * p_accel->y)) /
-        TERRAIN_GRAVITY_MPS2;
-    bool const b_stopped_dead = terrain_detect_stopped_dead(
-        &stopped, (int32_t)p_hint->speed_mm_s, push_g,
-        p_hint->b_distance_known && p_hint->b_following,
-        terrain_detect_hump_state(detect_word), &stopped_limits);
-    terrain_collision_input_t const in = {
-        terrain_detect_collision_push(
-            push_g, p_hint->b_distance_known ? (int32_t)p_hint->speed_mm_s : 0,
-            fabsf(tilt.roll_deg), TERRAIN_COLLISION_DRIVING_MM_S,
-            TERRAIN_COLLISION_MAX_LEAN_DEG),
-        terrain_detect_hump_state(detect_word),
-        p_hint->b_distance_known,
-        (int32_t)p_hint->speed_mm_s,
-        b_stopped_dead,
-        terrain_detect_stopped_peak_g(&stopped)};
+    terrain_vec3_t const level = {bias.x, bias.y,
+                                  bias.z + TERRAIN_GRAVITY_MPS2};
     uint32_t value = 0u;
-
-    if (terrain_detect_collision_step(&collide_word, &in, &collision_limits,
-                                      &value) == TERRAIN_EVENT_COLLISION)
+    terrain_event_type_t const type =
+        terrain_detect_lift_step(&lift, p_sample, &level, &lift_limits, &value);
+    if (TERRAIN_EVENT_NONE != type)
     {
-        queue_event(TERRAIN_EVENT_COLLISION, value, now_10ms);
+        lift_count = (uint8_t)(lift_count + 1u);
+        queue_event(type, value, now_10ms);
     }
 }
 

@@ -59,6 +59,16 @@ remote_command_result_t remote_command_handle (char const * p_text,
 bool remote_command_stopped (void);
 
 /**
+ * @brief Stop the car as the dashboard's "stop" does, until "start".
+ *
+ * For a car lifted or overturned (IF-11): the obstacle task holds the motors
+ * on the next loop. In builds with no dashboard nothing starts the car
+ * again until a reset.
+ * Obstacle task only; never waits.
+ */
+void remote_command_stop (void);
+
+/**
  * @brief Whether the dashboard wants the stopped car backed up.
  * @return True from "reverse" until "stop", "start" or
  *         remote_command_reverse_done().

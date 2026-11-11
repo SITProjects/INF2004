@@ -11,8 +11,8 @@
  * They come from the motion subsystem's odometry (motion_get_odometry(),
  * TEAM.md IF-05). For now only the distance, the ground speed and the two
  * wheel speeds are given. The distance is not used: the hump height comes
- * from the lean alone (one wheel on a ramp). The ground speed confirms
- * collisions; the wheel speeds give the turn rate. Whether the speed is
+ * from the lean alone (one wheel on a ramp). The ground speed paces
+ * the hump detector; the wheel speeds give the turn rate. Whether the speed is
  * changing, and whether to hold roll in turns, are unknown, so the
  * terrain module never holds tilt. Adding them changes only
  * terrain_hint.c.

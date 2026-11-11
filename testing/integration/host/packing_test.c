@@ -331,7 +331,7 @@ test_status (void)
     status.width_mm = 512u;
     status.range_mm = 4096u;
     status.humps = 256u;
-    status.collisions = 256u;
+    status.lifts = 256u;
     status.pitch_ddeg = 2048;
     status.distance_mm = 8388608;
     robot_status_pack(&status, words);
@@ -344,7 +344,7 @@ test_status (void)
                                ROBOT_STATUS_RANGE_BITS) == 4095u) &&
               (robot_field_get(words[0], ROBOT_STATUS_HUMPS_SHIFT,
                                ROBOT_STATUS_COUNT_BITS) == 255u) &&
-              (robot_field_get(words[5], ROBOT_STATUS_COLLISIONS_SHIFT,
+              (robot_field_get(words[5], ROBOT_STATUS_LIFTS_SHIFT,
                                ROBOT_STATUS_COUNT_BITS) == 255u));
     check("status one below saturates",
           robot_field_to_signed(
@@ -360,7 +360,7 @@ test_status (void)
                            ROBOT_STATUS_COUNT_BITS) == 0xFFu) &&
               (robot_field_get(words[5], ROBOT_STATUS_TAKEN_SHIFT,
                                ROBOT_STATUS_COUNT_BITS) == 0xFFu) &&
-              (robot_field_get(words[5], ROBOT_STATUS_COLLISIONS_SHIFT,
+              (robot_field_get(words[5], ROBOT_STATUS_LIFTS_SHIFT,
                                ROBOT_STATUS_COUNT_BITS) == 0u) &&
               (robot_field_get(words[4], ROBOT_STATUS_TURN_SHIFT,
                                ROBOT_STATUS_TURN_BITS) == 0u));

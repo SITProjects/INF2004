@@ -62,7 +62,7 @@ main (void)
                             .roll_ddeg = -3,
                             .turn_dps = 15,
                             .humps = 1u,
-                            .collisions = 2u,
+                            .lifts = 2u,
                             .requests = 300u,
                             .taken = 299u,
                             .calibration = 2u};
@@ -84,7 +84,7 @@ main (void)
                                      .roll_ddeg = 2047,
                                      .turn_dps = -1024,
                                      .humps = 255u,
-                                     .collisions = 255u,
+                                     .lifts = 255u,
                                      .requests = 511u,
                                      .taken = 256u,
                                      .calibration = 7u};

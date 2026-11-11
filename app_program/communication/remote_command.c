@@ -94,6 +94,13 @@ remote_command_stopped (void)
     return b_stopped;
 }
 
+void
+remote_command_stop (void)
+{
+    b_stopped = true;
+    b_reversing = false;
+}
+
 bool
 remote_command_reversing (void)
 {
