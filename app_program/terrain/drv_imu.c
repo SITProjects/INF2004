@@ -19,6 +19,34 @@
 #define REG_FIFO_CTRL_REG_A 0x2Eu
 #define REG_FIFO_SRC_REG_A 0x2Fu
 
+/* Magnetometer registers. Its register address auto-increments without a
+ * flag; the outputs are X, Z, Y, each high byte first. */
+#define REG_CRA_REG_M 0x00u
+#define REG_CRB_REG_M 0x01u
+#define REG_MR_REG_M 0x02u
+#define REG_OUT_X_H_M 0x03u
+#define REG_IRA_REG_M 0x0Au
+
+/* CRA_REG_M: rate in bits 4-2. CRB_REG_M: gain in bits 7-5. */
+#define CRA_ODR_SHIFT 2u
+#define CRB_GAIN_SHIFT 5u
+#define MR_CONTINUOUS 0x00u
+
+/* IRA, IRB and IRC_REG_M read "H43". */
+#define MAG_ID_BYTES 3u
+static uint8_t const mag_id[MAG_ID_BYTES] = {0x48u, 0x34u, 0x33u};
+
+#define MAG_X_HIGH_BYTE 0u
+#define MAG_X_LOW_BYTE 1u
+#define MAG_Z_HIGH_BYTE 2u
+#define MAG_Z_LOW_BYTE 3u
+#define MAG_Y_HIGH_BYTE 4u
+#define MAG_Y_LOW_BYTE 5u
+#define MAG_ODR_MIN ((uint32_t)IMU_MAG_ODR_15HZ)
+#define MAG_ODR_MAX ((uint32_t)IMU_MAG_ODR_220HZ)
+#define MAG_GAIN_MIN ((uint32_t)IMU_MAG_GAIN_1_3_GAUSS)
+#define MAG_GAIN_MAX ((uint32_t)IMU_MAG_GAIN_8_1_GAUSS)
+
 /* Bit 7 set: auto-increment the register address (section 5.1.1). */
 #define AUTO_INCREMENT 0x80u
 
@@ -74,9 +102,11 @@ static uint8_t accel_addr = 0u;
 static float accel_scale_mps2 = 0.0f;
 static bool b_accel_ready = false;
 static bool b_accel_fifo = false;
+static uint8_t mag_addr = 0u;
+static bool b_mag_ready = false;
 
 /* Private function declarations. */
-static imu_status_t write_and_verify (uint8_t reg, uint8_t value);
+static imu_status_t write_and_verify (uint8_t addr, uint8_t reg, uint8_t value);
 static imu_status_t read_sample (imu_accel_raw_t * p_raw);
 static int16_t bytes_to_counts (uint8_t low, uint8_t high);
 
@@ -107,24 +137,24 @@ imu_accel_init (uint8_t addr, imu_accel_odr_t odr, imu_accel_range_t range,
         (uint8_t)(CTRL4_BDU | ((uint32_t)range << CTRL4_FS_SHIFT) | CTRL4_HR);
     uint8_t ctrl5 = b_use_fifo ? (uint8_t)CTRL5_FIFO_EN : 0u;
 
-    imu_status_t status = write_and_verify(REG_CTRL_REG1_A, ctrl1);
+    imu_status_t status = write_and_verify(addr, REG_CTRL_REG1_A, ctrl1);
     if (status == IMU_OK)
     {
-        status = write_and_verify(REG_CTRL_REG4_A, ctrl4);
+        status = write_and_verify(addr, REG_CTRL_REG4_A, ctrl4);
     }
     if (status == IMU_OK)
     {
-        status = write_and_verify(REG_CTRL_REG5_A, ctrl5);
+        status = write_and_verify(addr, REG_CTRL_REG5_A, ctrl5);
     }
 
     /* Bypass then stream empties the FIFO of samples from before init. */
     if (status == IMU_OK)
     {
-        status = write_and_verify(REG_FIFO_CTRL_REG_A, FIFO_MODE_BYPASS);
+        status = write_and_verify(addr, REG_FIFO_CTRL_REG_A, FIFO_MODE_BYPASS);
     }
     if ((status == IMU_OK) && b_use_fifo)
     {
-        status = write_and_verify(REG_FIFO_CTRL_REG_A, FIFO_MODE_STREAM);
+        status = write_and_verify(addr, REG_FIFO_CTRL_REG_A, FIFO_MODE_STREAM);
     }
 
     if (status != IMU_OK)
@@ -224,19 +254,96 @@ imu_accel_scale_mps2 (void)
     return accel_scale_mps2;
 }
 
+imu_status_t
+imu_mag_init (uint8_t addr, imu_mag_odr_t odr, imu_mag_gain_t gain)
+{
+    b_mag_ready = false;
+
+    if (((uint32_t)odr < MAG_ODR_MIN) || ((uint32_t)odr > MAG_ODR_MAX) ||
+        ((uint32_t)gain < MAG_GAIN_MIN) || ((uint32_t)gain > MAG_GAIN_MAX))
+    {
+        return IMU_ERR_PARAM;
+    }
+
+    if (!imu_bus_probe(addr))
+    {
+        return IMU_ERR_NOT_FOUND;
+    }
+    uint8_t id[MAG_ID_BYTES] = {0u};
+    if (!imu_bus_read_regs(addr, REG_IRA_REG_M, id, MAG_ID_BYTES))
+    {
+        return IMU_ERR_BUS;
+    }
+    for (uint32_t i = 0u; i < MAG_ID_BYTES; i++)
+    {
+        if (id[i] != mag_id[i])
+        {
+            return IMU_ERR_NOT_FOUND;
+        }
+    }
+
+    imu_status_t status = write_and_verify(
+        addr, REG_CRA_REG_M, (uint8_t)((uint32_t)odr << CRA_ODR_SHIFT));
+    if (status == IMU_OK)
+    {
+        status = write_and_verify(addr, REG_CRB_REG_M,
+                                  (uint8_t)((uint32_t)gain << CRB_GAIN_SHIFT));
+    }
+    if (status == IMU_OK)
+    {
+        status = write_and_verify(addr, REG_MR_REG_M, MR_CONTINUOUS);
+    }
+    if (status != IMU_OK)
+    {
+        return status;
+    }
+
+    mag_addr = addr;
+    b_mag_ready = true;
+    return IMU_OK;
+}
+
+imu_status_t
+imu_mag_read (imu_mag_raw_t * p_raw)
+{
+    if (!b_mag_ready)
+    {
+        return IMU_ERR_NOT_INIT;
+    }
+    if (p_raw == NULL)
+    {
+        return IMU_ERR_PARAM;
+    }
+
+    uint8_t bytes[SAMPLE_BYTES] = {0u};
+    if (!imu_bus_read_regs(mag_addr, REG_OUT_X_H_M, bytes, SAMPLE_BYTES))
+    {
+        return IMU_ERR_BUS;
+    }
+
+    /* Right-justified 16-bit two's complement: no shift needed. */
+    p_raw->x = (int16_t)(((uint16_t)bytes[MAG_X_HIGH_BYTE] << BITS_PER_BYTE) |
+                         bytes[MAG_X_LOW_BYTE]);
+    p_raw->y = (int16_t)(((uint16_t)bytes[MAG_Y_HIGH_BYTE] << BITS_PER_BYTE) |
+                         bytes[MAG_Y_LOW_BYTE]);
+    p_raw->z = (int16_t)(((uint16_t)bytes[MAG_Z_HIGH_BYTE] << BITS_PER_BYTE) |
+                         bytes[MAG_Z_LOW_BYTE]);
+    return IMU_OK;
+}
+
 /* Private function definitions. */
 
 /* Read back each setting; the accelerometer has no ID register. */
 static imu_status_t
-write_and_verify (uint8_t reg, uint8_t value)
+write_and_verify (uint8_t addr, uint8_t reg, uint8_t value)
 {
-    if (!imu_bus_write_reg(accel_addr, reg, value))
+    if (!imu_bus_write_reg(addr, reg, value))
     {
         return IMU_ERR_BUS;
     }
 
     uint8_t readback = 0u;
-    if (!imu_bus_read_regs(accel_addr, reg, &readback, 1u))
+    if (!imu_bus_read_regs(addr, reg, &readback, 1u))
     {
         return IMU_ERR_BUS;
     }

@@ -26,12 +26,38 @@ static bool config_valid (obstacle_width_config_t const * p_config);
 static float index_angle_deg (uint8_t index);
 static uint16_t angle_ddeg (float angle_deg);
 static int16_t lateral_mm (float range_mm, float angle_deg);
+static float corner_offset_mm (float range_mm, float centre_mm);
 
 /* Public function definitions. */
 
+uint32_t
+obstacle_width_hit_limit_us (uint16_t centre_echo_us, uint8_t index)
+{
+    float off_deg = 0.0f;
+    if (index <= LAST_INDEX)
+    {
+        off_deg = fabsf(index_angle_deg(index) - (float)OBSTACLE_CENTRE_DEG);
+    }
+    /* The sweep stays within 60 degrees of centre, so cos >= 0.5 and the
+     * quotient stays below 2^17. Rounding keeps cos(60) = 0.5 exact. */
+    float const flat_us = (float)centre_echo_us / cosf(off_deg * DEG_TO_RAD);
+    return (uint32_t)(flat_us + 0.5f) + OBSTACLE_EDGE_JUMP_US;
+}
+
+bool
+obstacle_width_end_is_edge (uint16_t echo_us, uint16_t centre_echo_us,
+                            uint8_t index, bool b_other_clear)
+{
+    uint32_t const behind_us =
+        (obstacle_width_hit_limit_us(centre_echo_us, index) -
+         OBSTACLE_EDGE_JUMP_US) +
+        OBSTACLE_END_BEHIND_US;
+    return !b_other_clear || ((uint32_t)echo_us < behind_us);
+}
+
 obstacle_width_class_t
 obstacle_width_classify (ultrasonic_result_t measurement, uint16_t echo_us,
-                         uint16_t centre_echo_us)
+                         uint16_t centre_echo_us, uint8_t index)
 {
     if (measurement == ULTRASONIC_NO_ECHO)
     {
@@ -41,7 +67,7 @@ obstacle_width_classify (ultrasonic_result_t measurement, uint16_t echo_us,
     {
         return OBSTACLE_WIDTH_INVALID;
     }
-    uint32_t limit_us = (uint32_t)centre_echo_us + OBSTACLE_EDGE_JUMP_US;
+    uint32_t limit_us = obstacle_width_hit_limit_us(centre_echo_us, index);
     return ((uint32_t)echo_us < limit_us) ? OBSTACLE_WIDTH_HIT
                                           : OBSTACLE_WIDTH_MISS;
 }
@@ -126,6 +152,34 @@ obstacle_width_estimate (obstacle_width_edge_t left,
     return result;
 }
 
+uint16_t
+obstacle_width_close_up (obstacle_width_result_t const * p_result,
+                         uint16_t left_echo_us, uint16_t right_echo_us,
+                         uint16_t centre_echo_us,
+                         obstacle_width_config_t const * p_config)
+{
+    uint8_t const left = robot_obstacle_get_left_edge(p_result->edges);
+    uint8_t const right = robot_obstacle_get_right_edge(p_result->edges);
+    float left_mm = 0.0f;
+    float right_mm = 0.0f;
+    float centre_mm = 0.0f;
+    if (!p_result->b_left_found || !p_result->b_right_found ||
+        (left > (CENTRE_INDEX - OBSTACLE_WIDTH_CLOSE_STEPS)) ||
+        (right < (CENTRE_INDEX + OBSTACLE_WIDTH_CLOSE_STEPS)) ||
+        !obstacle_width_range_mm(left_echo_us, p_config, &left_mm) ||
+        !obstacle_width_range_mm(right_echo_us, p_config, &right_mm) ||
+        !obstacle_width_range_mm(centre_echo_us, p_config, &centre_mm) ||
+        (centre_mm > OBSTACLE_WIDTH_CLOSE_MAX_MM))
+    {
+        return p_result->width_mm;
+    }
+    float const width_mm = corner_offset_mm(left_mm, centre_mm) +
+                           corner_offset_mm(right_mm, centre_mm);
+    return ((width_mm >= 1.0f) && (width_mm < (float)p_result->width_mm))
+               ? (uint16_t)(width_mm + 0.5f)
+               : p_result->width_mm;
+}
+
 obstacle_width_result_t
 obstacle_width_unavailable (void)
 {
@@ -166,6 +220,15 @@ obstacle_width_range_mm (uint16_t echo_us,
 
 /* Private function definitions. */
 
+/* How far off centre a corner lies, from its range and the face's. */
+static float
+corner_offset_mm (float range_mm, float centre_mm)
+{
+    return (range_mm > centre_mm)
+               ? sqrtf((range_mm * range_mm) - (centre_mm * centre_mm))
+               : 0.0f;
+}
+
 static bool
 config_valid (obstacle_width_config_t const * p_config)
 {
@@ -183,7 +246,7 @@ index_angle_deg (uint8_t index)
                    (OBSTACLE_SWEEP_STEP_DEG * index));
 }
 
-/* Boundary angles lie within the sweep, 60..120 degrees, so this fits. */
+/* Boundary angles lie within the sweep, 50..130 degrees, so this fits. */
 static uint16_t
 angle_ddeg (float angle_deg)
 {

@@ -11,9 +11,12 @@
  * (motion_drive_control()), so speeds hold under load.
  * During a move, a straight-line (sync) PI loop also trims a small turn
  * rate into the wheel setpoints to hold the heading the move started on.
- * In follow mode a line PD loop turns the line error, which the owner
- * passes in with motion_move_set_line(), into the turn rate instead; this
- * module never reads the line sensors itself.
+ * In follow mode a heading PI loop instead holds the target heading the
+ * owner passes in with motion_move_set_follow_heading(), so the car turns
+ * by each step while driving and then runs straight; this module never
+ * reads the line sensors itself. motion_move_set_line() passes in only
+ * whether the line is seen, for stop-at-line and for the freshness of
+ * following.
  * The module is RTOS-free; its owner calls
  * motion_move_update() every MOTION_UPDATE_PERIOD_MS. All functions must
  * be called from that one task, because reading the encoders empties their
@@ -32,12 +35,6 @@
 #include "motion_drive.h"
 
 /* Public types, constants, and macros. */
-
-/**
- * @brief Largest line error magnitude motion_move_set_line() accepts; the
- * line sensors' full range on either side of centre.
- */
-#define MOTION_LINE_ERROR_MAX 1000
 
 /** @brief Motion mode. Values fit the 3-bit mode field (Tribunal 1). */
 typedef enum
@@ -93,11 +90,13 @@ typedef struct
  */
 typedef struct
 {
-    int16_t line_error; /**< Last error passed in; + means the line is
-                               left of centre. */
-    bool b_line_seen;   /**< Line in view, after debouncing. */
-    int16_t turn_deg_s; /**< Follow loop's turn rate; + is left. 0 when
-                               not following. */
+    int32_t target_heading_deg; /**< Heading following holds; odometry
+                                     degrees, not wrapped, + is left. */
+    int16_t heading_error_deg;  /**< Target - heading; + means the car
+                                     must turn left. 0 when not following. */
+    bool b_line_seen;           /**< Line in view, after debouncing. */
+    int16_t turn_deg_s;         /**< Follow loop's turn rate; + is left. 0
+                                     when not following. */
 } motion_follow_t;
 
 /* Public function declarations. */
@@ -173,10 +172,11 @@ motion_status_t motion_move_turn_right (uint16_t angle_deg);
 motion_status_t motion_move_u_turn (void);
 
 /**
- * @brief Follow the line forward at @p speed_mm_s until replaced or
- * stopped (FOLLOW mode). Each update after a new motion_move_set_line()
- * reading steers by the line PD loop on its error; other updates hold the
- * turn rate. The turn rate is limited to MOTION_FOLLOW_MAX_DEG_S and to
+ * @brief Drive forward at @p speed_mm_s holding a target heading until
+ * replaced or stopped (FOLLOW mode). The target starts as the current
+ * heading; motion_move_set_follow_heading() moves it. Each update steers
+ * by the heading PI loop. The turn rate is limited to
+ * MOTION_FOLLOW_MAX_DEG_S and to
  * 2 * @p speed_mm_s / MOTION_TRACK_WIDTH_MM (in deg/s), so the inner wheel
  * never reverses.
  * @param speed_mm_s Chassis speed in mm/s, 1 to MOTION_MAX_SPEED_MM_S.
@@ -192,25 +192,39 @@ motion_status_t motion_move_u_turn (void);
 motion_status_t motion_move_follow (uint16_t speed_mm_s);
 
 /**
+ * @brief Change the chassis speed while following, keeping the target
+ *        heading. The turn limit and heading gains follow the new speed.
+ * @param speed_mm_s New speed, in mm/s.
+ * @return MOTION_OK, MOTION_ERR_NOT_INIT, or MOTION_ERR_PARAM when not
+ *         following or out of range.
+ * Motion task only.
+ */
+motion_status_t motion_move_set_follow_speed (uint16_t speed_mm_s);
+
+/**
+ * @brief Set the heading following holds.
+ * @param target_deg Odometry heading (motion_odometry_t.heading_deg, not
+ * wrapped, + is left). The loop turns towards it at up to the follow turn
+ * limit while driving, then holds it.
+ * @return MOTION_OK, MOTION_ERR_PARAM if not following, or
+ * MOTION_ERR_NOT_INIT.
+ * Call after motion_move_follow(), which resets the target to the current
+ * heading.
+ */
+motion_status_t motion_move_set_follow_heading (int32_t target_deg);
+
+/**
  * @brief Pass in the latest line reading, for following and for
  * motion_move_stop_at_line().
- * @param error Line position from -MOTION_LINE_ERROR_MAX to
- * MOTION_LINE_ERROR_MAX; + means the line is left of the car's centre (so
- * the car must turn left), 0 centred. With both sensors on white (line
- * lost), pass the sign of the last error at full scale
- * (+/-MOTION_LINE_ERROR_MAX), never 0: a lost line must steer back towards
- * the side it was last seen, not straight ahead as if centred.
- * @param b_seen False only when both sensors read white (below their edge
- * bands); true when the line is under either sensor, even partly, as it
- * is when centred between edge-straddling sensors. It counts as seen, or
- * as gone, only after MOTION_LINE_SEEN_SAMPLES calls in a row agree.
- * @return MOTION_OK, MOTION_ERR_PARAM for an error out of range (nothing
- * stored), or MOTION_ERR_NOT_INIT.
+ * @param b_seen True when either line sensor reads black. It counts as
+ * seen, or as gone, only after MOTION_LINE_SEEN_SAMPLES calls in a row
+ * agree.
+ * @return MOTION_OK or MOTION_ERR_NOT_INIT.
  * Call from the owner task (as every function here) once per new sensor
- * reading, in every state, before motion_move_update(). An update with no
- * new reading since the last one holds the turn rate.
+ * reading, in every state, before motion_move_update(). Following stops
+ * once no reading has arrived for MOTION_LINE_TIMEOUT_MS.
  */
-motion_status_t motion_move_set_line (int16_t error, bool b_seen);
+motion_status_t motion_move_set_line (bool b_seen);
 
 /**
  * @brief End the move or turn in progress early when the line comes into
@@ -234,6 +248,15 @@ motion_status_t motion_move_stop_at_line (void);
  * obstacle reacquisition; the lower-level edge-only API stays available.
  */
 motion_status_t motion_move_acquire_line (void);
+
+/**
+ * @brief Watch for the line as a queued command asks: a turn takes one
+ *        already under the sensors, a move needs a fresh edge.
+ * @return As motion_move_stop_at_line(). Only the motion owner may call.
+ * @note A move does not stop on black it starts on: on 2026-11-07 the return
+ *       to the line began riding a cross tape and stopped on that.
+ */
+motion_status_t motion_move_watch_line (void);
 
 /**
  * @brief Brake both wheels, end any move, turn or following, and clear a
@@ -286,7 +309,7 @@ motion_status_t motion_move_set_sync (bool b_enable);
 motion_status_t motion_move_get_sync (motion_sync_t * p_sync);
 
 /**
- * @brief Read the line input and the follow loop's turn rate.
+ * @brief Read the line input and the follow loop's target and turn rate.
  * @param p_follow Caller-owned snapshot to fill.
  * @return MOTION_OK, MOTION_ERR_PARAM for a NULL pointer, or
  * MOTION_ERR_NOT_INIT.

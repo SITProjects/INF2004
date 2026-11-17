@@ -3,7 +3,7 @@
  * @brief Movement hints for the terrain module, from the motion
  *        subsystem's odometry (TEAM.md IF-05).
  *
- * Gives the distance driven, the ground speed (for collisions) and both
+ * Gives the distance driven, the ground speed (for the hump detector) and both
  * wheel speeds (for the turn rate). Whether the speed is changing, and
  * the turn hold, stay unknown, so tilt is never held; they come from the
  * same odometry later. Distance and speeds are unknown until tMotion has
@@ -63,8 +63,8 @@ terrain_hint_read (terrain_hint_t * p_out)
         return;
     }
 
-    terrain_hint_t hint = {false, false, false, false, false,
-                           false, 0,     0,     0,     0};
+    terrain_hint_t hint = {false, false, false, false, false, false,
+                           0,     0,     0,     0,     false};
 
     motion_shared_odometry_t odometry;
     if (motion_get_odometry(&odometry) && (odometry.updates != 0u) &&
@@ -75,6 +75,8 @@ terrain_hint_read (terrain_hint_t * p_out)
         hint.speed_mm_s = odometry.speed_mm_s;
         hint.left_mm_s = odometry.left_speed_mm_s;
         hint.right_mm_s = odometry.right_speed_mm_s;
+        hint.b_following =
+            (ROBOT_MOTION_MODE_FOLLOW == motion_get_status().mode);
     }
 
     *p_out = hint;

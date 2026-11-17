@@ -83,14 +83,13 @@ obstacle_decision_centre (ultrasonic_result_t measurement, uint16_t echo_us);
  * @brief Choose a direction once both side positions have completed.
  *
  * A side is clear for NO_ECHO or a VALID echo at or beyond both
- * OBSTACLE_DETECT_ECHO_US and centre_echo_us + OBSTACLE_EDGE_JUMP_US.
- * The latter matches obstacle_width_classify()'s MISS boundary; the sum
- * uses 32 bits. NO_ECHO ranks beyond any finite echo, the farther clear
+ * OBSTACLE_DETECT_ECHO_US and obstacle_width_hit_limit_us() at the sweep
+ * end, which matches obstacle_width_classify()'s MISS boundary there. NO_ECHO ranks beyond any finite echo, the farther clear
  * side wins and ties select left. With no clear side the result is UNKNOWN
  * if either side faulted, otherwise BLOCKED.
- * @param left Left (60 degree) position result.
+ * @param left Left (first, 30 degree) position result.
  * @param left_echo_us Left median echo in microseconds.
- * @param right Right (120 degree) position result.
+ * @param right Right (last, 150 degree) position result.
  * @param right_echo_us Right median echo in microseconds.
  * @param centre_echo_us Centre reference for this sweep, in microseconds.
  *        Zero still applies both limits; the detection threshold dominates
@@ -109,8 +108,9 @@ obstacle_side_decision_t obstacle_decision_sides (ultrasonic_result_t left,
  * @param echo_us Median echo in microseconds.
  * @param centre_echo_us Centre reference for the sweep.
  * @return true for NO_ECHO, or a VALID echo at or beyond both
- *         OBSTACLE_DETECT_ECHO_US and centre_echo_us + OBSTACLE_EDGE_JUMP_US:
- *         the same rule obstacle_decision_sides() uses.
+ *         OBSTACLE_DETECT_ECHO_US and the end's obstacle_width_hit_limit_us():
+ *         the same rule obstacle_decision_sides() uses. Only for the two
+ *         sweep ends.
  */
 bool obstacle_decision_side_clear (ultrasonic_result_t measurement,
                                    uint16_t echo_us, uint16_t centre_echo_us);

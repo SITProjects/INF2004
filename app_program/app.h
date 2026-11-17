@@ -68,12 +68,14 @@ ER motion_init (void);
 ER line_follow_init (void);
 ER terrain_init (void);
 ER communication_init (void);
+ER barcode_init (void);
 
 ER obstacle_start (void);
 ER motion_start (void);
 ER line_follow_start (void);
 ER terrain_start (void);
 ER communication_start (void);
+ER barcode_start (void);
 
 #if APP_TEST
 void obstacle_test (void);
@@ -81,6 +83,7 @@ void motion_test (void);
 void line_follow_test (void);
 void terrain_test (void);
 void communication_test (void);
+void barcode_test (void);
 #endif
 
 #endif /* APP_H */

@@ -8,12 +8,14 @@
  * testing/terrain/TEST_LOG.md. Test IDs: TER-U01, TER-U02, ...
  *
  * TER-U12 runs the hump state machine and event queue on made-up data,
- * TER-U15 the hump height on made-up one-wheel ramps, TER-U19 the
- * collision state machine on made-up pushes and speeds, and TER-U22 the
+ * TER-U15 the hump height on made-up one-wheel ramps, TER-U34 the lift
+ * and overturn check on made-up readings, TER-U22 the
  * turn rate and turning state machine on made-up wheel speeds and turn
- * rates; they need only the Pico. The other tests need the GY-511 connected; TER-U02, TER-U04
- * and TER-U13 also need the car standing still on level ground during
- * power-up. No test waits for a person: every wait is bounded.
+ * rates, TER-U24 the speed state machine on made-up wheel speeds, and
+ * TER-U26 the run summary on made-up events; they need only the Pico.
+ * The other tests need the GY-511 connected;
+ * TER-U02, TER-U04 and TER-U13 also need the car standing still on level
+ * ground during power-up. No test waits for a person: every wait is bounded.
  *
  * The bench tests TER-U06 and TER-U07 are added only with
  * TERRAIN_TEST_BENCH set to 1 in terrain_config.h. They print what to do
@@ -23,12 +25,14 @@
 
 #include "terrain.h"
 #include "../test_report.h"
+#include "terrain_compass.h"
 #include "terrain_config.h"
 #include "terrain_detect.h"
 #include "terrain_event.h"
 #include "terrain_height.h"
 #include "terrain_monitor.h"
 #include "terrain_process.h"
+#include "terrain_summary.h"
 
 #if APP_TEST
 
@@ -48,21 +52,16 @@
 #define TRACE_UP_DDEG 80 /* The lean: the size of the roll. */
 #define DDEG_PER_DEG 10.0f
 
-/* TER-U19 pushes (g) and speeds (mm/s): line-following speed, a stop,
- * pushes below the limit, between the limit and sure, and sure. */
-#define CRASH_CRUISE_MM_S 120
-#define CRASH_STOP_MM_S 40
-#define CRASH_SOFT_G 0.8f
-#define CRASH_HIT_G 1.5f
-#define CRASH_BIG_G 1.8f
-#define CRASH_SURE_G 2.5f
-#define CRASH_HIT_DG 15u
-#define CRASH_BIG_DG 18u
-#define CRASH_SURE_DG 25u
-#define CRASH_WAIT 3u  /* Samples before the speed drops. */
-#define CRASH_LONG 20u /* Longer than the 12-sample check. */
-#define CRASH_GAP 60u  /* Longer than the 50-sample cooldown. */
-#define DG_PER_G 10.0f
+/* TER-U34 readings (m/s^2): level, 1.30 g up exactly (not over it), a
+ * brisk lift, and gravity from the side; sample counts for the window
+ * (10), the 300 ms overturn (30) and the 1 s cooldown (100). These follow
+ * terrain_config.h's defaults. */
+#define LIFT_LEVEL_MPS2 10.0f /* Makes 13 exactly 1.30 of it. */
+#define LIFT_EDGE_MPS2 13.0f
+#define LIFT_UP_MPS2 14.0f
+#define LIFT_WINDOW 10u
+#define LIFT_OVER 30u
+#define LIFT_COOLDOWN 100u
 
 /* TER-U22 wheel speeds (mm/s) and turn rates (deg/s): a gentle curve
  * (right 160, left 80: 41.4 deg/s left), a turn in place at motion's
@@ -82,6 +81,26 @@
 #define TURN_EVENTS_MAX 8u
 #define TURN_HUMP_BITS 0x0002ABCDu /* Made-up hump fields, bits 0-17. */
 #define TURN_HUMP_MASK 0x0003FFFFu
+
+/* TER-U24 wheel speeds (mm/s): stopped, a blip, line-following speed
+ * (120) reached in 20 mm/s steps, one noisy check, and slowing down. */
+#define SPEED_STOP_MM_S 0.0f
+#define SPEED_BLIP_MM_S 100.0f
+#define SPEED_CRUISE_MM_S 120.0f
+#define SPEED_NOISE_MM_S 140.0f
+#define SPEED_EVENTS_MAX 8u
+
+/* TER-U26 made-up events: event values (a lean in tenths of a degree, a
+ * lift in hundredths of the level reading) and hump heights (mm), one too tall for its
+ * 8-bit field; event counts past the summary's limits. */
+#define SUMMARY_LEAN_DDEG 80u
+#define SUMMARY_LIFT_CG 142u
+#define SUMMARY_SMALL_MM 5u
+#define SUMMARY_TALL_MM 300u
+#define SUMMARY_STEP_MM 10u     /* Kept humps of 10, 20, ... 80 mm. */
+#define SUMMARY_MORE_HUMPS 7u   /* 9 + 7 = 16: one past the 15 limit. */
+#define SUMMARY_MANY 130u       /* Past the 15 and 127 limits. */
+#define SUMMARY_UNTOUCHED 0xA5u /* A refused pack must leave this. */
 
 /* TER-U15 ramps under one wheel, driven at 1.2 mm a sample (120 mm/s,
  * the line-following speed). */
@@ -106,22 +125,26 @@ typedef struct
     uint32_t samples; /**< Length, samples. */
 } trace_part_t;
 
-/** @brief One stretch of a TER-U19 collision trace. */
-typedef struct
-{
-    float push_g;              /**< Horizontal push for the whole stretch. */
-    terrain_hump_state_t hump; /**< Hump state for the stretch. */
-    bool b_speed_known;        /**< Motion's speed is fresh. */
-    int32_t speed_mm_s;        /**< Ground speed. */
-    uint32_t samples;          /**< Length, samples. */
-} crash_part_t;
-
 /** @brief One stretch of a TER-U22 turn-rate trace. */
 typedef struct
 {
     float turn_dps;   /**< Turn rate for the whole stretch. */
     uint32_t samples; /**< Length, samples. */
 } turn_part_t;
+
+/** @brief One stretch of a TER-U24 wheel-speed trace. */
+typedef struct
+{
+    float wheel_mm_s; /**< Wheel speed for the whole stretch. */
+    uint32_t samples; /**< Length, samples. */
+} speed_part_t;
+
+/** @brief One made-up event for TER-U26. */
+typedef struct
+{
+    terrain_event_type_t type; /**< Kind. */
+    uint32_t value;            /**< Value, in the kind's unit. */
+} summary_event_t;
 
 /** @brief A TER-U15 trapezoid ramp under one wheel, mm. */
 typedef struct
@@ -138,15 +161,19 @@ static int32_t drive_hump (hump_shape_t const * p_shape);
 static float hump_ground_mm (hump_shape_t const * p_shape, float x_mm);
 static float root (float square);
 static bool queue_drops_oldest (void);
-static bool crash_ignored_ok (void);
-static bool crash_confirmed_ok (void);
-static bool crash_at_once_ok (void);
-static uint32_t run_crash (crash_part_t const * p_parts, uint32_t n_parts,
-                           uint32_t * p_value);
+static bool lift_made_up_ok (void);
+static uint32_t run_lift (terrain_lift_t * p_lift, terrain_vec3_t sample,
+                          uint32_t samples, terrain_event_type_t type);
 static bool turn_rate_ok (void);
 static bool rate_near (float dps, int32_t want_x10);
 static bool turn_trace_ok (void);
 static bool turn_keeps_hump_ok (void);
+static bool speed_trace_ok (void);
+static bool summary_mixed_ok (void);
+static bool summary_limits_ok (void);
+static bool summary_refuses_null_ok (void);
+static bool msg_is (terrain_summary_t const * p_summary,
+                    uint8_t const * p_want);
 #if TERRAIN_TEST_BENCH
 static bool bench_step (char const * p_instruction,
                         terrain_calib_info_t * p_out);
@@ -176,6 +203,17 @@ terrain_test (void)
                                terrain_monitor_data_sample_count(&before)) >=
                     MIN_SAMPLES),
                "IMU delivers samples at about 100 Hz");
+
+    /* TER-U29: the compass is set up and reads once per update. */
+    terrain_compass_t compass_before = {0};
+    terrain_compass_t compass_after = {0};
+    (void)terrain_compass_get(&compass_before);
+    (void)tk_dly_tsk(SAMPLE_WINDOW_MS);
+    bool const b_compass = terrain_compass_get(&compass_after);
+    TEST_CHECK("TER-U29",
+               b_compass && ((uint8_t)(compass_after.samples -
+                                       compass_before.samples) >= MIN_SAMPLES),
+               "compass delivers readings at about 100 Hz");
 
     /* TER-U02: calibration becomes VALID within 5 s of power-up. */
     terrain_calib_info_t info = {0};
@@ -215,13 +253,9 @@ terrain_test (void)
     TEST_CHECK("TER-U15", hump_heights_ok(),
                "6, 11 and 20 mm one-wheel ramps read their height");
 
-    /* TER-U19: collision machine on made-up data (no IMU needed). */
-    TEST_CHECK("TER-U19", crash_ignored_ok(),
-               "soft push, jolt with no stop, and pushes on a ramp ignored");
-    TEST_CHECK("TER-U19", crash_confirmed_ok(),
-               "push then speed halved gives one COLLISION, biggest push");
-    TEST_CHECK("TER-U19", crash_at_once_ok(),
-               "sure push or unknown speed at once; one event per cooldown");
+    /* TER-U34: lift and overturn check on made-up data (no IMU needed). */
+    TEST_CHECK("TER-U34", lift_made_up_ok(),
+               "1.30 g ignored, a lift once per cooldown, overturn after 30");
 
     /* TER-U22: turn rate and turning machine on made-up data (no IMU or
      * motors needed). */
@@ -231,6 +265,20 @@ terrain_test (void)
                "turn trace gives TURNING, STRAIGHT, TURNING, STRAIGHT only");
     TEST_CHECK("TER-U22", turn_keeps_hump_ok(),
                "turning and hump fields of the detector word kept apart");
+
+    /* TER-U24: speed machine on made-up wheel speeds (no IMU or motors
+     * needed). */
+    TEST_CHECK("TER-U24", speed_trace_ok(),
+               "speed trace gives ACCELERATING, CRUISING, DECELERATING, "
+               "STATIONARY only");
+
+    /* TER-U26: run summary on made-up events (no IMU or motors needed). */
+    TEST_CHECK("TER-U26", summary_mixed_ok(),
+               "only LEVEL, LIFTED, OVERTURNED and TURNING counted; 11 bytes");
+    TEST_CHECK("TER-U26", summary_limits_ok(),
+               "8 heights kept, 9th counted; counts stop at 15, 15, 127");
+    TEST_CHECK("TER-U26", summary_refuses_null_ok(),
+               "reset empties it; NULL refused without writing");
 
     /* TER-U13: still and level, so no hump and no events. */
     terrain_data_t still = {0};
@@ -349,109 +397,90 @@ hump_trace_ok (void)
 }
 
 /*
- * TER-U19: no COLLISION for a push under the limit, for a push over it
- * where the car keeps going (a jolt), or for any push on a ramp.
+ * TER-U34: a full window at level and at exactly 1.30 g up gives nothing. A
+ * brisk lift gives one LIFTED with its size; put down at once, the window
+ * still reads a lift for two samples, but the 1 s cooldown holds it to one.
+ * A second lift after the cooldown counts again. On its side the 100 ms
+ * mean passes 60 degrees once 7 of the 10 samples are sideways, so
+ * OVERTURNED comes 36 samples in: once, not again while it stays there,
+ * and again after being righted and turned over once more. NULL and a zero
+ * level are refused.
  */
 static bool
-crash_ignored_ok (void)
+lift_made_up_ok (void)
 {
-    static crash_part_t const soft[] = {
-        {CRASH_SOFT_G, TERRAIN_HUMP_LEVEL, true, CRASH_CRUISE_MM_S, 1u},
-        {0.0f, TERRAIN_HUMP_LEVEL, true, CRASH_STOP_MM_S, CRASH_LONG}};
-    static crash_part_t const jolt[] = {
-        {CRASH_HIT_G, TERRAIN_HUMP_LEVEL, true, CRASH_CRUISE_MM_S, 1u},
-        {0.0f, TERRAIN_HUMP_LEVEL, true, CRASH_CRUISE_MM_S, CRASH_LONG},
-        {0.0f, TERRAIN_HUMP_LEVEL, true, CRASH_STOP_MM_S, CRASH_LONG}};
-    static crash_part_t const ramp[] = {
-        {CRASH_SURE_G, TERRAIN_HUMP_ASCENDING, true, CRASH_CRUISE_MM_S, 1u},
-        {CRASH_HIT_G, TERRAIN_HUMP_DESCENDING, false, 0, 1u},
-        {CRASH_HIT_G, TERRAIN_HUMP_LEVEL, true, CRASH_CRUISE_MM_S, 1u},
-        {0.0f, TERRAIN_HUMP_ASCENDING, true, CRASH_STOP_MM_S, CRASH_LONG}};
-    uint32_t value = 0u;
+    terrain_vec3_t const level = {0.0f, 0.0f, LIFT_LEVEL_MPS2};
+    terrain_vec3_t const edge = {0.0f, 0.0f, LIFT_EDGE_MPS2};
+    terrain_vec3_t const up = {0.0f, 0.0f, LIFT_UP_MPS2};
+    terrain_vec3_t const side = {LIFT_LEVEL_MPS2, 0.0f, 0.0f};
+    terrain_lift_t lift = {0};
 
-    return (run_crash(soft, sizeof(soft) / sizeof(soft[0]), &value) == 0u) &&
-           (run_crash(jolt, sizeof(jolt) / sizeof(jolt[0]), &value) == 0u) &&
-           (run_crash(ramp, sizeof(ramp) / sizeof(ramp[0]), &value) == 0u);
+    bool b_ok =
+        (run_lift(&lift, level, LIFT_WINDOW * 2u, TERRAIN_EVENT_LIFTED) ==
+         0u) &&
+        (run_lift(&lift, edge, LIFT_WINDOW * 2u, TERRAIN_EVENT_LIFTED) == 0u);
+
+    /* From 1.30 g, one brisk sample takes the mean over: value 131. */
+    terrain_lift_limits_t const limits = {
+        (float)TERRAIN_LIFT_UP_CG / 100.0f, (float)TERRAIN_LIFT_OVER_DEG,
+        TERRAIN_LIFT_OVER_SAMPLES, TERRAIN_LIFT_COOLDOWN_SAMPLES};
+    uint32_t value = 0u;
+    b_ok =
+        b_ok &&
+        (terrain_detect_lift_step(&lift, &up, &level, &limits, &value) ==
+         TERRAIN_EVENT_LIFTED) &&
+        (value == (TERRAIN_LIFT_UP_CG + 1u)) &&
+        (run_lift(&lift, up, LIFT_WINDOW, TERRAIN_EVENT_LIFTED) == 0u) &&
+        (run_lift(&lift, level, LIFT_COOLDOWN, TERRAIN_EVENT_LIFTED) == 0u) &&
+        (run_lift(&lift, up, LIFT_WINDOW, TERRAIN_EVENT_LIFTED) == 1u) &&
+        (run_lift(&lift, level, LIFT_COOLDOWN, TERRAIN_EVENT_LIFTED) == 0u);
+
+    b_ok =
+        b_ok &&
+        (run_lift(&lift, side, LIFT_OVER, TERRAIN_EVENT_OVERTURNED) == 0u) &&
+        (run_lift(&lift, side, LIFT_WINDOW, TERRAIN_EVENT_OVERTURNED) == 1u) &&
+        (run_lift(&lift, side, LIFT_COOLDOWN * 2u, TERRAIN_EVENT_OVERTURNED) ==
+         0u) &&
+        (run_lift(&lift, side, LIFT_COOLDOWN * 2u, TERRAIN_EVENT_LIFTED) ==
+         0u) &&
+        (run_lift(&lift, level, LIFT_WINDOW * 2u, TERRAIN_EVENT_OVERTURNED) ==
+         0u) &&
+        (run_lift(&lift, side, LIFT_OVER + LIFT_WINDOW,
+                  TERRAIN_EVENT_OVERTURNED) == 1u);
+
+    terrain_vec3_t const zero = {0.0f, 0.0f, 0.0f};
+    terrain_lift_t fresh = {0};
+    return b_ok &&
+           (terrain_detect_lift_step(NULL, &up, &level, &limits, &value) ==
+            TERRAIN_EVENT_NONE) &&
+           (terrain_detect_lift_step(&fresh, &up, &zero, &limits, &value) ==
+            TERRAIN_EVENT_NONE) &&
+           (terrain_detect_lift_step(&fresh, &up, &level, &limits, NULL) ==
+            TERRAIN_EVENT_NONE) &&
+           (fresh.word == 0u);
 }
 
-/*
- * TER-U19: a push over the limit, a bigger one, then the speed halves a
- * few samples later: one COLLISION carrying the bigger push.
- */
-static bool
-crash_confirmed_ok (void)
-{
-    static crash_part_t const hit[] = {
-        {CRASH_HIT_G, TERRAIN_HUMP_LEVEL, true, CRASH_CRUISE_MM_S, 1u},
-        {CRASH_BIG_G, TERRAIN_HUMP_LEVEL, true, CRASH_CRUISE_MM_S, 1u},
-        {0.0f, TERRAIN_HUMP_LEVEL, true, CRASH_CRUISE_MM_S, CRASH_WAIT},
-        {0.0f, TERRAIN_HUMP_LEVEL, true, CRASH_STOP_MM_S, CRASH_LONG}};
-    uint32_t value = 0u;
-
-    return (run_crash(hit, sizeof(hit) / sizeof(hit[0]), &value) == 1u) &&
-           (value == CRASH_BIG_DG);
-}
-
-/*
- * TER-U19: a sure push counts with no stop; so does a push over the limit
- * while motion's speed is unknown. Two sure pushes inside the cooldown
- * give one event; one after it gives another.
- */
-static bool
-crash_at_once_ok (void)
-{
-    static crash_part_t const sure[] = {
-        {CRASH_SURE_G, TERRAIN_HUMP_LEVEL, true, CRASH_CRUISE_MM_S, 1u},
-        {0.0f, TERRAIN_HUMP_LEVEL, true, CRASH_CRUISE_MM_S, CRASH_LONG}};
-    static crash_part_t const unknown[] = {
-        {CRASH_HIT_G, TERRAIN_HUMP_LEVEL, false, CRASH_CRUISE_MM_S, 1u}};
-    static crash_part_t const twice[] = {
-        {CRASH_SURE_G, TERRAIN_HUMP_LEVEL, true, CRASH_CRUISE_MM_S, 1u},
-        {0.0f, TERRAIN_HUMP_LEVEL, true, CRASH_CRUISE_MM_S, CRASH_LONG},
-        {CRASH_SURE_G, TERRAIN_HUMP_LEVEL, true, CRASH_CRUISE_MM_S, 1u},
-        {0.0f, TERRAIN_HUMP_LEVEL, true, CRASH_CRUISE_MM_S, CRASH_GAP},
-        {CRASH_SURE_G, TERRAIN_HUMP_LEVEL, true, CRASH_CRUISE_MM_S, 1u}};
-    uint32_t sure_value = 0u;
-    uint32_t unknown_value = 0u;
-    uint32_t value = 0u;
-
-    return (run_crash(sure, sizeof(sure) / sizeof(sure[0]), &sure_value) ==
-            1u) &&
-           (sure_value == CRASH_SURE_DG) &&
-           (run_crash(unknown, sizeof(unknown) / sizeof(unknown[0]),
-                      &unknown_value) == 1u) &&
-           (unknown_value == CRASH_HIT_DG) &&
-           (run_crash(twice, sizeof(twice) / sizeof(twice[0]), &value) == 2u);
-}
-
-/* Feed a TER-U19 trace through the collision machine from READY; count
- * the COLLISION events and keep the last one's value. */
+/* Feed the same reading to the lift check with the configured limits;
+ * count the events of @p type. */
 static uint32_t
-run_crash (crash_part_t const * p_parts, uint32_t n_parts, uint32_t * p_value)
+run_lift (terrain_lift_t * p_lift, terrain_vec3_t sample, uint32_t samples,
+          terrain_event_type_t type)
 {
-    terrain_collision_limits_t const limits = {
-        (float)TERRAIN_COLLISION_LIMIT_DG / DG_PER_G,
-        (float)TERRAIN_COLLISION_SURE_DG / DG_PER_G,
-        (float)TERRAIN_COLLISION_MIN_SPEED_MM_S,
-        TERRAIN_COLLISION_CHECK_SAMPLES, TERRAIN_COLLISION_COOLDOWN_SAMPLES};
-    uint32_t word = 0u;
-    uint32_t events = 0u;
-
-    for (uint32_t part = 0u; part < n_parts; part++)
+    terrain_vec3_t const level = {0.0f, 0.0f, LIFT_LEVEL_MPS2};
+    terrain_lift_limits_t const limits = {
+        (float)TERRAIN_LIFT_UP_CG / 100.0f, (float)TERRAIN_LIFT_OVER_DEG,
+        TERRAIN_LIFT_OVER_SAMPLES, TERRAIN_LIFT_COOLDOWN_SAMPLES};
+    uint32_t count = 0u;
+    uint32_t value = 0u;
+    for (uint32_t i = 0u; i < samples; i++)
     {
-        terrain_collision_input_t const in = {
-            p_parts[part].push_g, p_parts[part].hump,
-            p_parts[part].b_speed_known, p_parts[part].speed_mm_s};
-        for (uint32_t i = 0u; i < p_parts[part].samples; i++)
+        if (terrain_detect_lift_step(p_lift, &sample, &level, &limits,
+                                     &value) == type)
         {
-            if (terrain_detect_collision_step(&word, &in, &limits, p_value) ==
-                TERRAIN_EVENT_COLLISION)
-            {
-                events++;
-            }
+            ++count;
         }
     }
-    return events;
+    return count;
 }
 
 /*
@@ -567,6 +596,219 @@ turn_keeps_hump_ok (void)
     return b_hump_kept && ((word & TURN_HUMP_MASK) == 0u) &&
            (terrain_detect_hump_state(word) == TERRAIN_HUMP_LEVEL) &&
            (terrain_detect_turn_state(word) == TERRAIN_TURN_TURNING);
+}
+
+/*
+ * TER-U24: stopped, then a one-check blip: nothing. Speeding up 20 mm/s
+ * a check gives ACCELERATING after two checks; steady gives CRUISING;
+ * one noisy check up, then back down, gives nothing; slowing down gives
+ * DECELERATING; stopped gives STATIONARY after three checks. Nothing
+ * else, in that order. Every stretch is whole windows (10 samples), so
+ * each check sees one stretch.
+ */
+static bool
+speed_trace_ok (void)
+{
+    static speed_part_t const trace[] = {{SPEED_STOP_MM_S, 30u},
+                                         {SPEED_BLIP_MM_S, 10u},
+                                         {SPEED_STOP_MM_S, 30u},
+                                         {40.0f, 10u},
+                                         {60.0f, 10u},
+                                         {80.0f, 10u},
+                                         {100.0f, 10u},
+                                         {SPEED_CRUISE_MM_S, 50u},
+                                         {SPEED_NOISE_MM_S, 10u},
+                                         {SPEED_CRUISE_MM_S, 40u},
+                                         {100.0f, 10u},
+                                         {80.0f, 10u},
+                                         {60.0f, 10u},
+                                         {40.0f, 10u},
+                                         {SPEED_STOP_MM_S, 40u}};
+    static terrain_event_type_t const expected[] = {
+        TERRAIN_EVENT_ACCELERATING, TERRAIN_EVENT_CRUISING,
+        TERRAIN_EVENT_DECELERATING, TERRAIN_EVENT_STATIONARY};
+    terrain_speed_limits_t const limits = {
+        (float)TERRAIN_SPEED_STOP_MM_S, (float)TERRAIN_SPEED_CHANGE_MM_S,
+        TERRAIN_SPEED_WINDOW_SAMPLES, TERRAIN_SPEED_CONFIRM_CHECKS,
+        TERRAIN_SPEED_STOP_CHECKS};
+
+    terrain_event_type_t got[SPEED_EVENTS_MAX];
+    uint32_t n_got = 0u;
+    uint32_t word = 0u;
+    for (uint32_t part = 0u; part < (sizeof(trace) / sizeof(trace[0])); part++)
+    {
+        for (uint32_t i = 0u; i < trace[part].samples; i++)
+        {
+            terrain_event_type_t const type = terrain_detect_speed_step(
+                &word, trace[part].wheel_mm_s, &limits);
+            if ((type != TERRAIN_EVENT_NONE) && (n_got < SPEED_EVENTS_MAX))
+            {
+                got[n_got] = type;
+                n_got++;
+            }
+        }
+    }
+
+    uint32_t const n = sizeof(expected) / sizeof(expected[0]);
+    bool b_ok = (n_got == n) &&
+                (terrain_detect_speed_state(word) == TERRAIN_SPEED_STATIONARY);
+    for (uint32_t i = 0u; b_ok && (i < n); i++)
+    {
+        b_ok = (got[i] == expected[i]);
+    }
+    return b_ok;
+}
+
+/*
+ * TER-U26: a short run with every kind of event. Only the three humps
+ * (11, 9, 20 mm), one lift, one overturn and two turns count. Word 0 is
+ * 3 | 20 << 4 | 2 << 12 | 2 << 16 = 0x022143, sent low byte first, then
+ * one byte per hump and 0 for the five unused slots.
+ */
+static bool
+summary_mixed_ok (void)
+{
+    static summary_event_t const run[] = {
+        {TERRAIN_EVENT_ASCENDING, SUMMARY_LEAN_DDEG},
+        {TERRAIN_EVENT_DESCENDING, SUMMARY_LEAN_DDEG},
+        {TERRAIN_EVENT_LEVEL, 11u},
+        {TERRAIN_EVENT_TURNING, 0u},
+        {TERRAIN_EVENT_STRAIGHT, 0u},
+        {TERRAIN_EVENT_LIFTED, SUMMARY_LIFT_CG},
+        {TERRAIN_EVENT_OVERTURNED, 90u},
+        {TERRAIN_EVENT_ACCELERATING, 0u},
+        {TERRAIN_EVENT_CRUISING, 0u},
+        {TERRAIN_EVENT_LEVEL, 9u},
+        {TERRAIN_EVENT_DECELERATING, 0u},
+        {TERRAIN_EVENT_STATIONARY, 0u},
+        {TERRAIN_EVENT_TURNING, 0u},
+        {TERRAIN_EVENT_STRAIGHT, 0u},
+        {TERRAIN_EVENT_NONE, 0u},
+        {TERRAIN_EVENT_LEVEL, 20u}};
+    static uint8_t const want[TERRAIN_SUMMARY_BYTES] = {
+        0x43u, 0x21u, 0x02u, 0x0Bu, 0x09u, 0x14u, 0u, 0u, 0u, 0u, 0u};
+
+    terrain_summary_t summary;
+    terrain_summary_reset(&summary);
+    for (uint32_t i = 0u; i < (sizeof(run) / sizeof(run[0])); i++)
+    {
+        terrain_summary_add(&summary, run[i].type, run[i].value);
+    }
+
+    return (terrain_summary_hump_count(&summary) == 3u) &&
+           (terrain_summary_hump_mm(&summary, 0u) == 11u) &&
+           (terrain_summary_hump_mm(&summary, 1u) == 9u) &&
+           (terrain_summary_hump_mm(&summary, 2u) == 20u) &&
+           (terrain_summary_hump_mm(&summary, 3u) == 0u) &&
+           (terrain_summary_highest_mm(&summary) == 20u) &&
+           (terrain_summary_lifts(&summary) == 2u) &&
+           (terrain_summary_turns(&summary) == 2u) && msg_is(&summary, want);
+}
+
+/*
+ * TER-U26: humps of 10 to 80 mm fill the 8 slots. A 9th, too tall for its
+ * field, is counted and lifts the highest to 255 but has no slot; 7 small
+ * ones take the count past 15 and do not lower the highest. 130
+ * lifts and turns. Every count stops at its top, so bits 0-22 of
+ * word 0 are all ones: FF FF 7F.
+ */
+static bool
+summary_limits_ok (void)
+{
+    static uint8_t const want[TERRAIN_SUMMARY_BYTES] = {
+        0xFFu, 0xFFu, 0x7Fu, 10u, 20u, 30u, 40u, 50u, 60u, 70u, 80u};
+
+    terrain_summary_t summary;
+    terrain_summary_reset(&summary);
+    for (uint32_t i = 1u; i <= TERRAIN_SUMMARY_HUMPS; i++)
+    {
+        terrain_summary_add(&summary, TERRAIN_EVENT_LEVEL, i * SUMMARY_STEP_MM);
+    }
+    terrain_summary_add(&summary, TERRAIN_EVENT_LEVEL, SUMMARY_TALL_MM);
+    bool const b_ninth =
+        (terrain_summary_hump_count(&summary) ==
+         (TERRAIN_SUMMARY_HUMPS + 1u)) &&
+        (terrain_summary_highest_mm(&summary) == TERRAIN_HEIGHT_MAX_MM) &&
+        (terrain_summary_hump_mm(&summary, TERRAIN_SUMMARY_HUMPS) == 0u);
+
+    for (uint32_t i = 0u; i < SUMMARY_MORE_HUMPS; i++)
+    {
+        terrain_summary_add(&summary, TERRAIN_EVENT_LEVEL, SUMMARY_SMALL_MM);
+    }
+    for (uint32_t i = 0u; i < SUMMARY_MANY; i++)
+    {
+        terrain_summary_add(&summary, TERRAIN_EVENT_LIFTED, SUMMARY_LIFT_CG);
+        terrain_summary_add(&summary, TERRAIN_EVENT_TURNING, 0u);
+    }
+
+    return b_ninth &&
+           (terrain_summary_hump_count(&summary) ==
+            TERRAIN_SUMMARY_HUMP_COUNT_MAX) &&
+           (terrain_summary_highest_mm(&summary) == TERRAIN_HEIGHT_MAX_MM) &&
+           (terrain_summary_lifts(&summary) == TERRAIN_SUMMARY_LIFT_MAX) &&
+           (terrain_summary_turns(&summary) == TERRAIN_SUMMARY_TURN_MAX) &&
+           msg_is(&summary, want);
+}
+
+/*
+ * TER-U26: a reset empties a used summary (all-zero message). NULL is
+ * refused: reads give 0 and packs write nothing. The live getter checks
+ * NULL before setup, so this needs no IMU.
+ */
+static bool
+summary_refuses_null_ok (void)
+{
+    static uint8_t const empty[TERRAIN_SUMMARY_BYTES] = {0u};
+
+    terrain_summary_t summary;
+    terrain_summary_reset(&summary);
+    terrain_summary_add(&summary, TERRAIN_EVENT_LEVEL, 11u);
+    terrain_summary_add(&summary, TERRAIN_EVENT_TURNING, 0u);
+    terrain_summary_reset(&summary);
+    bool b_ok = msg_is(&summary, empty);
+
+    /* Must not crash. */
+    terrain_summary_reset(NULL);
+    terrain_summary_add(NULL, TERRAIN_EVENT_LEVEL, 11u);
+
+    uint8_t msg[TERRAIN_SUMMARY_BYTES];
+    for (uint32_t i = 0u; i < TERRAIN_SUMMARY_BYTES; i++)
+    {
+        msg[i] = SUMMARY_UNTOUCHED;
+    }
+    b_ok =
+        b_ok && (terrain_summary_hump_count(NULL) == 0u) &&
+        (terrain_summary_highest_mm(NULL) == 0u) &&
+        (terrain_summary_hump_mm(NULL, 0u) == 0u) &&
+        (terrain_summary_lifts(NULL) == 0u) &&
+        (terrain_summary_turns(NULL) == 0u) &&
+        (terrain_monitor_summary_pack(NULL, msg) == TERRAIN_ERR_PARAM) &&
+        (terrain_monitor_summary_pack(&summary, NULL) == TERRAIN_ERR_PARAM) &&
+        (terrain_monitor_get_summary(NULL) == TERRAIN_ERR_PARAM);
+    for (uint32_t i = 0u; b_ok && (i < TERRAIN_SUMMARY_BYTES); i++)
+    {
+        b_ok = (msg[i] == SUMMARY_UNTOUCHED);
+    }
+    return b_ok;
+}
+
+/* True if the summary packs to exactly the message p_want. */
+static bool
+msg_is (terrain_summary_t const * p_summary, uint8_t const * p_want)
+{
+    uint8_t msg[TERRAIN_SUMMARY_BYTES] = {0u};
+    if (!terrain_summary_pack(p_summary, msg))
+    {
+        return false;
+    }
+    for (uint32_t i = 0u; i < TERRAIN_SUMMARY_BYTES; i++)
+    {
+        if (msg[i] != p_want[i])
+        {
+            return false;
+        }
+    }
+    return true;
 }
 
 /*

@@ -31,8 +31,10 @@
     (OBSTACLE_AVOID_ENABLED && !APP_TEST &&                                    \
      (OBSTACLE_CALIBRATION_MODE == OBSTACLE_CAL_MODE_OFF))
 #if AVOID_ACTIVE
+#include "../communication/remote_command.h"
 #include "../motion/motion.h"
 #include "../motion/motion_config.h"
+#include "../terrain/terrain_monitor.h"
 #endif
 
 #define TELEMETRY_SAMPLE_PERIOD_MS 1000u
@@ -47,6 +49,16 @@
 /* Level bits of obstacle_flg_event. */
 #define EVT_LEVELS                                                             \
     (OBSTACLE_EVT_STOP | OBSTACLE_EVT_CRITICAL | OBSTACLE_EVT_FAULT)
+
+#if AVOID_ACTIVE
+/** @brief Where a "reverse" command has got to. */
+typedef enum
+{
+    REVERSE_IDLE = 0,  /**< Motors held, nothing asked for. */
+    REVERSE_RELEASING, /**< INHIBIT cleared, waiting for motion to see it. */
+    REVERSE_DRIVING    /**< The move is sent. */
+} reverse_phase_t;
+#endif
 
 /* Static data. */
 
@@ -67,7 +79,12 @@ ID obstacle_flg_event;
  * compiler moving its copy across the counter accesses.
  */
 static volatile uint32_t state_sequence;
-static obstacle_shared_state_t shared_state;
+static struct
+{
+    robot_obstacle_result_t result;
+    uint16_t control;  /* robot_obstacle_control_pack(). */
+    uint64_t geometry; /* robot_obstacle_geometry_pack(). */
+} shared_state;
 
 #if AVOID_ACTIVE
 static const obstacle_avoid_config_t avoid_config = {
@@ -78,9 +95,12 @@ static const obstacle_avoid_config_t avoid_config = {
                  .depth_mm = OBSTACLE_AVOID_DEPTH_MM,
                  .sidestep_min_mm = OBSTACLE_AVOID_SIDESTEP_MIN_MM,
                  .sidestep_max_mm = OBSTACLE_AVOID_SIDESTEP_MAX_MM,
+                 .edge_min_mm = OBSTACLE_AVOID_EDGE_MIN_MM,
                  .lateral_max_mm = OBSTACLE_AVOID_LATERAL_MAX_MM,
                  .pass_max_mm = OBSTACLE_AVOID_PASS_MAX_MM,
                  .return_extra_mm = OBSTACLE_AVOID_RETURN_EXTRA_MM,
+                 .overshoot_mm = OBSTACLE_AVOID_LINE_OVERSHOOT_MM,
+                 .line_gate_mm = OBSTACLE_AVOID_LINE_GATE_MM,
                  .angle_min_deg = OBSTACLE_AVOID_ANGLE_MIN_DEG,
                  .backoff_mm = OBSTACLE_AVOID_BACKOFF_MM,
                  .max_backoffs = OBSTACLE_AVOID_MAX_BACKOFFS,
@@ -94,6 +114,9 @@ static const obstacle_avoid_config_t avoid_config = {
                .retry_delay_ms = OBSTACLE_AVOID_RETRY_DELAY_MS,
                .backoff_delay_ms = OBSTACLE_AVOID_BACKOFF_DELAY_MS,
                .resweep_ms = OBSTACLE_AVOID_RESWEEP_MS,
+               .straighten_settle_ms = OBSTACLE_AVOID_STRAIGHTEN_SETTLE_MS,
+               .straighten_step_mm = OBSTACLE_AVOID_STRAIGHTEN_STEP_MM,
+               .straighten_max_deg = OBSTACLE_AVOID_STRAIGHTEN_MAX_DEG,
                .move_speed_mm_s = MOTION_MOVE_SPEED_MM_S,
                .turn_speed_deg_s = MOTION_TURN_SPEED_DEG_S,
                .resume_min_mm = OBSTACLE_AVOID_RESUME_MIN_MM,
@@ -124,8 +147,16 @@ static uint32_t log_time_ms (void);
 
 #endif
 #if AVOID_ACTIVE
+static bool remote_hold (void);
+static void remote_reverse (bool b_held);
+static bool reverse_send (void);
+static bool reverse_finished (void);
 static void avoid_loop (robot_obstacle_result_t scan, bool b_stop);
+static void log_watch (obstacle_avoid_input_t const * p_in);
 static void apply_actions (obstacle_avoid_action_t const * p_act);
+#if TM_MQTT
+static void publish_avoid (obstacle_avoid_action_t const * p_act);
+#endif
 #endif
 
 /* Public function definitions. */
@@ -182,10 +213,22 @@ obstacle_get_state (obstacle_shared_state_t * p_state)
         if ((before & 1u) == 0u)
         {
             STATE_BARRIER(); /* Copy only after reading the counter. */
-            *p_state = shared_state;
+            robot_obstacle_result_t const result = shared_state.result;
+            uint16_t const control = shared_state.control;
+            uint64_t const geometry = shared_state.geometry;
             STATE_BARRIER(); /* Finish the copy before checking again. */
             if (state_sequence == before)
             {
+                p_state->result = result;
+                p_state->geometry = robot_obstacle_geometry_unpack(geometry);
+                p_state->b_stop_requested =
+                    (control & ROBOT_OBSTACLE_CONTROL_STOP) != 0u;
+                p_state->avoid_state = (uint8_t)robot_field_get(
+                    control, ROBOT_OBSTACLE_CONTROL_STATE_SHIFT,
+                    ROBOT_OBSTACLE_CONTROL_STATE_BITS);
+                p_state->fault_reason = (uint8_t)robot_field_get(
+                    control, ROBOT_OBSTACLE_CONTROL_FAULT_SHIFT,
+                    ROBOT_OBSTACLE_CONTROL_FAULT_BITS);
                 return true;
             }
         }
@@ -236,7 +279,7 @@ scan_task (INT stacd, void * p_exinf)
     uint32_t last_sample_ms = log_time_ms();
     uint32_t sample_ms = 0u;
     bool b_sample_pending = false;
-    UB sample_text[TELEMETRY_TEXT_SIZE];
+    robot_telemetry_payload_t sample_payload = {0u, 0u, 0u};
 #endif
     uint8_t last_sequence = 0u;
     uint8_t last_flags = 0u;
@@ -276,8 +319,8 @@ scan_task (INT stacd, void * p_exinf)
                                          .avoid_state = 0u,
                                          .fault_reason = 0u};
 #if AVOID_ACTIVE
-        state.avoid_state = (uint8_t)avoid.state;
-        state.fault_reason = (uint8_t)avoid.fault;
+        state.avoid_state = (uint8_t)obstacle_avoid_state_of(&avoid);
+        state.fault_reason = (uint8_t)obstacle_avoid_fault_of(&avoid);
 #endif
         publish_state(&state, new_result);
         if (new_result && (scan.width_mm != ROBOT_OBSTACLE_WIDTH_UNAVAILABLE))
@@ -314,18 +357,15 @@ scan_task (INT stacd, void * p_exinf)
         {
             last_sample_ms = now_ms;
             sample_ms = now_ms;
-            (void)tm_sprintf(
-                sample_text,
-                (const UB *)"obstacle flags=%u edges=%u width_mm=%u",
-                (unsigned int)scan.flags, (unsigned int)scan.edges,
-                (unsigned int)scan.width_mm);
+            sample_payload =
+                robot_telemetry_obstacle(scan.flags, scan.edges, scan.width_mm);
             b_sample_pending = true;
         }
         if (b_sample_pending)
         {
             uint32_t sequence = 0u;
-            telemetry_enqueue_result_t queued = telemetry_queue_push(
-                sample_ms, (const char *)sample_text, &sequence);
+            telemetry_enqueue_result_t queued =
+                telemetry_queue_push(sample_ms, sample_payload, &sequence);
             if (queued != TELEMETRY_BUSY)
             {
                 b_sample_pending = false;
@@ -359,7 +399,10 @@ publish_state (obstacle_shared_state_t const * p_state, bool b_new_result)
 
     state_sequence = state_sequence + 1u; /* Odd: readers retry. */
     STATE_BARRIER();
-    shared_state = *p_state;
+    shared_state.result = p_state->result;
+    shared_state.control = robot_obstacle_control_pack(
+        p_state->b_stop_requested, p_state->avoid_state, p_state->fault_reason);
+    shared_state.geometry = robot_obstacle_geometry_pack(&p_state->geometry);
     STATE_BARRIER();
     state_sequence = state_sequence + 1u; /* Even: whole again. */
 
@@ -429,6 +472,10 @@ edge_degrees (uint8_t index)
 static void
 avoid_loop (robot_obstacle_result_t scan, bool b_stop)
 {
+    if (remote_hold())
+    {
+        return;
+    }
     T_RFLG events = {0};
     ER const read = tk_ref_flg(motion_flg_event, &events);
     if (read < E_OK)
@@ -455,9 +502,179 @@ avoid_loop (robot_obstacle_result_t scan, bool b_stop)
     avoid_in.b_rejected = (events.flgptn & MOTION_EVT_REJECTED) != 0u;
     avoid_in.distance_mm = odometry.distance_mm;
     avoid_in.heading_deg = odometry.heading_deg;
+    log_watch(&avoid_in);
 
     obstacle_avoid_action_t const act = obstacle_avoid_step(&avoid, &avoid_in);
     apply_actions(&act);
+}
+
+/*
+ * Each watch reading with where the car was. A sweep from standing cannot
+ * measure the obstacle's width (2026-11-08: 11, 16 and 21 cm all echo over
+ * the same angles); ranges taken from known points on the way past may.
+ */
+static void
+log_watch (obstacle_avoid_input_t const * p_in)
+{
+    static uint8_t last_sequence;
+    bool const b_new = p_in->watch.sequence != last_sequence;
+    last_sequence = p_in->watch.sequence;
+    if (b_new && p_in->watch.b_active)
+    {
+        tm_printf((UB *)"obstacle: watch %u us d=%ld h=%ld leg=%u\n",
+                  (unsigned int)p_in->watch.echo_us, (long)p_in->distance_mm,
+                  (long)p_in->heading_deg,
+                  (unsigned int)obstacle_avoid_leg_of(&avoid));
+    }
+}
+
+/*
+ * The dashboard's Stop holds the motors and pauses the bypass logic, so a
+ * stop is never taken for an obstacle. A lift or overturn found by terrain
+ * (IF-11) stops the car the same way. Start begins again from the power-on
+ * state, wherever the car stands: the next clear path releases it. A latched
+ * FAULT survives that, so Start cannot clear it.
+ * Returns true while stopped.
+ */
+static bool
+remote_hold (void)
+{
+    static bool b_held = false;
+    static uint8_t lifts_seen = 0u;
+    uint8_t const lifts = terrain_monitor_lift_count();
+    if (lifts != lifts_seen)
+    {
+        /* Lifted or overturned (IF-11): as the dashboard's Stop. */
+        lifts_seen = lifts;
+        remote_command_stop();
+        tm_printf((UB *)"[%lu ms]obstacle: car lifted, motors stopped until "
+                        "Start\n",
+                  (unsigned long)log_time_ms());
+    }
+    bool const b_stopped = remote_command_stopped();
+    remote_reverse(b_held);
+    if (b_stopped && !b_held)
+    {
+        app_check(tk_set_flg(motion_flg_ctrl, MOTION_FLG_INHIBIT),
+                  "obstacle remote stop");
+        obstacle_scan_set_watch(OBSTACLE_SCAN_WATCH_OFF);
+        obstacle_scan_set_side_scans(true);
+        tm_printf((UB *)"[%lu ms]obstacle: stopped by the dashboard\n",
+                  (unsigned long)log_time_ms());
+    }
+    else if (!b_stopped && b_held)
+    {
+        if (obstacle_avoid_state_of(&avoid) != OBSTACLE_AVOID_FAULT)
+        {
+            obstacle_avoid_init(&avoid, &avoid_config, log_time_ms());
+            avoid_in = (obstacle_avoid_input_t){0};
+        }
+        tm_printf((UB *)"[%lu ms]obstacle: started by the dashboard\n",
+                  (unsigned long)log_time_ms());
+    }
+    else
+    {
+        /* No change. */
+    }
+    b_held = b_stopped;
+    return b_stopped;
+}
+
+/*
+ * Temporary, to bring the car back between test passes: the dashboard's
+ * Reverse backs a stopped car up. INHIBIT is released for that one move and
+ * set again as soon as it ends, or on Stop, Start or the time limit. Motion
+ * discards commands until it has seen the release, so the move waits for
+ * that. Nothing watches behind the car.
+ */
+static void
+remote_reverse (bool b_held)
+{
+    static reverse_phase_t phase = REVERSE_IDLE;
+    static uint32_t started_ms = 0u;
+    bool const b_wanted = remote_command_reversing();
+    uint32_t const now_ms = log_time_ms();
+    bool b_end = !b_wanted;
+
+    switch (phase)
+    {
+        case REVERSE_IDLE:
+            if (b_wanted && b_held &&
+                (obstacle_avoid_state_of(&avoid) == OBSTACLE_AVOID_FAULT))
+            {
+                remote_command_reverse_done();
+                tm_printf((UB *)"[%lu ms]obstacle: reverse refused, fault "
+                                "latched\n",
+                          (unsigned long)now_ms);
+            }
+            else if (b_wanted && b_held)
+            {
+                app_check(tk_clr_flg(motion_flg_ctrl, ~MOTION_FLG_INHIBIT),
+                          "obstacle reverse release");
+                started_ms = now_ms;
+                phase = REVERSE_RELEASING;
+                tm_printf((UB *)"[%lu ms]obstacle: reversing %u mm\n",
+                          (unsigned long)now_ms,
+                          (unsigned int)OBSTACLE_REMOTE_REVERSE_MM);
+            }
+            else
+            {
+                /* Nothing asked for yet. */
+            }
+            break;
+
+        case REVERSE_RELEASING:
+            if (motion_get_status().mode != ROBOT_MOTION_MODE_INHIBITED)
+            {
+                b_end = b_end || !reverse_send();
+                phase = REVERSE_DRIVING;
+            }
+            break;
+
+        case REVERSE_DRIVING:
+            b_end = b_end || reverse_finished();
+            break;
+
+        default:
+            b_end = true;
+            break;
+    }
+
+    if ((phase != REVERSE_IDLE) &&
+        (b_end || ((now_ms - started_ms) > OBSTACLE_REMOTE_REVERSE_LIMIT_MS)))
+    {
+        app_check(tk_set_flg(motion_flg_ctrl, MOTION_FLG_INHIBIT),
+                  "obstacle reverse hold");
+        remote_command_reverse_done();
+        phase = REVERSE_IDLE;
+        tm_printf((UB *)"[%lu ms]obstacle: reverse ended\n",
+                  (unsigned long)log_time_ms());
+    }
+}
+
+/* Clear old events first: only then is the next MOVE_DONE this move's. */
+static bool
+reverse_send (void)
+{
+    uint32_t cmd =
+        robot_motion_cmd_move(OBSTACLE_REMOTE_REVERSE_MM, true, false);
+    ER er = tk_clr_flg(motion_flg_event, ~(UINT)MOTION_EVT_ALL);
+    if (er >= E_OK)
+    {
+        er = tk_snd_mbf(motion_mbf_cmd, &cmd, (INT)sizeof(cmd), TMO_POL);
+    }
+    app_check(er, "obstacle reverse command");
+    return er >= E_OK;
+}
+
+/* The move ended by itself, one way or another. */
+static bool
+reverse_finished (void)
+{
+    T_RFLG events = {0};
+    ER const read = tk_ref_flg(motion_flg_event, &events);
+    app_check(read, "obstacle reverse events");
+    return (read < E_OK) || ((events.flgptn & MOTION_EVT_ALL) != 0u);
 }
 
 /* Carry out the actions in their documented order and keep each result
@@ -524,12 +741,35 @@ apply_actions (obstacle_avoid_action_t const * p_act)
                                          : OBSTACLE_AVOID_SEND_ERROR;
         }
     }
+    if (p_act->b_skew_known)
+    {
+        tm_printf(
+            (UB *)"[%lu ms]obstacle: line's heading %d deg from the car\n",
+            (unsigned long)log_time_ms(), (int)p_act->skew_deg);
+    }
     if (p_act->p_reason != NULL)
     {
         tm_printf((UB *)"[%lu ms]obstacle: avoid %s -> %s (%s)\n",
                   (unsigned long)log_time_ms(),
                   obstacle_avoid_state_name(p_act->from),
                   obstacle_avoid_state_name(p_act->to), p_act->p_reason);
+#if TM_MQTT
+        publish_avoid(p_act);
+#endif
     }
 }
+
+#if TM_MQTT
+/* Queue the bypass state change for MQTT. A full or busy queue drops it:
+ * the console line above is the full record, reason included. */
+static void
+publish_avoid (obstacle_avoid_action_t const * p_act)
+{
+    uint32_t sequence = 0u;
+    (void)telemetry_queue_push(
+        log_time_ms(),
+        robot_telemetry_avoid((uint32_t)p_act->from, (uint32_t)p_act->to),
+        &sequence);
+}
+#endif
 #endif

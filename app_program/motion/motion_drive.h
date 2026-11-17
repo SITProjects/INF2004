@@ -95,6 +95,14 @@ motion_status_t motion_drive_control (int16_t left_mm_s, int16_t right_mm_s);
 motion_status_t motion_drive_set_speed_pid (bool b_enable);
 
 /**
+ * @brief Drop what the wheels' speed loops have built up, keeping the
+ *        setpoints: each wheel falls back to its feed-forward duty.
+ * @return MOTION_OK, or MOTION_ERR_NOT_INIT.
+ * Motion task only.
+ */
+motion_status_t motion_drive_reset_speed_loops (void);
+
+/**
  * @brief Brake both wheels immediately and reset their PI loops.
  * @return MOTION_OK or MOTION_ERR_NOT_INIT.
  */

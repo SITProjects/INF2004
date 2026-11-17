@@ -129,6 +129,22 @@ motion_drive_set_speed_pid (bool b_enable)
 }
 
 motion_status_t
+motion_drive_reset_speed_loops (void)
+{
+    if (!b_initialised)
+    {
+        return MOTION_ERR_NOT_INIT;
+    }
+
+    for (uint32_t id = 0u; id < (uint32_t)MOTOR_COUNT; id++)
+    {
+        motion_pid_reset(&wheels[id].pid);
+        wheels[id].correction = 0.0f;
+    }
+    return MOTION_OK;
+}
+
+motion_status_t
 motion_drive_stop (void)
 {
     if (!b_initialised)

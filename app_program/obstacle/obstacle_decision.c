@@ -5,6 +5,7 @@
 
 #include "obstacle_decision.h"
 #include "obstacle_config.h"
+#include "obstacle_width.h"
 #include <stddef.h>
 
 /* Private types, constants, and macros. */
@@ -136,8 +137,9 @@ clear_rank (ultrasonic_result_t measurement, uint16_t echo_us,
     {
         return NO_ECHO_RANK;
     }
-    /* Match the width classifier's MISS boundary without 16-bit wrap. */
-    uint32_t limit_us = (uint32_t)centre_echo_us + OBSTACLE_EDGE_JUMP_US;
+    /* Match the width classifier's MISS boundary at the ends, which lie
+     * equally far either side of centre. */
+    uint32_t limit_us = obstacle_width_hit_limit_us(centre_echo_us, 0u);
     if ((measurement == ULTRASONIC_VALID) &&
         (echo_us >= OBSTACLE_DETECT_ECHO_US) && ((uint32_t)echo_us >= limit_us))
     {

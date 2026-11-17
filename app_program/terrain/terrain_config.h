@@ -35,6 +35,49 @@
 #endif
 
 /*
+ * Magnetometer (compass) rate and range, as imu_mag_odr_t and
+ * imu_mag_gain_t values from drv_imu.h. 75 Hz gives most 10 ms updates a
+ * fresh sample. +/-1.3 gauss covers the Earth's field (0.25 to 0.65
+ * gauss) with room for the car's own; raise it if readings overflow.
+ */
+#ifndef TERRAIN_MAG_ODR
+#define TERRAIN_MAG_ODR IMU_MAG_ODR_75HZ
+#endif
+#ifndef TERRAIN_MAG_GAIN
+#define TERRAIN_MAG_GAIN IMU_MAG_GAIN_1_3_GAUSS
+#endif
+
+/*
+ * Hard-iron offset, in car axes and magnetometer counts: the field of the
+ * car's own magnets (motors, speaker), which turns with the car. Measure
+ * it with the calibration spin (TER-U28): the "centre" values printed
+ * after two slow full turns. Measure it again if anything magnetic on
+ * the car moves. Current values: TER-U28, 2026-11-06, motors off (spans
+ * 956 and 904 counts, so the Earth's field is about 0.42 gauss here).
+ * With the motors running the field the compass sees changes by up to
+ * half of that (TER-U31), so the heading is not yet good for steering.
+ */
+#ifndef TERRAIN_MAG_OFFSET_X
+#define TERRAIN_MAG_OFFSET_X (-347)
+#endif
+#ifndef TERRAIN_MAG_OFFSET_Y
+#define TERRAIN_MAG_OFFSET_Y (-96)
+#endif
+
+/*
+ * Print the compass (raw X, Y, Z, heading and the X/Y centre and span
+ * seen so far) this often, in ms; 0 never. On in the IR_CALIBRATION=1
+ * image, where the motors stay off, for the calibration spin.
+ */
+#ifndef TERRAIN_COMPASS_PRINT_MS
+#if IR_CALIBRATION_ONLY
+#define TERRAIN_COMPASS_PRINT_MS 250
+#else
+#define TERRAIN_COMPASS_PRINT_MS 0
+#endif
+#endif
+
+/*
  * Accelerometer data rate, as an imu_accel_odr_t value from drv_imu.h.
  * Matches the 100 Hz update rate.
  */
@@ -44,7 +87,8 @@
 
 /*
  * Accelerometer range, as an imu_accel_range_t value from drv_imu.h.
- * +/-8 g so collisions do not clip; costs resolution (4 mg per count).
+ * +/-8 g so a lift or a knock does not clip; costs resolution (4 mg per
+ * count).
  */
 #ifndef TERRAIN_ACCEL_RANGE
 #define TERRAIN_ACCEL_RANGE IMU_ACCEL_RANGE_8G
@@ -128,18 +172,19 @@
  * applied, of the car standing still on a floor checked to be flat.
  * Boot calibration compares against it to decide whether the car is
  * level. Record it again whenever the sensor is remounted.
- * Current values: bench reading with the loose sensor taped flat, chip
- * up, on a flat desk (TER-U06, 2026-11-03; 1.4 degrees from the
- * 2026-11-02 reading), before the sensor was mounted on the car.
+ * Current values: the mean of eight boots with the sensor mounted, on the
+ * floor (2026-11-09, all within 1.6 degrees of the mean), from the
+ * `terrain: calibration` line. The car had come to rest about 5 degrees
+ * further front to back than on 2026-11-07, and most boots read NOT_LEVEL.
  */
 #ifndef TERRAIN_LEVEL_REF_X
-#define TERRAIN_LEVEL_REF_X (-0.366f)
+#define TERRAIN_LEVEL_REF_X (-0.463f)
 #endif
 #ifndef TERRAIN_LEVEL_REF_Y
-#define TERRAIN_LEVEL_REF_Y (0.922f)
+#define TERRAIN_LEVEL_REF_Y (-1.765f)
 #endif
 #ifndef TERRAIN_LEVEL_REF_Z
-#define TERRAIN_LEVEL_REF_Z (8.522f)
+#define TERRAIN_LEVEL_REF_Z (8.373f)
 #endif
 
 /* Samples in one calibration attempt: 200 is 2 s at 100 Hz. */
@@ -183,9 +228,13 @@
  * Largest allowed angle, in degrees, between the measured gravity
  * direction and the level reference. Above it the car is not on level
  * ground and calibration stops with NOT_LEVEL.
+ * Calibration zeroes on the car as it stands, so this is what stops a car
+ * powered up on a slope from reading tilted for the whole run. Boots on the
+ * floor agree within 1 degree; 2 degrees left little room for a floor that
+ * is not quite flat, and NOT_LEVEL turns tilt and humps off.
  */
 #ifndef TERRAIN_LEVEL_MAX_DEG
-#define TERRAIN_LEVEL_MAX_DEG 2.0f
+#define TERRAIN_LEVEL_MAX_DEG 5.0f
 #endif
 
 /*
@@ -249,6 +298,42 @@
 #define TERRAIN_HUMP_LEVEL_DEG 1.1f
 #endif
 
+/*
+ * Humps are looked for only while following the line at this speed or more,
+ * in mm/s. 15 of 17 false humps on 2026-11-07 came from moves at 300 mm/s,
+ * pivots and the car being handled, and one more from pulling away. A slower
+ * car only pauses the search: braking for a hump dips below this, and ending
+ * the hump there cut every pass into short leans that never counted.
+ */
+#ifndef TERRAIN_HUMP_MIN_SPEED_MM_S
+#define TERRAIN_HUMP_MIN_SPEED_MM_S 20
+#endif
+
+/*
+ * A hump shorter than this, in mm of travel, is not counted. The course's
+ * 192 mm hump took 188 mm from climb to level on 2026-11-07, and at least 135
+ * in the model; the lean of steering took 34 to 122 mm. Travel, as time lets
+ * in leans of a slow car.
+ */
+#ifndef TERRAIN_HUMP_MIN_MM
+#define TERRAIN_HUMP_MIN_MM 130
+#endif
+
+/*
+ * A car at this speed or less as a hump ends slowed for it, in mm/s, and the
+ * hump needs only TERRAIN_HUMP_SLOW_MIN_MM of travel. Slow, the lean ends with
+ * little smoothing lag: the 192 mm hump took 66 to 116 mm on 15 logged slowed
+ * passes to 2026-11-09, against 150 or more at speed. A false lean is braked
+ * at once, so it covers far less: 55 mm or under on the same logs.
+ */
+#ifndef TERRAIN_HUMP_SLOW_MM_S
+#define TERRAIN_HUMP_SLOW_MM_S 60
+#endif
+
+#ifndef TERRAIN_HUMP_SLOW_MIN_MM
+#define TERRAIN_HUMP_SLOW_MIN_MM 60
+#endif
+
 /* Samples in a row to start a climb or a descent: 5 = 50 ms. */
 #ifndef TERRAIN_HUMP_ENTER_SAMPLES
 #define TERRAIN_HUMP_ENTER_SAMPLES 5u
@@ -288,76 +373,62 @@
 #endif
 
 /*
- * Roll smoothing for the hump height only, in seconds: lighter than
- * TERRAIN_TILT_TAU_S, whose 0.15 s can cut the short lean of a short ramp
- * and read it low. Lighter lets more motor vibration through, which can
- * read high. TODO(car day): tune over a measured ramp at race speed.
+ * Roll smoothing for the hump height only, in seconds. Lighter lets more
+ * motor vibration through, which reads high: 0.05 read the course's 10 mm hump
+ * as 16 mm at 120 mm/s on 2026-11-07. Its ramp is long enough for the tilt's
+ * 0.15 s, where the model reads 9 to 10 mm.
  */
 #ifndef TERRAIN_HUMP_HEIGHT_TAU_S
-#define TERRAIN_HUMP_HEIGHT_TAU_S 0.05f
+#define TERRAIN_HUMP_HEIGHT_TAU_S 0.15f
 #endif
 
 /*
- * Collision detection (terrain_detect.h), from the horizontal push: the
- * forward/back and sideways acceleration, in tenths of a g (10 = 1 g,
- * the pull of gravity). Hard braking is about 0.3 g; leaning on an 11 mm
- * ramp about 0.1 g. A push of at least TERRAIN_COLLISION_LIMIT_DG may be
- * a collision: it counts if the car's speed (motion's odometry) then
- * drops to half or less within TERRAIN_COLLISION_CHECK_SAMPLES, so a
- * wheel jolting on a ramp edge, where the car keeps going, does not. A
- * push of at least TERRAIN_COLLISION_SURE_DG counts at once, for hits
- * where the wheels keep spinning and the speed never drops.
- * TODO(car day): set both from wall hits and ramp runs (TER-U21).
+ * Lifted and overturned (terrain_detect.h): the motors stop when the car is
+ * picked up or turned over; lifting it ends a demonstration run. Both use
+ * the mean of the last TERRAIN_DETECT_LIFT_WINDOW samples (100 ms), before
+ * the bias, against the level reading taken at calibration.
+ *
+ * Lifted: the upward acceleration, in hundredths of the level reading,
+ * goes above TERRAIN_LIFT_UP_CG. On 2026-11-11 (TER-U34) eight brisk lifts,
+ * moving and stopped, peaked at 142 to 163; 43 s of floor driving with
+ * starts, stops and bumps never passed 117. A slow, gentle lift (109) is
+ * not seen: no limit could catch it without stopping the car while driving.
  */
-#ifndef TERRAIN_COLLISION_LIMIT_DG
-#define TERRAIN_COLLISION_LIMIT_DG 10u
-#endif
-
-#ifndef TERRAIN_COLLISION_SURE_DG
-#define TERRAIN_COLLISION_SURE_DG 20u
+#ifndef TERRAIN_LIFT_UP_CG
+#define TERRAIN_LIFT_UP_CG 130u
 #endif
 
 /*
- * Samples to wait for the speed to halve: 12 = 120 ms, motion's 100 ms
- * speed average (5 x 20 ms updates) plus one update.
+ * Overturned: tilted from level by more than TERRAIN_LIFT_OVER_DEG degrees
+ * for TERRAIN_LIFT_OVER_SAMPLES samples in a row (300 ms). On its side the
+ * car read 73 to 110 degrees, upside down 147 to 179; floor driving never
+ * passed 24.
  */
-#ifndef TERRAIN_COLLISION_CHECK_SAMPLES
-#define TERRAIN_COLLISION_CHECK_SAMPLES 12u
+#ifndef TERRAIN_LIFT_OVER_DEG
+#define TERRAIN_LIFT_OVER_DEG 60u
+#endif
+#ifndef TERRAIN_LIFT_OVER_SAMPLES
+#define TERRAIN_LIFT_OVER_SAMPLES 30u
 #endif
 
-/* Samples after a collision before the next: 50 = 500 ms, one hit gives
- * one event. */
-#ifndef TERRAIN_COLLISION_COOLDOWN_SAMPLES
-#define TERRAIN_COLLISION_COOLDOWN_SAMPLES 50u
+/* Samples after a lift or overturn before the next: 100 = 1 s, so one lift
+ * gives one event. */
+#ifndef TERRAIN_LIFT_COOLDOWN_SAMPLES
+#define TERRAIN_LIFT_COOLDOWN_SAMPLES 100u
 #endif
 
-/*
- * Below this speed, in mm/s, there is nothing to drop from (or the car
- * is standing and was hit): the push alone decides. Line following is
- * about 120 mm/s.
- */
-#ifndef TERRAIN_COLLISION_MIN_SPEED_MM_S
-#define TERRAIN_COLLISION_MIN_SPEED_MM_S 40u
+/* The counters are 8 bits; the limit fits the 12-bit event value. */
+#if (TERRAIN_LIFT_UP_CG < 105) || (TERRAIN_LIFT_UP_CG > 400)
+#error "TERRAIN_LIFT_UP_CG must be 105 to 400"
 #endif
-
-/* The push field stops at 12.7 g; the countdowns are 4 and 6 bits. */
-#if (TERRAIN_COLLISION_LIMIT_DG < 5) || (TERRAIN_COLLISION_LIMIT_DG > 80)
-#error "TERRAIN_COLLISION_LIMIT_DG must be 5 to 80 (0.5 to 8 g)"
+#if (TERRAIN_LIFT_OVER_DEG < 30) || (TERRAIN_LIFT_OVER_DEG > 170)
+#error "TERRAIN_LIFT_OVER_DEG must be 30 to 170"
 #endif
-#if (TERRAIN_COLLISION_SURE_DG < TERRAIN_COLLISION_LIMIT_DG) ||                \
-    (TERRAIN_COLLISION_SURE_DG > 127)
-#error "TERRAIN_COLLISION_SURE_DG must be TERRAIN_COLLISION_LIMIT_DG to 127"
+#if (TERRAIN_LIFT_OVER_SAMPLES < 1) || (TERRAIN_LIFT_OVER_SAMPLES > 255)
+#error "TERRAIN_LIFT_OVER_SAMPLES must be 1 to 255"
 #endif
-#if (TERRAIN_COLLISION_CHECK_SAMPLES < 1) ||                                   \
-    (TERRAIN_COLLISION_CHECK_SAMPLES > 15)
-#error "TERRAIN_COLLISION_CHECK_SAMPLES must be 1 to 15"
-#endif
-#if (TERRAIN_COLLISION_COOLDOWN_SAMPLES < 1) ||                                \
-    (TERRAIN_COLLISION_COOLDOWN_SAMPLES > 63)
-#error "TERRAIN_COLLISION_COOLDOWN_SAMPLES must be 1 to 63"
-#endif
-#if TERRAIN_COLLISION_MIN_SPEED_MM_S > 1000
-#error "TERRAIN_COLLISION_MIN_SPEED_MM_S must be 0 to 1000"
+#if (TERRAIN_LIFT_COOLDOWN_SAMPLES < 1) || (TERRAIN_LIFT_COOLDOWN_SAMPLES > 255)
+#error "TERRAIN_LIFT_COOLDOWN_SAMPLES must be 1 to 255"
 #endif
 
 /*
@@ -407,6 +478,60 @@
 #endif
 
 /*
+ * Speed state (terrain_detect.h), from the wheel speed: the average of
+ * the sizes of motion's two wheel speeds, in mm/s, so a turn in place
+ * (wheels at +84 and -84 mm/s) counts as moving at 84 mm/s.
+ *
+ * Every TERRAIN_SPEED_WINDOW_SAMPLES samples (10 = 100 ms, the same span
+ * motion averages its speeds over) the speed is compared with the
+ * previous check. Below TERRAIN_SPEED_STOP_MM_S is stopped (motion's
+ * slowest drive is 30 mm/s, over a barcode); a rise or fall of at least
+ * TERRAIN_SPEED_CHANGE_MM_S is speeding up or slowing down (15 mm/s in
+ * 100 ms is 150 mm/s^2); less is cruising. The state changes once the
+ * same answer comes TERRAIN_SPEED_CONFIRM_CHECKS checks in a row
+ * (TERRAIN_SPEED_STOP_CHECKS for STATIONARY), so one noisy check does
+ * not count. TODO(car day): tune the change limit and the checks
+ * (TER-U25).
+ */
+#ifndef TERRAIN_SPEED_STOP_MM_S
+#define TERRAIN_SPEED_STOP_MM_S 20u
+#endif
+
+#ifndef TERRAIN_SPEED_CHANGE_MM_S
+#define TERRAIN_SPEED_CHANGE_MM_S 15u
+#endif
+
+#ifndef TERRAIN_SPEED_WINDOW_SAMPLES
+#define TERRAIN_SPEED_WINDOW_SAMPLES 10u
+#endif
+
+#ifndef TERRAIN_SPEED_CONFIRM_CHECKS
+#define TERRAIN_SPEED_CONFIRM_CHECKS 2u
+#endif
+
+#ifndef TERRAIN_SPEED_STOP_CHECKS
+#define TERRAIN_SPEED_STOP_CHECKS 3u
+#endif
+
+/* The speed field stops at 510 mm/s in 2 mm/s steps; the window count is
+ * 4 bits and the confirm count 2 bits. */
+#if (TERRAIN_SPEED_STOP_MM_S < 2) || (TERRAIN_SPEED_STOP_MM_S > 500)
+#error "TERRAIN_SPEED_STOP_MM_S must be 2 to 500"
+#endif
+#if (TERRAIN_SPEED_CHANGE_MM_S < 2) || (TERRAIN_SPEED_CHANGE_MM_S > 500)
+#error "TERRAIN_SPEED_CHANGE_MM_S must be 2 to 500"
+#endif
+#if (TERRAIN_SPEED_WINDOW_SAMPLES < 1) || (TERRAIN_SPEED_WINDOW_SAMPLES > 15)
+#error "TERRAIN_SPEED_WINDOW_SAMPLES must be 1 to 15"
+#endif
+#if (TERRAIN_SPEED_CONFIRM_CHECKS < 1) || (TERRAIN_SPEED_CONFIRM_CHECKS > 3)
+#error "TERRAIN_SPEED_CONFIRM_CHECKS must be 1 to 3"
+#endif
+#if (TERRAIN_SPEED_STOP_CHECKS < 1) || (TERRAIN_SPEED_STOP_CHECKS > 3)
+#error "TERRAIN_SPEED_STOP_CHECKS must be 1 to 3"
+#endif
+
+/*
  * Motion's odometry (TEAM.md IF-05) counts as stale, and its distance as
  * unknown, once its update count has not changed for this long, in ms.
  * tMotion publishes every 20 ms, so 2 s means it has stopped, not that
@@ -428,6 +553,17 @@
  */
 #ifndef TERRAIN_DEBUG_PRINT_MS
 #define TERRAIN_DEBUG_PRINT_MS 0
+#endif
+
+/*
+ * Lift capture: 1 prints every accelerometer sample, ten to a line
+ * ("terrain: IMU"), for recording lifts and normal driving to tune the
+ * lift detection. Car axes, gains applied, before the calibration bias,
+ * in cm/s^2, with the mean wheel speed size. About 2 KB a second over the
+ * console mirror; keep 0 in commits.
+ */
+#ifndef TERRAIN_CAPTURE
+#define TERRAIN_CAPTURE 0
 #endif
 
 /*

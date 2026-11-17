@@ -10,3 +10,10 @@ ${CC:-cc} -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -g \
     "$repo_root/app_program/motion/motion_pid.c" \
     -lm -o "$test_tmp/line-acquisition"
 "$test_tmp/line-acquisition"
+
+${CC:-cc} -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -g \
+    -I"$repo_root/testing/motion/host/include" \
+    "$repo_root/testing/motion/host/command_slot_test.c" \
+    "$repo_root/app_program/motion/motion_command.c" \
+    -o "$test_tmp/command-slot"
+"$test_tmp/command-slot"

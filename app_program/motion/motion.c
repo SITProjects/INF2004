@@ -27,17 +27,11 @@
 
 /* Private types, constants, and macros. */
 
-/* Packed status word of motion_get_status(). */
-#define STATUS_MODE_MASK 0x07u
-#define STATUS_DONE_SHIFT 3u
-#define STATUS_DONE_MASK 0x03u
-
-/* Packed line word of motion_set_line_input(). */
-#define LINE_ERROR_MASK 0x0000FFFFu
+#if APP_TEST
+/* Packed line word of motion_test_set_line(). */
 #define LINE_SEEN 0x00010000u
-#define LINE_SEQUENCE_SHIFT 17u
-#define LINE_SEQUENCE_MASK 0x7FFFu
-#define LINE_ERROR_LIMIT 1000
+#define LINE_SEQUENCE_MASK 0x0000FFFFu
+#endif
 
 /* Each message takes the kernel's INT header plus the 4-byte word. */
 #define CMD_SIZE ((INT)sizeof(uint32_t))
@@ -71,7 +65,6 @@ _Static_assert((INT)MOTION_DONE_TARGET == (INT)ROBOT_MOTION_DONE_DIST,
                "done DIST");
 _Static_assert((INT)MOTION_DONE_LINE == (INT)ROBOT_MOTION_DONE_LINE,
                "done LINE");
-_Static_assert(MOTION_LINE_ERROR_MAX == LINE_ERROR_LIMIT, "line error range");
 
 /* Static data. */
 
@@ -80,17 +73,20 @@ ID motion_mbf_cmd;
 ID motion_flg_event;
 
 static ID cyc_motion;
-/* Queued commands/inhibit take control until an explicit FOLLOW request. */
-static bool b_line_control = MOTION_COMMAND_ACTUATION_ENABLED && !APP_TEST;
+/*
+ * Queued commands/inhibit take control until an explicit FOLLOW request.
+ * Written by tMotion only; read by the line task as one byte.
+ */
+static volatile bool b_line_control =
+    MOTION_COMMAND_ACTUATION_ENABLED && !APP_TEST;
 
 /* Written by tMotion only; read by any task as one word. */
-static volatile uint32_t status_word;
+static volatile uint8_t status_word;
 
-/*
- * TODO(step 9, line_follow): interim line input until line_state_t under
- * MTX_LINE exists. Written by one task only, read by tMotion.
- */
+#if APP_TEST
+/* Test line input (MOT-U36). Written by the test task, read by tMotion. */
 static volatile uint32_t line_word;
+#endif
 
 /*
  * Odometry for motion_get_odometry(), written by tMotion only. The
@@ -99,7 +95,8 @@ static volatile uint32_t line_word;
  * order, so volatile access order is the order the other core sees.
  */
 static volatile uint32_t odometry_sequence;
-static volatile motion_shared_odometry_t shared_odometry;
+static volatile uint32_t shared_odometry[ROBOT_ODOMETRY_WORDS];
+static uint8_t odometry_updates; /* 0 until the first publish. */
 
 /* Written by tMotion; read by the test task only while held. */
 static motion_task_timing_t timing;
@@ -116,7 +113,9 @@ static void tick_handler (void * p_exinf);
 static void run_commands (void);
 static void run_command (uint32_t cmd);
 static void flush_commands (void);
+#if APP_TEST
 static uint16_t feed_line (uint16_t last_sequence);
+#endif
 static void report_change (motion_state_t before, motion_state_t after);
 static void publish_status (bool b_inhibited);
 static void publish_odometry (void);
@@ -168,7 +167,7 @@ motion_init (void)
         return cyc_motion;
     }
 
-    status_word = (uint32_t)ROBOT_MOTION_MODE_STOPPED;
+    status_word = (uint8_t)ROBOT_MOTION_MODE_STOPPED;
     timing.inhibit_brake_us = TIMER_NONE;
     timing_reset();
     return motion_command_init();
@@ -208,12 +207,13 @@ motion_start (void)
 motion_task_status_t
 motion_get_status (void)
 {
-    uint32_t word = status_word;
+    uint32_t const word = status_word;
     motion_task_status_t status;
 
-    status.mode = (robot_motion_mode_t)(word & STATUS_MODE_MASK);
-    status.done =
-        (robot_motion_done_t)((word >> STATUS_DONE_SHIFT) & STATUS_DONE_MASK);
+    status.mode = (robot_motion_mode_t)robot_field_get(
+        word, ROBOT_MOTION_STATUS_MODE_SHIFT, ROBOT_MOTION_STATUS_MODE_BITS);
+    status.done = (robot_motion_done_t)robot_field_get(
+        word, ROBOT_MOTION_STATUS_DONE_SHIFT, ROBOT_MOTION_STATUS_DONE_BITS);
     return status;
 }
 
@@ -230,14 +230,15 @@ motion_get_odometry (motion_shared_odometry_t * p_odometry)
 
         if (0u == (before & 1u))
         {
-            p_odometry->updates = shared_odometry.updates;
-            p_odometry->distance_mm = shared_odometry.distance_mm;
-            p_odometry->heading_deg = shared_odometry.heading_deg;
-            p_odometry->speed_mm_s = shared_odometry.speed_mm_s;
-            p_odometry->left_speed_mm_s = shared_odometry.left_speed_mm_s;
-            p_odometry->right_speed_mm_s = shared_odometry.right_speed_mm_s;
+            uint32_t words[ROBOT_ODOMETRY_WORDS];
+
+            for (UINT word = 0u; word < ROBOT_ODOMETRY_WORDS; word++)
+            {
+                words[word] = shared_odometry[word];
+            }
             if (odometry_sequence == before)
             {
+                *p_odometry = robot_odometry_unpack(words);
                 return true;
             }
         }
@@ -245,32 +246,25 @@ motion_get_odometry (motion_shared_odometry_t * p_odometry)
     return false;
 }
 
-void
-motion_set_line_input (int16_t error, bool b_seen)
+bool
+motion_line_control_active (void)
 {
-    int16_t clamped = error;
-    uint32_t sequence;
+    return b_line_control;
+}
 
-    if (clamped > LINE_ERROR_LIMIT)
-    {
-        clamped = LINE_ERROR_LIMIT;
-    }
-    else if (clamped < -LINE_ERROR_LIMIT)
-    {
-        clamped = -LINE_ERROR_LIMIT;
-    }
-
+#if APP_TEST
+void
+motion_test_set_line (bool b_seen)
+{
     /* One writer, so the read-modify-write of the sequence is safe. */
-    sequence = ((line_word >> LINE_SEQUENCE_SHIFT) + 1u) & LINE_SEQUENCE_MASK;
+    uint32_t sequence = (line_word + 1u) & LINE_SEQUENCE_MASK;
     if (0u == sequence)
     {
         sequence = 1u; /* 0 means no reading yet. */
     }
-    line_word = ((uint32_t)(uint16_t)clamped & LINE_ERROR_MASK) |
-                (b_seen ? LINE_SEEN : 0u) | (sequence << LINE_SEQUENCE_SHIFT);
+    line_word = (b_seen ? LINE_SEEN : 0u) | sequence;
 }
 
-#if APP_TEST
 ER
 motion_task_hold (bool b_hold)
 {
@@ -303,7 +297,9 @@ motion_task (INT stacd, void * p_exinf)
 {
     bool b_inhibited = false;
     bool b_held = false;
+#if APP_TEST
     uint16_t line_sequence = 0u;
+#endif
 
     (void)stacd;
     (void)p_exinf;
@@ -375,7 +371,9 @@ motion_task (INT stacd, void * p_exinf)
         }
         else
         {
+#if APP_TEST
             line_sequence = feed_line(line_sequence);
+#endif
             run_commands();
         }
 
@@ -490,12 +488,10 @@ run_command (uint32_t cmd)
         b_line_control = false;
     }
 
-    /* Queued acquisition accepts a fresh line already under the sensors,
-     * including one seen before the post-obstacle return was armed. */
     if ((MOTION_OK == result) && robot_motion_cmd_get_stop_at_line(cmd) &&
         ((ROBOT_MOTION_CMD_MOVE == type) || (ROBOT_MOTION_CMD_TURN == type)))
     {
-        result = motion_move_acquire_line();
+        result = motion_move_watch_line();
     }
     if (result != MOTION_OK)
     {
@@ -515,24 +511,21 @@ flush_commands (void)
     }
 }
 
-/*
- * Pass a line reading newer than @p last_sequence to the motion module.
- * TODO(step 9, line_follow): lock MTX_LINE and copy line_state_t instead.
- */
+#if APP_TEST
+/* Pass a test line reading newer than @p last_sequence to the module. */
 static uint16_t
 feed_line (uint16_t last_sequence)
 {
     uint32_t word = line_word;
-    uint16_t sequence =
-        (uint16_t)((word >> LINE_SEQUENCE_SHIFT) & LINE_SEQUENCE_MASK);
+    uint16_t sequence = (uint16_t)(word & LINE_SEQUENCE_MASK);
 
     if ((sequence != 0u) && (sequence != last_sequence))
     {
-        (void)motion_move_set_line((int16_t)(uint16_t)(word & LINE_ERROR_MASK),
-                                   (word & LINE_SEEN) != 0u);
+        (void)motion_move_set_line((word & LINE_SEEN) != 0u);
     }
     return sequence;
 }
+#endif
 
 /* Raise the event for a state change made by motion_move_update(). */
 static void
@@ -580,8 +573,11 @@ publish_status (bool b_inhibited)
                                 : (uint32_t)motion_move_get_state();
     uint32_t done = (uint32_t)motion_move_get_done_reason();
 
-    status_word = (mode & STATUS_MODE_MASK) |
-                  ((done & STATUS_DONE_MASK) << STATUS_DONE_SHIFT);
+    uint32_t word = robot_field_put(0u, ROBOT_MOTION_STATUS_MODE_SHIFT,
+                                    ROBOT_MOTION_STATUS_MODE_BITS, mode);
+
+    status_word = (uint8_t)robot_field_put(word, ROBOT_MOTION_STATUS_DONE_SHIFT,
+                                           ROBOT_MOTION_STATUS_DONE_BITS, done);
 }
 
 /* Copy this update's odometry for motion_get_odometry(). */
@@ -594,13 +590,24 @@ publish_odometry (void)
     {
         return;
     }
+    /* Skip 0 on the wrap: 0 means nothing has been published yet. */
+    odometry_updates =
+        (UINT8_MAX == odometry_updates) ? 1u : (uint8_t)(odometry_updates + 1u);
+    robot_odometry_t const unpacked = {
+        .updates = odometry_updates,
+        .distance_mm = odometry.distance_mm,
+        .heading_deg = odometry.heading_deg,
+        .speed_mm_s = odometry.speed_mm_s,
+        .left_speed_mm_s = odometry.left_speed_mm_s,
+        .right_speed_mm_s = odometry.right_speed_mm_s};
+    uint32_t words[ROBOT_ODOMETRY_WORDS];
+
+    robot_odometry_pack(&unpacked, words);
     odometry_sequence++; /* Odd: readers retry. */
-    shared_odometry.updates++;
-    shared_odometry.distance_mm = odometry.distance_mm;
-    shared_odometry.heading_deg = odometry.heading_deg;
-    shared_odometry.speed_mm_s = odometry.speed_mm_s;
-    shared_odometry.left_speed_mm_s = odometry.left_speed_mm_s;
-    shared_odometry.right_speed_mm_s = odometry.right_speed_mm_s;
+    for (UINT word = 0u; word < ROBOT_ODOMETRY_WORDS; word++)
+    {
+        shared_odometry[word] = words[word];
+    }
     odometry_sequence++; /* Even: whole again. */
 }
 

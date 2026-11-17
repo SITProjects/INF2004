@@ -6,8 +6,8 @@
  * axes. Phase 2: calibrate at every start, then correct every reading.
  * Phase 3: pitch and roll. Phase 4: hump state and an event queue. Phase
  * 5: turn rate and turning state, from motion's wheel speeds. Phase 7:
- * collisions. Phase 9: hump height. Motion state follows in a later
- * phase.
+ * lifted and overturned. Phase 8: speed state. Phase 9: hump height. Phase 10: run
+ * summary.
  *
  * Call terrain_monitor_init() once, then terrain_monitor_update()
  * regularly (about every 10 ms) from one place only. Calibration then skips
@@ -17,9 +17,9 @@
  * are given out only once the calibration state is TERRAIN_CALIB_VALID.
  *
  * terrain_monitor_get_latest(), terrain_monitor_get_calibration(),
- * terrain_monitor_recalibrate(), terrain_monitor_poll_event() and
- * terrain_monitor_events_dropped() may be called from anywhere, including
- * other tasks.
+ * terrain_monitor_recalibrate(), terrain_monitor_poll_event(),
+ * terrain_monitor_events_dropped() and terrain_monitor_get_summary() may
+ * be called from anywhere, including other tasks.
  *
  * Copyright (c) 2026 10x Slackers
  * SPDX-License-Identifier: MIT
@@ -78,6 +78,19 @@ typedef enum
 } terrain_turn_state_t;
 
 /**
+ * @brief How the wheels' speed is changing, judged from motion's two
+ *        wheel speeds. Resting value 0. The order matches the event codes
+ *        TERRAIN_EVENT_STATIONARY to TERRAIN_EVENT_DECELERATING.
+ */
+typedef enum
+{
+    TERRAIN_SPEED_STATIONARY = 0, /**< Wheels stopped, or nearly. */
+    TERRAIN_SPEED_ACCELERATING,   /**< Wheels speeding up. */
+    TERRAIN_SPEED_CRUISING,       /**< Wheels at a steady speed. */
+    TERRAIN_SPEED_DECELERATING    /**< Wheels slowing down. */
+} terrain_speed_state_t;
+
+/**
  * @brief Kind of event. The codes are fixed, because events are passed to
  *        other subsystems; new kinds take the next free code.
  */
@@ -87,17 +100,18 @@ typedef enum
     TERRAIN_EVENT_ASCENDING,    /**< A climb started. */
     TERRAIN_EVENT_DESCENDING,   /**< A descent (or a dip) started. */
     TERRAIN_EVENT_LEVEL,        /**< Flat again after a descent. */
-    TERRAIN_EVENT_COLLISION,    /**< The car hit something. */
-    TERRAIN_EVENT_STATIONARY,   /**< Reserved: speed state. */
-    TERRAIN_EVENT_ACCELERATING, /**< Reserved: speed state. */
-    TERRAIN_EVENT_CRUISING,     /**< Reserved: speed state. */
-    TERRAIN_EVENT_DECELERATING, /**< Reserved: speed state. */
+    TERRAIN_EVENT_LIFTED,       /**< The car was picked up. */
+    TERRAIN_EVENT_STATIONARY,   /**< The wheels stopped. */
+    TERRAIN_EVENT_ACCELERATING, /**< The wheels started speeding up. */
+    TERRAIN_EVENT_CRUISING,     /**< The wheels reached a steady speed. */
+    TERRAIN_EVENT_DECELERATING, /**< The wheels started slowing down. */
     TERRAIN_EVENT_TURNING,      /**< The car started turning. */
-    TERRAIN_EVENT_STRAIGHT      /**< The car stopped turning. */
+    TERRAIN_EVENT_STRAIGHT,     /**< The car stopped turning. */
+    TERRAIN_EVENT_OVERTURNED    /**< The car is on its side or upside down. */
 } terrain_event_type_t;
 
 /* Number of event codes in use; codes from here up to 15 are spare. */
-#define TERRAIN_EVENT_TYPES 11u
+#define TERRAIN_EVENT_TYPES 12u
 
 /**
  * @brief One event, packed into one word: type 4 bits, value 12 bits,
@@ -144,9 +158,16 @@ typedef struct
  * accelerometer, so they are given in every calibration state. While
  * motion's odometry is missing or stale the turn rate reads 0.
  *
+ * The speed state says whether the wheels are stopped, speeding up, at a
+ * steady speed or slowing down (see terrain_monitor_poll_event()). It
+ * also comes from the wheels, so it is given in every calibration state;
+ * while motion's odometry is missing or stale the wheels count as
+ * stopped.
+ *
  * The acceleration, tilt and hump state fields are 0 (and nothing is
  * held) unless the calibration state is TERRAIN_CALIB_VALID. An all-zero
- * snapshot reads as CALIBRATING, LEVEL, STRAIGHT, with everything 0.
+ * snapshot reads as CALIBRATING, LEVEL, STRAIGHT, STATIONARY, with
+ * everything 0.
  */
 typedef struct
 {
@@ -173,6 +194,26 @@ typedef struct
     float gravity_z_mps2; /**< Last attempt's average, Z. */
 } terrain_calib_info_t;
 
+/* Humps whose height the run summary keeps. */
+#define TERRAIN_SUMMARY_HUMPS 8u
+
+/* Words in a packed run summary. */
+#define TERRAIN_SUMMARY_WORDS 3u
+
+/* Bytes in a packed run summary message (terrain_monitor_summary_pack()). */
+#define TERRAIN_SUMMARY_BYTES 11u
+
+/**
+ * @brief Run summary, packed: humps finished, the highest, the height of
+ *        each of the first TERRAIN_SUMMARY_HUMPS, lifts and turns,
+ *        all since init. Read it only through the terrain_monitor_summary_*()
+ *        functions; the layout is private. An all-zero summary is empty.
+ */
+typedef struct
+{
+    uint32_t word[TERRAIN_SUMMARY_WORDS]; /**< Packed fields. */
+} terrain_summary_t;
+
 /* Public function declarations. */
 
 /**
@@ -182,10 +223,10 @@ typedef struct
  *         terrain_monitor_status_text().
  * Does not wait for calibration: terrain_monitor_update() collects the
  * samples. Clears all counters. Raises the IMU fault (terrain_fault.h) if
- * setup fails and clears it if setup succeeds. Safe to call again to retry, for example
- * after plugging the sensor in, but only from the task that calls
- * terrain_monitor_update(); use terrain_monitor_recalibrate() from other
- * tasks.
+ * setup fails and clears it if setup succeeds. Safe to call again to
+ * retry, for example after plugging the sensor in, but only from the task
+ * that calls terrain_monitor_update(); use terrain_monitor_recalibrate()
+ * from other tasks.
  */
 terrain_status_t terrain_monitor_init (void);
 
@@ -218,6 +259,14 @@ terrain_status_t terrain_monitor_update (void);
  * Safe to call from other tasks while terrain_monitor_update() runs.
  */
 terrain_status_t terrain_monitor_get_latest (terrain_data_t * p_out);
+
+/**
+ * @brief Whether the car is on a hump now.
+ * @return True from the climb until level again. False until calibrated.
+ * Safe to call from other tasks while terrain_monitor_update() runs. Short
+ * leans read true too: only a finished hump is told from them.
+ */
+bool terrain_monitor_on_hump (void);
 
 /**
  * @brief Copy the calibration details.
@@ -272,14 +321,16 @@ terrain_status_t terrain_monitor_recalibrate (void);
  * While roll is held (the car is turning), no hump events are found and
  * the height pauses: the held value is not a new reading.
  *
- * - COLLISION: in hump state LEVEL only (never on a ramp), a horizontal
- *   push (forward/back and sideways) of at least
- *   TERRAIN_COLLISION_LIMIT_DG, after which motion's ground speed
- *   dropped to half or less within TERRAIN_COLLISION_CHECK_SAMPLES. It
- *   counts at once for a push of at least TERRAIN_COLLISION_SURE_DG, or
- *   when the speed is unknown or below TERRAIN_COLLISION_MIN_SPEED_MM_S.
- *   Then none for TERRAIN_COLLISION_COOLDOWN_SAMPLES. Value: the biggest
- *   push of the hit, tenths of a g, 0 to 127 (stops at 12.7 g).
+ * Lifted and overturned, from the mean of the last 100 ms of samples
+ * (before the bias) against the level reading from calibration, whatever
+ * the car is doing:
+ * - LIFTED: the mean's upward part was more than TERRAIN_LIFT_UP_CG
+ *   hundredths of the level reading. Value: that part, in hundredths.
+ * - OVERTURNED: the mean was tilted more than TERRAIN_LIFT_OVER_DEG from
+ *   level for TERRAIN_LIFT_OVER_SAMPLES samples in a row; once until it
+ *   comes back. Value: the tilt, degrees.
+ * After either, none for TERRAIN_LIFT_COOLDOWN_SAMPLES. Each also adds one
+ * to terrain_monitor_lift_count(), which stops the motors.
  *
  * In every calibration state (the turn rate comes from motion's wheel
  * speeds, not the accelerometer):
@@ -290,14 +341,36 @@ terrain_status_t terrain_monitor_recalibrate (void);
  * Turns in place and line-following curves faster than the limit count;
  * each separate turn of an obstacle detour counts as its own turn.
  *
+ * Also in every calibration state, from the wheel speed: the average of
+ * the sizes of motion's two wheel speeds, so a turn in place counts as
+ * moving. Every TERRAIN_SPEED_WINDOW_SAMPLES samples it is compared with
+ * the previous check. The state changes, with an event of the same name
+ * (value 0), once the same answer comes TERRAIN_SPEED_CONFIRM_CHECKS
+ * checks in a row (TERRAIN_SPEED_STOP_CHECKS for STATIONARY):
+ * - STATIONARY: below TERRAIN_SPEED_STOP_MM_S (or no odometry).
+ * - ACCELERATING: up by at least TERRAIN_SPEED_CHANGE_MM_S since the
+ *   previous check.
+ * - DECELERATING: down by at least TERRAIN_SPEED_CHANGE_MM_S.
+ * - CRUISING: moving, and changed by less than that.
+ *
  * The queue holds TERRAIN_EVENT_QUEUE_LEN events; when it is full the
  * oldest is dropped and counted (terrain_monitor_events_dropped()). A
- * recalibration resets the hump state to LEVEL and the collision check to
- * ready without an event, keeps the turning state, and keeps
+ * recalibration resets the hump state to LEVEL and the lift check
+ * without an event, keeps the turning state, and keeps
  * the events already queued. Only terrain_monitor_init() empties it.
  * Safe to call from other tasks while terrain_monitor_update() runs.
  */
 terrain_status_t terrain_monitor_poll_event (terrain_event_t * p_out);
+
+/**
+ * @brief Lifts and overturns found since init (IF-11).
+ * @return Count, wrapping at 256. Each LIFTED or OVERTURNED event adds one
+ *         as it is found, whether or not anyone polls the events; a change
+ *         means the car has been picked up or turned over since the last
+ *         read. 0 before init.
+ * Any task; never waits: one byte, written by the terrain task only.
+ */
+uint8_t terrain_monitor_lift_count (void);
 
 /**
  * @brief Events dropped because the queue was full, since init.
@@ -305,6 +378,80 @@ terrain_status_t terrain_monitor_poll_event (terrain_event_t * p_out);
  * Safe to call from other tasks.
  */
 uint8_t terrain_monitor_events_dropped (void);
+
+/**
+ * @brief Copy the run summary.
+ * @param p_out Receives the summary; read it with the
+ *        terrain_monitor_summary_*() functions.
+ * @return TERRAIN_OK, TERRAIN_ERR_NOT_INIT or TERRAIN_ERR_PARAM.
+ *
+ * Counted as the events are made, so it is up to date at any time,
+ * whether or not anyone polls the events: each LEVEL event adds a hump
+ * and its height, each LIFTED or OVERTURNED a lift, each TURNING a turn.
+ * Counts stop at their largest value. Only terrain_monitor_init() clears
+ * it; a recalibration keeps it. Safe to call from other tasks while
+ * terrain_monitor_update() runs.
+ */
+terrain_status_t terrain_monitor_get_summary (terrain_summary_t * p_out);
+
+/**
+ * @brief Humps finished in a summary.
+ * @param p_summary Summary from terrain_monitor_get_summary().
+ * @return 0 to 15; stops at 15, so more than TERRAIN_SUMMARY_HUMPS shows
+ *         humps whose height was not kept. 0 if @p p_summary is NULL.
+ * The summary read functions only read their argument: any task may call
+ * them on its own copy.
+ */
+uint8_t
+terrain_monitor_summary_hump_count (terrain_summary_t const * p_summary);
+
+/**
+ * @brief Highest hump in a summary, including humps whose height was not
+ *        kept.
+ * @param p_summary Summary.
+ * @return mm, 0 to 255; 0 before the first hump or if @p p_summary is
+ *         NULL.
+ */
+uint8_t
+terrain_monitor_summary_highest_mm (terrain_summary_t const * p_summary);
+
+/**
+ * @brief Height of one hump in a summary.
+ * @param p_summary Summary.
+ * @param index 0 for the first hump, up to TERRAIN_SUMMARY_HUMPS - 1.
+ * @return mm, 0 to 255; 0 for a hump not finished yet, an index out of
+ *         range, or if @p p_summary is NULL.
+ */
+uint8_t terrain_monitor_summary_hump_mm (terrain_summary_t const * p_summary,
+                                         uint32_t index);
+
+/**
+ * @brief Lifts (LIFTED and OVERTURNED events) in a summary.
+ * @param p_summary Summary.
+ * @return 0 to 15; stops at 15. 0 if @p p_summary is NULL.
+ */
+uint8_t terrain_monitor_summary_lifts (terrain_summary_t const * p_summary);
+
+/**
+ * @brief Turns (TURNING events) in a summary.
+ * @param p_summary Summary.
+ * @return 0 to 127; stops at 127. 0 if @p p_summary is NULL.
+ */
+uint8_t terrain_monitor_summary_turns (terrain_summary_t const * p_summary);
+
+/**
+ * @brief Pack a summary into the message sent to other subsystems.
+ * @param p_summary Summary.
+ * @param p_bytes Receives TERRAIN_SUMMARY_BYTES bytes, little-endian:
+ *        bytes 0-2 hold hump count (bits 0-3), highest hump in mm (bits
+ *        4-11), lifts (bits 12-15) and turns (bits 16-22), bit 23 is
+ *        0; bytes 3-10 the height of humps 1 to 8 in mm, 0 if unused.
+ * @return TERRAIN_OK; TERRAIN_ERR_PARAM, with @p p_bytes unchanged, if
+ *         either pointer is NULL.
+ */
+terrain_status_t
+terrain_monitor_summary_pack (terrain_summary_t const * p_summary,
+                              uint8_t * p_bytes);
 
 /**
  * @brief Kind of an event.
@@ -381,6 +528,15 @@ int16_t terrain_monitor_data_turn_rate_dps (terrain_data_t const * p_data);
  */
 terrain_turn_state_t
 terrain_monitor_data_turn_state (terrain_data_t const * p_data);
+
+/**
+ * @brief Speed state in a snapshot.
+ * @param p_data Snapshot.
+ * @return The state, in every calibration state;
+ *         TERRAIN_SPEED_STATIONARY if @p p_data is NULL.
+ */
+terrain_speed_state_t
+terrain_monitor_data_speed_state (terrain_data_t const * p_data);
 
 /**
  * @brief Pitch in a snapshot.
@@ -539,10 +695,41 @@ char const * terrain_monitor_hump_text (terrain_hump_state_t state);
 char const * terrain_monitor_turn_text (terrain_turn_state_t state);
 
 /**
+ * @brief Name of a speed state, for printing.
+ * @param state Any terrain_speed_state_t value.
+ * @return A constant string such as "CRUISING"; never NULL.
+ */
+char const * terrain_monitor_speed_text (terrain_speed_state_t state);
+
+/**
  * @brief Name of an event kind, for printing.
  * @param type Any terrain_event_type_t value.
  * @return A constant string such as "LEVEL"; never NULL.
  */
 char const * terrain_monitor_event_text (terrain_event_type_t type);
+
+/** One accelerometer sample kept for the lift capture (TERRAIN_CAPTURE). */
+typedef struct
+{
+    int16_t x_cm_s2;    /**< Forward, car axes, gains applied, no bias. */
+    int16_t y_cm_s2;    /**< Left. */
+    int16_t z_cm_s2;    /**< Up. */
+    int16_t wheel_mm_s; /**< Mean wheel speed size when it was read. */
+} terrain_capture_sample_t;
+
+/**
+ * @brief Take the oldest samples kept for the lift capture.
+ *
+ * Only with TERRAIN_CAPTURE set to 1; otherwise nothing is kept and this
+ * returns 0. Samples arrive at the accelerometer's 100 Hz.
+ * @param p_out Non-null; receives up to @p max samples, oldest first.
+ * @param max Room in @p p_out.
+ * @param p_dropped Non-null; set to the samples lost so far because the
+ *        capture was full.
+ * @return Samples written.
+ * Caller of terrain_monitor_update() only.
+ */
+uint32_t terrain_monitor_capture_take (terrain_capture_sample_t * p_out,
+                                       uint32_t max, uint32_t * p_dropped);
 
 #endif /* TERRAIN_MONITOR_H */

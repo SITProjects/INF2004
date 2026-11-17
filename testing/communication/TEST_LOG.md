@@ -20,6 +20,10 @@ Define a test here before running it. Test IDs never change.
 | COM-U08 | Wi-Fi outage telemetry replay | IF-01, MQTT=1 | manual | Follow TELEMETRY_REPLAY.md; interrupt AP for 20-30 s while keeping power and local subscriber | Accepted samples replay with original sequence/capture time; PUBACK removes them; duplicates allowed |
 | COM-U09 | Broker outage telemetry replay | IF-01, QoS 1 | manual | Stop broker 20 s, restart; inspect serial/broker ACK logs | Pending records survive reconnect and drain; other tasks continue |
 | COM-U10 | Outbox capacity and overflow | IF-01, 128 records | manual | Interrupt Wi-Fi over 140 s then restore | Full rejects newest visibly; oldest accepted data replays unchanged; new samples resume |
+| COM-U11 | dashboard commands in the firmware: run state, barcode table, and the radio-task callbacks | IF-10 | auto (host) | `sh testing/communication/host/run.sh` in the dev container | RC01..RC06 PASS, `0 failure(s)`; `connection_test` covers subscribing, retrying a failed subscribe, split and over-long messages |
+| COM-U12 | dashboard against a fake car over real MQTT | IF-10, `tools/dashboard/` | auto (host) | `python3 testing/communication/host/dashboard_test.py` | D01..D26 PASS, `0 failure(s)` |
+| COM-U13 | dashboard with the real car | IF-10, MQTT=1 | manual | 1. Run `tools/dashboard/car_dashboard.py <log>`, open http://localhost:8080. 2. Flash `make MQTT=1`; the car connects and stays still. 3. Set a barcode's action, press Start, then Stop while it follows a straight, then Start again. 4. Press Stop during a bypass, then Start. 5. Reset the car while the page shows Running. | 2: `Car connected`, `Stopped`, no movement. 3: the car brakes on Stop with no bypass, and follows again on Start. 4: it stays held, and on Start follows again from where it stands. 5: it comes back `Stopped` and stays still, with its actions sent again. Throughout, the Car panel updates twice a second, and speed reads about 80 mm/s while following and 0 when stopped |
+| COM-U14 | console mirror carries on after a stalled link | MQTT=1, `console_mirror_mqtt.c` | auto (host) | `sh testing/communication/host/run.sh` | CM01..CM10 PASS |
 
 
 *Method:* **auto** = `TEST_CHECK` in code, result printed on the console;
@@ -32,3 +36,4 @@ Add a new row for every run. Never edit or delete old rows.
 | Date | Test ID | Commit | Tester | Result | Log / evidence | Notes |
 |---|---|---|---|---|---|---|
 | YYYY-MM-DD | COM-U01 | `abc1234` | | PASS / FAIL | `logs/YYYY-MM-DD_….txt` | |
+| 2026-11-07 | COM-U14 | console stall fix | Kitsunez (host) | PASS | `sh testing/communication/host/run.sh` | CM01 to CM10 added. Not yet run on the car. The console feed stopped for good at 13:36:15: the link stalled about 33 s, past lwIP's 30 s MQTT_REQ_TIMEOUT, and the mirror ignored ERR_TIMEOUT. Telemetry kept going and the car read A and F, but the dashboard showed neither. |

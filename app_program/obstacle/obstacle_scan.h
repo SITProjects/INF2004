@@ -23,25 +23,12 @@ typedef struct
     uint16_t settle_margin_ms;
 } obstacle_servo_timing_t;
 
-/**
- * Geometry published with one result: zeros unless that result is a
- * finished sweep (PATH_FOUND or BLOCKED). Every range is from the servo
- * pivot (obstacle_width_range_mm()); lateral offsets are + left.
- */
-typedef struct
-{
-    uint16_t centre_mm;    /**< Servo pivot to obstacle face, 0 if none. */
-    int16_t left_x_mm;     /**< Left boundary, lateral mm from pivot. */
-    int16_t right_x_mm;    /**< Right boundary, lateral mm from pivot. */
-    bool b_left_clear;     /**< The 60 degree end was clear (free space). */
-    bool b_right_clear;    /**< The 120 degree end was clear (free space). */
-    uint16_t left_end_mm;  /**< Range at the 60 degree end, 0 if no echo. */
-    uint16_t right_end_mm; /**< Range at the 120 degree end, 0 if none. */
-} obstacle_scan_geometry_t;
+/** Geometry published with one result; layout in robot_types.h. */
+typedef robot_obstacle_geometry_t obstacle_scan_geometry_t;
 
 /**
- * One stationary corridor sweep: every grid position from 60 to 120
- * degrees, index 0 at 60 degrees (left). Echoes are medians in
+ * One stationary corridor sweep: every grid position from 50 to 130
+ * degrees, index 0 at 50 degrees (left). Echoes are medians in
  * microseconds; 0 is no echo. A position whose faults exhausted its retries
  * has its valid bit clear; a timed-out or cancelled sweep has none set.
  */
@@ -55,13 +42,8 @@ typedef struct
 /** No watch: obstacle_scan_set_watch() argument that centres the sensor. */
 #define OBSTACLE_SCAN_WATCH_OFF (-1)
 
-/** Latest reading while the sensor is held at a watch angle. */
-typedef struct
-{
-    uint8_t sequence; /**< Advances once per reading taken while watching. */
-    uint16_t echo_us; /**< Echo of that reading; 0 = none or unusable. */
-    bool b_active;    /**< The sensor is held at a watch angle. */
-} obstacle_scan_watch_t;
+/** Latest reading at a watch angle; layout in robot_types.h. */
+typedef robot_obstacle_watch_t obstacle_scan_watch_t;
 
 /* Public function declarations. */
 
@@ -115,7 +97,7 @@ typedef struct
  * Any coarse or fine position whose faults exhaust its retries makes the
  * width unavailable (width 0, edges EDGE_NONE, both flags false) while the
  * direction is still published. Edges are the first hit from outside, valid
- * for one contiguous obstacle in the 60..120 degree arc; a found edge is
+ * for one contiguous obstacle in the 50..130 degree arc; a found edge is
  * accurate to about half a step before calibration. Results assume the car
  * is stationary throughout the sweep. See obstacle_width.h for the geometry
  * and robot_types.h for the bit layout.
@@ -189,7 +171,7 @@ void obstacle_scan_set_side_scans (bool b_enabled);
  * request and published result are kept as they were. A side scan,
  * corridor sweep or rearm ends the watch. Readings of the car's own body
  * (OBSTACLE_SIDE_SELF_*) count as no echo.
- * @param angle Servo angle, OBSTACLE_SWEEP_FIRST_DEG..LAST_DEG, or
+ * @param angle Servo angle, OBSTACLE_WATCH_MIN_DEG..MAX_DEG, or
  *        OBSTACLE_SCAN_WATCH_OFF to centre and resume centre groups.
  * Call only from the scan task.
  */
@@ -205,8 +187,8 @@ obstacle_scan_watch_t obstacle_scan_watch (void);
 /**
  * @brief Start a corridor sweep for bypass verification.
  *
- * Latches the stop request, then measures every grid position from 60 to
- * 120 degrees with the side-position ping count, retries and median. When
+ * Latches the stop request, then measures every grid position from 50 to
+ * 130 degrees with the side-position ping count, retries and median. When
  * done, or after OBSTACLE_CORRIDOR_TIMEOUT_MS, the sweep is published for
  * obstacle_scan_corridor() and obstacle_scan_rearm() runs. Assumes the car
  * is stationary throughout.
