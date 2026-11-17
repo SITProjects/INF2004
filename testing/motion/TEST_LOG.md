@@ -110,7 +110,7 @@ tests motion alone, built with `WIFI=none`; *full* means the committed
 | S08 | MOT-U24..U26 | motion only, `MOTION_SYNC_TESTS` 1 | `S08_MOT-U24-U26.uf2` | `S08_MOT-U24-U26.txt` | S04, S06 |
 | S09 | MOT-U28..U30 | motion only, `MOTION_FOLLOW_TESTS` 1 | `S09_MOT-U28-U30.uf2` | `S09_MOT-U28-U30.txt` | S04, S06 |
 | S10 | MOT-U36, U37 | motion only, `MOTION_TASK_TESTS` 1 | `S10_MOT-U36-U37.uf2` | `S10_MOT-U36-U37.txt` | — |
-| S11 | MOT-U39 | full, `make`, on a real line | `S11_MOT-U39.uf2` | `S11_MOT-U39.txt` | S09 |
+| S11 | MOT-U43 (replaces MOT-U39) | `make IR_MOTOR_TEST=1 NET=none` (line following and motion only), on a real line | `S11_MOT-U43.uf2` | `S11_MOT-U43.txt` | S09 |
 | S12 | as S01, on the commit to be merged or demonstrated | full, `make TEST=1` | `S12_MOT-auto-final.uf2` | `S12_MOT-auto-final.txt` | all |
 
 Every `make TEST=1` image also runs the automatic checks, so MOT-U01,
@@ -240,6 +240,7 @@ confirm the stop-early distance, and MOT-U19/U20 are calibrated at
 | 2026-11-07 | MOT-U25 | #136 + follow drift | Kitsunez (host) | PASS | `sh testing/motion/host/run.sh` | Host only, not run on the car. Line following now allows for the right wheel's extra travel, as moves do. In the car model the uncorrected drift made the right sensor do all the correcting on a straight (54 right touches, 0 left, over 5.5 m); it did not explain the missed wide U. |
 | 2026-11-07 | MOT-U44 | double-buffered line requests | Kitsunez (host) | PASS | `sh testing/motion/host/run.sh` | Not yet run on the car. Crawl at 12:37 and 14:04: mode stayed stopped, one 3.5 or 7 mm lurch about a second, sensors and heading fine, no fault printed. That fits one request a second getting through, then the 100 ms timeout. Losing requests at the polled mutex on both sides is the likely cause, not proven; it comes and goes per boot, and the same firmware drove normally at 12:54. CAR lines now carry rq and rt, and a loss prints `no line request`. |
 | 2026-11-07 | MOT-U44 | return needs a fresh edge | Kitsunez (host) | PASS | `sh testing/motion/host/run.sh` | Not yet run on the car. Sensor trace of the bypass at 15:15: left sensor black 73 mm from d=1034 riding a cross tape, line found 50 ms after the check began, then the real line crossed at d=1125 to 1179 on the way on. A move now needs a fresh edge; a turn still takes a line already seen. |
+| 2026-11-17 | MOT-U43 | `d1486ff` | Felicia Chua | PASS | `logs/2026-11-17_S11_MOT-U43.txt` | S11, on a real line; built `make IR_MOTOR_TEST=1 NET=none`, no local changes. 5 holds of about 1 s, alternating left and right wheels, at `d` 232, 1054, 2754, 3113 and 3512 mm. Each printed `controller fault 3`, then `stall cleared, following again` about 0.5 s later by tester's estimate (the log has no timestamps; 1–2 `LT` lines between). Tester saw the car find the line and follow again every time; `d` keeps rising with line hits after each. After the last hold the car lost the line at 3708 mm, searched, found it, and lost it again on a curve at 4120 mm, where the run was stopped; no stall was involved, so this is line following, not MOT-U43 |
 
 ## Host regression: post-obstacle line acquisition
 

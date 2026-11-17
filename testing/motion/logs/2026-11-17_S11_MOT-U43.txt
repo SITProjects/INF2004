@@ -1,0 +1,195 @@
+=~=~=~=~=~=~=~=~=~=~=~= PuTTY log 2026.11.17 11:52:55 =~=~=~=~=~=~=~=~=~=~=~=
+
+
+microT-Kernel Version 3.00
+
+
+=== micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+dual-core (SMP) build, usermain on core 0
+motion: motors initialized and braked
+motion: encoders counting on PIO0
+motion: tMotion line adapter at 120 mm/s; 5 s startup delay, no run cutoff
+IR MOTOR TEST: continuous line following; no run cutoff
+
+Wi-Fi: built with NET=none; the radio is on but does not join a network
+wifi: cyw43_utk_task starting (proc 1)
+wifi: cyw43_init() ...
+wifi: cyw43_init() returned, bringing interface up ...
+line_follow: digital IR line sensing started. Submitting requests to motion. Built Nov 17 2026 02:31:32
+LT t=0 h=0 d=33 00 c=-1 m=0,0 n=0
+LT t=0 h=0 d=82 00 c=-1 m=0,0 n=0
+LT t=0 h=-1 d=131 00 c=-1 m=0,0 n=0
+LT t=0 h=-2 d=180 00 c=-1 m=0,0 n=0
+LT t=0 h=0 d=226 00 c=-1 m=0,0 n=0
+LT t=0 h=0 d=228 01 c=-1 m=0,0 n=0
+LT t=-13 h=2 d=232 01 c=-1 m=0,0 n=0
+motion: controller fault 3; STOP then FOLLOW or restart required
+LT t=-13 h=2 d=230 00 c=-1 m=0,0 n=0
+LT t=2 h=-3 d=221 00 c=-1 m=0,0 n=0
+motion: stall cleared, following again
+LT t=2 h=5 d=231 00 c=-1 m=0,0 n=0
+LT t=2 h=9 d=237 00 c=-1 m=0,0 n=0
+LT t=2 h=8 d=240 01 c=-1 m=0,0 n=0
+LT t=-17 h=-2 d=272 00 c=-1 m=0,0 n=0
+LT t=-20 h=-11 d=293 10 c=-1 m=0,0 n=0
+LT t=7 h=-8 d=342 00 c=-1 m=0,0 n=0
+LT t=-7 h=-7 d=375 10 c=-1 m=0,0 n=0
+LT t=8 h=-7 d=389 00 c=-1 m=0,0 n=0
+LT t=11 h=-1 d=415 01 c=-1 m=0,0 n=0
+LT t=-19 h=-4 d=436 00 c=-1 m=0,0 n=0
+LT t=-5 h=-6 d=488 00 c=-1 m=0,0 n=0
+LT t=-5 h=-6 d=537 00 c=-1 m=0,0 n=0
+LT t=-5 h=-11 d=575 10 c=-1 m=0,0 n=0
+LT t=8 h=-7 d=591 00 c=-1 m=0,0 n=0
+LT t=-8 h=-9 d=593 11 c=-1 m=0,0 n=0
+line JUNCTION STRAIGHT t=-10 h=-10 d=594
+LT t=-10 h=-12 d=608 11 c=-1 m=0,0 n=0
+LT t=-10 h=-21 d=637 11 c=-1 m=0,0 n=0
+LT t=-10 h=-1 d=705 00 c=-1 m=0,0 n=0
+LT t=-1 h=1 d=776 00 c=-1 m=0,0 n=0
+LT t=-1 h=0 d=828 00 c=-1 m=0,0 n=0
+LT t=-1 h=-2 d=878 00 c=-1 m=0,0 n=0
+LT t=-1 h=-3 d=926 00 c=-1 m=0,0 n=0
+LT t=-1 h=-4 d=975 00 c=-1 m=0,0 n=0
+LT t=-1 h=-4 d=1024 00 c=-1 m=0,0 n=0
+LT t=-1 h=0 d=1053 01 c=-1 m=0,0 n=0
+LT t=-14 h=1 d=1054 00 c=-1 m=0,0 n=0
+motion: controller fault 3; STOP then FOLLOW or restart required
+LT t=1 h=8 d=1063 00 c=-1 m=0,0 n=0
+LT t=1 h=8 d=1062 01 c=-1 m=0,0 n=0
+LT t=-5 h=10 d=1059 01 c=-1 m=0,0 n=0
+motion: stall cleared, following again
+LT t=-10 h=5 d=1064 00 c=-1 m=0,0 n=0
+LT t=-4 h=0 d=1074 10 c=-1 m=0,0 n=0
+LT t=18 h=3 d=1090 00 c=-1 m=0,0 n=0
+LT t=5 h=5 d=1134 10 c=-1 m=0,0 n=0
+LT t=22 h=7 d=1148 00 c=-1 m=0,0 n=0
+LT t=16 h=12 d=1158 01 c=-1 m=0,0 n=0
+LT t=-3 h=12 d=1168 00 c=-1 m=0,0 n=0
+LT t=11 h=10 d=1217 00 c=-1 m=0,0 n=0
+LT t=11 h=10 d=1266 00 c=-1 m=0,0 n=0
+LT t=11 h=9 d=1295 10 c=-1 m=0,0 n=0
+LT t=25 h=10 d=1304 00 c=-1 m=0,0 n=0
+LT t=11 h=10 d=1352 00 c=-1 m=0,0 n=0
+LT t=11 h=10 d=1389 10 c=-1 m=0,0 n=0
+LT t=11 h=10 d=1391 00 c=-1 m=0,0 n=0
+LT t=11 h=9 d=1439 00 c=-1 m=0,0 n=0
+LT t=11 h=8 d=1488 00 c=-1 m=0,0 n=0
+LT t=11 h=8 d=1536 00 c=-1 m=0,0 n=0
+LT t=11 h=7 d=1585 00 c=-1 m=0,0 n=0
+LT t=11 h=7 d=1633 00 c=-1 m=0,0 n=0
+LT t=11 h=6 d=1681 00 c=-1 m=0,0 n=0
+LT t=11 h=5 d=1730 00 c=-1 m=0,0 n=0
+LT t=11 h=5 d=1777 00 c=-1 m=0,0 n=0
+LT t=11 h=5 d=1786 11 c=-1 m=0,0 n=0
+line JUNCTION STRAIGHT t=5 h=5 d=1789
+LT t=5 h=4 d=1840 11 c=-1 m=0,0 n=0
+LT t=5 h=3 d=1891 11 c=-1 m=0,0 n=0
+LT t=5 h=3 d=1940 11 c=-1 m=0,0 n=0
+LT t=5 h=2 d=1988 11 c=-1 m=0,0 n=0
+LT t=5 h=2 d=2037 11 c=-1 m=0,0 n=0
+LT t=5 h=1 d=2085 11 c=-1 m=0,0 n=0
+LT t=5 h=0 d=2133 11 c=-1 m=0,0 n=0
+LT t=5 h=0 d=2181 11 c=-1 m=0,0 n=0
+LT t=5 h=0 d=2229 11 c=-1 m=0,0 n=0
+LT t=5 h=-1 d=2270 10 c=-1 m=0,0 n=0
+LT t=14 h=-1 d=2275 11 c=-1 m=0,0 n=0
+LT t=14 h=10 d=2299 10 c=-1 m=0,0 n=0
+LT t=48 h=33 d=2349 10 c=-1 m=0,0 n=0
+LT t=64 h=49 d=2376 11 c=-1 m=0,0 n=0
+LT t=64 h=62 d=2425 11 c=-1 m=0,0 n=0
+LT t=64 h=62 d=2442 01 c=-1 m=0,0 n=0
+LT t=47 h=62 d=2444 00 c=-1 m=0,0 n=0
+line SEARCH_R t=-57 h=63 d=2446
+LT t=-57 h=45 d=2453 10 c=-1 m=0,0 n=0
+line TRACK t=63 h=44 d=2453
+LT t=62 h=47 d=2468 00 c=-1 m=0,0 n=0
+LT t=49 h=49 d=2518 00 c=-1 m=0,0 n=0
+LT t=49 h=48 d=2566 00 c=-1 m=0,0 n=0
+LT t=49 h=47 d=2595 10 c=-1 m=0,0 n=0
+LT t=62 h=47 d=2602 00 c=-1 m=0,0 n=0
+LT t=47 h=47 d=2650 00 c=-1 m=0,0 n=0
+LT t=47 h=46 d=2680 10 c=-1 m=0,0 n=0
+LT t=61 h=46 d=2689 00 c=-1 m=0,0 n=0
+LT t=47 h=46 d=2726 10 c=-1 m=0,0 n=0
+LT t=62 h=47 d=2740 11 c=-1 m=0,0 n=0
+line JUNCTION STRAIGHT t=45 h=47 d=2741
+LT t=45 h=38 d=2751 01 c=-1 m=0,0 n=0
+LT t=45 h=38 d=2751 00 c=-1 m=0,0 n=0
+LT t=36 h=35 d=2754 10 c=-1 m=0,0 n=0
+motion: controller fault 3; STOP then FOLLOW or restart required
+LT t=52 h=37 d=2750 10 c=-1 m=0,0 n=0
+LT t=52 h=37 d=2750 00 c=-1 m=0,0 n=0
+motion: stall cleared, following again
+LT t=37 h=27 d=2768 00 c=-1 m=0,0 n=0
+LT t=56 h=44 d=2802 10 c=-1 m=0,0 n=0
+LT t=68 h=53 d=2818 00 c=-1 m=0,0 n=0
+LT t=63 h=59 d=2829 01 c=-1 m=0,0 n=0
+LT t=49 h=55 d=2862 00 c=-1 m=0,0 n=0
+LT t=64 h=54 d=2881 01 c=-1 m=0,0 n=0
+LT t=51 h=57 d=2893 00 c=-1 m=0,0 n=0
+LT t=64 h=55 d=2910 01 c=-1 m=0,0 n=0
+LT t=33 h=48 d=2934 00 c=-1 m=0,0 n=0
+LT t=46 h=45 d=2983 00 c=-1 m=0,0 n=0
+LT t=46 h=45 d=3032 00 c=-1 m=0,0 n=0
+LT t=46 h=45 d=3080 00 c=-1 m=0,0 n=0
+LT t=46 h=47 d=3111 01 c=-1 m=0,0 n=0
+LT t=35 h=50 d=3113 11 c=-1 m=0,0 n=0
+line JUNCTION STRAIGHT t=48 h=50 d=3113
+motion: controller fault 3; STOP then FOLLOW or restart required
+LT t=48 h=61 d=3123 11 c=-1 m=0,0 n=0
+LT t=48 h=62 d=3122 01 c=-1 m=0,0 n=0
+LT t=48 h=63 d=3120 00 c=-1 m=0,0 n=0
+motion: stall cleared, following again
+LT t=63 h=62 d=3141 00 c=-1 m=0,0 n=0
+LT t=63 h=62 d=3166 01 c=-1 m=0,0 n=0
+LT t=46 h=61 d=3176 00 c=-1 m=0,0 n=0
+LT t=42 h=54 d=3199 10 c=-1 m=0,0 n=0
+LT t=71 h=56 d=3218 00 c=-1 m=0,0 n=0
+LT t=58 h=57 d=3268 00 c=-1 m=0,0 n=0
+LT t=58 h=56 d=3307 10 c=-1 m=0,0 n=0
+LT t=72 h=57 d=3317 00 c=-1 m=0,0 n=0
+LT t=58 h=58 d=3365 00 c=-1 m=0,0 n=0
+LT t=58 h=57 d=3413 00 c=-1 m=0,0 n=0
+LT t=58 h=56 d=3461 00 c=-1 m=0,0 n=0
+LT t=58 h=55 d=3477 10 c=-1 m=0,0 n=0
+LT t=71 h=56 d=3487 00 c=-1 m=0,0 n=0
+LT t=57 h=58 d=3501 10 c=-1 m=0,0 n=0
+LT t=67 h=52 d=3507 00 c=-1 m=0,0 n=0
+LT t=50 h=49 d=3510 10 c=-1 m=0,0 n=0
+motion: controller fault 3; STOP then FOLLOW or restart required
+LT t=58 h=43 d=3512 10 c=-1 m=0,0 n=0
+motion: stall cleared, following again
+LT t=59 h=44 d=3513 10 c=-1 m=0,0 n=0
+LT t=56 h=41 d=3519 11 c=-1 m=0,0 n=0
+line JUNCTION STRAIGHT t=41 h=41 d=3519
+LT t=35 h=35 d=3547 11 c=-1 m=0,0 n=0
+LT t=30 h=30 d=3597 11 c=-1 m=0,0 n=0
+LT t=40 h=40 d=3661 11 c=-1 m=0,0 n=0
+LT t=53 h=53 d=3708 00 c=-1 m=0,0 n=0
+line SEARCH_L t=188 h=68 d=3759
+LT t=188 h=73 d=3767 00 c=-1 m=0,0 n=0
+LT t=188 h=104 d=3767 00 c=-1 m=0,0 n=0
+LT t=188 h=139 d=3766 00 c=-1 m=0,0 n=0
+LT t=188 h=175 d=3766 00 c=-1 m=0,0 n=0
+line SEARCH_R t=-52 h=188 d=3767
+LT t=-52 h=175 d=3768 00 c=-1 m=0,0 n=0
+LT t=-52 h=140 d=3770 00 c=-1 m=0,0 n=0
+LT t=-52 h=104 d=3771 00 c=-1 m=0,0 n=0
+LT t=-52 h=69 d=3771 00 c=-1 m=0,0 n=0
+LT t=-52 h=33 d=3772 00 c=-1 m=0,0 n=0
+LT t=-52 h=22 d=3772 01 c=-1 m=0,0 n=0
+LT t=-52 h=13 d=3772 00 c=-1 m=0,0 n=0
+line TRACK t=11 h=11 d=3772
+LT t=11 h=6 d=3773 10 c=-1 m=0,0 n=0
+LT t=26 h=11 d=3788 00 c=-1 m=0,0 n=0
+LT t=13 h=14 d=3817 10 c=-1 m=0,0 n=0
+LT t=33 h=18 d=3833 00 c=-1 m=0,0 n=0
+LT t=39 h=27 d=3864 01 c=-1 m=0,0 n=0
+LT t=22 h=28 d=3886 00 c=-1 m=0,0 n=0
+LT t=51 h=39 d=3933 00 c=-1 m=0,0 n=0
+LT t=73 h=61 d=3979 00 c=-1 m=0,0 n=0
+LT t=98 h=86 d=4028 00 c=-1 m=0,0 n=0
+LT t=124 h=112 d=4077 00 c=-1 m=0,0 n=0
+LT t=148 h=136 d=4120 00 c=-1 m=0,0 n=0
+line SEARCH_L t=266 h=146 d=4139
