@@ -1,0 +1,50 @@
+=~=~=~=~=~=~=~=~=~=~=~= PuTTY log 2026.11.17 15:06:37 =~=~=~=~=~=~=~=~=~=~=~=
+
+
+microT-Kernel Version 3.00
+
+
+=== micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+dual-core (SMP) build, usermain on core 0
+motion: motors initialized and braked
+motion: encoders counting on PIO0
+motion: line adapter dry run; no motor API calls
+line_follow: digital IR line sensing started. Submitting requests to motion. Built Nov 17 2026 06:15:36
+all subsystems started
+
+[TEST] === test run start ===
+Wi-Fi: the kernel radio service joins the network from config/wifi_secrets.h
+wifi: cyw43_utk_task starting (proc 1)
+wifi: cyw43_init() ...
+wifi: cyw43_init() returned, bringing interface up ...
+barcode: Code 39 reader on GP28 started
+[0 ms]obstacle: scanning started
+[0 ms]obstacle: stop request ACTIVE (sensing output only)
+terrain: IMU ready; calibrating, keep the car still on level ground
+[TEST] MOT-U01 PASS  both motors run 20 kHz PWM and are braked
+terrain: compass ready
+[TEST] MOT-U03 PASS  both encoders count on PIO0 and hold still at rest
+[TEST] MOT-U07 PASS  moves start stopped, odometry holds at rest, 0 refused
+[TEST] MOT-U18 PASS  PID P, I, D terms, limits, anti-windup and reset
+[760 ms]obstacle: stop request RELEASED
+[760 ms]obstacle: [0x11] CLEAR dir 90
+wifi: joining "<SSID removed>" ...
+[TEST] MOT-U22 50 updates took 1000 ms (1000 expected)
+[TEST] MOT-U22 PASS  test-loop updates run at MOTION_UPDATE_PERIOD_MS
+[TEST] MOT-U23 PASS  straight-line loop idle at rest, switches on and off
+[TEST] MOT-U40 PASS  follow and line input refuse bad values, line debounced
+[TEST] MOT-U33 PASS  motion commands pack, saturate and decode
+motion: TRACK target=0 seen=1 valid=1 (dry run)
+wifi: link status -> joined AP, waiting for IP (1)
+wifi: link status -> FAILED: SSID not found (out of range, wrong name, or 5GHz-only network -- this chip is 2.4GHz only) (-2)
+[TEST] MOT-U34 52 updates, period 19945..20066 us (20000 expected), longest update 495 us
+[TEST] MOT-U34 PASS  tMotion updates every period within 1 ms (NFR1)
+terrain: calibration NOT_LEVEL tilt 10.0 deg reading -757 -314 8560 mm/s2
+[TEST] MOT-U35 INHIBIT to brake 251 us (limit 20000)
+[TEST] MOT-U35 refused 1 stop 1 inhibited 1 cleared 1
+[TEST] MOT-U35 PASS  tMotion refuses bad commands, INHIBIT brakes and flushes
+[TEST] MOT-U38 11 updates in 200 ms (10 expected), distance 0 mm, heading 0 deg
+[TEST] MOT-U38 PASS  shared odometry rises every update and holds at rest
+[TEST] motion SUMMARY 11 passed, 0 failed
+[TEST] === test run end ===
+w
