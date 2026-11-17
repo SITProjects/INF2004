@@ -1,0 +1,46 @@
+=~=~=~=~=~=~=~=~=~=~=~= PuTTY log 2026.11.17 15:19:46 =~=~=~=~=~=~=~=~=~=~=~=
+
+
+microT-Kernel Version 3.00
+
+
+=== micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+dual-core (SMP) build, usermain on core 0
+motion: motors initialized and braked
+motion: encoders counting on PIO0
+motion: line adapter dry run; no motor API calls
+MOTION ONLY (local app_main.c)
+
+[TEST] === test run start ===
+[TEST] MOT-U01 PASS  both motors run 20 kHz PWM and are braked
+[TEST] MOT-U03 PASS  both encoders count on PIO0 and hold still at rest
+[TEST] MOT-U07 PASS  moves start stopped, odometry holds at rest, 0 refused
+[TEST] MOT-U18 PASS  PID P, I, D terms, limits, anti-windup and reset
+[TEST] MOT-U22 50 updates took 1000 ms (1000 expected)
+[TEST] MOT-U22 PASS  test-loop updates run at MOTION_UPDATE_PERIOD_MS
+[TEST] MOT-U23 PASS  straight-line loop idle at rest, switches on and off
+[TEST] MOT-U40 PASS  follow and line input refuse bad values, line debounced
+[TEST] MOT-U41 keep the car lifted: it follows at 120 mm/s to headings 0, 20, 0, -20, 1 s each, in 10 s
+[TEST] MOT-U41 target 0 heading -2 turn -1 deg/s speed L 124 R 121 mm/s state 5
+[TEST] MOT-U41 target 20 heading 17 turn -1 deg/s speed L 123 R 120 mm/s state 5
+[TEST] MOT-U41 target 0 heading -1 turn -2 deg/s speed L 123 R 119 mm/s state 5
+[TEST] MOT-U41 target -20 heading -22 turn -2 deg/s speed L 123 R 119 mm/s state 5
+[TEST] MOT-U41 steered 1; stopped 100 ms after the last reading (limit 100)
+[TEST] MOT-U41 PASS  follow turns to each target heading, stops on stale input
+[TEST] MOT-U29 keep the car lifted: four short moves and turns with a pretend line, in 10 s
+[TEST] MOT-U29 (a) 1 after 2 updates, (b) 1 after 2, (c) 1, (d) 1; state 0
+[TEST] MOT-U29 PASS  moves and turns end when the line comes into view
+[TEST] MOT-U42 car on the floor, 1 m clear all round: it turns LEFT 20 deg, runs straight, then turns back, 1 s each, in 10 s
+[TEST] MOT-U42 target 90: heading 87 deg (from 69), distance 171 mm, state 5
+[TEST] MOT-U42 target 90: heading 85 deg (from 87), distance 182 mm, state 5
+[TEST] MOT-U42 target 70: heading 67 deg (from 85), distance 181 mm, state 5
+[TEST] MOT-U33 PASS  motion commands pack, saturate and decode
+[TEST] MOT-U34 52 updates, period 19984..20026 us (20000 expected), longest update 180 us
+[TEST] MOT-U34 PASS  tMotion updates every period within 1 ms (NFR1)
+[TEST] MOT-U35 INHIBIT to brake 65 us (limit 20000)
+[TEST] MOT-U35 refused 1 stop 1 inhibited 1 cleared 1
+[TEST] MOT-U35 PASS  tMotion refuses bad commands, INHIBIT brakes and flushes
+[TEST] MOT-U38 11 updates in 200 ms (10 expected), distance 1857 mm, heading 67 deg
+[TEST] MOT-U38 PASS  shared odometry rises every update and holds at rest
+[TEST] motion SUMMARY 13 passed, 0 failed
+[TEST] === test run end ===
