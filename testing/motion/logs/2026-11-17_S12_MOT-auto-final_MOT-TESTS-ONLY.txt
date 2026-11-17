@@ -47,4 +47,3 @@ terrain: calibration NOT_LEVEL tilt 10.0 deg reading -757 -314 8560 mm/s2
 [TEST] MOT-U38 PASS  shared odometry rises every update and holds at rest
 [TEST] motion SUMMARY 11 passed, 0 failed
 [TEST] === test run end ===
-w
