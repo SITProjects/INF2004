@@ -242,6 +242,27 @@ confirm the stop-early distance, and MOT-U19/U20 are calibrated at
 | 2026-11-07 | MOT-U44 | return needs a fresh edge | Kitsunez (host) | PASS | `sh testing/motion/host/run.sh` | Not yet run on the car. Sensor trace of the bypass at 15:15: left sensor black 73 mm from d=1034 riding a cross tape, line found 50 ms after the check began, then the real line crossed at d=1125 to 1179 on the way on. A move now needs a fresh edge; a turn still takes a line already seen. |
 | 2026-11-17 | MOT-U43 | `d1486ff` | Felicia Chua | PASS | `logs/2026-11-17_S11_MOT-U43.txt` | S11, on a real line; built `make IR_MOTOR_TEST=1 NET=none`, no local changes. 5 holds of about 1 s, alternating left and right wheels, at `d` 232, 1054, 2754, 3113 and 3512 mm. Each printed `controller fault 3`, then `stall cleared, following again` about 0.5 s later by tester's estimate (the log has no timestamps; 1–2 `LT` lines between). Tester saw the car find the line and follow again every time; `d` keeps rising with line hits after each. After the last hold the car lost the line at 3708 mm, searched, found it, and lost it again on a curve at 4120 mm, where the run was stopped; no stall was involved, so this is line following, not MOT-U43 |
 
+### Known limitation: MOT-U25 and MOT-U26 left as FAIL
+
+MOT-U25 and MOT-U26 have no car PASS and are accepted as FAIL, not
+retuned further (decision by Felicia Chua, 2026-11-17).
+
+- **MOT-U25, drift over 1 m.** With `MOTION_SYNC_RIGHT_SCALE` 0.025 the
+  sync-ON drift averages near zero but varies from run to run (35, 10
+  and under 10 mm on 2026-11-05, limit < 20 mm). The tester judged the
+  drift acceptable on the car: while following a line, the IR sensors
+  correct it continuously, so a few centimetres over 1 m does not take
+  the car off the line. This does not cover moves made with no line
+  under the car. The obstacle bypass legs (sidestep, pass, return to
+  the line) are blind straight moves, so drift there adds up and relies
+  on the bypass finding the line again.
+- **MOT-U26, recovery after a nudge.** The tester saw the car carry on
+  parallel after the push, and the 2026-11-05 reverse drift was 0–5 mm
+  (limit 10 mm). The `errTicks` within ±1 check was never met. ±1 tick
+  is about 0.03 mm of wheel travel, while `errTicks` varies by about
+  ±20 ticks on unpushed runs, so this limit looks unreachable with this
+  hardware rather than a fault in the loop.
+
 ## Host regression: post-obstacle line acquisition
 
 Run `sh testing/motion/host/run.sh` (host C compiler and sanitizer runtime).
