@@ -127,6 +127,8 @@ typedef struct
 #define LINE_TRACK_F_BACK_STARTED 0x0800u  /* The reverse has begun. */
 #define LINE_TRACK_F_RETRACE 0x1000u /* Going back past it after U-turn. */
 #define LINE_TRACK_F_SETTLE 0x2000u  /* From a read to its crossing. */
+/* Steered back once against the bend since its own side last touched. */
+#define LINE_TRACK_F_COUNTERED 0x4000u
 
 /* line_track_t.fields, each "shift, bits": 30 of 32 bits. */
 #define LINE_TRACK_FIELD_MODE 0u, 2u
