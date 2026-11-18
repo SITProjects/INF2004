@@ -177,16 +177,21 @@ hold_heading (int left, int right, unsigned int updates)
 static void
 test_follow_drift (void)
 {
-    /* The right wheel goes MOTION_SYNC_RIGHT_SCALE further per count, so
-     * equal counts are really a curve to the left, 13 degrees a metre. */
+    /* Following ignores MOTION_SYNC_RIGHT_SCALE: equal counts are straight,
+     * and a curve either way is corrected by the same amount. */
     motion_follow_t follow = hold_heading(20, 20, 800u);
-    check("equal counts are a left curve, so a held heading steers right",
-          (follow.heading_error_deg <= -15) && (follow.turn_deg_s < 0));
+    check("equal counts are straight: the held heading has no error",
+          (follow.heading_error_deg >= -1) && (follow.heading_error_deg <= 1));
     (void)motion_move_stop();
 
-    follow = hold_heading(41, 40, 400u);
-    check("a really straight run needs no correction",
-          (follow.heading_error_deg >= -1) && (follow.heading_error_deg <= 1));
+    follow = hold_heading(40, 41, 400u);
+    motion_follow_t mirror;
+    (void)motion_move_stop();
+    mirror = hold_heading(41, 40, 400u);
+    check("a curve to the left steers right as hard as the mirror steers left",
+          (follow.heading_error_deg <= -15) && (follow.turn_deg_s < 0) &&
+              (mirror.heading_error_deg == -follow.heading_error_deg) &&
+              (mirror.turn_deg_s == -follow.turn_deg_s));
     (void)motion_move_stop();
 
     (void)hold_heading(20, 20, 800u);
