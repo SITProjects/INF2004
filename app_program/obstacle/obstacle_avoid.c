@@ -40,6 +40,10 @@
 /* An 8-bit sequence is newer when it is 1..127 steps ahead. */
 #define SEQUENCE_HALF 128u
 
+/* Corridor echoes within 1/32 of the nearest are the face's nearest point
+ * too: the beam keeps finding it about 15 degrees either side. */
+#define FACE_TOLERANCE_SHIFT 5u
+
 /* Static data. */
 
 /* Private function declarations. */
@@ -83,6 +87,9 @@ static void note_heading (obstacle_avoid_t * p_ctx,
                           obstacle_avoid_input_t const * p_in);
 static bool line_heading_known (obstacle_avoid_t * p_ctx,
                                 obstacle_avoid_input_t const * p_in);
+static bool try_square (obstacle_avoid_t * p_ctx,
+                        obstacle_avoid_action_t * p_act,
+                        obstacle_avoid_input_t const * p_in, bool b_inhibited);
 static bool try_straighten (obstacle_avoid_t * p_ctx,
                             obstacle_avoid_action_t * p_act,
                             obstacle_avoid_input_t const * p_in,
@@ -426,6 +433,65 @@ obstacle_avoid_check_corridor (obstacle_scan_corridor_t const * p_corridor,
     return OBSTACLE_AVOID_CORRIDOR_SHIFT;
 }
 
+bool
+obstacle_avoid_face_offset (obstacle_scan_corridor_t const * p_corridor,
+                            int32_t * p_offset_deg)
+{
+    if (p_offset_deg == NULL)
+    {
+        return false;
+    }
+    *p_offset_deg = 0;
+    if (p_corridor == NULL)
+    {
+        return false;
+    }
+    uint8_t nearest = OBSTACLE_SWEEP_POINTS;
+    for (uint8_t index = 0u; index < OBSTACLE_SWEEP_POINTS; ++index)
+    {
+        if ((p_corridor->valid_mask & (uint16_t)(1u << index)) == 0u)
+        {
+            return false;
+        }
+        uint16_t const echo_us = p_corridor->echo_us[index];
+        if ((echo_us != 0u) && ((nearest == OBSTACLE_SWEEP_POINTS) ||
+                                (echo_us < p_corridor->echo_us[nearest])))
+        {
+            nearest = index;
+        }
+    }
+    if (nearest == OBSTACLE_SWEEP_POINTS)
+    {
+        return false; /* No echo anywhere. */
+    }
+    uint32_t const limit_us =
+        (uint32_t)p_corridor->echo_us[nearest] +
+        ((uint32_t)p_corridor->echo_us[nearest] >> FACE_TOLERANCE_SHIFT);
+    uint8_t first = nearest;
+    uint8_t last = nearest;
+    while ((first > 0u) && (p_corridor->echo_us[first - 1u] != 0u) &&
+           ((uint32_t)p_corridor->echo_us[first - 1u] <= limit_us))
+    {
+        --first;
+    }
+    while (((last + 1u) < OBSTACLE_SWEEP_POINTS) &&
+           (p_corridor->echo_us[last + 1u] != 0u) &&
+           ((uint32_t)p_corridor->echo_us[last + 1u] <= limit_us))
+    {
+        ++last;
+    }
+    if ((first == 0u) || ((last + 1u) == OBSTACLE_SWEEP_POINTS))
+    {
+        return false; /* The face may carry on past the sweep. */
+    }
+    int32_t const middle_deg =
+        (int32_t)OBSTACLE_SWEEP_FIRST_DEG +
+        (((int32_t)OBSTACLE_SWEEP_STEP_DEG * ((int32_t)first + (int32_t)last)) /
+         2);
+    *p_offset_deg = middle_deg - (int32_t)OBSTACLE_CENTRE_DEG;
+    return true;
+}
+
 void
 obstacle_avoid_init (obstacle_avoid_t * p_ctx,
                      obstacle_avoid_config_t const * p_config, uint32_t now_ms)
@@ -480,6 +546,7 @@ obstacle_avoid_step (obstacle_avoid_t * p_ctx,
             {
                 flag_set(p_ctx, OBSTACLE_AVOID_F_STRAIGHTEN_DUE,
                          line_heading_known(p_ctx, p_in));
+                flag_set(p_ctx, OBSTACLE_AVOID_F_SQUARED, false);
                 hold(p_ctx, &act, OBSTACLE_AVOID_STOPPING, now_ms,
                      b_critical ? "critical" : "stop request");
             }
@@ -1041,6 +1108,51 @@ try_straighten (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
     flag_set(p_ctx, OBSTACLE_AVOID_F_BACKOFF, false);
     flag_set(p_ctx, OBSTACLE_AVOID_F_MEASURE_AGAIN, true);
     release(p_ctx, p_act, false, p_in->now_ms, "straighten");
+    return true;
+}
+
+/*
+ * Square up to the obstacle's face before choosing a side, once per
+ * obstacle. A flat face stops echoing about 25 degrees off square, so from a
+ * skewed car the far end of the face reads short and the near half of the
+ * face itself looks less clear. Turn to the face's bearing in the corridor
+ * sweep, then stop and measure again from there, as a straighten does. True
+ * if it set off.
+ */
+static bool
+try_square (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
+            obstacle_avoid_input_t const * p_in, bool b_inhibited)
+{
+    obstacle_avoid_timing_t const * const p_timing = &p_ctx->p_config->timing;
+    if ((0u == p_timing->square_max_deg) ||
+        obstacle_avoid_flag(p_ctx, OBSTACLE_AVOID_F_SQUARED) ||
+        robot_obstacle_get_critical(p_in->scan.flags))
+    {
+        return false; /* Too close to swing the nose: a later sweep may. */
+    }
+    flag_set(p_ctx, OBSTACLE_AVOID_F_SQUARED, true);
+    int32_t offset_deg = 0;
+    if (!obstacle_avoid_face_offset(&p_in->corridor, &offset_deg))
+    {
+        return false;
+    }
+    uint32_t const size =
+        (uint32_t)((offset_deg < 0) ? -offset_deg : offset_deg);
+    if ((size <= p_timing->resume_min_deg) || (size > p_timing->square_max_deg))
+    {
+        return false;
+    }
+    field_set(p_ctx, OBSTACLE_AVOID_FIELD_LEG,
+              (uint32_t)OBSTACLE_AVOID_LEG_STRAIGHTEN);
+    flag_set(p_ctx, OBSTACLE_AVOID_F_LEG_STARTED, true);
+    p_ctx->remaining = robot_clamp_u16(size);
+    flag_set(p_ctx, OBSTACLE_AVOID_F_HOME_RIGHT, offset_deg > 0);
+    flag_set(p_ctx, OBSTACLE_AVOID_F_BACKOFF, false);
+    flag_set(p_ctx, OBSTACLE_AVOID_F_MEASURE_AGAIN, true);
+    resume_after_replan(p_ctx, p_act, p_in, b_inhibited, "square up");
+    /* The new stop sweeps both sides again. */
+    p_act->b_side_scans_off = false;
+    p_act->b_side_scans_on = true;
     return true;
 }
 
@@ -2135,6 +2247,10 @@ step_replan (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
     bool const b_any_side =
         (p_ctx->lateral_mm == 0u) &&
         (obstacle_avoid_field(p_ctx, OBSTACLE_AVOID_FIELD_SIDESTEPS) == 0u);
+    if (b_any_side && try_square(p_ctx, p_act, p_in, b_inhibited))
+    {
+        return;
+    }
     uint32_t const left_pass = pass_left(p_ctx);
     uint16_t const pass_mm =
         (left_pass > 0u) ? (uint16_t)left_pass : p_ctx->plan_pass_mm;

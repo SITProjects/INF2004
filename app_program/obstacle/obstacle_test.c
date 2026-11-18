@@ -205,6 +205,9 @@ static bool sim_settle (void);
 static bool avoid_straighten_valid (void);
 static bool avoid_straighten_skip_valid (void);
 static bool plan_edge_min_valid (void);
+static void sim_corridor_echoes (uint16_t const * p_echo_us);
+static bool sim_square_from (uint16_t const * p_echo_us);
+static bool avoid_square_valid (void);
 
 /* Public function definitions. */
 
@@ -312,6 +315,8 @@ obstacle_test (void)
     TEST_CHECK(
         "OBS-U79", plan_edge_min_valid(),
         "plan: the first sidestep clears the widest obstacle on the line");
+    TEST_CHECK("OBS-U81", avoid_square_valid(),
+               "avoid: square up to the face once before choosing a side");
     TEST_CHECK("OBS-U72", plan_short_pass_valid(),
                "plan: stop short of the rear bumper when the edge is known");
     TEST_CHECK("OBS-U73", avoid_line_gate_valid(),
@@ -1773,7 +1778,8 @@ avoid_config (void)
                                                  .resweep_ms = 3000u,
                                                  .straighten_settle_ms = 250u,
                                                  .straighten_step_mm = 32u,
-                                                 .straighten_max_deg = 15u},
+                                                 .straighten_max_deg = 15u,
+                                                 .square_max_deg = 20u},
                                       .width = width_fixture(0.0f)};
     return config;
 }
@@ -3506,6 +3512,134 @@ avoid_home_valid (void)
     ok = ok && sim_home_from(-90, false) &&
          (sim.act.cmd == robot_motion_cmd_follow()) &&
          (obstacle_avoid_fault_of(&sim.ctx) == OBSTACLE_AVOID_FAULT_NONE);
+    return ok;
+}
+
+/* Publish a corridor sweep with these nine echoes, 50 to 130 degrees. */
+static void
+sim_corridor_echoes (uint16_t const * p_echo_us)
+{
+    sim.in.corridor = empty_corridor();
+    sim.in.corridor.sequence = (uint8_t)(sim.ctx.corridor_sequence + 1u);
+    for (uint8_t index = 0u; index < OBSTACLE_SWEEP_POINTS; ++index)
+    {
+        sim.in.corridor.echo_us[index] = p_echo_us[index];
+    }
+}
+
+/* Detect, plan left from 50 mm so the car reverses for room, and answer the
+ * re-sweep with these echoes; the step that reads them is sim.act. */
+static bool
+sim_square_from (uint16_t const * p_echo_us)
+{
+    bool ok = sim_detect_path();
+    sim.config.timing.b_recheck = false;
+    sim.config.geometry.min_room_mm = 200u;
+    sim.in.geometry = geometry_at(50u, 100, -100);
+    ok = ok &&
+         sim_until(OBSTACLE_AVOID_REPLAN, OBSTACLE_AVOID_LEG_TURN_OUT, 30u);
+    (void)sim_step(); /* Corridor request answered. */
+    sim_corridor_echoes(p_echo_us);
+    (void)sim_step();
+    return ok;
+}
+
+/* OBS-U81: the 2026-11-10 run 2 re-sweep, the car about 10 degrees left of
+ * square: turn 10 right, stop and measure again from that heading, and
+ * do not square a second time at the same obstacle. Run 1's face, 5 degrees
+ * right, is squared too. A face within resume_min_deg or beyond 20,
+ * CRITICAL, or square_max_deg 0 leaves the plan as it was. A new obstacle
+ * may square again. */
+static bool
+avoid_square_valid (void)
+{
+    static uint16_t const skewed[] = {4342u, 4699u, 1312u, 1200u, 1166u,
+                                      1151u, 1159u, 1190u, 0u};
+    static uint16_t const square[] = {0u,    0u,    1300u, 1180u, 1160u,
+                                      1180u, 1300u, 0u,    0u};
+    static uint16_t const nearly[] = {4195u, 1473u, 1306u, 1290u, 1205u,
+                                      1206u, 1301u, 1313u, 5454u};
+    static uint16_t const far_off[] = {0u,    0u,    0u,    1300u, 1250u,
+                                       1200u, 1170u, 1160u, 1300u};
+
+    bool ok =
+        sim_square_from(skewed) && sim.act.b_send &&
+        (sim.act.cmd == robot_motion_cmd_turn(10u, true, false)) &&
+        sim.act.b_side_scans_on &&
+        (obstacle_avoid_leg_of(&sim.ctx) == OBSTACLE_AVOID_LEG_STRAIGHTEN) &&
+        obstacle_avoid_flag(&sim.ctx, OBSTACLE_AVOID_F_SQUARED);
+    ok = ok &&
+         sim_until(OBSTACLE_AVOID_WAIT_RESULT, OBSTACLE_AVOID_LEG_FOLLOW, 20u);
+    ok = ok && (sim.in.heading_deg == -10) &&
+         (sim.ctx.origin_heading_deg == -10) &&
+         (sim.in.rearm_sequence == sim.in.scan.sequence);
+
+    /* Measured again: plan, reverse, and the same skewed re-sweep picks a
+     * side this time. */
+    sim_scan(ROBOT_OBSTACLE_PATH_FOUND, ROBOT_OBSTACLE_DIR_LEFT_60, true,
+             false);
+    sim.in.geometry = geometry_at(50u, 100, -100);
+    ok = ok &&
+         sim_until(OBSTACLE_AVOID_REPLAN, OBSTACLE_AVOID_LEG_TURN_OUT, 30u);
+    (void)sim_step();
+    sim_corridor_echoes(skewed);
+    ok = ok && sim_step().b_send &&
+         (robot_motion_cmd_get_angle(sim.act.cmd) == 90u) &&
+         (obstacle_avoid_leg_of(&sim.ctx) == OBSTACLE_AVOID_LEG_TURN_OUT);
+
+    /* Nothing worth squaring: the re-sweep plans straight away. A 5 degree
+     * face is squared, unless turns that small count as done. */
+    ok = ok && sim_square_from(square) && sim.act.b_send &&
+         (robot_motion_cmd_get_angle(sim.act.cmd) == 90u);
+    ok = ok && sim_square_from(nearly) && sim.act.b_send &&
+         (sim.act.cmd == robot_motion_cmd_turn(5u, true, false));
+    ok = ok && sim_detect_path();
+    sim.config.timing.resume_min_deg = 5u;
+    sim.config.timing.b_recheck = false;
+    sim.config.geometry.min_room_mm = 200u;
+    sim.in.geometry = geometry_at(50u, 100, -100);
+    ok = ok &&
+         sim_until(OBSTACLE_AVOID_REPLAN, OBSTACLE_AVOID_LEG_TURN_OUT, 30u);
+    (void)sim_step();
+    sim_corridor_echoes(nearly);
+    ok = ok && sim_step().b_send &&
+         (robot_motion_cmd_get_angle(sim.act.cmd) == 90u);
+    ok = ok && sim_square_from(far_off) && sim.act.b_send &&
+         (robot_motion_cmd_get_angle(sim.act.cmd) == 90u);
+    ok = ok && sim_detect_path();
+    sim.config.timing.square_max_deg = 0u;
+    sim.config.timing.b_recheck = false;
+    sim.config.geometry.min_room_mm = 200u;
+    sim.in.geometry = geometry_at(50u, 100, -100);
+    ok = ok &&
+         sim_until(OBSTACLE_AVOID_REPLAN, OBSTACLE_AVOID_LEG_TURN_OUT, 30u);
+    (void)sim_step();
+    sim_corridor_echoes(skewed);
+    ok = ok && sim_step().b_send &&
+         (robot_motion_cmd_get_angle(sim.act.cmd) == 90u);
+    ok = ok && sim_detect_path();
+    sim.config.timing.b_recheck = false;
+    sim.config.geometry.min_room_mm = 200u;
+    sim.in.geometry = geometry_at(50u, 100, -100);
+    ok = ok &&
+         sim_until(OBSTACLE_AVOID_REPLAN, OBSTACLE_AVOID_LEG_TURN_OUT, 30u);
+    (void)sim_step();
+    sim_corridor_echoes(skewed);
+    sim.in.scan.flags = robot_obstacle_set_critical(sim.in.scan.flags, true);
+    (void)sim_step();
+    ok = ok &&
+         (obstacle_avoid_leg_of(&sim.ctx) != OBSTACLE_AVOID_LEG_STRAIGHTEN) &&
+         !obstacle_avoid_flag(&sim.ctx, OBSTACLE_AVOID_F_SQUARED);
+
+    /* A new obstacle starts unsquared. */
+    sim_reset();
+    sim_scan(ROBOT_OBSTACLE_CLEAR, ROBOT_OBSTACLE_DIR_CENTRE_90, false, false);
+    ok = ok && sim_until(OBSTACLE_AVOID_IDLE, OBSTACLE_AVOID_LEG_FOLLOW, 10u);
+    sim.ctx.flags |= OBSTACLE_AVOID_F_SQUARED;
+    sim_scan(ROBOT_OBSTACLE_SCANNING, ROBOT_OBSTACLE_DIR_NONE, true, false);
+    (void)sim_step();
+    ok = ok && (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_STOPPING) &&
+         !obstacle_avoid_flag(&sim.ctx, OBSTACLE_AVOID_F_SQUARED);
     return ok;
 }
 
