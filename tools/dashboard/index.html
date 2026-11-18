@@ -321,6 +321,7 @@ li:last-child { padding-bottom: 0; }
             <div class="fact"><span>Tilt (pitch, roll)</span><strong id="tilt">–</strong></div>
             <div class="fact"><span>Turn rate</span><strong id="turn">–</strong></div>
             <div class="fact"><span>Humps</span><strong id="humps">–</strong></div>
+            <div class="fact"><span>Last ramp height (estimated)</span><strong id="ramp-height">None yet</strong></div>
             <div class="fact"><span>Lifts</span><strong id="lifts">–</strong></div>
           </div>
         </section>
@@ -437,6 +438,8 @@ function showCar(state) {
   const last = state.last_obstacle;
   $("width").textContent = last ? `${last.width_mm} mm` : "None yet";
   $("range").textContent = last ? `${last.range_mm} mm` : "None yet";
+  const height = state.last_ramp_height_mm;
+  $("ramp-height").textContent = height == null ? "None yet" : `${height} mm`;
   if (!car) { return; }
   $("speed").textContent = `${car.v} mm/s`;
   $("wheels").textContent = `${car.l}, ${car.r} mm/s`;
