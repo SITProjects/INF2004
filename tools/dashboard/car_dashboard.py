@@ -69,6 +69,7 @@ state = {
     "car": None,  # The latest status record, as numbers and names.
     "car_age_s": None,
     "last_obstacle": None,  # Width and range of the last obstacle measured.
+    "last_ramp_height_mm": None,  # Latest completed hump estimate.
 }
 car_seen = 0.0  # time.monotonic() of the latest status record.
 last_scan = {"barcode": None, "at": 0.0}  # The latest read, for note_scan().
@@ -227,6 +228,9 @@ def note_console(text):
         match = re.search(r"line JUNCTION (\w+)", message)
         if match:
             state["junction"] = match.group(1)
+        match = re.match(r"terrain: hump LEVEL height (\d+) mm\b", message)
+        if match:
+            state["last_ramp_height_mm"] = int(match.group(1))
         if SHOWN_EVENT.search(message):
             state["events"].appendleft(f"{time.strftime('%H:%M:%S')} {message}")
 
