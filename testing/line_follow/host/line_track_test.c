@@ -1433,19 +1433,6 @@ in_bend (int sign)
     }
 }
 
-/* @p mm of (@p left, @p right) while the car turns on the bend's way
- * (@p sign), a degree every other sample, as the seek turns it. */
-static void
-drive_turning (bool left, bool right, int mm, int sign)
-{
-    unsigned int const samples = samples_for(mm);
-    for (unsigned int i = 0u; i < samples; i++)
-    {
-        in.heading_deg += ((i % 2u) == 0u) ? sign : 0;
-        drive(left, right, 1u);
-    }
-}
-
 static void
 test_counter_touch (void)
 {
@@ -1524,48 +1511,6 @@ test_counter_touch (void)
           b_exit_ends);
     check("LT47 the 37 mm touch in the middle of a U leaves the bend on",
           b_mid_stays);
-
-    /* Run 3 on 2026-11-18: a right turn straight into a left U. The left
-     * sensor touched 29 mm, white 14 mm, then touched again while the car
-     * still turned right; each touch steered back only gently and the car
-     * drove off. */
-    bool b_first_gentle = true;
-    bool b_second_full = true;
-    bool b_back_gentle = true;
-    for (int sign = -1; sign <= 1; sign += 2)
-    {
-        in_bend(sign);
-        drive_turning(sign < 0, sign > 0, 29, sign);
-        b_first_gentle =
-            b_first_gentle &&
-            ((in.heading_deg - (sign * LINE_COUNTER_LEAD_DEG)) ==
-             out.target_heading_deg);
-        drive_turning(false, false, 14, sign);
-        drive_turning(sign < 0, sign > 0, 10, sign);
-        b_second_full =
-            b_second_full && !line_track_flag(&track, LINE_TRACK_F_CURVE) &&
-            ((in.heading_deg - (sign * LINE_LEAD_DEG)) ==
-             out.target_heading_deg);
-
-        /* A touch on the bend's own side between: still the car ahead of
-         * the bend, so the next touch against it stays gentle. */
-        in_bend(sign);
-        drive_turning(sign < 0, sign > 0, 29, sign);
-        drive_turning(false, false, 14, sign);
-        drive_turning(sign > 0, sign < 0, 8, sign);
-        drive_turning(false, false, 14, sign);
-        drive_turning(sign < 0, sign > 0, 10, sign);
-        b_back_gentle =
-            b_back_gentle && line_track_flag(&track, LINE_TRACK_F_CURVE) &&
-            ((in.heading_deg - (sign * LINE_COUNTER_LEAD_DEG)) ==
-             out.target_heading_deg);
-    }
-    check("LT127 a second touch against a bend, with none on the bend's side "
-          "between, is the tape turning that way: full lead, bend off",
-          b_first_gentle && b_second_full);
-    check("LT128 with a touch on the bend's side between, the next touch "
-          "against the bend stays gentle",
-          b_back_gentle);
 
     /* Someone else drives for a moment, the sensor still black. */
     in_bend(1);

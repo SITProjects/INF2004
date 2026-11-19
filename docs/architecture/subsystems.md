@@ -393,10 +393,10 @@ are only read inside the leg or bypass that set them.
   sensor's beam reaches past the edges of small obstacles: 16 and 21 cm obstacles
   have read about the same. Stopping at 250 mm was tried and was worse. Width is
   not yet reliable at this beam width.
-- **Scan side.** `OBSTACLE_SERVO_MIRRORED` is 1: the servo's 60 degree
-  command faces right. At 0 (2026-11-10 to 11-18) the bypass watch faced the
-  side the car turned to, away from the obstacle. Which end of an off-centre
-  obstacle the car goes round with 1 is still to be confirmed on the car.
+- **Scan side.** `OBSTACLE_SERVO_MIRRORED` is 0 since 2026-11-10: at 1, an
+  obstacle 30% left and 70% right of the line read with its sides swapped, and
+  the car went round its wider side (OBS-U80). The bypass on the car with 0 is
+  still to be run.
 - **Junction just before an obstacle.** The bypass knows nothing about line
   tape. An obstacle just past a cross makes the car back up onto the junction
   before it turns out, so the sidestep can run along the cross's arm.

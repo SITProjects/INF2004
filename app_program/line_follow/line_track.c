@@ -650,7 +650,6 @@ restart_tracking (line_track_t * p_track, line_track_input_t const * p_in,
     p_track->touch_mm = robot_mark16(p_in->distance_mm);
     flag_set(p_track, LINE_TRACK_F_CURVE, false);
     field_set(p_track, LINE_TRACK_FIELD_COUNTER_SIDE, (uint32_t)SIDE_NONE);
-    flag_set(p_track, LINE_TRACK_F_COUNTERED, false);
     flag_set(p_track, LINE_TRACK_F_CROSS_HOLD, false);
     flag_set(p_track, LINE_TRACK_F_RETRACE, false);
     flag_set(p_track, LINE_TRACK_F_SETTLE, false);
@@ -1237,33 +1236,23 @@ recent_turn (line_track_t const * p_track, line_track_input_t const * p_in)
            p_track->trend_deg[field_get(p_track, LINE_TRACK_FIELD_TREND_NEXT)];
 }
 
-/*
- * A touch begins: judge now whether it steers back against a bend. Once is
- * the car a little ahead of the bend. A second time with no touch on the
- * bend's side between is the tape turning this way, as a right turn runs
- * straight into a left U (2026-11-18): the bend ends and this side steers at
- * full lead.
- */
+/* A touch begins: judge now whether it steers back against a bend. */
 static void
 note_counter (line_track_t * p_track, line_track_input_t const * p_in,
               uint32_t side)
 {
-    if (counters_bend(p_track, p_in, side) &&
-        !line_track_flag(p_track, LINE_TRACK_F_COUNTERED))
+    if (counters_bend(p_track, p_in, side))
     {
         field_set(p_track, LINE_TRACK_FIELD_COUNTER_SIDE, (uint32_t)side);
         p_track->counter_mm = robot_mark16(p_in->distance_mm);
-        flag_set(p_track, LINE_TRACK_F_COUNTERED, true);
-        return;
     }
-    if (counters_bend(p_track, p_in, side))
-    {
-        flag_set(p_track, LINE_TRACK_F_CURVE, false);
-    }
-    flag_set(p_track, LINE_TRACK_F_COUNTERED, false);
-    if (side == field_get(p_track, LINE_TRACK_FIELD_COUNTER_SIDE))
+    else if (side == field_get(p_track, LINE_TRACK_FIELD_COUNTER_SIDE))
     {
         field_set(p_track, LINE_TRACK_FIELD_COUNTER_SIDE, (uint32_t)SIDE_NONE);
+    }
+    else
+    {
+        /* The other side's touch carries on. */
     }
 }
 
