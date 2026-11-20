@@ -1,0 +1,485 @@
+14:31:57 listening on 0.0.0.0:1884
+14:32:08 connect from 172.20.10.7:54591
+14:32:08 console 0
+14:32:08 console 0
+14:32:08 console 0 microT-Kernel Version 3.00
+14:32:08 console 0
+14:32:08 console 0
+14:32:08 console 0 === micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+14:32:08 console 0 dual-core (SMP) build, usermain on core 0
+14:32:08 console 1 motion: motors initialized and braked
+14:32:08 console 1 motion: encoders counting on PIO0
+14:32:08 console 1 motion: line adapter dry run; no motor API calls
+14:32:08 console 2 line_follow: digital IR line sensing started. Submitting requests to motion. Built Nov 19 2026 06:17:58
+14:32:08 console 2 all subsystems started
+14:32:08 console 3
+14:32:08 console 3 Wi-Fi: the kernel radio service joins the network from config/wifi_secrets.h
+14:32:08 dashboard -> car: clear
+14:32:08 mtk3smp-pico/heartbeat/telemetry seq=0 captured_ms=1000 obstacle flags=17 edges=255 width_mm=0
+14:32:08 console 4 wifi: cyw43_utk_task starting (proc 1)
+14:32:08 console 4 wifi: cyw43_init() ...
+14:32:08 console 5 wifi: cyw43_init() returned, bringing interface up ...
+14:32:08 console 5 barcode: Code 39 reader on GP28 started
+14:32:08 console 6 [0 ms]obstacle: scanning started
+14:32:08 console 6 [0 ms]obstacle: stop request ACTIVE (sensing output only)
+14:32:08 console 153 motion: TRACK target=0 seen=0 valid=1 (dry run)
+14:32:08 console 164 terrain: IMU ready; calibrating, keep the car still on level ground
+14:32:08 console 243 terrain: compass ready
+14:32:08 console 885 [760 ms]obstacle: stop request RELEASED
+14:32:08 console 885 [760 ms]obstacle: [0x11] CLEAR dir 90
+14:32:08 console 1464 wifi: joining "<SSID removed>" ...
+14:32:08 console 1684 wifi: link status -> joined AP, waiting for IP (1)
+14:32:08 console 2944 terrain: calibration VALID tilt 3.7 deg reading -662 -2290 8343 mm/s2
+14:32:08 console 4645 wifi: link status -> joined AP, no IP yet (2)
+14:32:08 console 4725 wifi: link up, ip=172.20.10.7
+14:32:08 console 4844 mqtt: connected to 172.20.10.2
+14:32:08 mtk3smp-pico/heartbeat/telemetry seq=1 captured_ms=2000 obstacle flags=17 edges=255 width_mm=0
+14:32:08 console 4963 [TEST] === test run start ===
+14:32:08 console 4984 remote: ready stopped
+14:32:08 console 4986 remote: ok clear, state stopped
+14:32:08 console 5223 Wi-Fi connected
+14:32:08 console 5224 IP Address: 172.20.10.7
+14:32:08 mtk3smp-pico/heartbeat/telemetry seq=2 captured_ms=3000 obstacle flags=17 edges=255 width_mm=0
+14:32:08 console 5473 [TEST] TER-U01 PASS  IMU delivers samples at about 100 Hz
+14:32:09 mtk3smp-pico/heartbeat/telemetry seq=3 captured_ms=4000 obstacle flags=17 edges=255 width_mm=0
+14:32:09 mtk3smp-pico/heartbeat/telemetry seq=4 captured_ms=5000 obstacle flags=17 edges=255 width_mm=0
+14:32:09 console 5983 [TEST] TER-U29 FAIL  compass delivers readings at about 100 Hz   (../app_program/terrain/terrain_test.c:213)
+14:32:09 console 5984 [TEST] TER-U02 PASS  calibration VALID with the car still and level
+14:32:11 mtk3smp-pico/heartbeat/telemetry seq=5 captured_ms=6000 obstacle flags=17 edges=255 width_mm=0
+14:32:11 console 6493 [TEST] TER-U04 PASS  pitch and roll within 1 degree of 0 at rest
+14:32:11 console 6496 [TEST] TER-U12 PASS  hump trace gives ASCENDING, DESCENDING, LEVEL only
+14:32:11 console 6496 [TEST] TER-U12 PASS  full event queue drops the oldest event
+14:32:11 console 6672 [TEST] TER-U15 PASS  6, 11 and 20 mm one-wheel ramps read their height
+14:32:11 console 6727 [TEST] TER-U34 PASS  1.30 g ignored, a lift once per cooldown, overturn after 30
+14:32:11 console 6727 [TEST] TER-U22 PASS  wheel speeds give the turn rate, left positive
+14:32:11 console 6728 [TEST] TER-U22 PASS  turn trace gives TURNING, STRAIGHT, TURNING, STRAIGHT only
+14:32:11 console 6729 [TEST] TER-U22 PASS  turning and hump fields of the detector word kept apart
+14:32:11 console 6730 [TEST] TER-U24 PASS  speed trace gives ACCELERATING, CRUISING, DECELERATING, STATIONARY only
+14:32:11 mtk3smp-pico/heartbeat/telemetry seq=6 captured_ms=7000 obstacle flags=17 edges=255 width_mm=0
+14:32:11 console 6730 [TEST] TER-U26 PASS  only LEVEL, LIFTED, OVERTURNED and TURNING counted; 11 bytes
+14:32:11 console 6731 [TEST] TER-U26 PASS  8 heights kept, 9th counted; counts stop at 15, 15, 127
+14:32:11 console 6731 [TEST] TER-U26 PASS  reset empties it; NULL refused without writing
+14:32:11 console 6732 [TEST] TER-U13 PASS  hump LEVEL and no events at rest
+14:32:11 console 6732 [TEST] terrain SUMMARY 15 passed, 1 failed
+14:32:11 console 6732 [TEST] === test run end ===
+14:32:11 mtk3smp-pico/heartbeat/telemetry seq=7 captured_ms=8000 obstacle flags=17 edges=255 width_mm=0
+14:32:12 mtk3smp-pico/heartbeat/telemetry seq=8 captured_ms=9000 obstacle flags=17 edges=255 width_mm=0
+14:32:13 mtk3smp-pico/heartbeat/telemetry seq=9 captured_ms=10000 obstacle flags=17 edges=255 width_mm=0
+14:32:14 mtk3smp-pico/heartbeat/telemetry seq=10 captured_ms=11000 obstacle flags=17 edges=255 width_mm=0
+14:32:15 mtk3smp-pico/heartbeat/telemetry seq=11 captured_ms=12000 obstacle flags=17 edges=255 width_mm=0
+14:32:16 mtk3smp-pico/heartbeat/telemetry seq=12 captured_ms=13000 obstacle flags=17 edges=255 width_mm=0
+14:32:25 disconnect 172.20.10.7:54591
+14:32:25 connect from 172.20.10.7:54591
+14:32:25 console 0
+14:32:25 console 0
+14:32:25 console 0 microT-Kernel Version 3.00
+14:32:25 console 0
+14:32:25 console 0
+14:32:25 console 0 === micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+14:32:25 console 0 dual-core (SMP) build, usermain on core 0
+14:32:25 console 1 motion: motors initialized and braked
+14:32:25 console 1 motion: encoders counting on PIO0
+14:32:25 console 1 motion: line adapter dry run; no motor API calls
+14:32:25 console 2 line_follow: digital IR line sensing started. Submitting requests to motion. Built Nov 19 2026 06:17:58
+14:32:25 console 2 all subsystems started
+14:32:25 console 3
+14:32:25 console 3 Wi-Fi: the kernel radio service joins the network from config/wifi_secrets.h
+14:32:25 dashboard -> car: clear
+14:32:25 mtk3smp-pico/heartbeat/telemetry seq=0 captured_ms=1000 obstacle flags=17 edges=255 width_mm=0
+14:32:25 console 4 wifi: cyw43_utk_task starting (proc 1)
+14:32:25 console 4 wifi: cyw43_init() ...
+14:32:25 console 5 wifi: cyw43_init() returned, bringing interface up ...
+14:32:25 console 5 barcode: Code 39 reader on GP28 started
+14:32:25 console 6 [0 ms]obstacle: scanning started
+14:32:25 console 6 [0 ms]obstacle: stop request ACTIVE (sensing output only)
+14:32:25 console 153 motion: TRACK target=0 seen=0 valid=1 (dry run)
+14:32:25 console 163 terrain: IMU ready; calibrating, keep the car still on level ground
+14:32:25 console 243 terrain: compass ready
+14:32:25 console 885 [760 ms]obstacle: stop request RELEASED
+14:32:25 console 885 [760 ms]obstacle: [0x11] CLEAR dir 90
+14:32:26 console 1464 wifi: joining "<SSID removed>" ...
+14:32:26 console 1664 wifi: link status -> joined AP, waiting for IP (1)
+14:32:26 console 4605 wifi: link status -> joined AP, no IP yet (2)
+14:32:26 console 4665 wifi: link up, ip=172.20.10.7
+14:32:26 console 4713 Wi-Fi connected
+14:32:26 console 4713 IP Address: 172.20.10.7
+14:32:26 console 4824 mqtt: connected to 172.20.10.2
+14:32:26 mtk3smp-pico/heartbeat/telemetry seq=1 captured_ms=2000 obstacle flags=17 edges=255 width_mm=0
+14:32:26 console 4924 terrain: calibration VALID tilt 3.7 deg reading -673 -2285 8334 mm/s2
+14:32:26 console 4925 remote: ready stopped
+14:32:26 console 4926 remote: ok clear, state stopped
+14:32:26 console 4963 [TEST] === test run start ===
+14:32:26 mtk3smp-pico/heartbeat/telemetry seq=2 captured_ms=3000 obstacle flags=17 edges=255 width_mm=0
+14:32:26 mtk3smp-pico/heartbeat/telemetry seq=3 captured_ms=4000 obstacle flags=17 edges=255 width_mm=0
+14:32:26 mtk3smp-pico/heartbeat/telemetry seq=4 captured_ms=5000 obstacle flags=17 edges=255 width_mm=0
+14:32:26 console 5473 [TEST] TER-U01 PASS  IMU delivers samples at about 100 Hz
+14:32:27 console 5983 [TEST] TER-U29 FAIL  compass delivers readings at about 100 Hz   (../app_program/terrain/terrain_test.c:213)
+14:32:27 console 5984 [TEST] TER-U02 PASS  calibration VALID with the car still and level
+14:32:27 mtk3smp-pico/heartbeat/telemetry seq=5 captured_ms=6000 obstacle flags=17 edges=255 width_mm=0
+14:32:27 console 6493 [TEST] TER-U04 PASS  pitch and roll within 1 degree of 0 at rest
+14:32:27 console 6496 [TEST] TER-U12 PASS  hump trace gives ASCENDING, DESCENDING, LEVEL only
+14:32:27 console 6496 [TEST] TER-U12 PASS  full event queue drops the oldest event
+14:32:27 console 6675 [TEST] TER-U15 PASS  6, 11 and 20 mm one-wheel ramps read their height
+14:32:27 console 6730 [TEST] TER-U34 PASS  1.30 g ignored, a lift once per cooldown, overturn after 30
+14:32:27 console 6731 [TEST] TER-U22 PASS  wheel speeds give the turn rate, left positive
+14:32:27 console 6732 [TEST] TER-U22 PASS  turn trace gives TURNING, STRAIGHT, TURNING, STRAIGHT only
+14:32:27 console 6732 [TEST] TER-U22 PASS  turning and hump fields of the detector word kept apart
+14:32:27 console 6733 [TEST] TER-U24 PASS  speed trace gives ACCELERATING, CRUISING, DECELERATING, STATIONARY only
+14:32:27 console 6734 [TEST] TER-U26 PASS  only LEVEL, LIFTED, OVERTURNED and TURNING counted; 11 bytes
+14:32:28 console 6735 [TEST] TER-U26 PASS  8 heights kept, 9th counted; counts stop at 15, 15, 127
+14:32:28 console 6735 [TEST] TER-U26 PASS  reset empties it; NULL refused without writing
+14:32:28 console 6736 [TEST] TER-U13 PASS  hump LEVEL and no events at rest
+14:32:28 console 6736 [TEST] terrain SUMMARY 15 passed, 1 failed
+14:32:28 console 6736 [TEST] === test run end ===
+14:32:28 mtk3smp-pico/heartbeat/telemetry seq=6 captured_ms=7000 obstacle flags=17 edges=255 width_mm=0
+14:32:29 mtk3smp-pico/heartbeat/telemetry seq=7 captured_ms=8000 obstacle flags=17 edges=255 width_mm=0
+14:32:30 mtk3smp-pico/heartbeat/telemetry seq=8 captured_ms=9000 obstacle flags=17 edges=255 width_mm=0
+14:32:31 mtk3smp-pico/heartbeat/telemetry seq=9 captured_ms=10000 obstacle flags=17 edges=255 width_mm=0
+14:32:32 mtk3smp-pico/heartbeat/telemetry seq=10 captured_ms=11000 obstacle flags=17 edges=255 width_mm=0
+14:32:33 mtk3smp-pico/heartbeat/telemetry seq=11 captured_ms=12000 obstacle flags=17 edges=255 width_mm=0
+14:32:42 disconnect 172.20.10.7:54591
+14:32:42 connect from 172.20.10.7:54591
+14:32:42 console 0
+14:32:42 console 0
+14:32:42 console 0 microT-Kernel Version 3.00
+14:32:42 console 0
+14:32:42 console 0
+14:32:42 console 0 === micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+14:32:42 console 0 dual-core (SMP) build, usermain on core 0
+14:32:42 console 1 motion: motors initialized and braked
+14:32:42 console 1 motion: encoders counting on PIO0
+14:32:42 console 1 motion: line adapter dry run; no motor API calls
+14:32:42 console 2 line_follow: digital IR line sensing started. Submitting requests to motion. Built Nov 19 2026 06:17:58
+14:32:42 console 2 all subsystems started
+14:32:42 console 3
+14:32:42 console 3 Wi-Fi: the kernel radio service joins the network from config/wifi_secrets.h
+14:32:42 dashboard -> car: clear
+14:32:42 mtk3smp-pico/heartbeat/telemetry seq=0 captured_ms=1000 obstacle flags=17 edges=255 width_mm=0
+14:32:42 console 4 wifi: cyw43_utk_task starting (proc 1)
+14:32:42 console 4 wifi: cyw43_init() ...
+14:32:42 console 5 wifi: cyw43_init() returned, bringing interface up ...
+14:32:42 console 5 barcode: Code 39 reader on GP28 started
+14:32:42 console 6 [0 ms]obstacle: scanning started
+14:32:42 console 6 [0 ms]obstacle: stop request ACTIVE (sensing output only)
+14:32:42 console 153 motion: TRACK target=0 seen=0 valid=1 (dry run)
+14:32:42 console 163 terrain: IMU ready; calibrating, keep the car still on level ground
+14:32:42 console 243 terrain: compass ready
+14:32:42 console 885 [760 ms]obstacle: stop request RELEASED
+14:32:42 console 885 [760 ms]obstacle: [0x11] CLEAR dir 90
+14:32:42 console 1464 wifi: joining "<SSID removed>" ...
+14:32:42 console 1664 wifi: link status -> joined AP, waiting for IP (1)
+14:32:42 console 3024 terrain: calibration VALID tilt 3.8 deg reading -658 -2300 8343 mm/s2
+14:32:42 console 4625 wifi: link status -> joined AP, no IP yet (2)
+14:32:42 console 4705 wifi: link up, ip=172.20.10.7
+14:32:42 console 4713 Wi-Fi connected
+14:32:42 console 4713 IP Address: 172.20.10.7
+14:32:42 mtk3smp-pico/heartbeat/telemetry seq=1 captured_ms=2000 obstacle flags=17 edges=255 width_mm=0
+14:32:42 console 4944 mqtt: connected to 172.20.10.2
+14:32:42 console 5025 remote: ready stopped
+14:32:42 console 5027 remote: ok clear, state stopped
+14:32:42 console 5073 [TEST] === test run start ===
+14:32:43 mtk3smp-pico/heartbeat/telemetry seq=2 captured_ms=3000 obstacle flags=17 edges=255 width_mm=0
+14:32:43 mtk3smp-pico/heartbeat/telemetry seq=3 captured_ms=4000 obstacle flags=17 edges=255 width_mm=0
+14:32:43 mtk3smp-pico/heartbeat/telemetry seq=4 captured_ms=5000 obstacle flags=17 edges=255 width_mm=0
+14:32:43 console 5583 [TEST] TER-U01 PASS  IMU delivers samples at about 100 Hz
+14:32:43 console 6093 [TEST] TER-U29 FAIL  compass delivers readings at about 100 Hz   (../app_program/terrain/terrain_test.c:213)
+14:32:43 console 6094 [TEST] TER-U02 PASS  calibration VALID with the car still and level
+14:32:44 mtk3smp-pico/heartbeat/telemetry seq=5 captured_ms=6000 obstacle flags=17 edges=255 width_mm=0
+14:32:44 console 6603 [TEST] TER-U04 PASS  pitch and roll within 1 degree of 0 at rest
+14:32:44 console 6608 [TEST] TER-U12 PASS  hump trace gives ASCENDING, DESCENDING, LEVEL only
+14:32:44 console 6609 [TEST] TER-U12 PASS  full event queue drops the oldest event
+14:32:44 console 6787 [TEST] TER-U15 PASS  6, 11 and 20 mm one-wheel ramps read their height
+14:32:44 console 6842 [TEST] TER-U34 PASS  1.30 g ignored, a lift once per cooldown, overturn after 30
+14:32:44 console 6843 [TEST] TER-U22 PASS  wheel speeds give the turn rate, left positive
+14:32:44 console 6845 [TEST] TER-U22 PASS  turn trace gives TURNING, STRAIGHT, TURNING, STRAIGHT only
+14:32:44 console 6845 [TEST] TER-U22 PASS  turning and hump fields of the detector word kept apart
+14:32:44 console 6846 [TEST] TER-U24 PASS  speed trace gives ACCELERATING, CRUISING, DECELERATING, STATIONARY only
+14:32:44 console 6847 [TEST] TER-U26 PASS  only LEVEL, LIFTED, OVERTURNED and TURNING counted; 11 bytes
+14:32:44 console 6847 [TEST] TER-U26 PASS  8 heights kept, 9th counted; counts stop at 15, 15, 127
+14:32:44 console 6848 [TEST] TER-U26 PASS  reset empties it; NULL refused without writing
+14:32:44 console 6848 [TEST] TER-U13 PASS  hump LEVEL and no events at rest
+14:32:44 console 6848 [TEST] terrain SUMMARY 15 passed, 1 failed
+14:32:44 console 6849 [TEST] === test run end ===
+14:32:45 mtk3smp-pico/heartbeat/telemetry seq=6 captured_ms=7000 obstacle flags=17 edges=255 width_mm=0
+14:32:46 mtk3smp-pico/heartbeat/telemetry seq=7 captured_ms=8000 obstacle flags=17 edges=255 width_mm=0
+14:32:47 mtk3smp-pico/heartbeat/telemetry seq=8 captured_ms=9000 obstacle flags=17 edges=255 width_mm=0
+14:32:48 mtk3smp-pico/heartbeat/telemetry seq=9 captured_ms=10000 obstacle flags=17 edges=255 width_mm=0
+14:32:49 mtk3smp-pico/heartbeat/telemetry seq=10 captured_ms=11000 obstacle flags=17 edges=255 width_mm=0
+14:32:58 disconnect 172.20.10.7:54591
+14:32:58 connect from 172.20.10.7:54591
+14:32:58 console 0
+14:32:58 console 0
+14:32:58 console 0 microT-Kernel Version 3.00
+14:32:58 console 0
+14:32:58 console 0
+14:32:58 console 0 === micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+14:32:58 console 0 dual-core (SMP) build, usermain on core 0
+14:32:58 console 1 motion: motors initialized and braked
+14:32:58 console 1 motion: encoders counting on PIO0
+14:32:58 console 1 motion: line adapter dry run; no motor API calls
+14:32:58 console 2 line_follow: digital IR line sensing started. Submitting requests to motion. Built Nov 19 2026 06:17:58
+14:32:58 console 2 all subsystems started
+14:32:58 console 3
+14:32:58 console 3 Wi-Fi: the kernel radio service joins the network from config/wifi_secrets.h
+14:32:58 dashboard -> car: clear
+14:32:58 mtk3smp-pico/heartbeat/telemetry seq=0 captured_ms=1000 obstacle flags=17 edges=255 width_mm=0
+14:32:58 console 4 wifi: cyw43_utk_task starting (proc 1)
+14:32:58 console 4 wifi: cyw43_init() ...
+14:32:58 console 5 wifi: cyw43_init() returned, bringing interface up ...
+14:32:58 console 5 barcode: Code 39 reader on GP28 started
+14:32:58 console 6 [0 ms]obstacle: scanning started
+14:32:58 console 6 [0 ms]obstacle: stop request ACTIVE (sensing output only)
+14:32:58 console 153 motion: TRACK target=0 seen=0 valid=1 (dry run)
+14:32:58 console 163 terrain: IMU ready; calibrating, keep the car still on level ground
+14:32:58 console 243 terrain: compass ready
+14:32:58 console 885 [760 ms]obstacle: stop request RELEASED
+14:32:58 console 885 [760 ms]obstacle: [0x11] CLEAR dir 90
+14:32:58 console 1464 wifi: joining "<SSID removed>" ...
+14:32:58 console 1664 wifi: link status -> joined AP, waiting for IP (1)
+14:32:58 console 3004 terrain: calibration VALID tilt 3.7 deg reading -657 -2287 8342 mm/s2
+14:32:58 console 4585 wifi: link status -> joined AP, no IP yet (2)
+14:32:58 console 4625 wifi: link up, ip=172.20.10.7
+14:32:58 console 4713 Wi-Fi connected
+14:32:58 console 4713 IP Address: 172.20.10.7
+14:32:58 mtk3smp-pico/heartbeat/telemetry seq=1 captured_ms=2000 obstacle flags=17 edges=255 width_mm=0
+14:32:58 console 4904 mqtt: connected to 172.20.10.2
+14:32:58 console 4984 remote: ready stopped
+14:32:58 console 4986 remote: ok clear, state stopped
+14:32:58 console 5073 [TEST] === test run start ===
+14:32:58 mtk3smp-pico/heartbeat/telemetry seq=2 captured_ms=3000 obstacle flags=17 edges=255 width_mm=0
+14:32:58 mtk3smp-pico/heartbeat/telemetry seq=3 captured_ms=4000 obstacle flags=17 edges=255 width_mm=0
+14:32:58 mtk3smp-pico/heartbeat/telemetry seq=4 captured_ms=5000 obstacle flags=17 edges=255 width_mm=0
+14:32:58 console 5583 [TEST] TER-U01 PASS  IMU delivers samples at about 100 Hz
+14:32:59 console 6093 [TEST] TER-U29 FAIL  compass delivers readings at about 100 Hz   (../app_program/terrain/terrain_test.c:213)
+14:32:59 console 6094 [TEST] TER-U02 PASS  calibration VALID with the car still and level
+14:32:59 mtk3smp-pico/heartbeat/telemetry seq=5 captured_ms=6000 obstacle flags=17 edges=255 width_mm=0
+14:33:00 console 6603 [TEST] TER-U04 PASS  pitch and roll within 1 degree of 0 at rest
+14:33:00 console 6607 [TEST] TER-U12 PASS  hump trace gives ASCENDING, DESCENDING, LEVEL only
+14:33:00 console 6607 [TEST] TER-U12 PASS  full event queue drops the oldest event
+14:33:00 console 6784 [TEST] TER-U15 PASS  6, 11 and 20 mm one-wheel ramps read their height
+14:33:00 console 6839 [TEST] TER-U34 PASS  1.30 g ignored, a lift once per cooldown, overturn after 30
+14:33:00 console 6839 [TEST] TER-U22 PASS  wheel speeds give the turn rate, left positive
+14:33:00 console 6840 [TEST] TER-U22 PASS  turn trace gives TURNING, STRAIGHT, TURNING, STRAIGHT only
+14:33:00 console 6840 [TEST] TER-U22 PASS  turning and hump fields of the detector word kept apart
+14:33:00 console 6841 [TEST] TER-U24 PASS  speed trace gives ACCELERATING, CRUISING, DECELERATING, STATIONARY only
+14:33:00 mtk3smp-pico/heartbeat/telemetry seq=6 captured_ms=7000 obstacle flags=17 edges=255 width_mm=0
+14:33:00 console 6842 [TEST] TER-U26 PASS  only LEVEL, LIFTED, OVERTURNED and TURNING counted; 11 bytes
+14:33:00 console 6843 [TEST] TER-U26 PASS  8 heights kept, 9th counted; counts stop at 15, 15, 127
+14:33:00 console 6844 [TEST] TER-U26 PASS  reset empties it; NULL refused without writing
+14:33:00 console 6845 [TEST] TER-U13 PASS  hump LEVEL and no events at rest
+14:33:00 console 6846 [TEST] terrain SUMMARY 15 passed, 1 failed
+14:33:00 console 6846 [TEST] === test run end ===
+14:33:01 mtk3smp-pico/heartbeat/telemetry seq=7 captured_ms=8000 obstacle flags=17 edges=255 width_mm=0
+14:33:02 mtk3smp-pico/heartbeat/telemetry seq=8 captured_ms=9000 obstacle flags=17 edges=255 width_mm=0
+14:33:03 mtk3smp-pico/heartbeat/telemetry seq=9 captured_ms=10000 obstacle flags=17 edges=255 width_mm=0
+14:33:04 mtk3smp-pico/heartbeat/telemetry seq=10 captured_ms=11000 obstacle flags=17 edges=255 width_mm=0
+14:33:05 mtk3smp-pico/heartbeat/telemetry seq=11 captured_ms=12000 obstacle flags=17 edges=255 width_mm=0
+14:33:06 mtk3smp-pico/heartbeat/telemetry seq=12 captured_ms=13000 obstacle flags=17 edges=255 width_mm=0
+14:33:07 mtk3smp-pico/heartbeat/telemetry seq=13 captured_ms=14000 obstacle flags=17 edges=255 width_mm=0
+14:33:08 mtk3smp-pico/heartbeat/telemetry seq=14 captured_ms=15000 obstacle flags=17 edges=255 width_mm=0
+14:33:09 mtk3smp-pico/heartbeat/telemetry seq=15 captured_ms=16000 obstacle flags=17 edges=255 width_mm=0
+14:33:17 disconnect 172.20.10.7:54591
+14:33:17 connect from 172.20.10.7:54591
+14:33:18 console 0
+14:33:18 console 0
+14:33:18 console 0 microT-Kernel Version 3.00
+14:33:18 console 0
+14:33:18 console 0
+14:33:18 console 0 === micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+14:33:18 console 0 dual-core (SMP) build, usermain on core 0
+14:33:18 console 1 motion: motors initialized and braked
+14:33:18 console 1 motion: encoders counting on PIO0
+14:33:18 console 1 motion: line adapter dry run; no motor API calls
+14:33:18 console 2 line_follow: digital IR line sensing started. Submitting requests to motion. Built Nov 19 2026 06:17:58
+14:33:18 console 2 all subsystems started
+14:33:18 console 3
+14:33:18 console 3 Wi-Fi: the kernel radio service joins the network from config/wifi_secrets.h
+14:33:18 dashboard -> car: clear
+14:33:18 mtk3smp-pico/heartbeat/telemetry seq=0 captured_ms=1000 obstacle flags=17 edges=255 width_mm=0
+14:33:18 console 4 wifi: cyw43_utk_task starting (proc 1)
+14:33:18 console 4 wifi: cyw43_init() ...
+14:33:18 console 5 wifi: cyw43_init() returned, bringing interface up ...
+14:33:18 console 5 barcode: Code 39 reader on GP28 started
+14:33:18 console 6 [0 ms]obstacle: scanning started
+14:33:18 console 6 [0 ms]obstacle: stop request ACTIVE (sensing output only)
+14:33:18 console 153 motion: TRACK target=0 seen=0 valid=1 (dry run)
+14:33:18 console 163 terrain: IMU ready; calibrating, keep the car still on level ground
+14:33:18 console 243 terrain: compass ready
+14:33:18 console 885 [760 ms]obstacle: stop request RELEASED
+14:33:18 console 885 [760 ms]obstacle: [0x11] CLEAR dir 90
+14:33:18 console 1424 wifi: joining "<SSID removed>" ...
+14:33:18 console 1644 wifi: link status -> joined AP, waiting for IP (1)
+14:33:18 console 2924 terrain: calibration VALID tilt 3.8 deg reading -674 -2309 8358 mm/s2
+14:33:18 console 4685 wifi: link status -> joined AP, no IP yet (2)
+14:33:18 console 4765 wifi: link up, ip=172.20.10.7
+14:33:18 console 5224 Wi-Fi connected
+14:33:18 mtk3smp-pico/heartbeat/telemetry seq=1 captured_ms=2000 obstacle flags=17 edges=255 width_mm=0
+14:33:18 console 5224 IP Address: 172.20.10.7
+14:33:18 console 5624 mqtt: connected to 172.20.10.2
+14:33:18 console 5704 remote: ready stopped
+14:33:18 console 5706 remote: ok clear, state stopped
+14:33:18 console 5733 [TEST] === test run start ===
+14:33:18 mtk3smp-pico/heartbeat/telemetry seq=2 captured_ms=3000 obstacle flags=17 edges=255 width_mm=0
+14:33:18 mtk3smp-pico/heartbeat/telemetry seq=3 captured_ms=4000 obstacle flags=17 edges=255 width_mm=0
+14:33:18 mtk3smp-pico/heartbeat/telemetry seq=4 captured_ms=5000 obstacle flags=17 edges=255 width_mm=0
+14:33:18 mtk3smp-pico/heartbeat/telemetry seq=5 captured_ms=6000 obstacle flags=17 edges=255 width_mm=0
+14:33:18 console 6243 [TEST] TER-U01 PASS  IMU delivers samples at about 100 Hz
+14:33:19 console 6753 [TEST] TER-U29 FAIL  compass delivers readings at about 100 Hz   (../app_program/terrain/terrain_test.c:213)
+14:33:19 console 6754 [TEST] TER-U02 PASS  calibration VALID with the car still and level
+14:33:19 mtk3smp-pico/heartbeat/telemetry seq=6 captured_ms=7000 obstacle flags=17 edges=255 width_mm=0
+14:33:20 console 7263 [TEST] TER-U04 PASS  pitch and roll within 1 degree of 0 at rest
+14:33:20 console 7267 [TEST] TER-U12 PASS  hump trace gives ASCENDING, DESCENDING, LEVEL only
+14:33:20 console 7267 [TEST] TER-U12 PASS  full event queue drops the oldest event
+14:33:20 console 7444 [TEST] TER-U15 PASS  6, 11 and 20 mm one-wheel ramps read their height
+14:33:20 console 7498 [TEST] TER-U34 PASS  1.30 g ignored, a lift once per cooldown, overturn after 30
+14:33:20 console 7499 [TEST] TER-U22 PASS  wheel speeds give the turn rate, left positive
+14:33:20 console 7499 [TEST] TER-U22 PASS  turn trace gives TURNING, STRAIGHT, TURNING, STRAIGHT only
+14:33:20 console 7500 [TEST] TER-U22 PASS  turning and hump fields of the detector word kept apart
+14:33:20 console 7501 [TEST] TER-U24 PASS  speed trace gives ACCELERATING, CRUISING, DECELERATING, STATIONARY only
+14:33:21 console 7501 [TEST] TER-U26 PASS  only LEVEL, LIFTED, OVERTURNED and TURNING counted; 11 bytes
+14:33:21 console 7502 [TEST] TER-U26 PASS  8 heights kept, 9th counted; counts stop at 15, 15, 127
+14:33:21 console 7503 [TEST] TER-U26 PASS  reset empties it; NULL refused without writing
+14:33:21 console 7503 [TEST] TER-U13 PASS  hump LEVEL and no events at rest
+14:33:21 console 7504 [TEST] terrain SUMMARY 15 passed, 1 failed
+14:33:21 console 7505 [TEST] === test run end ===
+14:33:21 mtk3smp-pico/heartbeat/telemetry seq=7 captured_ms=8000 obstacle flags=17 edges=255 width_mm=0
+14:33:22 mtk3smp-pico/heartbeat/telemetry seq=8 captured_ms=9000 obstacle flags=17 edges=255 width_mm=0
+14:33:22 mtk3smp-pico/heartbeat/telemetry seq=9 captured_ms=10000 obstacle flags=17 edges=255 width_mm=0
+14:33:24 mtk3smp-pico/heartbeat/telemetry seq=10 captured_ms=11000 obstacle flags=17 edges=255 width_mm=0
+14:33:24 mtk3smp-pico/heartbeat/telemetry seq=11 captured_ms=12000 obstacle flags=17 edges=255 width_mm=0
+14:33:25 mtk3smp-pico/heartbeat/telemetry seq=12 captured_ms=13000 obstacle flags=17 edges=255 width_mm=0
+14:33:33 disconnect 172.20.10.7:54591
+14:33:33 connect from 172.20.10.7:54591
+14:33:33 console 0
+14:33:33 console 0
+14:33:33 console 0 microT-Kernel Version 3.00
+14:33:33 console 0
+14:33:33 console 0
+14:33:33 console 0 === micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+14:33:33 console 0 dual-core (SMP) build, usermain on core 0
+14:33:33 console 1 motion: motors initialized and braked
+14:33:33 console 1 motion: encoders counting on PIO0
+14:33:33 console 1 motion: line adapter dry run; no motor API calls
+14:33:33 console 2 line_follow: digital IR line sensing started. Submitting requests to motion. Built Nov 19 2026 06:17:58
+14:33:33 console 2 all subsystems started
+14:33:33 console 3
+14:33:33 console 3 Wi-Fi: the kernel radio service joins the network from config/wifi_secrets.h
+14:33:33 dashboard -> car: clear
+14:33:33 mtk3smp-pico/heartbeat/telemetry seq=0 captured_ms=1000 obstacle flags=17 edges=255 width_mm=0
+14:33:33 console 4 wifi: cyw43_utk_task starting (proc 1)
+14:33:33 console 4 wifi: cyw43_init() ...
+14:33:33 console 5 wifi: cyw43_init() returned, bringing interface up ...
+14:33:33 console 5 barcode: Code 39 reader on GP28 started
+14:33:33 console 6 [0 ms]obstacle: scanning started
+14:33:33 console 6 [0 ms]obstacle: stop request ACTIVE (sensing output only)
+14:33:33 console 153 motion: TRACK target=0 seen=0 valid=1 (dry run)
+14:33:33 console 163 terrain: IMU ready; calibrating, keep the car still on level ground
+14:33:33 console 243 terrain: compass ready
+14:33:33 console 885 [760 ms]obstacle: stop request RELEASED
+14:33:33 console 885 [760 ms]obstacle: [0x11] CLEAR dir 90
+14:33:33 console 1444 wifi: joining "<SSID removed>" ...
+14:33:33 console 1644 wifi: link status -> joined AP, waiting for IP (1)
+14:33:33 console 4625 wifi: link status -> joined AP, no IP yet (2)
+14:33:33 console 4685 wifi: link up, ip=172.20.10.7
+14:33:33 console 4713 Wi-Fi connected
+14:33:33 console 4714 IP Address: 172.20.10.7
+14:33:33 console 4864 mqtt: connected to 172.20.10.2
+14:33:33 mtk3smp-pico/heartbeat/telemetry seq=1 captured_ms=2000 obstacle flags=17 edges=255 width_mm=0
+14:33:33 console 4944 remote: ready stopped
+14:33:33 console 4946 remote: ok clear, state stopped
+14:33:33 console 4963 [TEST] === test run start ===
+14:33:33 console 4965 terrain: calibration VALID tilt 3.8 deg reading -675 -2294 8342 mm/s2
+14:33:33 mtk3smp-pico/heartbeat/telemetry seq=2 captured_ms=3000 obstacle flags=17 edges=255 width_mm=0
+14:33:33 mtk3smp-pico/heartbeat/telemetry seq=3 captured_ms=4000 obstacle flags=17 edges=255 width_mm=0
+14:33:33 mtk3smp-pico/heartbeat/telemetry seq=4 captured_ms=5000 obstacle flags=17 edges=255 width_mm=0
+14:33:33 console 5473 [TEST] TER-U01 PASS  IMU delivers samples at about 100 Hz
+14:33:34 console 5983 [TEST] TER-U29 FAIL  compass delivers readings at about 100 Hz   (../app_program/terrain/terrain_test.c:213)
+14:33:34 console 5984 [TEST] TER-U02 PASS  calibration VALID with the car still and level
+14:33:34 mtk3smp-pico/heartbeat/telemetry seq=5 captured_ms=6000 obstacle flags=17 edges=255 width_mm=0
+14:33:34 console 6493 [TEST] TER-U04 PASS  pitch and roll within 1 degree of 0 at rest
+14:33:34 console 6496 [TEST] TER-U12 PASS  hump trace gives ASCENDING, DESCENDING, LEVEL only
+14:33:34 console 6496 [TEST] TER-U12 PASS  full event queue drops the oldest event
+14:33:35 console 6674 [TEST] TER-U15 PASS  6, 11 and 20 mm one-wheel ramps read their height
+14:33:35 console 6731 [TEST] TER-U34 PASS  1.30 g ignored, a lift once per cooldown, overturn after 30
+14:33:35 console 6732 [TEST] TER-U22 PASS  wheel speeds give the turn rate, left positive
+14:33:35 console 6732 [TEST] TER-U22 PASS  turn trace gives TURNING, STRAIGHT, TURNING, STRAIGHT only
+14:33:35 console 6733 [TEST] TER-U22 PASS  turning and hump fields of the detector word kept apart
+14:33:35 console 6734 [TEST] TER-U24 PASS  speed trace gives ACCELERATING, CRUISING, DECELERATING, STATIONARY only
+14:33:35 console 6735 [TEST] TER-U26 PASS  only LEVEL, LIFTED, OVERTURNED and TURNING counted; 11 bytes
+14:33:35 console 6735 [TEST] TER-U26 PASS  8 heights kept, 9th counted; counts stop at 15, 15, 127
+14:33:35 console 6736 [TEST] TER-U26 PASS  reset empties it; NULL refused without writing
+14:33:35 console 6736 [TEST] TER-U13 PASS  hump LEVEL and no events at rest
+14:33:35 console 6736 [TEST] terrain SUMMARY 15 passed, 1 failed
+14:33:35 console 6737 [TEST] === test run end ===
+14:33:35 mtk3smp-pico/heartbeat/telemetry seq=6 captured_ms=7000 obstacle flags=17 edges=255 width_mm=0
+14:33:36 mtk3smp-pico/heartbeat/telemetry seq=7 captured_ms=8000 obstacle flags=17 edges=255 width_mm=0
+14:33:37 mtk3smp-pico/heartbeat/telemetry seq=8 captured_ms=9000 obstacle flags=17 edges=255 width_mm=0
+14:33:38 mtk3smp-pico/heartbeat/telemetry seq=9 captured_ms=10000 obstacle flags=17 edges=255 width_mm=0
+14:34:08 disconnect 172.20.10.7:54591
+14:57:14 connect from 172.20.10.7:54591
+14:57:14 console 6
+14:57:14 console 6
+14:57:14 console 6 microT-Kernel Version 3.00
+14:57:14 console 6
+14:57:14 console 6
+14:57:14 console 6 === micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+14:57:14 console 7 dual-core (SMP) build, usermain on core 0
+14:57:14 console 7 obstacle: motors held until the path is confirmed clear
+14:57:14 console 8 motion: motors initialized and braked
+14:57:14 console 8 motion: encoders counting on PIO0
+14:57:14 console 8 motion: tMotion line adapter at 120 mm/s; 5 s startup delay, no run cutoff
+14:57:14 console 9 Wi-Fi: the kernel radio service joins the network from config/wifi_secrets.h
+14:57:14 console 10 all subsystems started
+14:57:14 console 10
+14:57:14 dashboard -> car: clear
+14:57:14 mtk3smp-pico/heartbeat/telemetry seq=0 captured_ms=1010 obstacle flags=17 edges=255 width_mm=0
+14:57:14 status CAR v=0 l=0 r=0 d=0 h=0 m=6 os=1 ow=0 od=0 av=WAIT_CLEAR p=2 ro=-1 tr=0 hu=0 lf=0 rq=0 rt=0 cs=2
+14:57:14 console 11 wifi: cyw43_utk_task starting (proc 1)
+14:57:14 console 11 wifi: cyw43_init() ...
+14:57:14 console 11 wifi: cyw43_init() returned, bringing interface up ...
+14:57:14 console 12 barcode: Code 39 reader on GP28 started
+14:57:14 console 13 [0 ms]obstacle: scanning started
+14:57:14 console 13 [0 ms]obstacle: stop request ACTIVE (sensing output only)
+14:57:14 console 13 [0 ms]obstacle: stopped by the dashboard
+14:57:14 console 150 terrain: IMU ready; calibrating, keep the car still on level ground
+14:57:14 console 206 terrain: compass ready
+14:57:14 console 881 [750 ms]obstacle: stop request RELEASED
+14:57:14 console 881 [750 ms]obstacle: [0x11] CLEAR dir 90
+14:57:14 console 1400 wifi: joining "<SSID removed>" ...
+14:57:14 console 1600 wifi: link status -> joined AP, waiting for IP (1)
+14:57:14 console 3120 terrain: calibration VALID tilt 3.6 deg reading -685 -2259 8337 mm/s2
+14:57:14 console 4561 wifi: link status -> joined AP, no IP yet (2)
+14:57:14 console 4641 wifi: link up, ip=172.20.10.7
+14:57:14 console 4701 mqtt: connected to 172.20.10.2
+14:57:14 mtk3smp-pico/heartbeat/telemetry seq=1 captured_ms=2010 obstacle flags=17 edges=255 width_mm=0
+14:57:14 console 4721 Wi-Fi connected
+14:57:14 console 4721 IP Address: 172.20.10.7
+14:57:14 console 4781 remote: ready stopped
+14:57:14 console 4783 remote: ok clear, state stopped
+14:57:14 mtk3smp-pico/heartbeat/telemetry seq=2 captured_ms=3010 obstacle flags=17 edges=255 width_mm=0
+14:57:14 mtk3smp-pico/heartbeat/telemetry seq=3 captured_ms=4010 obstacle flags=17 edges=255 width_mm=0
+14:57:14 console 5139 line_follow: digital IR line sensing started. Submitting requests to motion. Built Nov 19 2026 06:44:38
+14:57:14 mtk3smp-pico/heartbeat/telemetry seq=4 captured_ms=5010 obstacle flags=17 edges=255 width_mm=0
+14:57:14 status CAR v=0 l=0 r=0 d=0 h=0 m=6 os=1 ow=0 od=0 av=WAIT_CLEAR p=1 ro=0 tr=0 hu=0 lf=0 rq=3 rt=3 cs=2
+14:57:15 status CAR v=0 l=0 r=0 d=0 h=0 m=6 os=1 ow=0 od=0 av=WAIT_CLEAR p=2 ro=1 tr=0 hu=0 lf=0 rq=29 rt=28 cs=2
+14:57:15 mtk3smp-pico/heartbeat/telemetry seq=5 captured_ms=6010 obstacle flags=17 edges=255 width_mm=0
+14:57:15 status CAR v=0 l=0 r=0 d=0 h=0 m=6 os=1 ow=0 od=0 av=WAIT_CLEAR p=-1 ro=-1 tr=0 hu=0 lf=0 rq=54 rt=53 cs=2
+14:57:16 status CAR v=0 l=0 r=0 d=0 h=0 m=6 os=1 ow=0 od=0 av=WAIT_CLEAR p=-2 ro=-2 tr=0 hu=0 lf=0 rq=79 rt=78 cs=2
+14:57:16 mtk3smp-pico/heartbeat/telemetry seq=6 captured_ms=7010 obstacle flags=17 edges=255 width_mm=0
+14:57:16 status CAR v=0 l=0 r=0 d=0 h=0 m=6 os=1 ow=0 od=0 av=WAIT_CLEAR p=0 ro=-2 tr=0 hu=0 lf=0 rq=103 rt=103 cs=2
+14:57:17 status CAR v=0 l=0 r=0 d=0 h=0 m=6 os=1 ow=0 od=0 av=WAIT_CLEAR p=0 ro=0 tr=0 hu=0 lf=0 rq=129 rt=128 cs=2
+14:57:17 mtk3smp-pico/heartbeat/telemetry seq=7 captured_ms=8010 obstacle flags=17 edges=255 width_mm=0
+14:57:17 status CAR v=0 l=0 r=0 d=0 h=0 m=6 os=1 ow=0 od=0 av=WAIT_CLEAR p=2 ro=1 tr=0 hu=0 lf=0 rq=153 rt=153 cs=2
+14:57:18 status CAR v=0 l=0 r=0 d=0 h=0 m=6 os=1 ow=0 od=0 av=WAIT_CLEAR p=-1 ro=0 tr=0 hu=0 lf=0 rq=179 rt=178 cs=2
+14:57:18 mtk3smp-pico/heartbeat/telemetry seq=8 captured_ms=9010 obstacle flags=17 edges=255 width_mm=0
+14:57:18 status CAR v=0 l=0 r=0 d=0 h=0 m=6 os=1 ow=0 od=0 av=WAIT_CLEAR p=0 ro=2 tr=0 hu=0 lf=0 rq=203 rt=203 cs=2
+14:57:19 status CAR v=0 l=0 r=0 d=0 h=0 m=6 os=1 ow=0 od=0 av=WAIT_CLEAR p=1 ro=-1 tr=0 hu=0 lf=0 rq=229 rt=228 cs=2
+14:57:19 mtk3smp-pico/heartbeat/telemetry seq=9 captured_ms=10010 obstacle flags=17 edges=255 width_mm=0
+14:57:19 status CAR v=0 l=0 r=0 d=0 h=0 m=6 os=1 ow=0 od=0 av=WAIT_CLEAR p=0 ro=-1 tr=0 hu=0 lf=0 rq=253 rt=253 cs=2
+14:57:20 status CAR v=0 l=0 r=0 d=0 h=0 m=6 os=1 ow=0 od=0 av=WAIT_CLEAR p=0 ro=0 tr=0 hu=0 lf=0 rq=23 rt=22 cs=2
+14:57:20 mtk3smp-pico/heartbeat/telemetry seq=10 captured_ms=11010 obstacle flags=17 edges=255 width_mm=0
+14:57:20 status CAR v=0 l=0 r=0 d=0 h=0 m=6 os=1 ow=0 od=0 av=WAIT_CLEAR p=-2 ro=-1 tr=0 hu=0 lf=0 rq=47 rt=47 cs=2
+14:57:21 status CAR v=0 l=0 r=0 d=0 h=0 m=6 os=1 ow=0 od=0 av=WAIT_CLEAR p=-2 ro=2 tr=0 hu=0 lf=0 rq=73 rt=72 cs=2
+14:57:21 mtk3smp-pico/heartbeat/telemetry seq=11 captured_ms=12010 obstacle flags=17 edges=255 width_mm=0
+14:57:21 status CAR v=0 l=0 r=0 d=0 h=0 m=6 os=1 ow=0 od=0 av=WAIT_CLEAR p=2 ro=0 tr=0 hu=0 lf=0 rq=97 rt=97 cs=2
+14:57:22 status CAR v=0 l=0 r=0 d=0 h=0 m=6 os=1 ow=0 od=0 av=WAIT_CLEAR p=0 ro=-1 tr=0 hu=0 lf=0 rq=123 rt=122 cs=2
