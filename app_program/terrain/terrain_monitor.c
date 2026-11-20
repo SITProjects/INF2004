@@ -1117,9 +1117,14 @@ static void
 detect_sample (terrain_vec3_t const * p_accel, terrain_hint_t const * p_hint,
                uint32_t now_10ms)
 {
+    /*
+     * A curve leans the car like a hump, so turning stops one starting. A
+     * hump that started going straight is kept: the car steers on it.
+     */
     terrain_hump_sample_t const sample = terrain_detect_hump_sample(
-        p_hint->b_following, (tilt.flags & TERRAIN_TILT_ROLL_HELD) != 0u,
-        p_hint->speed_mm_s, TERRAIN_HUMP_MIN_SPEED_MM_S);
+        p_hint->b_following, terrain_detect_turn_blocks_hump(detect_word),
+        (tilt.flags & TERRAIN_TILT_ROLL_HELD) != 0u, p_hint->speed_mm_s,
+        TERRAIN_HUMP_MIN_SPEED_MM_S);
     if (TERRAIN_HUMP_SAMPLE_DROP == sample)
     {
         detect_word = terrain_detect_hump_clear(detect_word);

@@ -24,6 +24,20 @@
 #define LEAN_DEG 3.5f
 #define LEAN_START_S 2.5f
 #define LEAN_END_S 2.8f
+/*
+ * The lean of a curve: 4 degrees for 4 s, long enough to count on a slowed car,
+ * with the car turning at 80 deg/s (as logged on 2026-11-20). The real turning
+ * machine says TURNING 0.1 s into the curve and STRAIGHT 0.3 s after it.
+ */
+#define CURVE_DEG 4.0f
+#define CURVE_START_S 2.5f
+#define CURVE_END_S 6.5f
+#define CURVE_DPS 80.0f
+/* A steer on the hump, as on 2026-11-20 (S5 power-up 5): 21 deg/s or more
+ * from part way up the hump until past its top, mm along it. */
+#define STEER_DPS 40.0f
+#define STEER_FROM_MM 100.0f
+#define STEER_TO_MM 140.0f
 
 /* One pass as the line task drives it. */
 typedef struct
@@ -39,6 +53,9 @@ static terrain_hump_limits_t const limits = {
     TERRAIN_HUMP_UP_DEG,      TERRAIN_HUMP_DROP_DEG,
     TERRAIN_HUMP_LEVEL_DEG,   TERRAIN_HUMP_ENTER_SAMPLES,
     TERRAIN_HUMP_TOP_SAMPLES, TERRAIN_HUMP_LEVEL_SAMPLES};
+static terrain_turn_limits_t const turn_limits = {
+    (float)TERRAIN_TURN_ON_DPS, (float)TERRAIN_TURN_OFF_DPS,
+    TERRAIN_TURN_ON_SAMPLES, TERRAIN_TURN_OFF_SAMPLES};
 static terrain_height_limits_t const height_limits = {
     TERRAIN_TRACK_WIDTH_MM, TERRAIN_HUMP_LEVEL_DEG,
     TERRAIN_PROCESS_LOWPASS_ALPHA(TERRAIN_HUMP_HEIGHT_TAU_S,
@@ -107,6 +124,35 @@ drive (float speed, float clear_mm, unsigned int * p_climbs,
 }
 
 static float
+curve_roll (float x_mm, float t_s)
+{
+    (void)x_mm;
+    return ((t_s >= CURVE_START_S) && (t_s < CURVE_END_S)) ? CURVE_DEG : 0.0f;
+}
+
+static float
+no_turn (float x_mm, float t_s)
+{
+    (void)x_mm;
+    (void)t_s;
+    return 0.0f;
+}
+
+static float
+curve_turn (float x_mm, float t_s)
+{
+    (void)x_mm;
+    return ((t_s >= CURVE_START_S) && (t_s < CURVE_END_S)) ? CURVE_DPS : 0.0f;
+}
+
+static float
+steer_on_hump (float x_mm, float t_s)
+{
+    (void)t_s;
+    return ((x_mm >= STEER_FROM_MM) && (x_mm < STEER_TO_MM)) ? STEER_DPS : 0.0f;
+}
+
+static float
 hump_roll (float x_mm, float t_s)
 {
     (void)t_s;
@@ -123,10 +169,13 @@ steering_roll (float x_mm, float t_s)
 /*
  * The closed loop of the car and the machine: 120 mm/s, braking almost to a
  * stop and then 30 mm/s for as long as the machine says hump, as watch_hump()
- * asks. Samples go through the same gate as terrain_monitor.c.
+ * asks. Samples go through the same gate and turning machine as
+ * terrain_monitor.c, with the turn rate from @p p_turn_dps: turning stops a
+ * hump starting, never ends one.
  */
 static pass_t
-drive_slowing (float (*p_roll)(float x_mm, float t_s))
+drive_slowing (float (*p_roll)(float x_mm, float t_s),
+               float (*p_turn_dps)(float x_mm, float t_s))
 {
     float const alpha = TERRAIN_PROCESS_LOWPASS_ALPHA(TERRAIN_TILT_TAU_S,
                                                       TERRAIN_SAMPLE_PERIOD_S);
@@ -161,7 +210,8 @@ drive_slowing (float (*p_roll)(float x_mm, float t_s))
         float const roll = p_roll(x, t_s);
         tilt += alpha * (roll - tilt);
         terrain_hump_sample_t const sample = terrain_detect_hump_sample(
-            true, false, (int32_t)speed, TERRAIN_HUMP_MIN_SPEED_MM_S);
+            true, terrain_detect_turn_blocks_hump(word), false, (int32_t)speed,
+            TERRAIN_HUMP_MIN_SPEED_MM_S);
         if (TERRAIN_HUMP_SAMPLE_DROP == sample)
         {
             word = terrain_detect_hump_clear(word);
@@ -169,6 +219,8 @@ drive_slowing (float (*p_roll)(float x_mm, float t_s))
         }
         if (sample != TERRAIN_HUMP_SAMPLE_USE)
         {
+            (void)terrain_detect_turn_step(&word, p_turn_dps(x, t_s),
+                                           &turn_limits);
             continue;
         }
 
@@ -199,6 +251,7 @@ drive_slowing (float (*p_roll)(float x_mm, float t_s))
         {
             /* Nothing new. */
         }
+        (void)terrain_detect_turn_step(&word, p_turn_dps(x, t_s), &turn_limits);
     }
     return pass;
 }
@@ -244,7 +297,7 @@ main (void)
                                          TERRAIN_HUMP_MIN_MM));
 
     /* Slowing for the hump, as the car does. */
-    pass_t const slowed = drive_slowing(hump_roll);
+    pass_t const slowed = drive_slowing(hump_roll, no_turn);
     printf("  slowed: %u climb, %u hump, %d mm travel, height %d mm, "
            "fastest %.0f mm/s\n",
            slowed.climbs, slowed.humps, (int)slowed.travel_mm, slowed.height,
@@ -254,24 +307,63 @@ main (void)
     check("TH11 and the car stays slow until level, reading 9 to 11 mm",
           (slowed.fastest_mm_s <= SLOW_MM_S) && (slowed.height >= 9) &&
               (slowed.height <= 11));
-    pass_t const steering = drive_slowing(steering_roll);
+    pass_t const steering = drive_slowing(steering_roll, no_turn);
     printf("  steering lean: %u climb, %u hump, %d mm travel\n",
            steering.climbs, steering.humps, (int)steering.travel_mm);
     check("TH12 a steering lean, braked the same way, does not count",
           (1u == steering.climbs) && (0u == steering.humps));
     check("TH13 too slow or a held roll pauses, off the line drops",
           (TERRAIN_HUMP_SAMPLE_USE ==
-           terrain_detect_hump_sample(true, false, 30, 20)) &&
+           terrain_detect_hump_sample(true, false, false, 30, 20)) &&
               (TERRAIN_HUMP_SAMPLE_USE ==
-               terrain_detect_hump_sample(true, false, 20, 20)) &&
+               terrain_detect_hump_sample(true, false, false, 20, 20)) &&
               (TERRAIN_HUMP_SAMPLE_PAUSE ==
-               terrain_detect_hump_sample(true, false, 19, 20)) &&
+               terrain_detect_hump_sample(true, false, false, 19, 20)) &&
               (TERRAIN_HUMP_SAMPLE_PAUSE ==
-               terrain_detect_hump_sample(true, true, 120, 20)) &&
+               terrain_detect_hump_sample(true, false, true, 120, 20)) &&
               (TERRAIN_HUMP_SAMPLE_DROP ==
-               terrain_detect_hump_sample(false, false, 120, 20)) &&
+               terrain_detect_hump_sample(false, false, false, 120, 20)) &&
               (TERRAIN_HUMP_SAMPLE_DROP ==
-               terrain_detect_hump_sample(false, true, 0, 20)));
+               terrain_detect_hump_sample(false, false, true, 0, 20)));
+    uint32_t turning = 0u;
+    for (unsigned int k = 0u; k < TERRAIN_TURN_ON_SAMPLES; k++)
+    {
+        (void)terrain_detect_turn_step(&turning, CURVE_DPS, &turn_limits);
+    }
+    bool const b_blocks_level = terrain_detect_turn_blocks_hump(turning);
+    for (unsigned int k = 0u; k <= TERRAIN_HUMP_ENTER_SAMPLES; k++)
+    {
+        (void)terrain_detect_hump_step(&turning, CURVE_DEG, &limits);
+    }
+    check("TH19 turning blocks a hump only before it starts",
+          b_blocks_level && !terrain_detect_turn_blocks_hump(0u) &&
+              (TERRAIN_HUMP_LEVEL != terrain_detect_hump_state(turning)) &&
+              !terrain_detect_turn_blocks_hump(turning));
+    check("TH16 turning drops, whatever the speed or roll",
+          (TERRAIN_HUMP_SAMPLE_DROP ==
+           terrain_detect_hump_sample(true, true, false, 120, 20)) &&
+              (TERRAIN_HUMP_SAMPLE_DROP ==
+               terrain_detect_hump_sample(true, true, false, 10, 20)) &&
+              (TERRAIN_HUMP_SAMPLE_DROP ==
+               terrain_detect_hump_sample(true, true, true, 120, 20)));
+
+    /* The lean of a curve, as logged on 2026-11-20 (S4, 5 mm at 3.2 m). */
+    pass_t const curve_straight = drive_slowing(curve_roll, no_turn);
+    pass_t const curve_turning_pass = drive_slowing(curve_roll, curve_turn);
+    printf("  curve lean, not turning: %u climb, %u hump, %d mm travel\n",
+           curve_straight.climbs, curve_straight.humps,
+           (int)curve_straight.travel_mm);
+    printf("  curve lean, turning: %u climb, %u hump\n",
+           curve_turning_pass.climbs, curve_turning_pass.humps);
+    check("TH17 a curve's lean counts as a hump unless the car is turning",
+          (1u == curve_straight.humps) && (0u == curve_turning_pass.humps));
+    pass_t const steered = drive_slowing(hump_roll, steer_on_hump);
+    printf("  hump with a steer on it: %u climb, %u hump, height %d mm\n",
+           steered.climbs, steered.humps, steered.height);
+    check("TH18 a hump started going straight still counts once when the car "
+          "steers on it",
+          (1u == steered.climbs) && (1u == steered.humps) &&
+              (steered.height >= 9) && (steered.height <= 11));
     /* Slowed passes logged to 2026-11-09, travel from climb to level. */
     int32_t const slowed_min = terrain_detect_hump_min_mm(
         30, TERRAIN_HUMP_SLOW_MM_S, TERRAIN_HUMP_SLOW_MIN_MM,

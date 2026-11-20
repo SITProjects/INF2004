@@ -220,16 +220,23 @@ terrain_detect_hump_min_mm (int32_t speed_mm_s, int32_t slow_mm_s,
 }
 
 terrain_hump_sample_t
-terrain_detect_hump_sample (bool b_following, bool b_roll_held,
+terrain_detect_hump_sample (bool b_following, bool b_turning, bool b_roll_held,
                             int32_t speed_mm_s, int32_t min_speed_mm_s)
 {
-    if (!b_following)
+    if (!b_following || b_turning)
     {
         return TERRAIN_HUMP_SAMPLE_DROP;
     }
     return (b_roll_held || (speed_mm_s < min_speed_mm_s))
                ? TERRAIN_HUMP_SAMPLE_PAUSE
                : TERRAIN_HUMP_SAMPLE_USE;
+}
+
+bool
+terrain_detect_turn_blocks_hump (uint32_t word)
+{
+    return (terrain_detect_turn_state(word) == TERRAIN_TURN_TURNING) &&
+           (terrain_detect_hump_state(word) == TERRAIN_HUMP_LEVEL);
 }
 
 terrain_event_type_t
