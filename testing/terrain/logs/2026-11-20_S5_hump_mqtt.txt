@@ -27,7 +27,7 @@
 11:34:08 console 203 terrain: compass ready
 11:34:08 console 874 [750 ms]obstacle: stop request RELEASED
 11:34:08 console 875 [750 ms]obstacle: [0x11] CLEAR dir 90
-11:34:08 console 1354 wifi: joining "ann" ...
+11:34:08 console 1354 wifi: joining "<SSID removed>" ...
 11:34:08 console 1553 wifi: link status -> joined AP, waiting for IP (1)
 11:34:08 console 3634 terrain: calibration VALID tilt 4.0 deg reading -770 -2274 8300 mm/s2
 11:34:08 console 4734 wifi: link status -> joined AP, no IP yet (2)
@@ -1287,7 +1287,7 @@
 12:20:27 console 203 terrain: compass ready
 12:20:27 console 874 [750 ms]obstacle: stop request RELEASED
 12:20:27 console 875 [750 ms]obstacle: [0x11] CLEAR dir 90
-12:20:27 console 1354 wifi: joining "ann" ...
+12:20:27 console 1354 wifi: joining "<SSID removed>" ...
 12:20:27 console 1553 wifi: link status -> joined AP, waiting for IP (1)
 12:20:27 console 3654 terrain: calibration VALID tilt 3.4 deg reading -736 -2182 8289 mm/s2
 12:20:27 console 4634 wifi: link status -> joined AP, no IP yet (2)
@@ -1774,7 +1774,7 @@
 12:23:38 console 223 terrain: compass ready
 12:23:38 console 883 [760 ms]obstacle: stop request RELEASED
 12:23:38 console 883 [760 ms]obstacle: [0x11] CLEAR dir 90
-12:23:38 console 1393 wifi: joining "ann" ...
+12:23:38 console 1393 wifi: joining "<SSID removed>" ...
 12:23:38 console 1613 wifi: link status -> joined AP, waiting for IP (1)
 12:23:38 console 4104 terrain: calibration VALID tilt 3.5 deg reading -758 -2189 8320 mm/s2
 12:23:38 console 4574 wifi: link status -> joined AP, no IP yet (2)
@@ -1887,7 +1887,7 @@
 12:24:11 console 223 terrain: compass ready
 12:24:11 console 874 [750 ms]obstacle: stop request RELEASED
 12:24:11 console 875 [750 ms]obstacle: [0x11] CLEAR dir 90
-12:24:11 console 1374 wifi: joining "ann" ...
+12:24:11 console 1374 wifi: joining "<SSID removed>" ...
 12:24:11 console 1573 wifi: link status -> joined AP, waiting for IP (1)
 12:24:11 console 4534 wifi: link status -> joined AP, no IP yet (2)
 12:24:11 console 4634 wifi: link up, ip=172.20.10.7
@@ -2800,7 +2800,7 @@
 12:26:18 console 203 terrain: compass ready
 12:26:18 console 874 [750 ms]obstacle: stop request RELEASED
 12:26:18 console 875 [750 ms]obstacle: [0x11] CLEAR dir 90
-12:26:18 console 1393 wifi: joining "ann" ...
+12:26:18 console 1393 wifi: joining "<SSID removed>" ...
 12:26:18 console 1593 wifi: link status -> joined AP, waiting for IP (1)
 12:26:18 console 4575 wifi: link status -> joined AP, no IP yet (2)
 12:26:18 console 4615 wifi: link up, ip=172.20.10.7
@@ -2910,7 +2910,7 @@
 12:26:50 console 203 terrain: compass ready
 12:26:50 console 874 [750 ms]obstacle: stop request RELEASED
 12:26:50 console 875 [750 ms]obstacle: [0x11] CLEAR dir 90
-12:26:50 console 1354 wifi: joining "ann" ...
+12:26:50 console 1354 wifi: joining "<SSID removed>" ...
 12:26:50 console 1553 wifi: link status -> joined AP, waiting for IP (1)
 12:26:50 console 4594 wifi: link status -> joined AP, no IP yet (2)
 12:26:50 console 4635 wifi: link up, ip=172.20.10.7
@@ -3006,7 +3006,7 @@
 12:27:25 console 203 terrain: compass ready
 12:27:25 console 874 [750 ms]obstacle: stop request RELEASED
 12:27:25 console 875 [750 ms]obstacle: [0x11] CLEAR dir 90
-12:27:25 console 1374 wifi: joining "ann" ...
+12:27:25 console 1374 wifi: joining "<SSID removed>" ...
 12:27:25 console 1573 wifi: link status -> joined AP, waiting for IP (1)
 12:27:25 console 4534 wifi: link status -> joined AP, no IP yet (2)
 12:27:25 console 4734 wifi: link up, ip=172.20.10.7
@@ -3099,7 +3099,7 @@
 12:27:52 console 203 terrain: compass ready
 12:27:52 console 874 [750 ms]obstacle: stop request RELEASED
 12:27:52 console 875 [750 ms]obstacle: [0x11] CLEAR dir 90
-12:27:52 console 1394 wifi: joining "ann" ...
+12:27:52 console 1394 wifi: joining "<SSID removed>" ...
 12:27:52 console 1613 wifi: link status -> joined AP, waiting for IP (1)
 12:27:52 console 4574 wifi: link status -> joined AP, no IP yet (2)
 12:27:52 console 4655 wifi: link up, ip=172.20.10.7
@@ -3166,7 +3166,7 @@
 12:28:15 console 203 terrain: compass ready
 12:28:15 console 874 [750 ms]obstacle: stop request RELEASED
 12:28:15 console 875 [750 ms]obstacle: [0x11] CLEAR dir 90
-12:28:15 console 1334 wifi: joining "ann" ...
+12:28:15 console 1334 wifi: joining "<SSID removed>" ...
 12:28:15 console 1533 wifi: link status -> joined AP, waiting for IP (1)
 12:28:15 console 4535 wifi: link status -> joined AP, no IP yet (2)
 12:28:15 console 4595 wifi: link up, ip=172.20.10.7

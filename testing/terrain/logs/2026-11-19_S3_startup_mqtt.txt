@@ -28,7 +28,7 @@
 14:59:40 console 203 terrain: compass ready
 14:59:40 console 874 [750 ms]obstacle: stop request RELEASED
 14:59:40 console 875 [750 ms]obstacle: [0x11] CLEAR dir 90
-14:59:40 console 1354 wifi: joining "ann" ...
+14:59:40 console 1354 wifi: joining "<SSID removed>" ...
 14:59:40 console 1553 wifi: link status -> joined AP, waiting for IP (1)
 14:59:40 console 3674 terrain: calibration NOT_LEVEL tilt 11.8 deg reading -598 -18 8525 mm/s2
 14:59:40 console 4514 wifi: link status -> joined AP, no IP yet (2)
@@ -304,7 +304,7 @@
 15:03:00 console 223 terrain: compass ready
 15:03:00 console 874 [750 ms]obstacle: stop request RELEASED
 15:03:00 console 875 [750 ms]obstacle: [0x11] CLEAR dir 90
-15:03:00 console 1394 wifi: joining "ann" ...
+15:03:00 console 1394 wifi: joining "<SSID removed>" ...
 15:03:00 console 1573 wifi: link status -> joined AP, waiting for IP (1)
 15:03:00 console 4534 wifi: link status -> joined AP, no IP yet (2)
 15:03:00 console 4595 wifi: link up, ip=172.20.10.7
@@ -494,7 +494,7 @@
 15:06:00 console 203 terrain: compass ready
 15:06:00 console 874 [750 ms]obstacle: stop request RELEASED
 15:06:00 console 874 [750 ms]obstacle: [0x11] CLEAR dir 90
-15:06:00 console 1393 wifi: joining "ann" ...
+15:06:00 console 1393 wifi: joining "<SSID removed>" ...
 15:06:00 console 1633 wifi: link status -> joined AP, waiting for IP (1)
 15:06:00 console 4013 terrain: speed CRUISING t 4.00 s
 15:06:00 console 4393 terrain: speed STATIONARY t 4.38 s
@@ -640,7 +640,7 @@
 15:07:58 console 223 terrain: compass ready
 15:07:58 console 884 [760 ms]obstacle: stop request RELEASED
 15:07:58 console 885 [760 ms]obstacle: [0x11] CLEAR dir 90
-15:07:58 console 1464 wifi: joining "ann" ...
+15:07:58 console 1464 wifi: joining "<SSID removed>" ...
 15:07:58 console 1683 wifi: link status -> joined AP, waiting for IP (1)
 15:07:58 console 3943 barcode: long black ended the scan, elements=3
 15:07:58 console 4624 wifi: link status -> joined AP, no IP yet (2)
