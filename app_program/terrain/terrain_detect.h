@@ -215,16 +215,28 @@ typedef enum
 /**
  * @brief Whether a sample can say anything about a hump.
  * @param b_following Following the line: moves, pivots and hands fake a lean.
+ * @param b_turning The turning state is TURNING and no hump has started (hump
+ *        state LEVEL): a curve leans the car as a wheel on a hump does, and no
+ *        real pass started in a turn. Pass false once a hump has started: the
+ *        car steers on the hump, and that must not end it.
  * @param b_roll_held The roll is an old value, not news.
  * @param speed_mm_s Ground speed; + is forward.
  * @param min_speed_mm_s TERRAIN_HUMP_MIN_SPEED_MM_S.
- * @return What to do with it. Too slow only pauses: the car brakes for a hump,
+ * @return What to do with it. Off the line drops any hump so far; turning
+ *         stops one starting. Too slow only pauses: the car brakes for a hump,
  *         almost to a stop, and that must not end the hump.
  */
-terrain_hump_sample_t terrain_detect_hump_sample (bool b_following,
-                                                  bool b_roll_held,
-                                                  int32_t speed_mm_s,
-                                                  int32_t min_speed_mm_s);
+terrain_hump_sample_t
+terrain_detect_hump_sample (bool b_following, bool b_turning, bool b_roll_held,
+                            int32_t speed_mm_s, int32_t min_speed_mm_s);
+
+/**
+ * @brief Whether turning stops a hump: TURNING while no hump has started.
+ * @param word Detector word, holding both the hump and the turning state.
+ * @return True if the turning state is TURNING and the hump state LEVEL.
+ *         Pass it to terrain_detect_hump_sample() as @p b_turning.
+ */
+bool terrain_detect_turn_blocks_hump (uint32_t word);
 
 /**
  * @brief Run the turning state machine on one sample.
