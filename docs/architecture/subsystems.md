@@ -120,7 +120,7 @@ preferred. Otherwise the clear side needing the shorter sidestep is taken.
 |---|---|
 | Sidestep | The side's need, at least 258 mm and at most 400 mm. The 258 mm floor is a 115 mm edge plus half the car plus the margin: on 2026-11-08 sidesteps planned from an edge read near the line hit a centred obstacle |
 | Reverse first | If the obstacle is nearer than 200 mm, reverse to make 200 mm of room |
-| Turn angle | `atan(sidestep / (room - margin))`, rounded up to 5 degrees, between 30 and 90 |
+| Turn angle | 90 degrees: `OBSTACLE_AVOID_ANGLE_MIN_DEG` is 90, the box path. Below 90 it would be `atan(sidestep / (room - margin))`, rounded up to 5 degrees, at least that minimum |
 | Pass distance | Room, plus axle-to-pivot 60 mm, depth 200 mm, tail 162 mm and the margin, at most 1500 mm. With a known edge a shorter tail clearance is used |
 
 **The legs, in order.**
@@ -129,12 +129,12 @@ preferred. Otherwise the clear side needing the shorter sidestep is taken.
 |---|---|
 | `REVERSE` | Backs up, only if the plan needs room |
 | `TURN_OUT` | Turns by the plan's angle toward the gap |
-| `SIDESTEP` | Drives diagonally `sidestep / sin(angle)`. The sensor is held toward the obstacle and can widen the path by up to 80 mm |
+| `SIDESTEP` | Drives `sidestep / sin(angle)`, straight sideways at 90 degrees. The sensor is held toward the obstacle and can widen the path by up to 80 mm |
 | `TURN_BACK` | Turns back parallel to the line |
 | `VERIFY` | Sweeps the corridor ahead: clear goes on, blocked waits, too close adds another sidestep (up to three in all, 500 mm sideways at most) |
 | `PASS` | Drives past the obstacle |
 | `TURN_IN` | Turns toward the line; only its second half may pick the line up |
-| `RETURN` | Drives back `(lateral + 150) / sin(angle)`, stopping at any confirmed line |
+| `RETURN` | Drives back `(lateral + 150) / sin(angle)`, square to the line at 90 degrees, stopping at any confirmed line |
 | `OVERSHOOT` | Drives 130 mm on, putting the axle (not the sensors) on the line |
 | `TURN_HOME` | Turns to the heading the car stopped on |
 | `FOLLOW` | Hands back to line following |

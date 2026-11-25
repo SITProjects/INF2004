@@ -368,8 +368,9 @@
  * re-check before each move and verify the corridor (slower). */
 #define OBSTACLE_AVOID_RECHECK 0
 /* Shallowest turn toward or away from the gap; steeper when the obstacle
- * leaves less room in front. 90 gives the box path. */
-#define OBSTACLE_AVOID_ANGLE_MIN_DEG 30u
+ * leaves less room in front. 90 gives the box path: out, past and back in at
+ * right angles, so the car meets the line square (user, 2026-11-25). */
+#define OBSTACLE_AVOID_ANGLE_MIN_DEG 90u
 
 /*
  * Bypass time limits. A rearm may start a full side scan, and a corridor
