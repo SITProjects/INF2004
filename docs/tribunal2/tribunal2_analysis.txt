@@ -1,0 +1,298 @@
+TRIBUNAL 2: REQUIREMENT CHANGE AND DESIGN REVIEW
+
+Team ID: CSC30
+
+Member IDs: 2500658, 2503811, 2500859, 2503286, 2503998
+
+Repo Link: https://github.com/SITProjects/INF2004
+
+DURATION: 1 hour
+
+
+INJECTED REQUIREMENT: If any part of the system fails or provides invalid data, the system must respond in a safe and predictable way. (A value that is unavailable or invalid must not be used as though it were correct; the response must be defined: limited operation, stopping the affected function, attempting recovery, or requiring intervention.)
+
+
+-------------------------------------------------------------------------------------------------------------------------------------------------
+
+INSTRUCTIONS
+1. Review the injected requirement against the complete system.
+2. Identify what needs to change and what should remain unchanged.
+3. Suggestions may come from AI, a Buddy, or the team.
+4. For every suggestion, choose: Accept, Modify, Reject, or No Change.
+5. Explain the reason and provide engineering evidence.
+6. Add as many rows as necessary. Coverage is assessed.
+7. AI output is a suggestion, not engineering evidence.
+8. Submit this completed text file at the end of Tribunal 2. No separate report is required.
+
+DECISION MEANINGS
+Accept    - Use the suggestion as proposed.
+Modify    - Use the idea, but change the proposed solution.
+Reject    - Do not use the suggestion.
+No Change - The area was considered and the existing design should remain.
+
+ENGINEERING EVIDENCE MAY INCLUDE
+Requirement values, calculations, measurements, test results, source-code behaviour, interfaces, statecharts, block diagrams, hardware limits, RTOS behaviour, or datasheet specifications.
+
+========================================================================
+TRIBUNAL 2 ANALYSIS TABLE
+========================================================================
+
+Summary of the outcome (detail in the rows):
+- Already defined, kept: ultrasonic fault, line lost, encoder timeout, bad
+  barcode read, bad dashboard command, full telemetry queue, bypass fault.
+- Gaps found, to change: (a) an IMU fault or failed calibration silently
+  turns off the hump slow-down and the lift stop; (b) a lost Wi-Fi link
+  removes the dashboard Stop with no defined response; (c) a hung obstacle
+  task or motion task has no cover; (d) a dead encoder while following is
+  retried without limit; (e) faults are not gathered in one record.
+- "Proposed" marks a new design value. Everything else is the current code.
+
+
+#1
+Affected Requirement / Component: Requirements (new FR16; FR13, FR15, NFR7 reworded)
+What needs to change?: Add FR16: "Every input the car depends on shall have a validity state. On an invalid or missing input the car shall take the response listed for it (stop, limited operation, recovery attempt or operator intervention) within the listed time, and report it." Reword NFR7 (row #12), FR15 (row #11) and FR13 (row #10) to match. FR1-FR12, FR14 and NFR1-NFR6, NFR8-NFR11 keep their wording.
+Suggested by: (AI/Buddy/Team) Buddy 5
+Decision: Accept
+Why?: FR14 already lists stops for four faults, but there is no single requirement that every input has a defined response, so the gaps in rows #10, #11, #12, #14 and #16 were allowed by the current requirements. One requirement plus a per-input table makes the behaviour testable row by row.
+Engineering Evidence: Current requirement values: FR14 (80 mm, three missed pings = 200 ms, stall 300 ms, scanner fault), NFR2 (line request older than 100 ms stops following), FR2 (search ends in a stop after 8 s). No current requirement covers IMU fault, link loss or a hung task.
+
+------------------------------------
+
+#2
+Affected Requirement / Component: Shared data / interfaces: team fault record (new interface, proposed IF-12)
+What needs to change?: Suggestion: keep one global fault word that every task ORs its bit into. Modified to: one T-Kernel event flag object as the fault record. Each owner sets and clears only its own bits with tk_set_flg / tk_clr_flg; readers poll it without waiting. Proposed bits: IMU, ultrasonic, bypass, encoder/stall, line lost, barcode overflow, link down, telemetry full, task stale. car_status publishes it in the status record.
+Suggested by: (AI/Buddy/Team) Buddy 2
+Decision: Modify
+Why?: The kernel runs tasks on both RP2040 cores. A plain word written by several tasks is a read-modify-write on two cores and can lose a bit, which is itself invalid data. The kernel's set and clear calls are atomic, so no lock is added and NFR6 (shared state read without waiting) still holds.
+Engineering Evidence: Source: terrain_fault.h already keeps an IMU fault bit "shaped like" a team mask that does not exist yet, and motion.h has a TODO to move STALL and ENC_FAULT into a shared fault mask. Only terrain.c reads the IMU bit today (it prints it). Kernel object budget (TEAM.md section 6): event flags limit 16, application uses 3 (obstacle 1, motion 2), so one more fits. Nine bits fit one flag word (min-bit rule, NFR8).
+
+------------------------------------
+
+#3
+Affected Requirement / Component: FR7, FR14 / obstacle_scan_task, drv_ultrasonic (forward distance invalid or missing)
+What needs to change?: Nothing. Considered: the ultrasonic sensor unplugged, its echo line stuck, or readings missing.
+Suggested by: (AI/Buddy/Team) Buddy 1
+Decision: No Change
+Why?: The driver already separates three results and the scanner never treats a missing answer as a clear path. A sensor that does not answer is a FAULT, a fault requests a stop at once, and 200 ms with no usable reading also requests a stop. Recovery needs three new votes, so one good ping cannot release the car.
+Engineering Evidence: drv_ultrasonic.h: VALID = pulse captured; NO_ECHO = pulse rose but ran past the measurable range (over 23 ms), counted as clear because "the sensor still answers"; FAULT = no rising edge within the 2 ms start timeout. obstacle_scan.c check_watchdogs(): no usable centre reading for OBSTACLE_FORWARD_MAX_AGE_MS = 3 x 60 + 2 x 10 = 200 ms sets the stop request and publishes UNKNOWN. Travel while blind at 120 mm/s: 0.2 s x 120 = 24 mm, inside the 150 mm stop distance. Test OBS-U26 covers echo disconnection.
+
+------------------------------------
+
+#4
+Affected Requirement / Component: FR8 / drv_servo (servo stuck or unplugged)
+What needs to change?: Suggestion: detect a stuck servo by comparing echoes across the 50 to 130 degree sweep and raise a fault when they are all alike.
+Suggested by: (AI/Buddy/Team) Buddy 3
+Decision: Reject
+Why?: The servo is driven open loop by 50 Hz PWM and has no position feedback, so its angle cannot be measured. The echo pattern cannot stand in for it: on this car different obstacles already give the same echoes over the same angles, so "all alike" is normal data, and the check would raise false faults. The consequence of a wrong sweep is already bounded by later checks. Residual risk, stated: a servo stuck off-centre while the car is only watching ahead cannot be detected in software; that needs hardware (a servo with feedback or a fixed forward sensor).
+Engineering Evidence: Hardware limit: hobby servo on GP12, driven by PWM only, no feedback wire. obstacle.c comment dated 2026-11-08: 11, 16 and 21 cm obstacles all echo over the same angles from standing. Existing bounds: side scan timeout (2 x worst case) cancels a sweep that does not finish; the corridor sweep after a sidestep must verify the gap; a reading under 80 mm during a move backs the car off 50 mm, at most twice; a second problem latches FAULT with the motors held.
+
+------------------------------------
+
+#5
+Affected Requirement / Component: FR6 / tMotion, drv_encoder (encoder invalid during a MOVE or TURN; inconsistent odometry)
+What needs to change?: Nothing. Considered: an encoder that stops counting or counts wrongly during a commanded move or turn, and a reader getting a torn odometry copy.
+Suggested by: (AI/Buddy/Team) Buddy 4
+Decision: No Change
+Why?: A move or turn ends on encoder counts, so a bad encoder could otherwise run forever. An encoder with no counts reads as a wheel that is not turning and is braked as a stall after 300 ms. An encoder that counts wrongly (for example the wrong way, MOT-U17) is not a stall, so tMotion also bounds every move by time, brakes, and latches the result until a STOP. The bypass treats that event as a fault and holds the motors. Odometry readers never use a half-written copy.
+Engineering Evidence: motion_config.h: time limit = MOTION_TIMEOUT_FACTOR 3 x expected time + MOTION_TIMEOUT_MARGIN_MS 500 ms, then MOTION_EVT_ENC_FAULT and mode TIMED_OUT. obstacle_avoid.h: OBSTACLE_AVOID_FAULT_ENCODER and OBSTACLE_AVOID_FAULT_ODOMETRY ("no consistent odometry") both end in FAULT. IF-05 is a sequence-checked copy (TEAM.md section 5). Tests MOT-U10, MOT-U16 and MOT-U37 (held wheel stalls, new move refused until STOP).
+
+------------------------------------
+
+#6
+Affected Requirement / Component: FR14 / tMotion stall handling while following (dead encoder or jammed wheel in FOLLOW)
+What needs to change?: Suggestion: stop for good on the first stall. Modified to: keep the automatic restart, but latch a fault and stop until Start after 3 stalls in a row on the same wheel with no encoder counts from that wheel between them (proposed).
+Suggested by: (AI/Buddy/Team) Buddy 2
+Decision: Modify
+Why?: tMotion cannot tell a jammed wheel from a dead encoder: both read as zero speed. A real stall (for example at the hump) clears and the wheel counts again, so restarting is right. A dead encoder never counts, so the car would brake and restart for ever, lurching up to 300 ms each time with one wheel at rising duty. Stopping on the first stall would end runs that recover today.
+Engineering Evidence: motion_config.h: MOTION_STALL_TIMEOUT_MS 300, MOTION_STALL_MIN_SPEED_MM_S 25. Test history: MOT-U39 restarted following at most 3 times in a row; MOT-U43 (S11) restarts with no limit. Worst case per cycle: 300 ms before the brake. The new rule needs one 2-bit counter per wheel and uses the counts tMotion already reads every 20 ms.
+
+------------------------------------
+
+#7
+Affected Requirement / Component: Hardware / motor supply (low battery, motor driver fault)
+What needs to change?: Suggestion: measure battery voltage and stop below a threshold.
+Suggested by: (AI/Buddy/Team) Buddy 1
+Decision: Reject
+Why?: There is no free analogue input to measure it with, and adding one is a hardware change outside this review. The effect of a weak supply is already detected where it matters: the wheels fail to reach speed and the stall and time limits act.
+Engineering Evidence: Hardware limit: the Pico's three ADC pins GP26, GP27 and GP28 are the two line sensors and the barcode sensor, used as digital inputs (TEAM.md pin table). ADC3 (VSYS/3 on GP29) is shared with the CYW43 radio on the Pico W, and the radio belongs to the kernel's radio task (NFR5). Covered effects: stall after 300 ms (row #6), move time limit (row #5).
+
+------------------------------------
+
+#8
+Affected Requirement / Component: FR1, FR2, FR3, NFR2 / line_follow_task, tMotion (line sensor stuck, line lost, line task stops sending)
+What needs to change?: Nothing. Considered: a line sensor stuck black or stuck white, the car leaving the tape, and line_follow_task no longer sending requests.
+Suggested by: (AI/Buddy/Team) AI
+Decision: No Change
+Why?: The sensors are digital, so a broken one looks like steady black or steady white. Both cases are already limited by distance travelled, not by trusting the level: the car searches, and stops if the search fails. tMotion does not keep steering on an old request.
+Engineering Evidence: line_follow_config.h: one sensor black for LINE_EDGE_MAX_MM 200 mm, or both white for LINE_LOST_MM 250 mm in a bend / LINE_STRAIGHT_LOST_MM 600 mm on a straight, starts a pivot search of up to 120 degrees each way; LINE_SEARCH_TIMEOUT_MS 8000 ends in LINE_MODE_STOP (line_track.c). Each request carries ROBOT_LINE_REQ_VALID; tMotion stops following when the newest request is older than MOTION_LINE_TIMEOUT_MS 100 ms (5 updates of 20 ms). Test LINE-U07 (search both ways, then stop).
+
+------------------------------------
+
+#9
+Affected Requirement / Component: FR4, FR5 / tBarcode, drv_barcode (barcode misread, edge queue overflow)
+What needs to change?: Suggestion: add a Code 39 check character so that a wrong decode is caught. Not used; the handling of a failed or partial read stays as it is. (An edge-queue overflow is reported through the fault record of row #2.)
+Suggested by: (AI/Buddy/Team) AI
+Decision: Reject
+Why?: A check character would have to be printed on the course's barcodes, which the team does not control, and the decoded text is only '*' + one character + '*'. The existing response to an invalid read is already safe and predictable: no turn is set, and FR3 says the car then goes straight on at the junction. It never guesses a turn.
+Engineering Evidence: barcode.c finish_scan(): a failed decode prints "barcode: FAIL", sets no turn and releases the slow pass; a partial read is used only if the dashboard table already holds that text (comment: 2026-11-06, a false '.' was read). Too many elements sets BARCODE_SCAN_F_OVERFLOW and fails the scan. drv_barcode: 64-edge queue, dropped edges counted by drv_barcode_overflows(); pulses under 10 ms ignored (NFR4). Code 39 itself needs the start and stop '*' and 3 wide elements of 9 in every character.
+
+------------------------------------
+
+#10
+Affected Requirement / Component: FR10, FR13 / terrain_task (IMU stops answering during a run)
+What needs to change?: The IMU fault must leave the terrain module. On a fault: set the IMU bit in the fault record (row #2); report hump and lift results as "unavailable", not as 0 / level; apply the limited operation of row #11; clear the bit on the first good read. FR13 gains: "If the IMU is in fault, the lift stop is reported unavailable."
+Suggested by: (AI/Buddy/Team) Buddy 5
+Decision: Accept
+Why?: This is the injected requirement's own example in our system. Today a failed IMU reads as "not on a hump, not lifted": line following keeps 120 mm/s over the hump and the lift stop (our only stop that needs no Wi-Fi) is silently gone. The terrain task detects the fault correctly, but nobody else is told.
+Engineering Evidence: terrain_monitor.c: TERRAIN_FAULT_RETRY_UPDATES 10 failed reads in a row (about 100 ms at 100 Hz) raise the fault and set the sensor up again; the next good read clears it. Each I2C transfer is time-limited (TERRAIN_I2C_TIMEOUT_US), so the task does not hang on the bus. grep: terrain_fault_is_active() is read only in terrain.c for a log line. line_follow.c takes b_hump from terrain_monitor_on_hump() with no validity; obstacle.c takes the lift count the same way. Test TER-U11 covers the fault being raised and cleared.
+
+------------------------------------
+
+#11
+Affected Requirement / Component: FR15, FR10 / terrain calibration invalid at Start (NOT_LEVEL)
+What needs to change?: Suggestion: refuse Start until IMU calibration is VALID. Modified to: allow Start, but run limited: follow speed capped at the hump speed of 30 mm/s for the whole run (proposed), hump count and heights reported as unavailable, lift stop reported unavailable. FR15 gains this sentence.
+Suggested by: (AI/Buddy/Team) Buddy 1
+Decision: Modify
+Why?: Refusing Start makes the whole car depend on the least repeatable input: calibration needs level ground and has failed on most boots in one session. But continuing at full speed uses "no hump" as though it were measured. With no hump detection the safe assumption is that the car may be on a hump at any time, so it uses the speed the design already allows on a hump. Line following, obstacle stop and bypass do not need the IMU and stay fully working.
+Engineering Evidence: TER-U33 (9 Nov): 7 of 9 boots read NOT_LEVEL. terrain_monitor.c: tilt, hump and lift detection run only while calibration is VALID; calibration needs 200 still samples and the car within TERRAIN_LEVEL_MAX_DEG 5.0 of level. Slow speed 30 mm/s already exists as ROBOT_LINE_REQ_SLOW in the line request word, so no new command or interface is needed. Cost: a lap is 4 times slower (120 / 30). The status record already carries the calibration state.
+
+------------------------------------
+
+#12
+Affected Requirement / Component: NFR7, FR12 / communication_task, mqtt_client, obstacle motor hold (Wi-Fi or MQTT link lost)
+What needs to change?: Suggestion: stop the car as soon as the link drops. Modified to a rule: the car must always have one working operator stop. Link down + lift stop available: keep driving, queue telemetry, retry (as today). Link down + lift stop unavailable (rows #10, #11): hold the motors through the existing run flag until the link is back and Start is pressed. NFR7 is reworded to say this.
+Suggested by: (AI/Buddy/Team) AI
+Decision: Modify
+Why?: Stopping on every dropout makes driving depend on Wi-Fi, which NFR7 exists to prevent, and the link is the least reliable part we have. But today a link loss while the IMU is invalid leaves no way for a person to stop the car except an obstacle. The rule keeps the car running through a dropout when lifting it still stops it, and stops it only when both operator stops are gone.
+Engineering Evidence: obstacle.c remote_hold(): dashboard Stop and a lift both set the same run flag and INHIBIT; Start releases it. No application code outside communication reads the link state today (grep: mqtt_client_is_connected only in mqtt_client.c and console_mirror). communication_task checks the link every 500 ms, so loss is seen within 0.5 s. mqtt_client retries every 3 s; telemetry queue 128 records x 12 B, newest rejected when full with a sequence gap. MOT-U34 (17 Nov) ran with the Wi-Fi join failed and tMotion still held 19,945 to 20,066 us periods, so driving itself does not need the link.
+
+------------------------------------
+
+#13
+Affected Requirement / Component: FR11, FR12 / remote_command, telemetry_queue (invalid dashboard command, full queue)
+What needs to change?: Nothing. Considered: a malformed or unknown /cmd message, a barcode map with no free entry, and telemetry arriving faster than it can be sent.
+Suggested by: (AI/Buddy/Team) AI
+Decision: No Change
+Why?: Each of these already has one defined result and none changes the car's motion: a bad command is refused and the run flag and map are left as they were; a full queue drops the newest record and shows the loss.
+Engineering Evidence: remote_command.c: remote_command_handle() returns REMOTE_COMMAND_BAD for anything that is not start, stop, clear or a valid map entry, and REMOTE_COMMAND_FULL when all 8 entries are used. telemetry_queue.h: TELEMETRY_FULL rejects the newest record and still consumes a sequence number, "making dropped records visible as gaps"; the queue never blocks the caller. Tests COM-U10 (capacity and overflow) and COM-U14 (console mirror carries on after a stalled link).
+
+------------------------------------
+
+#14
+Affected Requirement / Component: Tasks / safety path: obstacle_scan_task is the only setter of INHIBIT (task hangs or starves)
+What needs to change?: Add a heartbeat: obstacle_scan_task increments a one-byte counter in its published state every loop; tMotion brakes and reports "task stale" if the counter has not changed for 100 ms (proposed: 10 scan loops, 5 motion updates). Following resumes when the counter moves again and INHIBIT is clear. The same stale rule is proposed for the terrain snapshot: no update for 100 ms is treated as IMU unavailable (row #10). The 100 ms figure is to be confirmed by measuring the scan task's worst loop gap with Wi-Fi running (row #23).
+Suggested by: (AI/Buddy/Team) Buddy 5
+Decision: Accept
+Why?: Every stop in the car (obstacle, critical distance, lift, dashboard Stop, bypass fault) goes through this one task. If it hangs, the forward distance is no longer checked and nothing sets INHIBIT, yet tMotion keeps following because the line task is still sending. That is "continuing as though the value were correct". tMotion already applies exactly this rule to line requests, so the pattern is proven and costs no new kernel object.
+Engineering Evidence: Block diagram stop-paths band: all stops pass through tScan (pri 11, core 0, 10 ms loop). motion_move.c: line request age counted in updates against LINE_TIMEOUT_UPDATES = 100 / 20 = 5. Timing: travel before the brake = (100 ms + one 20 ms update) x 120 mm/s = 14.4 mm. Budget: MOT-U34 longest tMotion update 495 us of 20,000 us, and one compare per update is negligible. The counter is one byte in an existing word (IF-07), read as a single word (NFR6).
+
+------------------------------------
+
+#15
+Affected Requirement / Component: Tasks / components: add the tSafety task from the Week 6 design (priority 5 is reserved)
+What needs to change?: Suggestion: create tSafety to own all fault handling and INHIBIT.
+Suggested by: (AI/Buddy/Team) Buddy 1
+Decision: Reject
+Why?: It moves the single point of failure from one task to another and adds a second writer of INHIBIT, against the one-owner rule. The checks that matter can sit in the task that owns the actuator: tMotion already runs every 20 ms on its own core and is the last thing between any fault and the motors (rows #14, #16). Memory is not the reason; ownership and the size of the change are.
+Engineering Evidence: TEAM.md section 4: priorities 5 (tSafety) and 10 (tMission) reserved, not implemented; IF-06 has the obstacle task stand in for both. A new task = one 2,048 B stack (0.8% of 270,336 B) plus one task object (limit 32), so it would fit. NFR5: each peripheral and control flag has one owning task. MOT-U35: tMotion brakes 251 us after INHIBIT (limit 20,000 us).
+
+------------------------------------
+
+#16
+Affected Requirement / Component: Hardware / software: tMotion itself hangs (RP2040 watchdog)
+What needs to change?: Suggestion: enable the RP2040 watchdog and feed it from a low-priority background task. Modified to: feed it from tMotion's 20 ms update only, with a 100 ms timeout (proposed).
+Suggested by: (AI/Buddy/Team) Buddy 3
+Decision: Modify
+Why?: tMotion is the only task that drives the motors, so if it hangs the PWM stays at its last duty and no other task can brake: this is the one failure with no software cover. A low-priority feeder would prove the wrong thing: it shows the scheduler is alive, not that the motors are being controlled, and it would starve and reset the car whenever higher tasks are busy. A chip reset is safe here because of how the car boots.
+Engineering Evidence: obstacle_avoid.h: OBSTACLE_AVOID_FAULT_STOP_ACK is latched when motion does not acknowledge INHIBIT within OBSTACLE_STOP_ACK_TIMEOUT_MS 500, but that only records the fault; it cannot stop the wheels. app_main.c enables only the watchdog tick (for TIMER), not the watchdog reset. RP2040 datasheet: with the watchdog set to restart the reset controller (PSM WDSEL), the IO and pad blocks return to their reset state (output disabled, pull-down on), which removes the motor PWM. FR11: the car powers up with the motors held and needs Start and a clear path. Margin: MOT-U34 period 19,945 to 20,066 us, so 100 ms is 5 periods.
+
+------------------------------------
+
+#17
+Affected Requirement / Component: State machines: bypass FAULT state, line STOP mode, motion STALLED / TIMED_OUT
+What needs to change?: Suggestion: let the dashboard's Start clear the bypass FAULT state so the car can carry on without a reboot.
+Suggested by: (AI/Buddy/Team) AI
+Decision: Reject
+Why?: FAULT is entered only after one retry has already failed, for causes Start cannot verify are gone (motion not acknowledging a stop, a kernel call failing, inconsistent odometry). The car is off the line at an unknown point of the bypass, so resuming in place would act on a position it no longer trusts. A reboot returns to the one known state: motors held, obstacle unknown. No state is added or removed in any of the three state machines; new fault causes use spare codes.
+Engineering Evidence: subsystems.md section 2.3: a leg that overruns twice its expected time plus 1 s is retried once (RETRY_WAIT, 1000 ms); a second problem latches FAULT "until reboot, motors held". obstacle.c remote_hold(): "A latched FAULT survives that, so Start cannot clear it." Field sizes (robot_types.h obstacle control word): bypass state 4 bits holds 13 states, fault reason 4 bits holds 9 values (none + 8 reasons), so 7 more reasons fit with no layout change. Test OBS-U47 (faults and the one retry).
+
+------------------------------------
+
+#18
+Affected Requirement / Component: Interfaces / messages: IF-01 command buffer, IF-02 INHIBIT, IF-03 events (command lost, refused or invalid)
+What needs to change?: Nothing. Considered: a command word with invalid fields, the 4-deep message buffer being full, and a command sent while motion is stalled or inhibited.
+Suggested by: (AI/Buddy/Team) Buddy 2
+Decision: No Change
+Why?: tMotion validates every command and answers with an event, and the sender treats a refusal or a missing answer as a fault, not as success. A stop is never refused.
+Engineering Evidence: MOT-U35: tMotion refuses a word with reserved bits set, a 0 mm move and a turn above 180 degrees, but not a STOP, and raises MOTION_EVT_REJECTED. Commands are discarded while INHIBIT is set (subsystems.md section 3). obstacle_avoid.h: OBSTACLE_AVOID_FAULT_REJECTED and OBSTACLE_AVOID_FAULT_KERNEL (INHIBIT, event clear or send failed); OBSTACLE_AVOID_SEND_TIMEOUT_MS 200 bounds a send that cannot be queued. OBS-U10 covers packed fields at their limits and with invalid values (saturating, NFR8).
+
+------------------------------------
+
+#19
+Affected Requirement / Component: Shared data / concurrency / interrupts: GPIO interrupt dispatcher, echo and barcode handlers, shared copies
+What needs to change?: Nothing in the handlers or the shared copies. The only concurrency change is row #2 (fault record as a kernel event flag).
+Suggested by: (AI/Buddy/Team) Buddy 4
+Decision: No Change
+Why?: Fault responses must not add waiting to an interrupt or to tMotion. The handlers already only time-stamp and queue; invalid timing is classified in task context; and every reader of shared state takes a complete copy or retries.
+Engineering Evidence: drv_gpio_irq.c owns the single IO_IRQ_BANK0 handler and calls the echo (GP17) and barcode (GP28) handlers in turn. Echo: no rise in 2 ms = FAULT, pulse over 23 ms = NO_ECHO, decided outside the handler. Barcode: 64-edge queue, overflow counted. Shared state (NFR6): IF-04 double buffer, IF-05 sequence-checked copy, IF-09 copy under a short spin lock, telemetry queue mutex polled, never waited on. The new heartbeat (row #14) is one byte in a word that is already published.
+
+------------------------------------
+
+#20
+Affected Requirement / Component: Timing / performance: NFR1, NFR2 and the fault detection times
+What needs to change?: No period or priority changes. The detection time of each fault is written into FR16's table.
+Suggested by: (AI/Buddy/Team) Buddy 4
+Decision: No Change
+Why?: Every new check is a compare inside a loop that already runs, so no task period, priority or core assignment has to move. The detection times below are all shorter than the distance margins they protect.
+Engineering Evidence: Detection times and travel at 120 mm/s: ultrasonic stale 200 ms = 24 mm (stop distance 150 mm, critical 80 mm); line request stale 100 ms = 12 mm; scan-task heartbeat 120 ms = 14.4 mm (proposed); stall 300 ms; IMU fault about 100 ms (10 reads at 100 Hz); link loss 500 ms (no motion effect on its own); INHIBIT to brake limit 20 ms, measured 251 us (MOT-U35). tMotion headroom: longest update 495 us in a 20,000 us period, 2.5% (MOT-U34).
+
+------------------------------------
+
+#21
+Affected Requirement / Component: Memory / resources: NFR8, NFR9
+What needs to change?: Nothing beyond one event flag and a few bytes.
+Suggested by: (AI/Buddy/Team) Buddy 2
+Decision: No Change
+Why?: The whole change is state bits, not buffers or tasks, so the memory requirement and the "objects created only at start-up" rule are unaffected.
+Engineering Evidence: Static RAM 104,300 of 270,336 B (38.6%), so 166,036 B free. Added: 1 event flag (4th of 16), 1 heartbeat byte, two 2-bit stall counters, 9 fault bits. No new task, so stacks stay at 6 x 2,048 B. Fault bits follow the min-bit rule: 9 faults need 9 bits, carried in one flag word; the obstacle control word needs no new bits (row #17).
+
+------------------------------------
+
+#22
+Affected Requirement / Component: Recovery and safe resumption (all stops)
+What needs to change?: Write the recovery class of every fault into FR16 and make Start obey it: (1) clears by itself, car resumes: ultrasonic fault or stale data (after three new votes), obstacle, stall with progress, link back while the lift stop works; (2) needs Start: dashboard Stop, lift or overturn, failed line search, repeated stall on a dead encoder, "no operator stop" hold; (3) needs a reboot: bypass FAULT, watchdog reset. Start is refused while a class-2 or class-3 cause is still present (proposed).
+Suggested by: (AI/Buddy/Team) AI
+Decision: Accept
+Why?: A predictable response includes a predictable way back. The three classes already exist in the code but are spread over three modules and not stated anywhere, so an operator cannot tell whether to wait, press Start or power-cycle. Resuming is safe because every resume goes through the same gate as power-up.
+Engineering Evidence: obstacle.c remote_hold(): Start "begins again from the power-on state, wherever the car stands: the next clear path releases it" (FR11), so a resume always re-checks the forward distance first. obstacle_scan.c: after a fault "recovery needs three new votes". motion.h: STALLED and TIMED_OUT stay until STOP or INHIBIT. subsystems.md: FAULT latched until reboot. MOT-U43: following resumes after a stall.
+
+------------------------------------
+
+#23
+Affected Requirement / Component: Verification / testing: NFR11
+What needs to change?: Add one fault-injection test per row of FR16's table to the make TEST=1 image and the manual logs: unplug the IMU during a run (speed cap, bit set, cleared on reconnect); boot on a slope (NOT_LEVEL limited run); switch the hotspot off with the IMU valid (car continues) and invalid (car holds); stop the scan task's heartbeat by a test hook (tMotion brakes within 120 ms); hold one wheel three times with its encoder unplugged (latched stop); starve the watchdog (reset, motors held at boot). Host tests for the pure decision logic.
+Suggested by: (AI/Buddy/Team) AI
+Decision: Accept
+Why?: Each new response has a number in it (30 mm/s, 100 ms, 3 stalls, 500 ms), so each can be passed or failed. The faults that already have responses already have tests, so only the new behaviours need new ones. Nothing here is claimed as working until it is run on the car.
+Engineering Evidence: Existing fault tests: OBS-U26 (echo disconnection), OBS-U47 (bypass faults and retry), MOT-U10 / U16 / U37 (stall), MOT-U35 (refused commands, INHIBIT 251 us), LINE-U07 (lost line), TER-U11 (IMU fault raised and cleared), COM-U10 (queue overflow), COM-U14 (stalled link). Pure logic already runs on the host (testing/motion/host, testing/terrain/host). Gap noted honestly: testing/system/TEST_LOG.md has no whole-system fault run yet.
+
+------------------------------------
+
+
+
+FINAL COVERAGE CHECK
+Before submitting, check whether the team considered, where relevant:
+[X] Requirements                              (rows #1, #10, #11, #12)
+[X] Tasks / components                        (rows #14, #15, #16)
+[X] State machines                            (rows #6, #17)
+[X] Interfaces / messages                     (rows #2, #13, #18)
+[X] Shared data / concurrency / interrupts    (rows #2, #19)
+[X] Timing / performance                      (row #20)
+[X] Memory / resources                        (row #21)
+[X] Safety / fault handling                   (rows #3 to #12, #14, #16)
+[X] Hardware / software interaction           (rows #4, #7, #16)
+[X] Recovery and safe resumption              (rows #17, #22)
+[X] Verification / testing                    (row #23)
+
+FINAL TEAM STATEMENT
+[X] We reviewed the injected requirement against the complete system. Areas marked No Change were deliberately considered rather than omitted.

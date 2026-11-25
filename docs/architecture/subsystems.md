@@ -134,7 +134,7 @@ preferred. Otherwise the clear side needing the shorter sidestep is taken.
 | `VERIFY` | Sweeps the corridor ahead: clear goes on, blocked waits, too close adds another sidestep (up to three in all, 500 mm sideways at most) |
 | `PASS` | Drives past the obstacle |
 | `TURN_IN` | Turns toward the line; only its second half may pick the line up |
-| `RETURN` | Drives back `(lateral + 150) / sin(angle)`, square to the line at 90 degrees, stopping at any confirmed line |
+| `RETURN` | Drives back `lateral / sin(angle)` (`OBSTACLE_AVOID_RETURN_EXTRA_MM` is 0), square to the line at 90 degrees, stopping at any confirmed line. The axle stops where the line should be; a line not seen by then is left to line following, which pivots on the spot to find it, one way then the other |
 | `OVERSHOOT` | Drives 130 mm on, putting the axle (not the sensors) on the line |
 | `TURN_HOME` | Turns to the heading the car stopped on |
 | `FOLLOW` | Hands back to line following |

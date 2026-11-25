@@ -1,0 +1,216 @@
+17:14:39 listening on 0.0.0.0:1884
+17:15:31 connect from 172.20.10.3:54591
+17:15:31 console 0 
+17:15:31 console 0 
+17:15:31 console 0 microT-Kernel Version 3.00
+17:15:31 console 0 
+17:15:31 console 0 
+17:15:31 console 0 === micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+17:15:31 console 0 dual-core (SMP) build, usermain on core 0
+17:15:31 console 1 motion: motors initialized and braked
+17:15:31 console 1 motion: encoders counting on PIO0
+17:15:31 console 1 motion: tMotion line adapter at 120 mm/s; 5 s startup delay, no run cutoff
+17:15:31 console 2 Wi-Fi: the kernel radio service joins the network from config/wifi_secrets.h
+17:15:31 console 3 all subsystems started
+17:15:31 console 3 
+17:15:31 console 4 wifi: cyw43_utk_task starting (proc 1)
+17:15:31 console 4 wifi: cyw43_init() ...
+17:15:42 dashboard -> car: clear
+17:15:42 dashboard -> car: map Z RIGHT
+17:15:42 dashboard -> car: map F LEFT
+17:15:42 dashboard -> car: map A UTURN
+17:15:42 mtk3smp-pico/heartbeat/telemetry seq=0 captured_ms=5770 line JUNCTION STRAIGHT t=3 h=18 d=75
+17:15:42 status CAR v=0 l=0 r=0 d=317 h=-44 m=0 os=0 ow=0 od=0 av=IDLE p=0 ro=0 tr=0 hu=0 lf=0 rq=105 rt=104 cs=0
+17:15:42 console 4 wifi: cyw43_init() returned, bringing interface up ...
+17:15:42 console 5 barcode: Code 39 reader on GP28 started
+17:15:42 console 183 terrain: IMU ready; calibrating, keep the car still on level ground
+17:15:42 console 263 terrain: compass ready
+17:15:42 console 700 CALMETA,START,5,0
+17:15:42 console 1314 CALWIDE,1,50,130,4,3684,18122
+17:15:42 console 1393 wifi: joining "Nyx" ...
+17:15:42 console 1633 wifi: link status -> joined AP, waiting for IP (1)
+17:15:42 console 1763 CALWIDE,1,55,125,4,11395,17385
+17:15:42 console 2233 CALWIDE,1,60,120,4,1465,2984
+17:15:42 console 2703 CALWIDE,1,65,115,5,1385,1431
+17:15:42 console 3173 CALWIDE,1,70,110,5,1320,1405
+17:15:42 console 3663 CALWIDE,1,75,105,5,1309,1329
+17:15:42 status CAR v=139 l=150 r=129 d=474 h=-20 m=5 os=0 ow=0 od=0 av=IDLE p=0 ro=0 tr=-15 hu=0 lf=0 rq=92 rt=92 cs=0
+17:15:42 console 4113 CALWIDE,1,80,100,5,1254,1314
+17:15:42 console 4563 CALWIDE,1,85,95,5,1289,1315
+17:15:42 console 4574 wifi: link status -> joined AP, no IP yet (2)
+17:15:42 console 5033 CALWIDE,1,90,90,5,1274,1308
+17:15:42 console 5133 line_follow: digital IR line sensing started. Submitting requests to motion. Built Nov 18 2026 09:08:06
+17:15:42 console 5393 LT t=-1 h=-3 d=11 10 c=336 m=-671,650 n=19
+17:15:42 console 5503 CALWIDE,1,95,85,5,1223,1314
+17:15:42 console 5543 terrain: TURNING t 5.53 s
+17:15:42 console 5543 terrain: speed CRUISING t 5.53 s
+17:15:42 console 5544 terrain: summary humps 0 (mm:) highest 0 mm lifts 0 turns 1 msg 00 00 01 00 00 00 00 00 00 00 00
+17:15:42 mtk3smp-pico/heartbeat/telemetry seq=1 captured_ms=7570 line SEARCH_L t=197 h=77 d=311
+17:15:42 status CAR v=124 l=129 r=119 d=539 h=-24 m=5 os=0 ow=0 od=0 av=IDLE p=0 ro=0 tr=-7 hu=0 lf=0 rq=117 rt=117 cs=0
+17:15:42 console 5593 LT t=18 h=3 d=29 11 c=331 m=-728,598 n=20
+17:15:42 console 5793 LT t=18 h=20 d=57 00 c=331 m=-728,598 n=20
+17:15:42 console 5853 LT t=20 h=19 d=67 01 c=331 m=-728,598 n=20
+17:15:42 console 5873 LT t=3 h=18 d=71 11 c=331 m=-728,598 n=20
+17:15:42 console 5894 line JUNCTION STRAIGHT t=3 h=18 d=75
+17:15:42 console 5933 LT t=3 h=18 d=82 10 c=327 m=-752,539 n=21
+17:15:42 console 5953 LT t=3 h=16 d=85 11 c=327 m=-752,539 n=21
+17:15:42 console 5974 CALWIDE,1,100,80,5,1127,1186
+17:15:42 console 6254 wifi: link up, ip=172.20.10.3
+17:15:42 console 6353 LT t=3 h=3 d=142 11 c=332 m=-702,593 n=22
+17:15:42 console 6423 CALWIDE,1,105,75,5,1178,1233
+17:15:42 status CAR v=123 l=118 r=128 d=601 h=-26 m=5 os=0 ow=0 od=0 av=IDLE p=0 ro=0 tr=-14 hu=0 lf=0 rq=142 rt=142 cs=0
+17:15:49 console 6453 LT t=3 h=3 d=156 10 c=332 m=-702,593 n=22
+17:15:49 console 6755 Wi-Fi connected
+17:15:49 console 6755 IP Address: 172.20.10.3
+17:15:49 console 6853 LT t=43 h=28 d=208 10 c=334 m=-684,619 n=23
+17:15:49 console 6894 CALWIDE,1,110,70,5,1207,1268
+17:15:49 console 7073 LT t=60 h=45 d=235 00 c=335 m=-679,621 n=24
+17:15:49 console 7363 CALWIDE,1,115,65,5,1256,1323
+17:15:49 console 7473 LT t=75 h=63 d=284 00 c=335 m=-679,621 n=24
+17:15:49 console 7694 line SEARCH_L t=197 h=77 d=311
+17:15:49 console 7834 CALWIDE,1,120,60,5,1344,1394
+17:15:49 console 7873 LT t=197 h=93 d=317 00 c=335 m=-671,623 n=25
+17:15:49 console 8273 LT t=197 h=135 d=318 00 c=334 m=-687,612 n=26
+17:15:49 mtk3smp-pico/heartbeat/telemetry seq=2 captured_ms=8810 line SEARCH_R t=-43 h=198 d=318
+17:15:49 status CAR v=120 l=122 r=119 d=662 h=-27 m=5 os=0 ow=0 od=0 av=IDLE p=0 ro=0 tr=-1 hu=0 lf=0 rq=167 rt=167 cs=0
+17:15:49 status CAR v=120 l=122 r=119 d=722 h=-28 m=5 os=0 ow=0 od=0 av=IDLE p=0 ro=0 tr=-2 hu=0 lf=0 rq=192 rt=192 cs=0
+17:15:49 console 8283 CALWIDE,1,125,55,5,2107,2457
+17:15:49 console 8673 LT t=197 h=174 d=318 00 c=334 m=-688,620 n=27
+17:15:49 console 8774 CALWIDE,1,130,50,3,2704,2873
+17:15:49 console 8933 line SEARCH_R t=-43 h=198 d=318
+17:15:49 console 9073 LT t=-43 h=192 d=318 00 c=334 m=-687,616 n=28
+17:15:49 console 9473 LT t=-43 h=149 d=317 00 c=334 m=-685,616 n=29
+17:15:49 console 9873 LT t=-43 h=111 d=317 00 c=335 m=-679,625 n=31
+17:15:49 console 10273 LT t=-43 h=75 d=317 00 c=335 m=-679,627 n=32
+17:15:49 console 10674 LT t=-43 h=38 d=317 00 c=334 m=-686,621 n=33
+17:15:49 console 11073 LT t=-43 h=2 d=317 00 c=334 m=-688,625 n=34
+17:15:49 console 11473 LT t=-43 h=-33 d=317 00 c=335 m=-681,628 n=35
+17:15:49 console 11573 line STOP t=-42 h=-42 d=317
+17:15:49 console 11754 terrain: speed STATIONARY t 11.73 s
+17:15:49 console 11754 terrain: STRAIGHT t 11.73 s
+17:15:49 console 11873 LT t=-42 h=-44 d=317 00 c=334 m=-684,621 n=36
+17:15:49 console 12273 LT t=-42 h=-44 d=317 00 c=334 m=-684,621 n=36
+17:15:49 console 12335 mqtt: connected to 172.20.10.2
+17:15:49 console 12403 CALWIDE,2,50,130,0,0,0
+17:15:49 console 12673 LT t=-42 h=-44 d=317 00 c=335 m=-683,628 n=37
+17:15:49 console 12874 CALWIDE,2,55,125,0,0,0
+17:15:49 mtk3smp-pico/heartbeat/telemetry seq=3 captured_ms=11450 line STOP t=-42 h=-42 d=317
+17:15:49 console 13073 LT t=-42 h=-44 d=317 00 c=334 m=-682,619 n=38
+17:15:49 console 13343 CALWIDE,2,60,120,4,1594,4000
+17:15:49 console 13473 LT t=-42 h=-44 d=317 00 c=334 m=-682,619 n=38
+17:15:49 console 13814 CALWIDE,2,65,115,5,1224,1298
+17:15:49 console 13873 LT t=-42 h=-44 d=317 00 c=335 m=-677,624 n=39
+17:15:49 console 14273 LT t=-42 h=-44 d=317 00 c=335 m=-678,627 n=40
+17:15:49 console 14283 CALWIDE,2,70,110,5,1195,1239
+17:15:49 console 14673 LT t=-42 h=-44 d=317 00 c=335 m=-677,624 n=41
+17:15:49 console 14734 CALWIDE,2,75,105,5,1187,1214
+17:15:49 console 15073 LT t=-42 h=-44 d=317 00 c=335 m=-677,624 n=41
+17:15:49 console 15203 CALWIDE,2,80,100,5,1164,1209
+17:15:49 status CAR v=0 l=-88 r=88 d=1151 h=-43 m=3 os=0 ow=0 od=0 av=IDLE p=0 ro=0 tr=91 hu=0 lf=0 rq=237 rt=236 cs=0
+17:15:50 console 15473 LT t=-42 h=-44 d=317 00 c=335 m=-682,622 n=42
+17:15:50 console 15654 CALWIDE,2,85,95,5,1183,1184
+17:15:50 console 15873 LT t=-42 h=-44 d=317 00 c=335 m=-681,624 n=43
+17:15:50 console 16123 CALWIDE,2,90,90,5,1152,1179
+17:15:50 console 16273 LT t=-42 h=-44 d=317 00 c=334 m=-685,623 n=44
+17:15:50 console 16594 CALWIDE,2,95,85,5,1159,1184
+17:15:50 console 16673 LT t=-42 h=-44 d=317 00 c=334 m=-685,623 n=44
+17:15:50 console 17043 CALWIDE,2,100,80,5,1183,1209
+17:15:50 console 17073 LT t=-42 h=-44 d=317 00 c=335 m=-683,626 n=45
+17:15:50 console 17473 LT t=-42 h=-44 d=317 00 c=334 m=-685,627 n=46
+17:15:50 console 17494 CALWIDE,2,105,75,5,1188,1189
+17:15:50 mtk3smp-pico/heartbeat/telemetry seq=4 captured_ms=20870 line TRACK t=-44 h=-44 d=317
+17:15:50 console 17873 LT t=-42 h=-44 d=317 00 c=335 m=-685,630 n=47
+17:15:50 console 17983 CALWIDE,2,110,70,5,1219,1264
+17:15:50 console 18273 LT t=-42 h=-44 d=317 00 c=335 m=-685,630 n=47
+17:15:50 console 18434 CALWIDE,2,115,65,5,1298,1319
+17:15:50 console 18673 LT t=-42 h=-44 d=317 00 c=335 m=-680,635 n=48
+17:15:50 console 18903 CALWIDE,2,120,60,3,1493,4854
+17:15:50 console 19073 LT t=-42 h=-44 d=317 00 c=335 m=-679,633 n=49
+17:15:50 console 19373 CALWIDE,2,125,55,2,13413,14395
+17:15:50 console 19473 LT t=-42 h=-44 d=317 00 c=335 m=-679,633 n=49
+17:15:50 console 19863 CALWIDE,2,130,50,0,0,0
+17:15:50 console 19873 LT t=-42 h=-44 d=317 00 c=335 m=-680,627 n=50
+17:15:50 console 20273 LT t=-42 h=-44 d=317 00 c=335 m=-675,629 n=51
+17:15:50 console 20673 LT t=-42 h=-44 d=317 00 c=335 m=-675,629 n=51
+17:15:50 console 20973 LT t=-42 h=-44 d=317 10 c=331 m=-724,583 n=52
+17:15:50 console 20993 line TRACK t=-44 h=-44 d=317
+17:15:50 console 21223 terrain: speed CRUISING t 21.21 s
+17:15:50 console 21373 LT t=-33 h=-48 d=329 10 c=333 m=-701,628 n=53
+17:15:50 console 21473 LT t=-34 h=-49 d=332 11 c=333 m=-701,628 n=53
+17:15:50 console 21533 LT t=-34 h=-49 d=335 10 c=333 m=-701,628 n=53
+17:15:50 console 21594 terrain: TURNING t 21.58 s
+17:15:50 mtk3smp-pico/heartbeat/telemetry seq=5 captured_ms=27710 line SEARCH_R t=-153 h=-33 d=1144
+17:15:50 console 21595 terrain: summary humps 0 (mm:) highest 0 mm lifts 0 turns 2 msg 00 00 02 00 00 00 00 00 00 00 00
+17:15:50 console 21613 LT t=-23 h=-38 d=349 11 c=337 m=-656,653 n=54
+17:15:50 console 21713 LT t=-23 h=-30 d=368 10 c=337 m=-656,653 n=54
+17:15:50 console 21733 LT t=-23 h=-30 d=370 11 c=337 m=-656,653 n=54
+17:15:50 console 21954 terrain: STRAIGHT t 21.94 s
+17:15:50 console 22134 LT t=-23 h=-17 d=445 11 c=336 m=-663,614 n=55
+17:15:50 console 22533 LT t=-23 h=-22 d=501 11 c=335 m=-675,607 n=56
+17:15:50 console 22773 LT t=-23 h=-24 d=531 01 c=338 m=-639,630 n=57
+17:15:50 console 22796 remote: ready stopped
+17:15:50 console 22797 remote: ok clear, state stopped
+17:15:50 console 22798 remote: ok map Z RIGHT, state stopped
+17:15:50 console 22799 remote: ok map F LEFT, state stopped
+17:15:50 console 22799 remote: ok map A UTURN, state stopped
+17:15:50 console 22853 LT t=-39 h=-24 d=541 00 c=338 m=-639,630 n=57
+17:15:50 console 22923 terrain: TURNING t 22.91 s
+17:15:50 console 22924 terrain: summary humps 0 (mm:) highest 0 mm lifts 0 turns 3 msg 00 00 03 00 00 00 00 00 00 00 00
+17:15:50 console 23253 LT t=-26 h=-26 d=591 00 c=335 m=-664,610 n=59
+17:15:50 mtk3smp-pico/heartbeat/telemetry seq=6 captured_ms=29010 line SEARCH_L t=87 h=-156 d=1150
+17:15:50 console 23534 CALWIDE,3,50,130,0,0,0
+17:15:50 console 23554 terrain: STRAIGHT t 23.54 s
+17:15:50 console 23653 LT t=-26 h=-27 d=640 00 c=336 m=-666,619 n=60
+17:15:50 console 24023 CALWIDE,3,55,125,0,0,0
+17:15:50 console 24053 LT t=-26 h=-27 d=688 00 c=336 m=-666,619 n=60
+17:15:50 console 24453 LT t=-26 h=-28 d=737 00 c=335 m=-672,615 n=62
+17:15:50 console 24514 CALWIDE,3,60,120,5,1502,4007
+17:15:50 console 24853 LT t=-26 h=-29 d=785 00 c=335 m=-672,615 n=62
+17:15:50 console 25003 CALWIDE,3,65,115,5,1386,2769
+17:15:50 status CAR v=0 l=-88 r=88 d=1150 h=2 m=3 os=0 ow=0 od=0 av=IDLE p=0 ro=0 tr=91 hu=0 lf=0 rq=6 rt=5 cs=0
+17:15:50 console 25253 LT t=-26 h=-29 d=833 00 c=335 m=-672,606 n=63
+17:15:50 console 25454 CALWIDE,3,70,110,5,1307,1357
+17:15:50 console 25653 LT t=-26 h=-30 d=881 00 c=335 m=-667,609 n=64
+17:15:50 console 25943 CALWIDE,3,75,105,5,1307,1333
+17:15:50 console 26053 LT t=-26 h=-31 d=930 00 c=335 m=-666,616 n=65
+17:15:50 console 26453 LT t=-26 h=-31 d=978 00 c=336 m=-655,619 n=66
+17:15:50 console 26455 CALWIDE,3,80,100,5,1287,1311
+17:15:50 console 26853 LT t=-26 h=-32 d=1026 00 c=337 m=-650,621 n=67
+17:15:50 console 26923 CALWIDE,3,85,95,5,1303,1307
+17:15:50 console 27253 LT t=-26 h=-32 d=1074 00 c=336 m=-655,617 n=68
+17:15:50 console 27376 CALWIDE,3,90,90,5,1272,1308
+17:15:50 console 27653 LT t=-26 h=-33 d=1122 00 c=336 m=-662,621 n=69
+17:15:50 console 27834 line SEARCH_R t=-153 h=-33 d=1144
+17:15:50 console 27843 CALWIDE,3,95,85,5,1258,1308
+17:15:50 console 28053 LT t=-153 h=-50 d=1150 00 c=337 m=-653,630 n=70
+17:15:50 console 28254 terrain: TURNING t 28.24 s
+17:15:50 console 28254 terrain: summary humps 0 (mm:) highest 0 mm lifts 0 turns 4 msg 00 00 04 00 00 00 00 00 00 00 00
+17:15:50 console 28294 CALWIDE,3,100,80,5,1302,1307
+17:15:50 console 28453 LT t=-153 h=-91 d=1150 00 c=336 m=-657,622 n=71
+17:15:50 console 28743 CALWIDE,3,105,75,5,1310,1313
+17:15:50 console 28853 LT t=-153 h=-129 d=1150 00 c=337 m=-646,634 n=72
+17:15:50 console 29134 line SEARCH_L t=87 h=-156 d=1150
+17:15:50 console 29214 CALWIDE,3,110,70,5,1308,1326
+17:15:50 console 29253 LT t=87 h=-152 d=1149 00 c=336 m=-655,627 n=73
+17:15:50 console 29653 LT t=87 h=-109 d=1150 00 c=336 m=-660,619 n=74
+17:15:50 console 29683 CALWIDE,3,115,65,5,1329,1391
+17:15:50 console 30053 LT t=87 h=-70 d=1151 00 c=336 m=-660,623 n=75
+17:15:50 console 30167 CALWIDE,3,120,60,5,1397,1492
+17:15:50 console 30453 LT t=87 h=-33 d=1151 00 c=336 m=-660,627 n=78
+17:15:50 console 30634 CALWIDE,3,125,55,5,1496,1569
+17:15:50 console 30853 LT t=87 h=2 d=1150 00 c=336 m=-660,624 n=81
+17:15:50 console 31143 CALWIDE,3,130,50,1,13337,13337
+17:15:50 console 31253 LT t=87 h=39 d=1150 00 c=336 m=-659,623 n=86
+17:15:50 status CAR v=0 l=-87 r=88 d=1150 h=48 m=3 os=0 ow=0 od=0 av=IDLE p=0 ro=0 tr=91 hu=0 lf=0 rq=31 rt=30 cs=0
+17:15:51 console 31653 LT t=87 h=75 d=1150 00 c=336 m=-657,626 n=89
+17:15:51 mtk3smp-pico/heartbeat/telemetry seq=7 captured_ms=31650 line STOP t=86 h=86 d=1150
+17:15:51 status CAR v=0 l=-37 r=38 d=1150 h=88 m=0 os=0 ow=0 od=0 av=IDLE p=0 ro=0 tr=90 hu=0 lf=0 rq=56 rt=55 cs=0
+17:15:51 console 31773 line STOP t=86 h=86 d=1150
+17:15:51 console 32013 LT t=86 h=88 d=1150 11 c=336 m=-663,624 n=91
+17:15:51 mtk3smp-pico/heartbeat/telemetry seq=8 captured_ms=31910 line TRACK t=88 h=88 d=1150
+17:15:52 console 32033 line TRACK t=88 h=88 d=1150
+17:15:52 console 32053 line JUNCTION STRAIGHT t=88 h=88 d=1150
+17:15:52 console 32143 terrain: STRAIGHT t 32.13 s
+17:15:52 status CAR v=119 l=130 r=108 d=1184 h=86 m=5 os=0 ow=0 od=0 av=IDLE p=0 ro=0 tr=-1 hu=0 lf=0 rq=81 rt=80 cs=0
+17:17:56 disconnect 172.20.10.3:54591
+17:17:57 connect from 172.20.10.3:54591

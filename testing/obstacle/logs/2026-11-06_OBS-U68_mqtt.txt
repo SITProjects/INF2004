@@ -1,0 +1,401 @@
+11:09:17 listening on 0.0.0.0:1884
+11:10:33 connect from 172.20.10.3:54591
+11:10:33 console 0 
+11:10:33 console 0 
+11:10:33 console 0 microT-Kernel Version 3.00
+11:10:33 console 0 
+11:10:33 console 0 
+11:10:33 console 0 === micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+11:10:33 console 0 dual-core (SMP) build, usermain on core 0
+11:10:33 console 1 motion: motors initialized and braked
+11:10:33 console 1 motion: encoders counting on PIO0
+11:10:33 console 1 motion: line adapter dry run; no motor API calls
+11:10:33 console 2 line_follow: digital IR line sensing started. Submitting requests to motion.
+11:10:33 console 2 all subsystems started
+11:10:33 console 3 
+11:10:33 console 3 Wi-Fi: the kernel radio service joins the network from config/wifi_secrets.h
+11:10:33 console 3 wifi: cyw43_utk_task starting (proc 1)
+11:10:33 console 4 wifi: cyw43_init() ...
+11:10:33 console 4 wifi: cyw43_init() returned, bringing interface up ...
+11:10:33 console 5 barcode: Code 39 reader on GP28 started
+11:10:33 console 153 motion: TRACK target=0 seen=0 valid=1 (dry run)
+11:10:33 console 183 terrain: IMU ready; calibrating, keep the car still on level ground
+11:10:33 console 697 CALMETA,START,5,0
+11:10:33 console 1413 wifi: joining "Nyx" ...
+11:10:33 console 1434 CALWIDE,1,30,30,1,11346,11346
+11:10:33 console 1633 wifi: link status -> joined AP, waiting for IP (1)
+11:10:33 console 1943 CALWIDE,1,35,35,1,11370,11370
+11:10:33 console 2413 CALWIDE,1,40,40,3,369,1242
+11:10:33 console 2883 CALWIDE,1,45,45,1,10418,10418
+11:10:33 console 3353 CALWIDE,1,50,50,4,344,19248
+11:10:33 console 3823 CALWIDE,1,55,55,4,4651,19250
+11:10:33 console 4273 CALWIDE,1,60,60,5,2408,2653
+11:10:33 console 4574 wifi: link status -> joined AP, no IP yet (2)
+11:10:33 console 4743 CALWIDE,1,65,65,5,2403,2527
+11:10:33 console 5213 CALWIDE,1,70,70,5,2301,2348
+11:10:33 console 5683 CALWIDE,1,75,75,5,2265,2353
+11:10:33 console 6155 CALWIDE,1,80,80,5,2310,2338
+11:10:33 console 6274 wifi: link up, ip=172.20.10.3
+11:10:33 console 6644 CALWIDE,1,85,85,5,2232,2324
+11:10:33 console 6753 Wi-Fi connected
+11:10:33 console 6753 IP Address: 172.20.10.3
+11:10:33 console 7153 CALWIDE,1,90,90,5,2238,2267
+11:10:33 console 7643 CALWIDE,1,95,95,5,2213,2259
+11:10:33 console 7794 mqtt: connected to 172.20.10.2
+11:10:33 console 8133 CALWIDE,1,100,100,5,2193,2238
+11:10:34 console 8623 CALWIDE,1,105,105,5,2232,2263
+11:10:34 console 9093 CALWIDE,1,110,110,5,2230,2243
+11:10:35 console 9543 CALWIDE,1,115,115,5,2263,2268
+11:10:36 console 10033 CALWIDE,1,120,120,5,2264,2268
+11:10:36 console 10483 CALWIDE,1,125,125,5,2312,2318
+11:10:36 console 10933 CALWIDE,1,130,130,5,2362,2392
+11:10:36 console 11383 CALWIDE,1,135,135,5,13309,13454
+11:10:37 console 11853 CALWIDE,1,140,140,3,13359,13403
+11:10:38 console 12323 CALWIDE,1,145,145,0,0,0
+11:10:38 console 12723 line JUNCTION t=-6 h=-6 d=-5
+11:10:38 mtk3smp-pico/heartbeat/telemetry seq=0 captured_ms=12600 line JUNCTION t=-6 h=-6 d=-5
+11:10:38 console 12813 CALWIDE,1,150,150,3,6238,7902
+11:10:38 console 13223 line JUNCTION t=-6 h=-6 d=-5
+11:10:38 mtk3smp-pico/heartbeat/telemetry seq=1 captured_ms=13100 line JUNCTION t=-6 h=-6 d=-5
+11:23:55 disconnect 172.20.10.3:54591
+11:23:55 connect from 172.20.10.3:54591
+11:23:55 console 0 
+11:23:55 console 0 
+11:23:55 console 0 microT-Kernel Version 3.00
+11:23:55 console 0 
+11:23:55 console 0 
+11:23:55 console 0 === micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+11:23:55 console 0 dual-core (SMP) build, usermain on core 0
+11:23:55 console 1 motion: motors initialized and braked
+11:23:55 console 1 motion: encoders counting on PIO0
+11:23:55 console 1 motion: line adapter dry run; no motor API calls
+11:23:55 console 2 line_follow: digital IR line sensing started. Submitting requests to motion.
+11:23:55 console 2 all subsystems started
+11:23:55 console 3 
+11:23:55 console 3 Wi-Fi: the kernel radio service joins the network from config/wifi_secrets.h
+11:23:55 mtk3smp-pico/heartbeat/telemetry seq=0 captured_ms=60 line JUNCTION t=0 h=0 d=0
+11:23:56 console 3 wifi: cyw43_utk_task starting (proc 1)
+11:23:56 console 4 wifi: cyw43_init() ...
+11:23:56 console 4 wifi: cyw43_init() returned, bringing interface up ...
+11:23:56 console 5 barcode: Code 39 reader on GP28 started
+11:23:56 console 153 motion: TRACK target=0 seen=1 valid=1 (dry run)
+11:23:56 console 183 line JUNCTION t=0 h=0 d=0
+11:23:56 console 183 terrain: IMU ready; calibrating, keep the car still on level ground
+11:23:56 console 698 CALMETA,START,5,0
+11:23:56 console 1414 CALWIDE,1,30,30,2,8206,8227
+11:23:56 console 1434 wifi: joining "Nyx" ...
+11:23:56 console 1653 wifi: link status -> joined AP, waiting for IP (1)
+11:23:56 console 1903 CALWIDE,1,35,35,2,10281,15097
+11:23:56 console 2413 CALWIDE,1,40,40,0,0,0
+11:23:56 console 2883 CALWIDE,1,45,45,0,0,0
+11:23:56 console 3353 CALWIDE,1,50,50,0,0,0
+11:23:56 console 3843 CALWIDE,1,55,55,0,0,0
+11:23:56 console 4333 CALWIDE,1,60,60,5,1422,1447
+11:23:56 console 4823 CALWIDE,1,65,65,5,1321,1322
+11:23:56 console 5273 CALWIDE,1,70,70,5,1317,1318
+11:23:56 console 5594 wifi: link status -> joined AP, no IP yet (2)
+11:23:56 console 5763 CALWIDE,1,75,75,5,1230,1263
+11:23:56 console 5775 wifi: link up, ip=172.20.10.3
+11:23:56 console 5894 mqtt: connected to 172.20.10.2
+11:23:56 console 6233 CALWIDE,1,80,80,5,1205,1237
+11:23:56 console 6243 Wi-Fi connected
+11:23:56 console 6243 IP Address: 172.20.10.3
+11:23:56 console 6743 CALWIDE,1,85,85,5,1183,1233
+11:23:57 console 7213 CALWIDE,1,90,90,5,1183,1207
+11:23:57 console 7683 CALWIDE,1,95,95,5,1181,1208
+11:23:58 console 8173 CALWIDE,1,100,100,5,1183,1212
+11:23:58 console 8623 CALWIDE,1,105,105,5,1212,1237
+11:23:59 console 9113 CALWIDE,1,110,110,5,1237,1258
+11:23:59 console 9623 CALWIDE,1,115,115,5,1252,1257
+11:24:00 console 10093 CALWIDE,1,120,120,5,1307,1337
+11:24:00 console 10563 CALWIDE,1,125,125,5,8921,12790
+11:24:01 console 11033 CALWIDE,1,130,130,5,8940,12951
+11:24:01 console 11543 CALWIDE,1,135,135,4,8985,12830
+11:24:02 console 12013 CALWIDE,1,140,140,4,8954,9005
+11:24:02 console 12483 CALWIDE,1,145,145,2,12750,12968
+11:24:03 console 12993 CALWIDE,1,150,150,0,0,0
+11:24:06 console 16723 CALWIDE,2,30,30,2,1316,1321
+11:24:07 console 17213 CALWIDE,2,35,35,3,813,987
+11:24:07 console 17683 CALWIDE,2,40,40,4,944,1022
+11:24:08 console 18153 CALWIDE,2,45,45,3,883,977
+11:24:08 console 18643 CALWIDE,2,50,50,0,0,0
+11:24:09 console 19153 CALWIDE,2,55,55,0,0,0
+11:24:09 console 19643 CALWIDE,2,60,60,1,1052,1052
+11:24:10 console 20093 CALWIDE,2,65,65,5,1445,1639
+11:24:10 console 20563 CALWIDE,2,70,70,5,1434,1490
+11:24:11 console 21053 CALWIDE,2,75,75,5,1425,1435
+11:24:11 console 21543 CALWIDE,2,80,80,5,1402,1436
+11:24:12 console 22013 CALWIDE,2,85,85,5,1400,1406
+11:24:12 console 22523 CALWIDE,2,90,90,5,1401,1406
+11:24:13 console 22973 CALWIDE,2,95,95,5,1401,1406
+11:24:13 console 23443 CALWIDE,2,100,100,5,1405,1411
+11:24:13 console 23913 CALWIDE,2,105,105,5,1404,1411
+11:24:14 console 24363 CALWIDE,2,110,110,5,1440,1465
+11:24:14 console 24813 CALWIDE,2,115,115,5,1440,1495
+11:24:15 console 25283 CALWIDE,2,120,120,5,1520,1590
+11:24:15 console 25753 CALWIDE,2,125,125,5,1594,1740
+11:24:16 console 26203 CALWIDE,2,130,130,5,9054,9133
+11:24:16 console 26673 CALWIDE,2,135,135,5,9344,12894
+11:24:17 console 27183 CALWIDE,2,140,140,4,9117,12863
+11:24:17 console 27653 CALWIDE,2,145,145,5,5960,6058
+11:24:18 console 28143 CALWIDE,2,150,150,5,5909,5978
+11:24:21 console 31853 CALWIDE,3,30,30,0,0,0
+11:24:22 console 32323 CALWIDE,3,35,35,0,0,0
+11:24:22 console 32813 CALWIDE,3,40,40,0,0,0
+11:24:23 console 33263 CALWIDE,3,45,45,5,1112,1261
+11:24:23 console 33753 CALWIDE,3,50,50,5,1063,1092
+11:24:24 console 34223 CALWIDE,3,55,55,5,1092,1122
+11:24:24 console 34733 CALWIDE,3,60,60,0,0,0
+11:24:25 console 35203 CALWIDE,3,65,65,0,0,0
+11:24:25 console 35693 CALWIDE,3,70,70,0,0,0
+11:24:26 console 36183 CALWIDE,3,75,75,4,4635,4933
+11:24:26 console 36673 CALWIDE,3,80,80,4,4570,4815
+11:24:27 console 37163 CALWIDE,3,85,85,5,2378,4888
+11:24:27 console 37653 CALWIDE,3,90,90,5,1306,1653
+11:24:28 console 38143 CALWIDE,3,95,95,5,1166,1222
+11:24:28 console 38613 CALWIDE,3,100,100,5,1097,1136
+11:24:29 console 39083 CALWIDE,3,105,105,5,1085,1116
+11:24:29 console 39553 CALWIDE,3,110,110,5,1097,1107
+11:24:30 console 40003 CALWIDE,3,115,115,5,1131,1137
+11:24:30 console 40473 CALWIDE,3,120,120,5,1180,1187
+11:24:31 console 40923 CALWIDE,3,125,125,5,1187,1211
+11:24:31 console 41393 CALWIDE,3,130,130,5,1257,1261
+11:24:32 console 41883 CALWIDE,3,135,135,5,9122,13015
+11:24:32 console 42353 CALWIDE,3,140,140,3,6143,12891
+11:24:33 console 42823 CALWIDE,3,145,145,5,5959,6249
+11:24:33 console 43313 CALWIDE,3,150,150,5,5925,6124
+11:24:37 console 47043 CALWIDE,4,30,30,0,0,0
+11:24:37 console 47513 CALWIDE,4,35,35,0,0,0
+11:24:38 console 48003 CALWIDE,4,40,40,0,0,0
+11:24:38 console 48473 CALWIDE,4,45,45,0,0,0
+11:24:39 console 48963 CALWIDE,4,50,50,0,0,0
+11:24:39 console 49453 CALWIDE,4,55,55,0,0,0
+11:24:39 console 49943 CALWIDE,4,60,60,0,0,0
+11:24:40 console 50433 CALWIDE,4,65,65,0,0,0
+11:24:40 console 50923 CALWIDE,4,70,70,5,1306,1311
+11:24:41 console 51393 CALWIDE,4,75,75,5,1158,1186
+11:24:41 console 51883 CALWIDE,4,80,80,5,1124,1132
+11:24:42 console 52393 CALWIDE,4,85,85,5,1117,1126
+11:24:43 console 52843 CALWIDE,4,90,90,5,1098,1102
+11:24:43 console 53313 CALWIDE,4,95,95,5,1095,1102
+11:24:43 console 53743 CALWIDE,4,100,100,5,1097,1102
+11:24:44 console 54193 CALWIDE,4,105,105,5,1081,1102
+11:24:44 console 54663 CALWIDE,4,110,110,5,1125,1132
+11:24:45 console 55153 CALWIDE,4,115,115,5,1137,1162
+11:24:45 console 55603 CALWIDE,4,120,120,5,1205,1211
+11:24:46 console 56093 CALWIDE,4,125,125,5,1211,1241
+11:24:46 console 56543 CALWIDE,4,130,130,5,1306,1311
+11:24:47 console 57013 CALWIDE,4,135,135,5,9153,12807
+11:24:47 console 57483 CALWIDE,4,140,140,2,11649,12940
+11:24:48 console 57953 CALWIDE,4,145,145,5,5984,6182
+11:24:48 console 58443 CALWIDE,4,150,150,5,5978,6053
+11:24:52 console 62173 CALWIDE,5,30,30,0,0,0
+11:24:52 console 62683 CALWIDE,5,35,35,0,0,0
+11:24:53 console 63173 CALWIDE,5,40,40,0,0,0
+11:24:53 console 63663 CALWIDE,5,45,45,0,0,0
+11:24:54 console 64133 CALWIDE,5,50,50,0,0,0
+11:24:54 console 64623 CALWIDE,5,55,55,0,0,0
+11:24:55 console 65113 CALWIDE,5,60,60,0,0,0
+11:24:55 console 65603 CALWIDE,5,65,65,0,0,0
+11:24:56 console 66073 CALWIDE,5,70,70,5,1293,1311
+11:24:56 console 66543 CALWIDE,5,75,75,5,1158,1211
+11:24:57 console 66993 CALWIDE,5,80,80,5,1127,1132
+11:24:57 console 67463 CALWIDE,5,85,85,5,1123,1127
+11:24:57 console 67913 CALWIDE,5,90,90,5,1096,1102
+11:24:58 console 68403 CALWIDE,5,95,95,5,1097,1102
+11:24:58 console 68893 CALWIDE,5,100,100,5,1095,1101
+11:25:01 console 69343 CALWIDE,5,105,105,5,1121,1127
+11:25:01 console 69833 CALWIDE,5,110,110,5,1126,1132
+11:25:01 console 70303 CALWIDE,5,115,115,5,1156,1156
+11:25:01 console 70773 CALWIDE,5,120,120,5,1185,1187
+11:25:01 console 71243 CALWIDE,5,125,125,5,1180,1187
+11:25:01 console 71733 CALWIDE,5,130,130,5,1256,1261
+11:25:02 console 72183 CALWIDE,5,135,135,5,9052,9352
+11:25:02 console 72673 CALWIDE,5,140,140,3,12841,12919
+11:25:03 console 73123 CALWIDE,5,145,145,5,5963,6158
+11:25:03 console 73593 CALWIDE,5,150,150,5,5891,5978
+11:25:07 console 77323 CALWIDE,6,30,30,2,9530,9676
+11:25:07 console 77793 CALWIDE,6,35,35,1,8848,8848
+11:25:08 console 78283 CALWIDE,6,40,40,0,0,0
+11:25:08 console 78773 CALWIDE,6,45,45,1,15803,15803
+11:25:09 console 79243 CALWIDE,6,50,50,0,0,0
+11:25:09 console 79733 CALWIDE,6,55,55,0,0,0
+11:25:10 console 80203 CALWIDE,6,60,60,0,0,0
+11:25:10 console 80693 CALWIDE,6,65,65,0,0,0
+11:25:11 console 81163 CALWIDE,6,70,70,5,1261,1311
+11:25:11 console 81653 CALWIDE,6,75,75,5,1161,1211
+11:25:12 console 82123 CALWIDE,6,80,80,5,1165,1172
+11:25:12 console 82593 CALWIDE,6,85,85,5,1116,1142
+11:25:13 console 83083 CALWIDE,6,90,90,5,1111,1117
+11:25:13 console 83553 CALWIDE,6,95,95,5,1104,1117
+11:25:14 console 84023 CALWIDE,6,100,100,5,1113,1117
+11:25:14 console 84513 CALWIDE,6,105,105,5,1110,1117
+11:25:15 console 84983 CALWIDE,6,110,110,5,1113,1141
+11:25:15 console 85473 CALWIDE,6,115,115,5,1139,1172
+11:25:16 console 85963 CALWIDE,6,120,120,5,1151,1201
+11:25:16 console 86453 CALWIDE,6,125,125,5,1192,1226
+11:25:16 console 86923 CALWIDE,6,130,130,5,1196,1301
+11:25:17 console 87393 CALWIDE,6,135,135,5,1376,12778
+11:25:18 console 87883 CALWIDE,6,140,140,5,9132,9357
+11:25:18 console 88373 CALWIDE,6,145,145,3,6023,6168
+11:25:18 console 88843 CALWIDE,6,150,150,5,5963,6176
+11:25:22 console 92553 CALWIDE,7,30,30,5,9277,10513
+11:25:23 console 93063 CALWIDE,7,35,35,2,10422,10472
+11:25:23 console 93553 CALWIDE,7,40,40,0,0,0
+11:25:24 console 94023 CALWIDE,7,45,45,0,0,0
+11:25:24 console 94513 CALWIDE,7,50,50,0,0,0
+11:25:25 console 95003 CALWIDE,7,55,55,0,0,0
+11:25:25 console 95493 CALWIDE,7,60,60,0,0,0
+11:25:26 console 95983 CALWIDE,7,65,65,0,0,0
+11:25:26 console 96453 CALWIDE,7,70,70,5,1250,1251
+11:25:27 console 96923 CALWIDE,7,75,75,5,1171,1196
+11:25:27 console 97413 CALWIDE,7,80,80,5,1161,1166
+11:25:27 console 97883 CALWIDE,7,85,85,5,1117,1141
+11:25:28 console 98333 CALWIDE,7,90,90,5,1132,1137
+11:25:28 console 98783 CALWIDE,7,95,95,5,1111,1116
+11:25:29 console 99253 CALWIDE,7,100,100,5,1111,1117
+11:25:29 console 99703 CALWIDE,7,105,105,5,1111,1117
+11:25:30 console 100173 CALWIDE,7,110,110,5,1109,1147
+11:25:30 console 100623 CALWIDE,7,115,115,5,1166,1171
+11:25:31 console 101073 CALWIDE,7,120,120,5,1170,1177
+11:25:31 console 101543 CALWIDE,7,125,125,5,1164,1201
+11:25:32 console 102013 CALWIDE,7,130,130,5,1219,1226
+11:25:32 console 102483 CALWIDE,7,135,135,5,1371,1401
+11:25:33 console 102973 CALWIDE,7,140,140,3,9237,9349
+11:25:33 console 103443 CALWIDE,7,145,145,4,5935,6317
+11:25:33 console 103913 CALWIDE,7,150,150,5,5968,6136
+11:25:39 console 107603 CALWIDE,8,30,30,5,10315,10382
+11:25:39 console 108093 CALWIDE,8,35,35,2,10495,10599
+11:25:39 console 108583 CALWIDE,8,40,40,0,0,0
+11:25:39 console 109073 CALWIDE,8,45,45,0,0,0
+11:25:39 console 109543 CALWIDE,8,50,50,0,0,0
+11:25:40 console 110033 CALWIDE,8,55,55,0,0,0
+11:25:40 console 110503 CALWIDE,8,60,60,0,0,0
+11:25:41 console 110973 CALWIDE,8,65,65,0,0,0
+11:25:41 console 111443 CALWIDE,8,70,70,5,1247,1276
+11:25:41 console 111913 CALWIDE,8,75,75,5,1168,1194
+11:25:42 console 112383 CALWIDE,8,80,80,5,1161,1166
+11:25:43 console 112833 CALWIDE,8,85,85,5,1131,1141
+11:25:43 console 113303 CALWIDE,8,90,90,5,1105,1136
+11:25:43 console 113793 CALWIDE,8,95,95,5,1092,1111
+11:25:44 console 114055 terrain: calibration NOT_LEVEL
+11:25:44 console 114263 CALWIDE,8,100,100,5,1109,1116
+11:25:45 console 114733 CALWIDE,8,105,105,5,1105,1116
+11:25:45 console 115203 CALWIDE,8,110,110,5,1136,1146
+11:25:45 console 115713 CALWIDE,8,115,115,5,1166,1171
+11:25:46 console 116163 CALWIDE,8,120,120,5,1171,1176
+11:25:46 console 116633 CALWIDE,8,125,125,5,1196,1201
+11:25:47 console 117083 CALWIDE,8,130,130,5,1221,1226
+11:25:47 console 117533 CALWIDE,8,135,135,5,1371,1400
+11:25:48 console 118063 CALWIDE,8,140,140,3,9254,9335
+11:25:48 console 118553 CALWIDE,8,145,145,5,5972,6116
+11:25:49 console 119043 CALWIDE,8,150,150,5,5943,6162
+11:25:52 console 122773 CALWIDE,9,30,30,1,10429,10429
+11:25:53 console 123243 CALWIDE,9,35,35,1,9428,9428
+11:25:53 console 123733 CALWIDE,9,40,40,0,0,0
+11:25:54 console 124203 CALWIDE,9,45,45,0,0,0
+11:25:54 console 124693 CALWIDE,9,50,50,0,0,0
+11:25:55 console 125183 CALWIDE,9,55,55,0,0,0
+11:25:55 console 125653 CALWIDE,9,60,60,0,0,0
+11:25:56 console 126143 CALWIDE,9,65,65,0,0,0
+11:25:56 console 126593 CALWIDE,9,70,70,5,1275,1433
+11:25:57 console 127063 CALWIDE,9,75,75,5,1192,1196
+11:25:57 console 127553 CALWIDE,9,80,80,5,1160,1166
+11:25:58 console 128003 CALWIDE,9,85,85,5,1113,1117
+11:25:58 console 128493 CALWIDE,9,90,90,5,1130,1136
+11:25:59 console 128983 CALWIDE,9,95,95,5,1110,1116
+11:25:59 console 129453 CALWIDE,9,100,100,5,1091,1116
+11:25:59 console 129903 CALWIDE,9,105,105,5,1110,1116
+11:26:00 console 130353 CALWIDE,9,110,110,5,1141,1146
+11:26:00 console 130843 CALWIDE,9,115,115,5,1165,1171
+11:26:01 console 131313 CALWIDE,9,120,120,5,1156,1176
+11:26:01 console 131803 CALWIDE,9,125,125,5,1195,1201
+11:26:02 console 132253 CALWIDE,9,130,130,5,1225,1245
+11:26:02 console 132703 CALWIDE,9,135,135,5,1394,1425
+11:26:03 console 133173 CALWIDE,9,140,140,3,9308,9380
+11:26:05 console 133663 CALWIDE,9,145,145,5,5938,6195
+11:26:05 console 134133 CALWIDE,9,150,150,5,5941,6066
+11:32:00 disconnect 172.20.10.3:54591
+11:32:03 connect from 172.20.10.3:54591
+11:32:03 console 0 
+11:32:03 console 0 
+11:32:03 console 0 microT-Kernel Version 3.00
+11:32:03 console 0 
+11:32:03 console 0 
+11:32:03 console 0 === micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+11:32:03 console 0 dual-core (SMP) build, usermain on core 0
+11:32:03 console 1 motion: motors initialized and braked
+11:32:03 console 1 motion: encoders counting on PIO0
+11:32:03 console 1 motion: line adapter dry run; no motor API calls
+11:32:03 console 2 line_follow: digital IR line sensing started. Submitting requests to motion.
+11:32:03 console 2 all subsystems started
+11:32:03 console 3 
+11:32:03 console 3 Wi-Fi: the kernel radio service joins the network from config/wifi_secrets.h
+11:32:03 console 3 wifi: cyw43_utk_task starting (proc 1)
+11:32:03 console 4 wifi: cyw43_init() ...
+11:32:03 console 4 wifi: cyw43_init() returned, bringing interface up ...
+11:32:03 console 5 barcode: Code 39 reader on GP28 started
+11:32:03 console 153 motion: TRACK target=0 seen=0 valid=1 (dry run)
+11:32:03 console 183 terrain: IMU ready; calibrating, keep the car still on level ground
+11:32:03 console 697 CALMETA,START,5,0
+11:32:03 console 1394 CALWIDE,1,30,30,5,3631,3712
+11:32:03 console 1414 barcode: edge queue overflow, scan dropped
+11:32:03 console 1434 wifi: joining "Nyx" ...
+11:32:03 console 1673 wifi: link status -> joined AP, waiting for IP (1)
+11:32:03 console 1843 CALWIDE,1,35,35,5,3591,3691
+11:32:03 console 2333 CALWIDE,1,40,40,5,3626,3676
+11:32:03 console 2803 CALWIDE,1,45,45,5,3581,3671
+11:32:03 console 3253 CALWIDE,1,50,50,5,3577,3621
+11:32:03 console 3723 CALWIDE,1,55,55,5,3628,3721
+11:32:03 console 4193 CALWIDE,1,60,60,5,3810,7068
+11:32:03 console 4594 wifi: link status -> joined AP, no IP yet (2)
+11:32:03 console 4663 CALWIDE,1,65,65,5,6933,7018
+11:32:03 console 4695 wifi: link up, ip=172.20.10.3
+11:32:03 console 4713 Wi-Fi connected
+11:32:03 console 4714 IP Address: 172.20.10.3
+11:32:03 console 5173 CALWIDE,1,70,70,5,6949,7093
+11:32:03 console 5593 barcode: edge queue overflow, scan dropped
+11:32:03 console 5663 CALWIDE,1,75,75,5,6964,7022
+11:32:03 console 6173 CALWIDE,1,80,80,5,7042,8334
+11:32:03 console 6643 CALWIDE,1,85,85,4,14572,15468
+11:32:03 console 6873 barcode: edge queue overflow, scan dropped
+11:32:03 console 7093 CALWIDE,1,90,90,5,15270,16084
+11:32:03 console 7563 CALWIDE,1,95,95,3,15256,15381
+11:32:03 console 7634 mqtt: connected to 172.20.10.2
+11:32:03 console 8014 barcode: edge queue overflow, scan dropped
+11:32:03 console 8053 CALWIDE,1,100,100,1,15273,15273
+11:32:04 console 8293 barcode: edge queue overflow, scan dropped
+11:32:04 console 8543 CALWIDE,1,105,105,1,9590,9590
+11:32:05 console 9013 CALWIDE,1,110,110,0,0,0
+11:32:05 console 9213 barcode: FAIL ratio elements=29 narrow=1 us
+11:32:05 console 9214 barcode: edge queue overflow, scan dropped
+11:32:05 console 9293 barcode: edge queue overflow, scan dropped
+11:32:05 console 9503 CALWIDE,1,115,115,0,0,0
+11:32:05 console 9993 CALWIDE,1,120,120,0,0,0
+11:32:05 console 10014 barcode: FAIL length elements=13 narrow=1 us
+11:32:05 console 10015 barcode: FAIL length elements=19 narrow=1 us
+11:32:05 console 10015 barcode: edge queue overflow, scan dropped
+11:32:06 console 10483 CALWIDE,1,125,125,0,0,0
+11:32:06 console 10674 barcode: edge queue overflow, scan dropped
+11:32:06 console 10993 CALWIDE,1,130,130,0,0,0
+11:32:06 console 11134 barcode: edge queue overflow, scan dropped
+11:32:07 console 11353 barcode: edge queue overflow, scan dropped
+11:32:07 console 11503 CALWIDE,1,135,135,0,0,0
+11:32:07 console 12013 CALWIDE,1,140,140,0,0,0
+11:32:08 console 12503 CALWIDE,1,145,145,0,0,0
+11:32:08 console 12993 CALWIDE,1,150,150,0,0,0
+11:32:09 console 13613 barcode: edge queue overflow, scan dropped
+11:32:09 console 13673 barcode: edge queue overflow, scan dropped
+11:32:09 console 13873 barcode: edge queue overflow, scan dropped
+11:32:10 console 14414 barcode: edge queue overflow, scan dropped
+11:32:10 console 14453 barcode: FAIL length elements=15 narrow=1 us
+11:32:10 console 14553 barcode: edge queue overflow, scan dropped
+11:32:10 console 14575 barcode: edge queue overflow, scan dropped
+11:32:10 console 14634 barcode: edge queue overflow, scan dropped
+11:32:10 console 14674 barcode: edge queue overflow, scan dropped
+11:32:10 console 14714 barcode: edge queue overflow, scan dropped
+11:32:10 console 14754 barcode: edge queue overflow, scan dropped
+11:32:10 console 14793 barcode: edge queue overflow, scan dropped
+11:32:10 console 14817 barcode: edge queue overflow, scan dropped
+11:32:12 console 16703 CALWIDE,2,30,30,5,2960,3179
+11:32:12 console 17193 CALWIDE,2,35,35,5,2920,3016

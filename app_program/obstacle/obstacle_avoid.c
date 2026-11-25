@@ -1499,11 +1499,11 @@ retry_or_fault (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
                 obstacle_avoid_input_t const * p_in, bool b_line_missed,
                 char const * p_reason)
 {
-    if (obstacle_avoid_flag(p_ctx, OBSTACLE_AVOID_F_RETRY_USED) &&
-        b_line_missed)
+    if (b_line_missed)
     {
-        /* Missed twice: the obstacle is passed, so let line following
-         * search for the line from here. */
+        /* The obstacle is passed: line following pivots on the spot to
+         * find the line, one way then the other, instead of the car
+         * driving on (user, 2026-11-25). */
         field_set(p_ctx, OBSTACLE_AVOID_FIELD_LEG,
                   (uint32_t)OBSTACLE_AVOID_LEG_FOLLOW);
         flag_set(p_ctx, OBSTACLE_AVOID_F_LEG_STARTED, false);
@@ -1521,17 +1521,7 @@ retry_or_fault (obstacle_avoid_t * p_ctx, obstacle_avoid_action_t * p_act,
         return;
     }
     flag_set(p_ctx, OBSTACLE_AVOID_F_RETRY_USED, true);
-    if (b_line_missed)
-    {
-        /* Search once more for the line, the same way. */
-        field_set(p_ctx, OBSTACLE_AVOID_FIELD_LEG,
-                  (uint32_t)OBSTACLE_AVOID_LEG_RETURN);
-        flag_set(p_ctx, OBSTACLE_AVOID_F_LEG_STARTED, true);
-        flag_set(p_ctx, OBSTACLE_AVOID_F_NEED_PREPARE, true);
-        p_ctx->remaining = robot_clamp_u16(
-            (uint32_t)(p_ctx->p_config->geometry.return_extra_mm));
-    }
-    else if (!record_progress(p_ctx, p_in))
+    if (!record_progress(p_ctx, p_in))
     {
         latch_fault(p_ctx, p_act, OBSTACLE_AVOID_FAULT_ODOMETRY, p_in->now_ms,
                     "no odometry");

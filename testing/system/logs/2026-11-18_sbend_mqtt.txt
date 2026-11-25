@@ -1,0 +1,832 @@
+17:03:54 listening on 0.0.0.0:1884
+17:04:08 connect from 172.20.10.3:54591
+17:04:08 console 0 
+17:04:08 console 0 
+17:04:08 console 0 microT-Kernel Version 3.00
+17:04:08 console 0 
+17:04:08 console 0 
+17:04:08 console 0 === micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+17:04:08 console 0 dual-core (SMP) build, usermain on core 0
+17:04:08 console 0 obstacle: motors held until the path is confirmed clear
+17:04:08 console 1 motion: motors initialized and braked
+17:04:08 console 1 motion: encoders counting on PIO0
+17:04:08 console 1 motion: tMotion line adapter at 120 mm/s; 5 s startup delay, no run cutoff
+17:04:08 console 2 Wi-Fi: the kernel radio service joins the network from config/wifi_secrets.h
+17:04:08 console 3 all subsystems started
+17:04:08 console 3 
+17:04:08 dashboard -> car: clear
+17:04:08 dashboard -> car: map Z RIGHT
+17:04:08 dashboard -> car: map F LEFT
+17:04:08 dashboard -> car: map A UTURN
+17:04:08 mtk3smp-pico/heartbeat/telemetry seq=0 captured_ms=1010 obstacle flags=17 edges=255 width_mm=0
+17:04:08 status CAR v=0 l=0 r=0 d=0 h=0 m=6 os=1 ow=0 od=0 av=WAIT_CLEAR p=0 ro=0 tr=0 hu=0 lf=0 rq=120 rt=119 cs=0
+17:04:08 console 4 wifi: cyw43_utk_task starting (proc 1)
+17:04:08 console 4 wifi: cyw43_init() ...
+17:04:08 console 5 wifi: cyw43_init() returned, bringing interface up ...
+17:04:08 console 5 barcode: Code 39 reader on GP28 started
+17:04:08 console 6 [0 ms]obstacle: scanning started
+17:04:08 console 6 [0 ms]obstacle: stop request ACTIVE (sensing output only)
+17:04:08 console 7 [0 ms]obstacle: stopped by the dashboard
+17:04:08 console 153 terrain: IMU ready; calibrating, keep the car still on level ground
+17:04:08 console 203 terrain: compass ready
+17:04:08 console 874 [750 ms]obstacle: stop request RELEASED
+17:04:08 console 875 [750 ms]obstacle: [0x11] CLEAR dir 90
+17:04:09 console 1393 wifi: joining "Nyx" ...
+17:04:09 console 1633 wifi: link status -> joined AP, waiting for IP (1)
+17:04:09 console 2333 wifi: link status -> FAILED: SSID not found (out of range, wrong name, or 5GHz-only network -- this chip is 2.4GHz only) (-2)
+17:04:09 console 2573 [2450 ms]obstacle: stop request ACTIVE
+17:04:09 console 2574 [2450 ms]obstacle: [0x00] SCANNING dir -1
+17:04:09 console 2693 [2570 ms]obstacle: side scan started
+17:04:09 mtk3smp-pico/heartbeat/telemetry seq=1 captured_ms=2010 obstacle flags=17 edges=255 width_mm=0
+17:04:09 console 3614 [3490 ms]obstacle: ends L VALID 708 us blocked, R VALID 5339 us clear (centre 912 us)
+17:04:09 console 3853 [3730 ms]obstacle: fine 120 deg NO_ECHO 0 us MISS
+17:04:09 console 4093 [3970 ms]obstacle: fine 110 deg NO_ECHO 0 us MISS
+17:04:09 console 4313 [4190 ms]obstacle: fine 100 deg VALID 623 us HIT
+17:04:09 console 4315 [4190 ms]obstacle: width 102 mm hits 50..100 bounds 50.0..105.0
+17:04:09 console 4316 [4190 ms]obstacle: side scan completed after 1620 ms
+17:04:09 console 4316 [4190 ms]obstacle: [0x5A] PATH_FOUND dir 130 width 102 mm hits 50..100 (L not found, R found)
+17:04:09 console 4673 [4550 ms]obstacle: side scan started
+17:04:09 console 5133 line_follow: digital IR line sensing started. Submitting requests to motion. Built Nov 18 2026 09:02:46
+17:04:09 console 5614 [5490 ms]obstacle: ends L VALID 4756 us clear, R VALID 4078 us clear (centre 755 us)
+17:04:09 console 5834 [5710 ms]obstacle: fine 120 deg VALID 2558 us MISS
+17:04:09 console 6054 [5930 ms]obstacle: fine 110 deg VALID 2469 us MISS
+17:04:09 mtk3smp-pico/heartbeat/telemetry seq=2 captured_ms=3010 obstacle flags=0 edges=255 width_mm=0
+17:04:09 console 6274 [6150 ms]obstacle: fine 100 deg VALID 2780 us MISS
+17:04:09 console 6574 [6450 ms]obstacle: fine 60 deg NO_ECHO 0 us MISS
+17:04:09 console 6794 [6670 ms]obstacle: fine 70 deg VALID 7365 us MISS
+17:04:09 console 7014 [6890 ms]obstacle: fine 80 deg VALID 3692 us MISS
+17:04:09 console 7015 [6890 ms]obstacle: width 22 mm hits 90..90 bounds 85.0..95.0
+17:04:09 console 7016 [6890 ms]obstacle: side scan completed after 2340 ms
+17:04:09 console 7016 [6890 ms]obstacle: [0x6A] PATH_FOUND dir 50 width 22 mm hits 90..90 (L found, R found)
+17:04:09 console 7353 wifi: joining "Nyx" ...
+17:04:09 console 7374 [7250 ms]obstacle: stop request RELEASED
+17:04:09 console 7375 [7250 ms]obstacle: [0x11] CLEAR dir 90
+17:04:09 console 7613 wifi: link status -> joined AP, waiting for IP (1)
+17:04:09 console 10555 wifi: link status -> joined AP, no IP yet (2)
+17:04:09 console 12035 wifi: link up, ip=172.20.10.3
+17:04:09 mtk3smp-pico/heartbeat/telemetry seq=3 captured_ms=4010 obstacle flags=0 edges=255 width_mm=0
+17:04:09 console 12363 Wi-Fi connected
+17:04:09 console 12363 IP Address: 172.20.10.3
+17:04:09 console 12635 mqtt: connected to 172.20.10.2
+17:04:09 console 12736 remote: ready stopped
+17:04:09 console 12737 remote: ok clear, state stopped
+17:04:09 console 12739 remote: ok map Z RIGHT, state stopped
+17:04:09 console 12739 remote: ok map F LEFT, state stopped
+17:04:09 console 12740 remote: ok map A UTURN, state stopped
+17:04:09 console 12835 terrain: calibration VALID tilt 4.3 deg reading -695 -2345 8247 mm/s2
+17:04:09 mtk3smp-pico/heartbeat/telemetry seq=4 captured_ms=5010 obstacle flags=0 edges=80 width_mm=102
+17:04:09 status CAR v=0 l=0 r=0 d=0 h=0 m=6 os=1 ow=0 od=0 av=WAIT_CLEAR p=0 ro=-1 tr=0 hu=0 lf=0 rq=145 rt=144 cs=2
+17:04:10 dashboard -> car: start
+17:04:10 mtk3smp-pico/heartbeat/telemetry seq=5 captured_ms=6010 obstacle flags=0 edges=80 width_mm=102
+17:04:11 status CAR v=0 l=0 r=0 d=0 h=0 m=6 os=1 ow=0 od=0 av=WAIT_CLEAR p=1 ro=1 tr=0 hu=0 lf=0 rq=169 rt=169 cs=2
+17:04:11 console 14074 remote: ok start, state running
+17:04:11 status CAR v=0 l=0 r=0 d=0 h=0 m=5 os=1 ow=0 od=0 av=IDLE p=1 ro=-2 tr=0 hu=0 lf=0 rq=194 rt=194 cs=2
+17:04:11 console 14076 [13950 ms]obstacle: started by the dashboard
+17:04:11 console 14077 [13950 ms]obstacle: avoid WAIT_CLEAR -> RELEASING (path clear)
+17:04:11 console 14094 [13970 ms]obstacle: avoid RELEASING -> SEND (resume following)
+17:04:11 console 14114 LT t=0 h=0 d=0 00 c=50 m=171,333 n=53
+17:04:11 console 14115 [13990 ms]obstacle: avoid SEND -> IDLE (following)
+17:04:11 console 14383 terrain: speed CRUISING t 14.37 s
+17:04:11 console 14513 LT t=0 h=0 d=39 00 c=48 m=157,347 n=55
+17:04:11 console 14915 LT t=0 h=0 d=90 00 c=48 m=150,350 n=56
+17:04:11 mtk3smp-pico/heartbeat/telemetry seq=6 captured_ms=7010 obstacle flags=106 edges=68 width_mm=22
+17:04:11 mtk3smp-pico/heartbeat/telemetry seq=7 captured_ms=8010 obstacle flags=17 edges=255 width_mm=0
+17:04:11 status CAR v=122 l=125 r=120 d=114 h=-1 m=5 os=1 ow=0 od=0 av=IDLE p=6 ro=-4 tr=-3 hu=0 lf=0 rq=244 rt=244 cs=2
+17:04:11 mtk3smp-pico/heartbeat/telemetry seq=8 captured_ms=9010 obstacle flags=17 edges=255 width_mm=0
+17:04:11 mtk3smp-pico/heartbeat/telemetry seq=9 captured_ms=10010 obstacle flags=17 edges=255 width_mm=0
+17:04:11 console 15314 LT t=0 h=-1 d=136 00 c=47 m=133,341 n=58
+17:04:11 mtk3smp-pico/heartbeat/telemetry seq=10 captured_ms=11010 obstacle flags=17 edges=255 width_mm=0
+17:04:11 mtk3smp-pico/heartbeat/telemetry seq=11 captured_ms=12010 obstacle flags=17 edges=255 width_mm=0
+17:04:11 mtk3smp-pico/heartbeat/telemetry seq=12 captured_ms=13010 obstacle flags=17 edges=255 width_mm=0
+17:04:11 status CAR v=121 l=123 r=120 d=175 h=-2 m=5 os=1 ow=0 od=0 av=IDLE p=3 ro=0 tr=-2 hu=0 lf=0 rq=13 rt=13 cs=2
+17:04:11 mtk3smp-pico/heartbeat/telemetry seq=13 captured_ms=13950 avoid WAIT_CLEAR>RELEASING
+17:04:12 console 15715 LT t=0 h=-2 d=185 00 c=47 m=126,345 n=60
+17:04:12 mtk3smp-pico/heartbeat/telemetry seq=14 captured_ms=13970 avoid RELEASING>SEND
+17:04:12 mtk3smp-pico/heartbeat/telemetry seq=15 captured_ms=13990 avoid SEND>IDLE
+17:04:12 mtk3smp-pico/heartbeat/telemetry seq=16 captured_ms=14010 obstacle flags=17 edges=255 width_mm=0
+17:04:12 console 16115 LT t=0 h=-2 d=236 00 c=46 m=111,344 n=61
+17:04:12 status CAR v=121 l=123 r=119 d=236 h=-2 m=5 os=1 ow=0 od=0 av=IDLE p=-2 ro=-1 tr=-3 hu=0 lf=0 rq=38 rt=38 cs=2
+17:04:12 mtk3smp-pico/heartbeat/telemetry seq=17 captured_ms=15020 obstacle flags=17 edges=255 width_mm=0
+17:04:12 mtk3smp-pico/heartbeat/telemetry seq=18 captured_ms=16020 obstacle flags=17 edges=255 width_mm=0
+17:04:12 console 16513 LT t=0 h=-3 d=282 00 c=44 m=112,367 n=63
+17:04:12 status CAR v=118 l=121 r=116 d=296 h=-3 m=5 os=1 ow=0 od=0 av=IDLE p=6 ro=-3 tr=-4 hu=0 lf=0 rq=63 rt=63 cs=2
+17:04:12 console 16634 LT t=0 h=-3 d=296 01 c=43 m=104,386 n=64
+17:04:13 console 16775 LT t=-23 h=-8 d=313 00 c=43 m=104,386 n=64
+17:04:13 console 16903 terrain: TURNING t 16.88 s
+17:04:13 console 16904 terrain: summary humps 0 (mm:) highest 0 mm lifts 0 turns 1 msg 00 00 01 00 00 00 00 00 00 00 00
+17:04:13 console 16933 LT t=-10 h=-13 d=333 01 c=31 m=6,479 n=65
+17:04:13 status CAR v=126 l=207 r=46 d=357 h=-21 m=5 os=1 ow=0 od=0 av=IDLE p=5 ro=-7 tr=-40 hu=0 lf=0 rq=88 rt=88 cs=2
+17:04:13 console 17135 LT t=-36 h=-21 d=357 00 c=31 m=6,479 n=65
+17:04:13 mtk3smp-pico/heartbeat/telemetry seq=19 captured_ms=17020 obstacle flags=17 edges=255 width_mm=0
+17:04:13 console 17204 terrain: hump ASCENDING lean 2.2 deg t 17.17 s
+17:04:13 console 17273 LT t=-33 h=-26 d=375 01 c=19 m=-117,547 n=66
+17:04:13 console 17434 LT t=-49 h=-34 d=394 00 c=19 m=-117,547 n=66
+17:04:13 console 17504 terrain: hump DESCENDING lean 0.6 deg t 17.47 s
+17:04:13 console 17555 LT t=-49 h=-40 d=412 01 c=5 m=-286,587 n=67
+17:04:13 status CAR v=117 l=131 r=103 d=418 h=-42 m=5 os=1 ow=0 od=0 av=IDLE p=-7 ro=-6 tr=-82 hu=0 lf=0 rq=113 rt=113 cs=2
+17:04:14 console 17733 LT t=-65 h=-50 d=430 00 c=5 m=-286,587 n=67
+17:04:14 console 17853 LT t=-63 h=-56 d=445 01 c=350 m=-471,606 n=68
+17:04:14 console 17993 LT t=-78 h=-63 d=461 00 c=350 m=-471,606 n=68
+17:04:14 status CAR v=123 l=158 r=89 d=479 h=-70 m=5 os=1 ow=0 od=0 av=IDLE p=-15 ro=6 tr=-67 hu=0 lf=0 rq=138 rt=138 cs=2
+17:04:14 console 18136 LT t=-80 h=-70 d=481 01 c=336 m=-634,570 n=69
+17:04:14 mtk3smp-pico/heartbeat/telemetry seq=20 captured_ms=18020 obstacle flags=17 edges=255 width_mm=0
+17:04:14 console 18375 LT t=-101 h=-86 d=511 00 c=336 m=-634,570 n=69
+17:04:15 status CAR v=116 l=186 r=46 d=539 h=-99 m=5 os=1 ow=0 od=0 av=IDLE p=12 ro=22 tr=-74 hu=0 lf=0 rq=163 rt=163 cs=2
+17:04:15 status CAR v=121 l=200 r=43 d=600 h=-139 m=5 os=1 ow=0 od=0 av=IDLE p=-6 ro=4 tr=-79 hu=0 lf=0 rq=188 rt=188 cs=2
+17:04:15 mtk3smp-pico/heartbeat/telemetry seq=21 captured_ms=19020 obstacle flags=17 edges=255 width_mm=0
+17:04:15 console 18473 LT t=-97 h=-91 d=521 01 c=315 m=-851,410 n=70
+17:04:15 console 18873 LT t=-133 h=-118 d=568 01 c=297 m=-964,228 n=71
+17:04:15 console 19093 LT t=-151 h=-136 d=595 00 c=273 m=-1028,-51 n=72
+17:04:15 console 19473 LT t=-169 h=-157 d=641 10 c=259 m=-1008,-221 n=73
+17:04:16 console 19713 LT t=-153 h=-159 d=669 00 c=249 m=-961,-331 n=74
+17:04:16 console 19834 LT t=-164 h=-158 d=684 10 c=249 m=-961,-331 n=74
+17:04:20 console 19974 LT t=-141 h=-156 d=701 00 c=250 m=-963,-314 n=75
+17:04:20 status CAR v=123 l=134 r=113 d=721 h=-153 m=5 os=1 ow=0 od=0 av=IDLE p=5 ro=5 tr=-21 hu=0 lf=0 rq=238 rt=238 cs=2
+17:04:20 mtk3smp-pico/heartbeat/telemetry seq=22 captured_ms=20020 obstacle flags=17 edges=255 width_mm=0
+17:04:20 status CAR v=118 l=65 r=171 d=781 h=-138 m=5 os=1 ow=0 od=0 av=IDLE p=-8 ro=12 tr=36 hu=0 lf=0 rq=7 rt=7 cs=2
+17:04:20 console 20154 LT t=-155 h=-155 d=726 10 c=250 m=-963,-314 n=75
+17:04:20 console 20313 LT t=-135 h=-150 d=742 00 c=259 m=-969,-209 n=76
+17:04:20 console 20493 LT t=-133 h=-145 d=765 10 c=274 m=-973,-45 n=77
+17:04:20 console 20553 LT t=-128 h=-143 d=772 00 c=274 m=-973,-45 n=77
+17:04:20 console 20673 LT t=-131 h=-138 d=786 10 c=274 m=-973,-45 n=77
+17:04:20 console 20813 LT t=-118 h=-133 d=803 00 c=285 m=-970,73 n=78
+17:04:20 console 20973 LT t=-117 h=-127 d=823 10 c=300 m=-915,234 n=79
+17:04:20 console 21053 LT t=-110 h=-125 d=832 00 c=300 m=-915,234 n=79
+17:04:20 console 21193 LT t=-110 h=-119 d=849 10 c=300 m=-915,234 n=79
+17:04:20 console 21353 LT t=-96 h=-111 d=868 00 c=311 m=-870,367 n=80
+17:04:20 console 21453 LT t=-100 h=-106 d=881 10 c=311 m=-870,367 n=80
+17:04:20 console 21484 terrain: hump ASCENDING lean 3.4 deg t 21.47 s
+17:04:20 console 21764 terrain: hump DESCENDING lean 1.6 deg t 21.74 s
+17:04:20 console 21853 LT t=-67 h=-82 d=929 10 c=344 m=-554,638 n=82
+17:04:20 mtk3smp-pico/heartbeat/telemetry seq=23 captured_ms=21020 obstacle flags=17 edges=255 width_mm=0
+17:04:20 console 22173 LT t=-44 h=-59 d=968 00 c=3 m=-300,701 n=83
+17:04:20 console 22333 LT t=-42 h=-52 d=987 10 c=18 m=-81,692 n=84
+17:04:20 console 22393 LT t=-35 h=-50 d=994 00 c=18 m=-81,692 n=84
+17:04:20 console 22673 LT t=-26 h=-38 d=1027 01 c=24 m=9,685 n=85
+17:04:20 console 22763 terrain: hump LEVEL height 7 mm t 22.74 s
+17:04:20 console 22764 terrain: summary humps 1 (mm: 7) highest 7 mm lifts 0 turns 1 msg 71 00 01 07 00 00 00 00 00 00 00
+17:04:20 console 23073 LT t=-48 h=-42 d=1075 01 c=23 m=34,774 n=87
+17:04:20 console 23173 LT t=-50 h=-44 d=1087 00 c=23 m=34,774 n=87
+17:04:21 console 23253 LT t=-45 h=-46 d=1097 01 c=15 m=-80,846 n=88
+17:04:21 console 23393 LT t=-66 h=-51 d=1113 00 c=15 m=-80,846 n=88
+17:04:21 console 23553 LT t=-52 h=-55 d=1133 01 c=4 m=-268,919 n=89
+17:04:21 console 23833 LT t=-82 h=-67 d=1168 00 c=353 m=-473,956 n=90
+17:04:21 console 24233 LT t=-97 h=-85 d=1217 00 c=340 m=-710,905 n=91
+17:04:21 console 24254 LT t=-98 h=-86 d=1220 10 c=340 m=-710,905 n=91
+17:04:21 console 24393 LT t=-83 h=-89 d=1237 00 c=327 m=-904,786 n=92
+17:04:21 mtk3smp-pico/heartbeat/telemetry seq=24 captured_ms=22020 obstacle flags=17 edges=255 width_mm=0
+17:04:21 status CAR v=121 l=164 r=78 d=1265 h=-91 m=5 os=1 ow=0 od=0 av=IDLE p=-4 ro=0 tr=-29 hu=1 lf=0 rq=207 rt=207 cs=2
+17:04:21 console 24673 LT t=-105 h=-93 d=1270 10 c=327 m=-903,760 n=93
+17:04:22 console 24815 LT t=-77 h=-92 d=1290 00 c=327 m=-903,760 n=93
+17:04:22 mtk3smp-pico/heartbeat/telemetry seq=25 captured_ms=23020 obstacle flags=17 edges=255 width_mm=0
+17:04:22 status CAR v=119 l=131 r=107 d=1328 h=-92 m=5 os=1 ow=0 od=0 av=IDLE p=4 ro=11 tr=-30 hu=1 lf=0 rq=232 rt=232 cs=2
+17:04:22 console 24913 LT t=-92 h=-87 d=1300 01 c=322 m=-951,689 n=94
+17:04:22 console 24933 LT t=-92 h=-87 d=1303 00 c=322 m=-951,689 n=94
+17:04:22 status CAR v=127 l=152 r=102 d=1389 h=-99 m=5 os=1 ow=0 od=0 av=IDLE p=-5 ro=-1 tr=-61 hu=1 lf=0 rq=1 rt=1 cs=2
+17:04:22 status CAR v=125 l=142 r=109 d=1449 h=-105 m=5 os=1 ow=0 od=0 av=IDLE p=3 ro=1 tr=-33 hu=1 lf=0 rq=26 rt=26 cs=2
+17:04:23 console 25333 LT t=-92 h=-93 d=1352 00 c=316 m=-985,573 n=96
+17:04:23 console 25413 LT t=-92 h=-93 d=1362 01 c=316 m=-985,573 n=96
+17:04:23 console 25493 LT t=-109 h=-94 d=1372 00 c=316 m=-985,573 n=96
+17:04:23 console 25873 LT t=-95 h=-96 d=1418 01 c=306 m=-1053,425 n=97
+17:04:23 console 25973 LT t=-113 h=-98 d=1429 00 c=307 m=-1021,418 n=98
+17:04:23 console 26193 LT t=-119 h=-107 d=1456 10 c=296 m=-1058,265 n=99
+17:04:23 console 26334 LT t=-92 h=-107 d=1473 00 c=296 m=-1058,265 n=99
+17:04:23 mtk3smp-pico/heartbeat/telemetry seq=26 captured_ms=24020 obstacle flags=17 edges=255 width_mm=0
+17:04:23 status CAR v=122 l=135 r=109 d=1512 h=-106 m=5 os=1 ow=0 od=0 av=IDLE p=1 ro=-1 tr=-17 hu=1 lf=0 rq=51 rt=51 cs=2
+17:04:23 status CAR v=113 l=98 r=128 d=1572 h=-117 m=5 os=1 ow=0 od=0 av=IDLE p=-12 ro=-5 tr=16 hu=1 lf=0 rq=76 rt=76 cs=2
+17:04:23 console 26733 LT t=-106 h=-107 d=1524 00 c=287 m=-1045,129 n=101
+17:04:23 console 26753 LT t=-106 h=-107 d=1526 01 c=287 m=-1045,129 n=101
+17:04:23 console 26893 LT t=-128 h=-113 d=1543 00 c=280 m=-1036,36 n=102
+17:04:23 console 27053 LT t=-115 h=-118 d=1563 01 c=280 m=-1036,36 n=102
+17:04:23 console 27293 LT t=-145 h=-130 d=1593 00 c=271 m=-1004,-78 n=103
+17:04:23 console 27413 LT t=-142 h=-135 d=1607 01 c=249 m=-930,-311 n=104
+17:04:23 mtk3smp-pico/heartbeat/telemetry seq=27 captured_ms=25020 obstacle flags=17 edges=255 width_mm=0
+17:04:23 status CAR v=126 l=206 r=46 d=1634 h=-148 m=5 os=1 ow=0 od=0 av=IDLE p=-5 ro=20 tr=-83 hu=1 lf=0 rq=101 rt=101 cs=2
+17:04:23 console 27644 terrain: hump ASCENDING lean 2.2 deg t 27.62 s
+17:04:24 console 27675 LT t=-168 h=-153 d=1642 00 c=236 m=-841,-423 n=105
+17:04:24 mtk3smp-pico/heartbeat/telemetry seq=28 captured_ms=26020 obstacle flags=17 edges=255 width_mm=0
+17:04:24 mtk3smp-pico/heartbeat/telemetry seq=29 captured_ms=27020 obstacle flags=17 edges=255 width_mm=0
+17:04:24 console 27884 terrain: hump DESCENDING lean 0.3 deg t 27.85 s
+17:04:24 console 28073 LT t=-185 h=-173 d=1687 00 c=227 m=-757,-479 n=106
+17:04:24 console 28095 LT t=-186 h=-174 d=1690 10 c=227 m=-757,-479 n=106
+17:04:24 status CAR v=120 l=180 r=61 d=1697 h=-178 m=5 os=1 ow=0 od=0 av=IDLE p=-9 ro=3 tr=-63 hu=1 lf=0 rq=127 rt=126 cs=2
+17:04:24 mtk3smp-pico/heartbeat/telemetry seq=30 captured_ms=28020 obstacle flags=17 edges=255 width_mm=0
+17:04:24 console 28233 LT t=-172 h=-178 d=1706 00 c=210 m=-623,-559 n=107
+17:04:24 console 28493 LT t=-195 h=-183 d=1737 10 c=214 m=-636,-514 n=108
+17:04:24 status CAR v=117 l=96 r=138 d=1754 h=-183 m=5 os=1 ow=0 od=0 av=IDLE p=-3 ro=5 tr=-16 hu=1 lf=0 rq=151 rt=151 cs=2
+17:04:24 console 28634 LT t=-168 h=-183 d=1754 00 c=214 m=-636,-514 n=108
+17:04:24 console 28715 LT t=-180 h=-178 d=1765 01 c=214 m=-623,-505 n=109
+17:04:25 console 28774 LT t=-194 h=-179 d=1773 00 c=214 m=-623,-505 n=109
+17:04:25 console 28993 LT t=-180 h=-183 d=1801 01 c=217 m=-630,-469 n=110
+17:04:25 console 29093 LT t=-199 h=-184 d=1813 00 c=217 m=-630,-469 n=110
+17:04:25 status CAR v=122 l=175 r=70 d=1818 h=-188 m=5 os=1 ow=0 od=0 av=IDLE p=-1 ro=1 tr=-36 hu=1 lf=0 rq=176 rt=176 cs=2
+17:04:25 mtk3smp-pico/heartbeat/telemetry seq=31 captured_ms=29020 obstacle flags=17 edges=255 width_mm=0
+17:04:26 console 29223 terrain: hump ASCENDING lean 3.4 deg t 29.20 s
+17:04:26 status CAR v=60 l=37 r=83 d=1863 h=-197 m=5 os=1 ow=0 od=0 av=IDLE p=11 ro=0 tr=10 hu=1 lf=0 rq=201 rt=201 cs=2
+17:04:26 status CAR v=125 l=127 r=123 d=1930 h=-194 m=5 os=1 ow=0 od=0 av=IDLE p=-8 ro=2 tr=-33 hu=1 lf=0 rq=226 rt=226 cs=2
+17:04:26 console 29333 LT t=-207 h=-195 d=1843 10 c=216 m=-608,-448 n=111
+17:04:26 console 29353 line HUMP SLOW h=-197 d=1846
+17:04:26 console 29533 line HUMP DONE h=-200 d=1857
+17:04:26 console 29543 terrain: hump DESCENDING lean 1.6 deg t 29.51 s
+17:04:26 console 29544 terrain: STRAIGHT t 29.51 s
+17:04:26 console 29653 LT t=-180 h=-195 d=1866 00 c=212 m=-568,-450 n=112
+17:04:26 console 29884 terrain: TURNING t 29.85 s
+17:04:26 console 29884 terrain: summary humps 1 (mm: 7) highest 7 mm lifts 0 turns 2 msg 71 00 02 07 00 00 00 00 00 00 00
+17:04:26 console 30053 LT t=-194 h=-194 d=1920 00 c=226 m=-631,-368 n=113
+17:04:26 mtk3smp-pico/heartbeat/telemetry seq=32 captured_ms=30020 obstacle flags=17 edges=255 width_mm=0
+17:04:26 console 30204 terrain: STRAIGHT t 30.18 s
+17:04:26 console 30333 line BARCODE BRAKE h=-193 d=1954
+17:04:26 console 30453 LT t=-194 h=-194 d=1960 00 c=229 m=-641,-344 n=114
+17:04:26 console 30513 LT t=-194 h=-193 d=1959 01 c=229 m=-641,-344 n=114
+17:04:26 console 30533 LT t=-194 h=-193 d=1959 11 c=229 m=-641,-344 n=114
+17:04:26 console 30534 line TRACK t=-194 h=-193 d=1959
+17:04:26 console 30534 line BARCODE BACK h=-193 d=1959
+17:04:26 console 30556 terrain: speed STATIONARY t 30.54 s
+17:04:28 status CAR v=-134 l=-140 r=-129 d=1946 h=-193 m=1 os=1 ow=0 od=0 av=IDLE p=-2 ro=-1 tr=6 hu=1 lf=0 rq=252 rt=251 cs=2
+17:04:28 mtk3smp-pico/heartbeat/telemetry seq=33 captured_ms=30410 line TRACK t=-194 h=-193 d=1959
+17:04:28 console 30824 terrain: speed CRUISING t 30.80 s
+17:04:28 status CAR v=-222 l=-221 r=-224 d=1798 h=-193 m=6 os=1 ow=0 od=0 av=IDLE p=-61 ro=69 tr=2 hu=1 lf=1 rq=20 rt=20 cs=2
+17:04:28 console 30933 LT t=-194 h=-193 d=1852 11 c=211 m=-579,-481 n=116
+17:04:28 console 31073 line BARCODE CREEP h=-193 d=1808
+17:04:28 console 31094 line JUNCTION STRAIGHT t=-192 h=-193 d=1803
+17:04:28 console 31095 terrain: LIFTED up 1.31 g t 31.08 s
+17:04:28 console 31095 terrain: summary humps 1 (mm: 7) highest 7 mm lifts 1 turns 2 msg 71 10 02 07 00 00 00 00 00 00 00
+17:04:28 console 31103 [30980 ms]obstacle: car lifted, motors stopped until Start
+17:04:28 console 31103 [30980 ms]obstacle: stopped by the dashboard
+17:04:28 console 31113 line BARCODE DONE h=-193 d=1800
+17:04:28 console 31503 terrain: speed STATIONARY t 31.49 s
+17:04:28 mtk3smp-pico/heartbeat/telemetry seq=34 captured_ms=30970 line JUNCTION STRAIGHT t=-192 h=-193 d=1803
+17:04:28 mtk3smp-pico/heartbeat/telemetry seq=35 captured_ms=31020 obstacle flags=17 edges=255 width_mm=0
+17:04:28 mtk3smp-pico/heartbeat/telemetry seq=36 captured_ms=32020 obstacle flags=17 edges=255 width_mm=0
+17:04:28 status CAR v=0 l=0 r=0 d=1797 h=-193 m=6 os=1 ow=0 od=0 av=IDLE p=68 ro=-51 tr=0 hu=1 lf=1 rq=95 rt=95 cs=2
+17:04:29 status CAR v=0 l=0 r=0 d=1797 h=-193 m=6 os=1 ow=0 od=0 av=IDLE p=80 ro=-41 tr=0 hu=1 lf=1 rq=120 rt=120 cs=2
+17:04:30 mtk3smp-pico/heartbeat/telemetry seq=37 captured_ms=33020 obstacle flags=17 edges=255 width_mm=0
+17:04:30 status CAR v=0 l=0 r=0 d=1797 h=-193 m=6 os=1 ow=0 od=0 av=IDLE p=77 ro=-81 tr=0 hu=1 lf=1 rq=145 rt=145 cs=2
+17:04:30 status CAR v=0 l=0 r=0 d=1797 h=-193 m=6 os=1 ow=0 od=0 av=IDLE p=65 ro=-96 tr=0 hu=1 lf=1 rq=170 rt=170 cs=2
+17:04:31 mtk3smp-pico/heartbeat/telemetry seq=38 captured_ms=34020 obstacle flags=17 edges=255 width_mm=0
+17:04:31 console 34763 [34640 ms]obstacle: car lifted, motors stopped until Start
+17:04:31 console 34783 terrain: LIFTED up 1.31 g t 34.75 s
+17:04:31 console 34784 terrain: summary humps 1 (mm: 7) highest 7 mm lifts 2 turns 2 msg 71 20 02 07 00 00 00 00 00 00 00
+17:04:31 status CAR v=0 l=0 r=0 d=1797 h=-193 m=6 os=1 ow=0 od=0 av=IDLE p=-8 ro=-9 tr=0 hu=1 lf=2 rq=220 rt=220 cs=2
+17:04:31 mtk3smp-pico/heartbeat/telemetry seq=39 captured_ms=35020 obstacle flags=17 edges=255 width_mm=0
+17:04:31 status CAR v=0 l=0 r=0 d=1797 h=-193 m=6 os=1 ow=0 od=0 av=IDLE p=32 ro=57 tr=0 hu=1 lf=2 rq=245 rt=245 cs=2
+17:04:32 status CAR v=0 l=0 r=0 d=1797 h=-193 m=6 os=1 ow=0 od=0 av=IDLE p=7 ro=6 tr=0 hu=1 lf=2 rq=14 rt=14 cs=2
+17:04:32 mtk3smp-pico/heartbeat/telemetry seq=40 captured_ms=36020 obstacle flags=17 edges=255 width_mm=0
+17:04:32 status CAR v=0 l=0 r=0 d=1797 h=-193 m=6 os=1 ow=0 od=0 av=IDLE p=3 ro=-2 tr=0 hu=1 lf=2 rq=39 rt=39 cs=2
+17:04:33 status CAR v=0 l=0 r=0 d=1797 h=-193 m=6 os=1 ow=0 od=0 av=IDLE p=-1 ro=-3 tr=0 hu=1 lf=2 rq=64 rt=64 cs=2
+17:04:33 mtk3smp-pico/heartbeat/telemetry seq=41 captured_ms=37020 obstacle flags=17 edges=255 width_mm=0
+17:04:33 status CAR v=0 l=0 r=0 d=1797 h=-193 m=6 os=1 ow=0 od=0 av=IDLE p=1 ro=-4 tr=0 hu=1 lf=2 rq=89 rt=89 cs=2
+17:04:34 dashboard -> car: start
+17:04:34 console 37914 remote: ok start, state running
+17:04:35 mtk3smp-pico/heartbeat/telemetry seq=42 captured_ms=37800 avoid WAIT_CLEAR>RELEASING
+17:04:35 status CAR v=105 l=107 r=103 d=1811 h=-193 m=5 os=1 ow=0 od=0 av=IDLE p=1 ro=-4 tr=-1 hu=1 lf=2 rq=114 rt=114 cs=2
+17:04:35 status CAR v=120 l=121 r=119 d=1873 h=-193 m=5 os=1 ow=0 od=0 av=IDLE p=32 ro=0 tr=0 hu=1 lf=2 rq=139 rt=139 cs=2
+17:04:36 console 37923 [37800 ms]obstacle: started by the dashboard
+17:04:36 console 37924 [37800 ms]obstacle: avoid WAIT_CLEAR -> RELEASING (path clear)
+17:04:36 console 37943 [37820 ms]obstacle: avoid RELEASING -> SEND (resume following)
+17:04:36 console 37954 LT t=-193 h=-193 d=1797 00 c=48 m=170,359 n=131
+17:04:36 console 37963 [37840 ms]obstacle: avoid SEND -> IDLE (following)
+17:04:36 console 38083 terrain: speed CRUISING t 38.06 s
+17:04:36 console 38353 LT t=-193 h=-193 d=1839 00 c=48 m=164,364 n=132
+17:04:36 status CAR v=119 l=122 r=117 d=1993 h=-195 m=5 os=1 ow=0 od=0 av=IDLE p=3 ro=-3 tr=-3 hu=1 lf=2 rq=189 rt=189 cs=2
+17:04:36 status CAR v=118 l=123 r=113 d=2054 h=-195 m=5 os=1 ow=0 od=0 av=IDLE p=9 ro=0 tr=-17 hu=1 lf=2 rq=214 rt=214 cs=2
+17:04:37 console 38753 LT t=-193 h=-193 d=1887 00 c=46 m=149,377 n=134
+17:04:37 console 39153 LT t=-193 h=-194 d=1936 00 c=45 m=139,384 n=135
+17:04:37 console 39553 LT t=-193 h=-195 d=1984 00 c=44 m=121,384 n=136
+17:04:37 console 39634 LT t=-193 h=-195 d=1993 10 c=44 m=121,384 n=136
+17:04:37 console 39653 LT t=-193 h=-195 d=1996 00 c=43 m=109,387 n=137
+17:04:37 console 39673 LT t=-193 h=-195 d=1998 10 c=43 m=109,387 n=137
+17:04:37 console 39713 LT t=-180 h=-195 d=2003 00 c=43 m=109,387 n=137
+17:04:37 console 40113 LT t=-195 h=-194 d=2051 00 c=45 m=120,363 n=138
+17:04:37 mtk3smp-pico/heartbeat/telemetry seq=43 captured_ms=37820 avoid RELEASING>SEND
+17:04:37 status CAR v=124 l=171 r=78 d=2114 h=-188 m=5 os=1 ow=0 od=0 av=IDLE p=-2 ro=1 tr=17 hu=1 lf=2 rq=239 rt=239 cs=2
+17:04:37 status CAR v=59 l=57 r=61 d=2171 h=-191 m=5 os=1 ow=0 od=0 av=IDLE p=-8 ro=-14 tr=0 hu=1 lf=2 rq=8 rt=8 cs=2
+17:04:38 console 40193 LT t=-195 h=-195 d=2061 10 c=45 m=120,363 n=138
+17:04:38 console 40273 LT t=-179 h=-194 d=2070 00 c=44 m=105,367 n=139
+17:04:38 console 40473 LT t=-174 h=-186 d=2095 01 c=51 m=157,301 n=140
+17:04:38 console 40653 LT t=-205 h=-190 d=2117 00 c=51 m=157,301 n=140
+17:04:38 console 40724 terrain: TURNING t 40.70 s
+17:04:38 console 40724 terrain: summary humps 1 (mm: 7) highest 7 mm lifts 2 turns 3 msg 71 20 03 07 00 00 00 00 00 00 00
+17:04:38 status CAR v=24 l=25 r=23 d=2182 h=-192 m=5 os=1 ow=0 od=0 av=IDLE p=-5 ro=-5 tr=-1 hu=1 lf=2 rq=33 rt=33 cs=2
+17:04:38 console 41004 terrain: hump ASCENDING lean 5.3 deg t 40.99 s
+17:04:38 console 41013 line HUMP SLOW h=-191 d=2162
+17:04:38 console 41053 LT t=-191 h=-191 d=2167 00 c=47 m=123,341 n=142
+17:04:38 console 41323 terrain: STRAIGHT t 41.30 s
+17:04:38 console 41324 terrain: speed STATIONARY t 41.30 s
+17:04:38 console 41453 LT t=-191 h=-191 d=2177 00 c=46 m=116,347 n=143
+17:04:38 console 41634 line HUMP DONE h=-192 d=2182
+17:04:38 console 41644 terrain: hump DESCENDING lean 1.5 deg t 41.61 s
+17:04:38 console 41644 terrain: speed CRUISING t 41.61 s
+17:04:38 mtk3smp-pico/heartbeat/telemetry seq=44 captured_ms=37840 avoid SEND>IDLE
+17:04:38 console 41853 LT t=-191 h=-191 d=2205 00 c=45 m=109,353 n=144
+17:04:38 console 41913 LT t=-191 h=-191 d=2213 01 c=45 m=109,353 n=144
+17:04:40 console 42015 LT t=-209 h=-194 d=2229 00 c=45 m=115,363 n=145
+17:04:40 mtk3smp-pico/heartbeat/telemetry seq=45 captured_ms=38020 obstacle flags=17 edges=255 width_mm=0
+17:04:40 status CAR v=133 l=171 r=95 d=2242 h=-198 m=5 os=1 ow=0 od=0 av=IDLE p=0 ro=-3 tr=1 hu=1 lf=2 rq=58 rt=58 cs=2
+17:04:40 status CAR v=121 l=163 r=80 d=2304 h=-213 m=5 os=1 ow=0 od=0 av=IDLE p=-12 ro=-12 tr=-46 hu=1 lf=2 rq=83 rt=83 cs=2
+17:04:40 console 42194 LT t=-194 h=-196 d=2249 01 c=45 m=115,363 n=145
+17:04:40 console 42204 terrain: TURNING t 42.18 s
+17:04:40 console 42204 terrain: summary humps 1 (mm: 7) highest 7 mm lifts 2 turns 4 msg 71 20 04 07 00 00 00 00 00 00 00
+17:04:40 console 42373 LT t=-218 h=-203 d=2271 00 c=39 m=75,411 n=146
+17:04:40 console 42773 LT t=-233 h=-221 d=2322 00 c=27 m=-40,505 n=147
+17:04:40 console 42974 LT t=-245 h=-233 d=2346 10 c=13 m=-189,579 n=148
+17:04:40 console 43073 LT t=-231 h=-237 d=2358 00 c=13 m=-189,579 n=148
+17:04:40 console 43134 LT t=-237 h=-234 d=2365 01 c=358 m=-360,604 n=149
+17:04:40 console 43393 LT t=-263 h=-248 d=2398 00 c=358 m=-360,604 n=149
+17:04:40 console 43513 LT t=-261 h=-254 d=2413 01 c=345 m=-533,596 n=150
+17:04:40 mtk3smp-pico/heartbeat/telemetry seq=46 captured_ms=39020 obstacle flags=17 edges=255 width_mm=0
+17:04:40 console 43834 LT t=-290 h=-275 d=2452 00 c=330 m=-704,527 n=151
+17:04:40 console 43933 LT t=-287 h=-281 d=2464 01 c=330 m=-704,527 n=151
+17:04:40 mtk3smp-pico/heartbeat/telemetry seq=47 captured_ms=40020 obstacle flags=17 edges=255 width_mm=0
+17:04:40 status CAR v=120 l=209 r=32 d=2488 h=-293 m=5 os=1 ow=0 od=0 av=IDLE p=0 ro=8 tr=-33 hu=1 lf=2 rq=158 rt=158 cs=2
+17:04:40 mtk3smp-pico/heartbeat/telemetry seq=48 captured_ms=41020 obstacle flags=17 edges=255 width_mm=0
+17:04:40 console 44335 LT t=-326 h=-311 d=2515 01 c=297 m=-975,224 n=153
+17:04:40 mtk3smp-pico/heartbeat/telemetry seq=49 captured_ms=42020 obstacle flags=17 edges=255 width_mm=0
+17:04:40 mtk3smp-pico/heartbeat/telemetry seq=50 captured_ms=43020 obstacle flags=17 edges=255 width_mm=0
+17:04:40 console 44553 LT t=-342 h=-327 d=2539 00 c=277 m=-1031,-1 n=154
+17:04:40 status CAR v=122 l=199 r=46 d=2549 h=-333 m=5 os=1 ow=0 od=0 av=IDLE p=1 ro=12 tr=-81 hu=1 lf=2 rq=183 rt=183 cs=2
+17:04:42 mtk3smp-pico/heartbeat/telemetry seq=51 captured_ms=44020 obstacle flags=17 edges=255 width_mm=0
+17:04:43 console 44913 LT t=-359 h=-347 d=2582 10 c=262 m=-1017,-180 n=155
+17:04:43 status CAR v=117 l=89 r=146 d=2609 h=-348 m=5 os=1 ow=0 od=0 av=IDLE p=-3 ro=7 tr=-74 hu=1 lf=2 rq=208 rt=208 cs=2
+17:04:43 status CAR v=128 l=164 r=92 d=2671 h=-345 m=5 os=1 ow=0 od=0 av=IDLE p=-3 ro=3 tr=22 hu=1 lf=2 rq=233 rt=233 cs=2
+17:04:43 console 45134 LT t=-342 h=-348 d=2609 00 c=250 m=-974,-318 n=156
+17:04:43 console 45273 LT t=-357 h=-348 d=2626 10 c=251 m=-958,-304 n=157
+17:04:43 console 45433 LT t=-331 h=-346 d=2645 00 c=253 m=-960,-275 n=158
+17:04:43 console 45613 LT t=-345 h=-344 d=2668 10 c=253 m=-960,-275 n=158
+17:04:43 console 45793 LT t=-324 h=-339 d=2690 00 c=259 m=-966,-207 n=159
+17:04:43 console 45913 LT t=-328 h=-335 d=2706 10 c=259 m=-966,-207 n=159
+17:04:43 console 46053 LT t=-315 h=-330 d=2723 00 c=275 m=-977,-35 n=160
+17:04:43 mtk3smp-pico/heartbeat/telemetry seq=52 captured_ms=45020 obstacle flags=17 edges=255 width_mm=0
+17:04:43 console 46193 LT t=-316 h=-325 d=2740 10 c=290 m=-951,130 n=161
+17:04:43 console 46293 LT t=-307 h=-322 d=2752 00 c=290 m=-951,130 n=161
+17:04:43 console 46433 LT t=-307 h=-316 d=2769 10 c=290 m=-951,130 n=161
+17:04:43 console 46533 LT t=-298 h=-313 d=2781 00 c=302 m=-914,261 n=162
+17:04:43 console 46673 LT t=-298 h=-307 d=2798 10 c=302 m=-914,261 n=162
+17:04:43 console 46833 LT t=-284 h=-299 d=2817 00 c=315 m=-842,407 n=163
+17:04:43 console 46933 LT t=-287 h=-293 d=2829 10 c=315 m=-842,407 n=163
+17:04:43 mtk3smp-pico/heartbeat/telemetry seq=53 captured_ms=46020 obstacle flags=17 edges=255 width_mm=0
+17:04:43 status CAR v=118 l=43 r=193 d=2853 h=-284 m=5 os=1 ow=0 od=0 av=IDLE p=-3 ro=-7 tr=24 hu=1 lf=2 rq=52 rt=52 cs=2
+17:04:43 console 47333 LT t=-254 h=-269 d=2878 10 c=346 m=-532,655 n=165
+17:04:43 mtk3smp-pico/heartbeat/telemetry seq=54 captured_ms=47020 obstacle flags=17 edges=255 width_mm=0
+17:04:43 console 47573 LT t=-236 h=-251 d=2907 00 c=1 m=-326,698 n=166
+17:04:43 status CAR v=121 l=50 r=192 d=2914 h=-247 m=5 os=1 ow=0 od=0 av=IDLE p=6 ro=-5 tr=75 hu=1 lf=2 rq=77 rt=77 cs=2
+17:04:44 console 47695 LT t=-236 h=-245 d=2924 10 c=16 m=-116,698 n=167
+17:04:46 console 47793 LT t=-227 h=-242 d=2933 00 c=16 m=-116,698 n=167
+17:04:46 status CAR v=119 l=54 r=185 d=2974 h=-224 m=5 os=1 ow=0 od=0 av=IDLE p=4 ro=-2 tr=52 hu=1 lf=2 rq=102 rt=102 cs=2
+17:04:46 mtk3smp-pico/heartbeat/telemetry seq=55 captured_ms=48020 obstacle flags=17 edges=255 width_mm=0
+17:04:46 status CAR v=24 l=26 r=23 d=3023 h=-233 m=5 os=1 ow=0 od=0 av=IDLE p=-12 ro=-19 tr=-23 hu=1 lf=2 rq=127 rt=127 cs=2
+17:04:46 console 48073 LT t=-216 h=-228 d=2966 01 c=24 m=5,690 n=168
+17:04:46 console 48204 terrain: hump ASCENDING lean 3.5 deg t 48.18 s
+17:04:46 console 48453 LT t=-237 h=-231 d=3012 00 c=31 m=125,679 n=169
+17:04:46 console 48473 line HUMP SLOW h=-232 d=3014
+17:04:46 console 48503 terrain: hump DESCENDING lean 1.4 deg t 48.48 s
+17:04:46 console 48823 terrain: speed STATIONARY t 48.80 s
+17:04:46 console 48824 terrain: STRAIGHT t 48.80 s
+17:04:46 console 48853 LT t=-232 h=-234 d=3027 00 c=19 m=-31,817 n=171
+17:04:46 console 48953 LT t=-232 h=-234 d=3029 01 c=19 m=-31,817 n=171
+17:04:46 console 49053 LT t=-249 h=-234 d=3032 00 c=19 m=-31,817 n=171
+17:04:46 console 49164 terrain: speed CRUISING t 49.14 s
+17:04:46 console 49173 line HUMP DONE h=-236 d=3036
+17:04:46 console 49233 LT t=-235 h=-236 d=3039 01 c=16 m=-67,846 n=172
+17:04:46 console 49373 LT t=-255 h=-240 d=3057 00 c=16 m=-67,846 n=172
+17:04:46 console 49464 terrain: TURNING t 49.44 s
+17:04:46 console 49464 terrain: summary humps 1 (mm: 7) highest 7 mm lifts 2 turns 5 msg 71 20 05 07 00 00 00 00 00 00 00
+17:04:46 mtk3smp-pico/heartbeat/telemetry seq=56 captured_ms=49020 obstacle flags=17 edges=255 width_mm=0
+17:04:46 console 49773 LT t=-272 h=-260 d=3109 00 c=351 m=-503,948 n=174
+17:04:46 console 49873 LT t=-278 h=-266 d=3121 10 c=351 m=-503,948 n=174
+17:04:46 console 49993 LT t=-263 h=-269 d=3136 00 c=351 m=-503,948 n=174
+17:04:46 console 50333 LT t=-289 h=-277 d=3178 10 c=334 m=-791,848 n=176
+17:04:46 console 50455 LT t=-262 h=-277 d=3194 00 c=334 m=-791,848 n=176
+17:04:46 console 50535 LT t=-277 h=-272 d=3205 01 c=330 m=-861,793 n=177
+17:04:46 mtk3smp-pico/heartbeat/telemetry seq=57 captured_ms=50020 obstacle flags=17 edges=255 width_mm=0
+17:04:46 console 50613 LT t=-290 h=-275 d=3213 00 c=330 m=-861,793 n=177
+17:04:46 status CAR v=126 l=183 r=69 d=3217 h=-278 m=5 os=1 ow=0 od=0 av=IDLE p=-4 ro=-6 tr=54 hu=1 lf=2 rq=228 rt=227 cs=2
+17:04:47 console 50974 LT t=-278 h=-279 d=3258 01 c=321 m=-944,664 n=179
+17:04:47 console 51073 LT t=-296 h=-281 d=3270 00 c=321 m=-944,664 n=179
+17:04:47 status CAR v=118 l=187 r=50 d=3277 h=-286 m=5 os=1 ow=0 od=0 av=IDLE p=1 ro=7 tr=-1 hu=1 lf=2 rq=252 rt=252 cs=2
+17:04:47 mtk3smp-pico/heartbeat/telemetry seq=58 captured_ms=51020 obstacle flags=17 edges=255 width_mm=0
+17:04:47 console 51296 LT t=-304 h=-292 d=3299 10 c=311 m=-1032,519 n=180
+17:04:47 console 51493 LT t=-285 h=-291 d=3321 00 c=304 m=-1072,405 n=181
+17:04:47 status CAR v=121 l=119 r=123 d=3338 h=-290 m=5 os=1 ow=0 od=0 av=IDLE p=-2 ro=11 tr=-9 hu=1 lf=2 rq=21 rt=21 cs=2
+17:04:47 console 51694 LT t=-305 h=-293 d=3345 10 c=304 m=-1072,405 n=181
+17:04:48 console 51833 LT t=-278 h=-293 d=3362 00 c=303 m=-1058,373 n=182
+17:04:48 status CAR v=120 l=134 r=107 d=3400 h=-291 m=5 os=1 ow=0 od=0 av=IDLE p=2 ro=-4 tr=41 hu=1 lf=2 rq=46 rt=46 cs=2
+17:04:48 mtk3smp-pico/heartbeat/telemetry seq=59 captured_ms=52020 obstacle flags=17 edges=255 width_mm=0
+17:04:48 console 52233 LT t=-291 h=-292 d=3412 00 c=306 m=-1017,391 n=183
+17:04:48 console 52534 LT t=-291 h=-292 d=3449 01 c=298 m=-1039,272 n=184
+17:04:48 console 52543 terrain: STRAIGHT t 52.52 s
+17:04:48 status CAR v=123 l=146 r=100 d=3461 h=-294 m=5 os=1 ow=0 od=0 av=IDLE p=3 ro=-2 tr=-1 hu=1 lf=2 rq=71 rt=71 cs=2
+17:04:48 console 52655 LT t=-311 h=-296 d=3463 00 c=293 m=-1033,195 n=185
+17:04:49 console 52813 LT t=-298 h=-301 d=3484 01 c=293 m=-1033,195 n=185
+17:04:49 console 52864 terrain: TURNING t 52.83 s
+17:04:49 console 52864 terrain: summary humps 1 (mm: 7) highest 7 mm lifts 2 turns 6 msg 71 20 06 07 00 00 00 00 00 00 00
+17:04:49 console 53013 LT t=-325 h=-310 d=3508 00 c=280 m=-1034,35 n=186
+17:04:49 status CAR v=130 l=170 r=90 d=3524 h=-315 m=5 os=1 ow=0 od=0 av=IDLE p=-6 ro=-6 tr=27 hu=1 lf=2 rq=96 rt=96 cs=2
+17:04:49 console 53135 LT t=-322 h=-315 d=3524 01 c=280 m=-1034,35 n=186
+17:04:49 mtk3smp-pico/heartbeat/telemetry seq=60 captured_ms=53020 obstacle flags=17 edges=255 width_mm=0
+17:04:49 console 53313 LT t=-340 h=-325 d=3546 00 c=260 m=-981,-197 n=187
+17:04:49 console 53433 LT t=-338 h=-331 d=3561 01 c=260 m=-981,-197 n=187
+17:04:49 status CAR v=123 l=210 r=37 d=3585 h=-343 m=5 os=1 ow=0 od=0 av=IDLE p=-12 ro=9 tr=-28 hu=1 lf=2 rq=121 rt=121 cs=2
+17:04:49 console 53635 LT t=-358 h=-343 d=3585 00 c=244 m=-892,-355 n=188
+17:04:50 console 54033 LT t=-376 h=-364 d=3633 00 c=215 m=-662,-542 n=190
+17:04:50 status CAR v=119 l=173 r=65 d=3645 h=-370 m=5 os=1 ow=0 od=0 av=IDLE p=2 ro=5 tr=-70 hu=1 lf=2 rq=146 rt=146 cs=2
+17:04:50 mtk3smp-pico/heartbeat/telemetry seq=61 captured_ms=54020 obstacle flags=17 edges=255 width_mm=0
+17:04:50 console 54055 LT t=-377 h=-365 d=3636 10 c=215 m=-662,-542 n=190
+17:04:50 console 54193 LT t=-363 h=-369 d=3652 00 c=215 m=-662,-542 n=190
+17:04:50 console 54453 LT t=-386 h=-374 d=3684 10 c=215 m=-649,-519 n=191
+17:04:50 console 54573 LT t=-361 h=-376 d=3698 00 c=208 m=-587,-535 n=192
+17:04:52 status CAR v=120 l=53 r=188 d=3705 h=-371 m=5 os=1 ow=0 od=0 av=IDLE p=0 ro=-13 tr=-36 hu=1 lf=2 rq=171 rt=171 cs=2
+17:04:52 console 54973 LT t=-374 h=-376 d=3748 00 c=218 m=-630,-456 n=193
+17:04:52 status CAR v=121 l=123 r=119 d=3767 h=-376 m=5 os=1 ow=0 od=0 av=IDLE p=-2 ro=9 tr=-20 hu=1 lf=2 rq=196 rt=196 cs=2
+17:04:52 mtk3smp-pico/heartbeat/telemetry seq=62 captured_ms=55020 obstacle flags=17 edges=255 width_mm=0
+17:04:52 status CAR v=119 l=111 r=128 d=3828 h=-382 m=5 os=1 ow=0 od=0 av=IDLE p=3 ro=3 tr=-2 hu=1 lf=2 rq=221 rt=221 cs=2
+17:04:52 console 55183 terrain: STRAIGHT t 55.15 s
+17:04:52 console 55233 LT t=-374 h=-377 d=3779 01 c=221 m=-635,-419 n=194
+17:04:52 console 55333 LT t=-394 h=-379 d=3791 00 c=221 m=-635,-419 n=194
+17:04:52 console 55733 LT t=-380 h=-382 d=3841 00 c=222 m=-622,-393 n=195
+17:04:52 console 55893 LT t=-380 h=-382 d=3860 01 c=230 m=-646,-344 n=196
+17:04:52 console 55974 LT t=-398 h=-383 d=3870 00 c=230 m=-646,-344 n=196
+17:04:52 console 56135 terrain: TURNING t 56.12 s
+17:04:54 console 56135 terrain: summary humps 1 (mm: 7) highest 7 mm lifts 2 turns 7 msg 71 20 07 07 00 00 00 00 00 00 00
+17:04:54 console 56215 LT t=-407 h=-395 d=3901 10 c=226 m=-623,-357 n=197
+17:04:54 mtk3smp-pico/heartbeat/telemetry seq=63 captured_ms=56020 obstacle flags=17 edges=255 width_mm=0
+17:04:54 status CAR v=57 l=77 r=38 d=3945 h=-392 m=0 os=1 ow=0 od=0 av=IDLE p=2 ro=1 tr=72 hu=1 lf=2 rq=15 rt=15 cs=2
+17:04:54 status CAR v=-329 l=-332 r=-326 d=3844 h=-391 m=1 os=1 ow=0 od=0 av=IDLE p=-21 ro=3 tr=2 hu=1 lf=2 rq=40 rt=40 cs=2
+17:04:54 console 56373 LT t=-378 h=-393 d=3918 00 c=226 m=-623,-357 n=197
+17:04:54 console 56513 line BARCODE BRAKE h=-389 d=3937
+17:04:54 console 56713 line TRACK t=-391 h=-392 d=3945
+17:04:54 console 56714 line BARCODE BACK h=-392 d=3945
+17:04:54 console 56724 terrain: speed STATIONARY t 56.71 s
+17:04:54 console 56773 LT t=-391 h=-392 d=3944 00 c=230 m=-644,-344 n=199
+17:04:54 console 57054 terrain: STRAIGHT t 57.04 s
+17:04:54 console 57054 terrain: speed CRUISING t 57.04 s
+17:04:54 console 57173 LT t=-391 h=-391 d=3831 00 c=226 m=-631,-368 n=200
+17:04:54 console 57293 line BARCODE CREEP h=-391 d=3793
+17:04:54 console 57353 LT t=-389 h=-390 d=3783 10 c=226 m=-631,-368 n=200
+17:04:54 console 57413 LT t=-384 h=-390 d=3782 00 c=211 m=-564,-454 n=201
+17:04:54 console 57684 terrain: hump ASCENDING lean 4.2 deg t 57.65 s
+17:04:54 console 57684 terrain: hump DESCENDING lean 2.2 deg t 57.65 s
+17:04:54 console 57814 LT t=-389 h=-390 d=3796 00 c=213 m=-582,-452 n=202
+17:04:54 mtk3smp-pico/heartbeat/telemetry seq=64 captured_ms=56590 line TRACK t=-391 h=-392 d=3945
+17:04:54 status CAR v=27 l=26 r=29 d=3806 h=-389 m=5 os=1 ow=0 od=0 av=IDLE p=5 ro=0 tr=2 hu=1 lf=2 rq=90 rt=90 cs=2
+17:04:54 status CAR v=28 l=29 r=28 d=3821 h=-389 m=5 os=1 ow=0 od=0 av=IDLE p=2 ro=1 tr=1 hu=1 lf=2 rq=115 rt=115 cs=2
+17:04:55 console 58213 LT t=-389 h=-389 d=3808 00 c=218 m=-599,-419 n=204
+17:04:55 console 58613 LT t=-389 h=-389 d=3821 00 c=218 m=-596,-414 n=205
+17:04:55 mtk3smp-pico/heartbeat/telemetry seq=65 captured_ms=57020 obstacle flags=17 edges=255 width_mm=0
+17:04:55 mtk3smp-pico/heartbeat/telemetry seq=66 captured_ms=58020 obstacle flags=17 edges=255 width_mm=0
+17:04:55 console 59015 LT t=-389 h=-389 d=3833 00 c=220 m=-610,-404 n=207
+17:04:55 status CAR v=30 l=31 r=29 d=3836 h=-389 m=5 os=1 ow=0 od=0 av=IDLE p=0 ro=0 tr=0 hu=1 lf=2 rq=140 rt=140 cs=2
+17:04:55 mtk3smp-pico/heartbeat/telemetry seq=67 captured_ms=59020 obstacle flags=17 edges=255 width_mm=0
+17:04:57 console 59413 LT t=-389 h=-389 d=3844 00 c=220 m=-607,-396 n=208
+17:04:57 status CAR v=32 l=32 r=33 d=3852 h=-389 m=5 os=1 ow=0 od=0 av=IDLE p=1 ro=1 tr=1 hu=1 lf=2 rq=165 rt=165 cs=2
+17:04:57 status CAR v=30 l=29 r=31 d=3867 h=-389 m=5 os=1 ow=0 od=0 av=IDLE p=-4 ro=0 tr=1 hu=1 lf=2 rq=190 rt=190 cs=2
+17:04:57 mtk3smp-pico/heartbeat/telemetry seq=68 captured_ms=60020 obstacle flags=17 edges=255 width_mm=0
+17:04:57 console 59814 LT t=-389 h=-389 d=3857 00 c=222 m=-615,-384 n=210
+17:04:57 console 60213 LT t=-389 h=-389 d=3869 00 c=224 m=-619,-375 n=211
+17:04:57 console 60613 LT t=-389 h=-389 d=3882 00 c=226 m=-629,-364 n=212
+17:04:57 console 61013 LT t=-389 h=-389 d=3894 00 c=228 m=-636,-349 n=214
+17:04:57 mtk3smp-pico/heartbeat/telemetry seq=69 captured_ms=61020 obstacle flags=17 edges=255 width_mm=0
+17:04:57 console 61413 LT t=-389 h=-389 d=3906 00 c=229 m=-640,-343 n=215
+17:04:58 status CAR v=31 l=33 r=30 d=3913 h=-389 m=5 os=1 ow=0 od=0 av=IDLE p=-3 ro=-2 tr=-1 hu=1 lf=2 rq=9 rt=9 cs=2
+17:04:58 console 61813 LT t=-389 h=-390 d=3918 00 c=231 m=-643,-335 n=216
+17:04:58 status CAR v=31 l=33 r=29 d=3928 h=-390 m=5 os=1 ow=0 od=0 av=IDLE p=-4 ro=5 tr=-1 hu=1 lf=2 rq=34 rt=34 cs=2
+17:04:59 mtk3smp-pico/heartbeat/telemetry seq=70 captured_ms=62020 obstacle flags=17 edges=255 width_mm=0
+17:04:59 console 62213 LT t=-389 h=-390 d=3931 00 c=230 m=-645,-344 n=217
+17:04:59 status CAR v=27 l=29 r=26 d=3943 h=-391 m=5 os=1 ow=0 od=0 av=IDLE p=-3 ro=-2 tr=-2 hu=1 lf=2 rq=59 rt=59 cs=2
+17:04:59 console 62613 LT t=-389 h=-391 d=3942 00 c=231 m=-649,-338 n=219
+17:04:59 status CAR v=27 l=30 r=24 d=3958 h=-391 m=5 os=1 ow=0 od=0 av=IDLE p=-4 ro=1 tr=-1 hu=1 lf=2 rq=84 rt=84 cs=2
+17:04:59 console 63015 LT t=-389 h=-391 d=3955 00 c=232 m=-650,-326 n=220
+17:04:59 mtk3smp-pico/heartbeat/telemetry seq=71 captured_ms=63020 obstacle flags=17 edges=255 width_mm=0
+17:04:59 console 63415 LT t=-389 h=-391 d=3967 00 c=232 m=-654,-330 n=221
+17:04:59 status CAR v=29 l=28 r=31 d=3973 h=-391 m=5 os=1 ow=0 od=0 av=IDLE p=-6 ro=2 tr=1 hu=1 lf=2 rq=109 rt=109 cs=2
+17:05:00 console 63813 LT t=-389 h=-391 d=3979 00 c=234 m=-661,-324 n=222
+17:05:01 status CAR v=31 l=31 r=31 d=3989 h=-391 m=5 os=1 ow=0 od=0 av=IDLE p=-5 ro=2 tr=-1 hu=1 lf=2 rq=134 rt=134 cs=2
+17:05:01 mtk3smp-pico/heartbeat/telemetry seq=72 captured_ms=64020 obstacle flags=17 edges=255 width_mm=0
+17:05:01 console 64213 LT t=-389 h=-391 d=3991 00 c=233 m=-665,-334 n=223
+17:05:01 status CAR v=31 l=31 r=32 d=4004 h=-391 m=5 os=1 ow=0 od=0 av=IDLE p=-5 ro=3 tr=0 hu=1 lf=2 rq=159 rt=159 cs=2
+17:05:01 console 64613 LT t=-389 h=-391 d=4004 00 c=233 m=-673,-336 n=225
+17:05:01 console 65013 LT t=-389 h=-391 d=4016 00 c=234 m=-680,-335 n=226
+17:05:01 console 65413 LT t=-389 h=-391 d=4028 00 c=234 m=-681,-333 n=227
+17:05:01 mtk3smp-pico/heartbeat/telemetry seq=73 captured_ms=65020 obstacle flags=17 edges=255 width_mm=0
+17:05:01 status CAR v=30 l=32 r=29 d=4036 h=-392 m=5 os=1 ow=0 od=0 av=IDLE p=-5 ro=5 tr=-3 hu=1 lf=2 rq=210 rt=209 cs=2
+17:05:02 console 65813 LT t=-389 h=-392 d=4040 00 c=234 m=-680,-338 n=228
+17:05:02 status CAR v=32 l=32 r=33 d=4050 h=-392 m=5 os=1 ow=0 od=0 av=IDLE p=-5 ro=0 tr=1 hu=1 lf=2 rq=234 rt=234 cs=2
+17:05:02 mtk3smp-pico/heartbeat/telemetry seq=74 captured_ms=66020 obstacle flags=17 edges=255 width_mm=0
+17:05:02 console 66213 LT t=-389 h=-392 d=4053 00 c=233 m=-689,-351 n=229
+17:05:02 console 66613 LT t=-389 h=-392 d=4065 00 c=233 m=-688,-348 n=230
+17:05:02 status CAR v=30 l=30 r=31 d=4065 h=-392 m=5 os=1 ow=0 od=0 av=IDLE p=-3 ro=1 tr=0 hu=1 lf=2 rq=3 rt=3 cs=2
+17:05:03 console 67014 LT t=-389 h=-392 d=4077 00 c=233 m=-695,-350 n=231
+17:05:03 status CAR v=31 l=34 r=29 d=4081 h=-392 m=5 os=1 ow=0 od=0 av=IDLE p=-4 ro=-1 tr=-1 hu=1 lf=2 rq=28 rt=28 cs=2
+17:05:03 mtk3smp-pico/heartbeat/telemetry seq=75 captured_ms=67020 obstacle flags=17 edges=255 width_mm=0
+17:05:03 console 67414 LT t=-389 h=-392 d=4089 00 c=232 m=-704,-371 n=233
+17:05:03 status CAR v=31 l=31 r=32 d=4096 h=-392 m=5 os=1 ow=0 od=0 av=IDLE p=-3 ro=-1 tr=-1 hu=1 lf=2 rq=53 rt=53 cs=2
+17:05:04 console 67813 LT t=-389 h=-392 d=4102 00 c=232 m=-703,-374 n=234
+17:05:04 status CAR v=29 l=29 r=30 d=4111 h=-392 m=5 os=1 ow=0 od=0 av=IDLE p=-3 ro=-1 tr=-1 hu=1 lf=2 rq=78 rt=78 cs=2
+17:05:04 mtk3smp-pico/heartbeat/telemetry seq=76 captured_ms=68020 obstacle flags=17 edges=255 width_mm=0
+17:05:04 console 68215 LT t=-389 h=-392 d=4114 00 c=231 m=-703,-376 n=235
+17:05:05 console 68613 LT t=-389 h=-392 d=4126 00 c=231 m=-713,-385 n=236
+17:05:05 status CAR v=30 l=32 r=29 d=4126 h=-392 m=5 os=1 ow=0 od=0 av=IDLE p=-3 ro=1 tr=1 hu=1 lf=2 rq=103 rt=103 cs=2
+17:05:05 console 69013 LT t=-389 h=-393 d=4138 00 c=230 m=-708,-398 n=237
+17:05:06 console 69074 barcode: F dir=fwd elements=29 narrow=170352 us turn=LEFT
+17:05:06 mtk3smp-pico/heartbeat/telemetry seq=77 captured_ms=68950 barcode F fwd
+17:05:06 status CAR v=28 l=30 r=27 d=4142 h=-393 m=5 os=1 ow=0 od=0 av=IDLE p=-7 ro=-1 tr=-1 hu=1 lf=2 rq=128 rt=128 cs=2
+17:05:06 status CAR v=126 l=127 r=125 d=4206 h=-392 m=5 os=1 ow=0 od=0 av=IDLE p=6 ro=-2 tr=2 hu=1 lf=2 rq=153 rt=153 cs=2
+17:05:06 console 69095 line BARCODE DONE h=-393 d=4141
+17:05:06 console 69413 LT t=-392 h=-392 d=4178 00 c=229 m=-706,-404 n=238
+17:05:06 console 69813 LT t=-392 h=-392 d=4229 00 c=223 m=-710,-483 n=240
+17:05:06 console 70213 LT t=-392 h=-393 d=4277 00 c=219 m=-702,-528 n=241
+17:05:06 console 70613 LT t=-392 h=-393 d=4326 00 c=214 m=-681,-580 n=242
+17:05:07 mtk3smp-pico/heartbeat/telemetry seq=78 captured_ms=69020 obstacle flags=17 edges=255 width_mm=0
+17:05:07 mtk3smp-pico/heartbeat/telemetry seq=79 captured_ms=70020 obstacle flags=17 edges=255 width_mm=0
+17:05:07 console 71013 LT t=-392 h=-394 d=4374 00 c=211 m=-657,-612 n=243
+17:05:07 status CAR v=121 l=123 r=119 d=4388 h=-394 m=5 os=1 ow=0 od=0 av=IDLE p=1 ro=-4 tr=-4 hu=1 lf=2 rq=228 rt=228 cs=2
+17:05:07 mtk3smp-pico/heartbeat/telemetry seq=80 captured_ms=71020 obstacle flags=17 edges=255 width_mm=0
+17:05:07 console 71413 LT t=-392 h=-395 d=4422 00 c=208 m=-634,-623 n=244
+17:05:07 status CAR v=119 l=123 r=116 d=4449 h=-395 m=5 os=1 ow=0 od=0 av=IDLE p=0 ro=-6 tr=-1 hu=1 lf=2 rq=253 rt=253 cs=2
+17:05:08 console 71813 LT t=-392 h=-395 d=4470 00 c=207 m=-617,-620 n=245
+17:05:08 status CAR v=119 l=122 r=116 d=4509 h=-396 m=5 os=1 ow=0 od=0 av=IDLE p=0 ro=1 tr=1 hu=1 lf=2 rq=22 rt=22 cs=2
+17:05:08 dashboard -> car: stop
+17:05:08 mtk3smp-pico/heartbeat/telemetry seq=81 captured_ms=72020 obstacle flags=17 edges=255 width_mm=0
+17:05:08 console 72213 LT t=-392 h=-396 d=4519 00 c=206 m=-582,-570 n=247
+17:05:08 console 72394 remote: ok stop, state stopped
+17:05:08 console 72403 [72280 ms]obstacle: stopped by the dashboard
+17:05:08 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-4 ro=1 tr=0 hu=1 lf=2 rq=47 rt=47 cs=2
+17:05:09 console 72963 terrain: speed STATIONARY t 72.94 s
+17:05:09 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-20 ro=-1 tr=0 hu=1 lf=2 rq=73 rt=72 cs=2
+17:05:09 mtk3smp-pico/heartbeat/telemetry seq=82 captured_ms=73020 obstacle flags=17 edges=255 width_mm=0
+17:05:09 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-5 ro=2 tr=0 hu=1 lf=2 rq=97 rt=97 cs=2
+17:05:10 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-7 ro=1 tr=0 hu=1 lf=2 rq=122 rt=122 cs=2
+17:05:10 mtk3smp-pico/heartbeat/telemetry seq=83 captured_ms=74020 obstacle flags=17 edges=255 width_mm=0
+17:05:11 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-4 ro=2 tr=0 hu=1 lf=2 rq=147 rt=147 cs=2
+17:05:11 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-2 ro=1 tr=0 hu=1 lf=2 rq=172 rt=172 cs=2
+17:05:11 mtk3smp-pico/heartbeat/telemetry seq=84 captured_ms=75020 obstacle flags=17 edges=255 width_mm=0
+17:05:11 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-2 ro=-2 tr=0 hu=1 lf=2 rq=197 rt=197 cs=2
+17:05:12 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-5 ro=0 tr=0 hu=1 lf=2 rq=222 rt=222 cs=2
+17:05:12 mtk3smp-pico/heartbeat/telemetry seq=85 captured_ms=76020 obstacle flags=17 edges=255 width_mm=0
+17:05:12 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-5 ro=0 tr=0 hu=1 lf=2 rq=247 rt=247 cs=2
+17:05:13 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-7 ro=-2 tr=0 hu=1 lf=2 rq=16 rt=16 cs=2
+17:05:13 mtk3smp-pico/heartbeat/telemetry seq=86 captured_ms=77020 obstacle flags=17 edges=255 width_mm=0
+17:05:13 console 77243 [77120 ms]obstacle: car lifted, motors stopped until Start
+17:05:13 console 77244 terrain: LIFTED up 1.30 g t 77.22 s
+17:05:13 console 77244 terrain: summary humps 1 (mm: 7) highest 7 mm lifts 3 turns 7 msg 71 30 07 07 00 00 00 00 00 00 00
+17:05:13 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-40 ro=-25 tr=0 hu=1 lf=3 rq=41 rt=41 cs=2
+17:05:14 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-32 ro=-8 tr=0 hu=1 lf=3 rq=66 rt=66 cs=2
+17:05:14 mtk3smp-pico/heartbeat/telemetry seq=87 captured_ms=78020 obstacle flags=17 edges=255 width_mm=0
+17:05:15 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-20 ro=49 tr=0 hu=1 lf=3 rq=91 rt=91 cs=2
+17:05:15 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-66 ro=-10 tr=0 hu=1 lf=3 rq=116 rt=116 cs=2
+17:05:15 mtk3smp-pico/heartbeat/telemetry seq=88 captured_ms=79020 obstacle flags=17 edges=255 width_mm=0
+17:05:15 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-57 ro=-42 tr=0 hu=1 lf=3 rq=141 rt=141 cs=2
+17:05:17 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-9 ro=7 tr=0 hu=1 lf=3 rq=166 rt=166 cs=2
+17:05:17 mtk3smp-pico/heartbeat/telemetry seq=89 captured_ms=80020 obstacle flags=17 edges=255 width_mm=0
+17:05:17 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-20 ro=14 tr=0 hu=1 lf=3 rq=191 rt=191 cs=2
+17:05:17 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-60 ro=26 tr=0 hu=1 lf=3 rq=216 rt=216 cs=2
+17:05:17 mtk3smp-pico/heartbeat/telemetry seq=90 captured_ms=81020 obstacle flags=17 edges=255 width_mm=0
+17:05:18 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-82 ro=-38 tr=0 hu=1 lf=3 rq=242 rt=241 cs=2
+17:05:18 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-35 ro=-25 tr=0 hu=1 lf=3 rq=10 rt=10 cs=2
+17:05:18 mtk3smp-pico/heartbeat/telemetry seq=91 captured_ms=82020 obstacle flags=17 edges=255 width_mm=0
+17:05:20 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-22 ro=-20 tr=0 hu=1 lf=3 rq=35 rt=35 cs=2
+17:05:21 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-45 ro=-53 tr=0 hu=1 lf=3 rq=60 rt=60 cs=2
+17:05:21 mtk3smp-pico/heartbeat/telemetry seq=92 captured_ms=83020 obstacle flags=17 edges=255 width_mm=0
+17:05:21 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-43 ro=-53 tr=0 hu=1 lf=3 rq=85 rt=85 cs=2
+17:05:22 mtk3smp-pico/heartbeat/telemetry seq=93 captured_ms=84020 obstacle flags=17 edges=255 width_mm=0
+17:05:22 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-33 ro=-60 tr=0 hu=1 lf=3 rq=185 rt=185 cs=2
+17:05:22 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-28 ro=-66 tr=0 hu=1 lf=3 rq=211 rt=210 cs=2
+17:05:22 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-35 ro=-32 tr=0 hu=1 lf=3 rq=235 rt=235 cs=2
+17:05:23 mtk3smp-pico/heartbeat/telemetry seq=94 captured_ms=85020 obstacle flags=17 edges=255 width_mm=0
+17:05:23 mtk3smp-pico/heartbeat/telemetry seq=95 captured_ms=86020 obstacle flags=17 edges=255 width_mm=0
+17:05:23 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-4 ro=-20 tr=0 hu=1 lf=3 rq=4 rt=4 cs=2
+17:05:23 mtk3smp-pico/heartbeat/telemetry seq=96 captured_ms=87020 obstacle flags=17 edges=255 width_mm=0
+17:05:23 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-14 ro=-21 tr=0 hu=1 lf=3 rq=29 rt=29 cs=2
+17:05:25 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-41 ro=-47 tr=0 hu=1 lf=3 rq=54 rt=54 cs=2
+17:05:25 mtk3smp-pico/heartbeat/telemetry seq=97 captured_ms=88020 obstacle flags=17 edges=255 width_mm=0
+17:05:25 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-70 ro=-23 tr=0 hu=1 lf=3 rq=79 rt=79 cs=2
+17:05:29 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-31 ro=-16 tr=0 hu=1 lf=3 rq=104 rt=104 cs=2
+17:05:29 mtk3smp-pico/heartbeat/telemetry seq=98 captured_ms=89020 obstacle flags=17 edges=255 width_mm=0
+17:05:29 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-17 ro=-25 tr=0 hu=1 lf=3 rq=129 rt=129 cs=2
+17:05:29 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-94 ro=-48 tr=0 hu=1 lf=3 rq=154 rt=154 cs=2
+17:05:29 mtk3smp-pico/heartbeat/telemetry seq=99 captured_ms=90020 obstacle flags=17 edges=255 width_mm=0
+17:05:29 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-54 ro=-26 tr=0 hu=1 lf=3 rq=49 rt=48 cs=2
+17:05:29 mtk3smp-pico/heartbeat/telemetry seq=100 captured_ms=91020 obstacle flags=17 edges=255 width_mm=0
+17:05:31 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-61 ro=-38 tr=0 hu=1 lf=3 rq=73 rt=73 cs=2
+17:05:31 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-54 ro=-26 tr=0 hu=1 lf=3 rq=98 rt=98 cs=2
+17:05:31 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-60 ro=-39 tr=0 hu=1 lf=3 rq=123 rt=123 cs=2
+17:05:31 mtk3smp-pico/heartbeat/telemetry seq=101 captured_ms=92020 obstacle flags=17 edges=255 width_mm=0
+17:05:31 mtk3smp-pico/heartbeat/telemetry seq=102 captured_ms=93020 obstacle flags=17 edges=255 width_mm=0
+17:05:31 mtk3smp-pico/heartbeat/telemetry seq=103 captured_ms=94020 obstacle flags=17 edges=255 width_mm=0
+17:05:31 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-76 ro=-60 tr=0 hu=1 lf=3 rq=173 rt=173 cs=2
+17:05:31 mtk3smp-pico/heartbeat/telemetry seq=104 captured_ms=95020 obstacle flags=17 edges=255 width_mm=0
+17:05:32 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-40 ro=-59 tr=0 hu=1 lf=3 rq=198 rt=198 cs=2
+17:05:32 mtk3smp-pico/heartbeat/telemetry seq=105 captured_ms=96020 obstacle flags=17 edges=255 width_mm=0
+17:05:33 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-83 ro=-30 tr=0 hu=1 lf=3 rq=224 rt=223 cs=2
+17:05:33 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-94 ro=-45 tr=0 hu=1 lf=3 rq=248 rt=248 cs=2
+17:05:34 mtk3smp-pico/heartbeat/telemetry seq=106 captured_ms=97020 obstacle flags=17 edges=255 width_mm=0
+17:05:34 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-112 ro=-84 tr=0 hu=1 lf=3 rq=17 rt=17 cs=2
+17:05:34 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-118 ro=-85 tr=0 hu=1 lf=3 rq=42 rt=42 cs=2
+17:05:35 mtk3smp-pico/heartbeat/telemetry seq=107 captured_ms=98020 obstacle flags=17 edges=255 width_mm=0
+17:05:35 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-79 ro=-48 tr=0 hu=1 lf=3 rq=93 rt=92 cs=2
+17:05:35 mtk3smp-pico/heartbeat/telemetry seq=108 captured_ms=99020 obstacle flags=17 edges=255 width_mm=0
+17:05:36 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-78 ro=-75 tr=0 hu=1 lf=3 rq=117 rt=117 cs=2
+17:05:37 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-107 ro=-71 tr=0 hu=1 lf=3 rq=142 rt=142 cs=2
+17:05:37 mtk3smp-pico/heartbeat/telemetry seq=109 captured_ms=100020 obstacle flags=17 edges=255 width_mm=0
+17:05:37 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-94 ro=-59 tr=0 hu=1 lf=3 rq=167 rt=167 cs=2
+17:05:49 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-65 ro=-38 tr=0 hu=1 lf=3 rq=192 rt=192 cs=2
+17:05:51 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-102 ro=-58 tr=0 hu=1 lf=3 rq=217 rt=217 cs=2
+17:05:51 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-95 ro=-49 tr=0 hu=1 lf=3 rq=242 rt=242 cs=2
+17:05:51 mtk3smp-pico/heartbeat/telemetry seq=110 captured_ms=101020 obstacle flags=17 edges=255 width_mm=0
+17:05:54 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-104 ro=-57 tr=0 hu=1 lf=3 rq=149 rt=149 cs=2
+17:05:54 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-89 ro=-59 tr=0 hu=1 lf=3 rq=174 rt=174 cs=2
+17:05:54 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-92 ro=-74 tr=0 hu=1 lf=3 rq=199 rt=199 cs=2
+17:05:54 mtk3smp-pico/heartbeat/telemetry seq=111 captured_ms=102020 obstacle flags=17 edges=255 width_mm=0
+17:05:54 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-96 ro=-61 tr=0 hu=1 lf=3 rq=18 rt=18 cs=2
+17:05:55 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-69 ro=-51 tr=0 hu=1 lf=3 rq=43 rt=43 cs=2
+17:05:55 mtk3smp-pico/heartbeat/telemetry seq=112 captured_ms=103020 obstacle flags=17 edges=255 width_mm=0
+17:05:55 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-86 ro=-37 tr=0 hu=1 lf=3 rq=68 rt=68 cs=2
+17:05:56 mtk3smp-pico/heartbeat/telemetry seq=113 captured_ms=104020 obstacle flags=17 edges=255 width_mm=0
+17:05:56 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-24 ro=-32 tr=0 hu=1 lf=3 rq=93 rt=93 cs=2
+17:05:56 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-22 ro=-33 tr=0 hu=1 lf=3 rq=118 rt=118 cs=2
+17:05:56 mtk3smp-pico/heartbeat/telemetry seq=114 captured_ms=105020 obstacle flags=17 edges=255 width_mm=0
+17:05:56 mtk3smp-pico/heartbeat/telemetry seq=115 captured_ms=106020 obstacle flags=17 edges=255 width_mm=0
+17:05:57 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-43 ro=-52 tr=0 hu=1 lf=3 rq=143 rt=143 cs=2
+17:05:57 mtk3smp-pico/heartbeat/telemetry seq=116 captured_ms=107020 obstacle flags=17 edges=255 width_mm=0
+17:05:57 mtk3smp-pico/heartbeat/telemetry seq=117 captured_ms=108020 obstacle flags=17 edges=255 width_mm=0
+17:05:57 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-44 ro=-32 tr=0 hu=1 lf=3 rq=168 rt=168 cs=2
+17:05:57 mtk3smp-pico/heartbeat/telemetry seq=118 captured_ms=109020 obstacle flags=17 edges=255 width_mm=0
+17:06:01 dashboard -> car: start
+17:06:02 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=15 ro=-52 tr=0 hu=1 lf=3 rq=193 rt=193 cs=2
+17:06:02 console 122103 [121980 ms]obstacle: car lifted, motors stopped until Start
+17:06:02 console 122104 terrain: LIFTED up 1.31 g t 122.08 s
+17:06:02 console 122104 terrain: summary humps 1 (mm: 7) highest 7 mm lifts 4 turns 7 msg 71 40 07 07 00 00 00 00 00 00 00
+17:06:02 status CAR v=0 l=0 r=0 d=4547 h=-397 m=6 os=1 ow=0 od=0 av=IDLE p=-79 ro=-40 tr=0 hu=1 lf=4 rq=218 rt=218 cs=2
+17:06:02 status CAR v=0 l=0 r=0 d=4547 h=-396 m=6 os=1 ow=0 od=0 av=IDLE p=-51 ro=-7 tr=0 hu=1 lf=4 rq=243 rt=243 cs=2
+17:06:02 mtk3smp-pico/heartbeat/telemetry seq=119 captured_ms=110020 obstacle flags=17 edges=255 width_mm=0
+17:06:02 status CAR v=0 l=0 r=0 d=4547 h=-396 m=6 os=1 ow=0 od=0 av=IDLE p=-14 ro=-3 tr=0 hu=1 lf=4 rq=12 rt=12 cs=2
+17:06:02 status CAR v=0 l=0 r=0 d=4547 h=-396 m=6 os=1 ow=0 od=0 av=IDLE p=-14 ro=-3 tr=0 hu=1 lf=4 rq=37 rt=37 cs=2
+17:06:02 console 125814 remote: ok start, state running
+17:06:02 status CAR v=138 l=138 r=138 d=4573 h=-396 m=5 os=1 ow=0 od=0 av=IDLE p=-8 ro=-1 tr=-2 hu=1 lf=4 rq=162 rt=162 cs=2
+17:06:02 console 125823 [125700 ms]obstacle: started by the dashboard
+17:06:02 console 125824 [125700 ms]obstacle: avoid WAIT_CLEAR -> RELEASING (path clear)
+17:06:02 console 125843 [125720 ms]obstacle: avoid RELEASING -> SEND (resume following)
+17:06:02 console 125854 LT t=-396 h=-396 d=4547 00 c=224 m=-734,-492 n=100
+17:06:02 console 125863 [125740 ms]obstacle: avoid SEND -> IDLE (following)
+17:06:02 console 126084 terrain: speed CRUISING t 126.06 s
+17:06:02 console 126253 LT t=-396 h=-396 d=4588 00 c=224 m=-726,-489 n=101
+17:06:02 mtk3smp-pico/heartbeat/telemetry seq=120 captured_ms=111020 obstacle flags=17 edges=255 width_mm=0
+17:06:02 status CAR v=119 l=120 r=119 d=4635 h=-396 m=5 os=1 ow=0 od=0 av=IDLE p=19 ro=3 tr=-4 hu=1 lf=4 rq=187 rt=187 cs=2
+17:06:02 console 126655 LT t=-396 h=-397 d=4639 00 c=223 m=-721,-489 n=102
+17:06:03 mtk3smp-pico/heartbeat/telemetry seq=121 captured_ms=112020 obstacle flags=17 edges=255 width_mm=0
+17:06:03 mtk3smp-pico/heartbeat/telemetry seq=122 captured_ms=113020 obstacle flags=17 edges=255 width_mm=0
+17:06:03 mtk3smp-pico/heartbeat/telemetry seq=123 captured_ms=114020 obstacle flags=17 edges=255 width_mm=0
+17:06:04 console 127053 LT t=-396 h=-397 d=4685 00 c=225 m=-740,-478 n=104
+17:06:04 status CAR v=118 l=122 r=115 d=4695 h=-397 m=5 os=1 ow=0 od=0 av=IDLE p=-3 ro=-3 tr=1 hu=1 lf=4 rq=212 rt=212 cs=2
+17:06:04 status CAR v=122 l=124 r=121 d=4756 h=-398 m=5 os=1 ow=0 od=0 av=IDLE p=-4 ro=-4 tr=-3 hu=1 lf=4 rq=237 rt=237 cs=2
+17:06:04 console 127453 LT t=-396 h=-398 d=4733 00 c=224 m=-740,-494 n=105
+17:06:04 console 127853 LT t=-396 h=-398 d=4782 00 c=223 m=-747,-516 n=107
+17:06:04 console 128254 LT t=-396 h=-399 d=4830 00 c=224 m=-761,-523 n=108
+17:06:04 console 128273 LT t=-396 h=-399 d=4833 10 c=224 m=-761,-523 n=108
+17:06:04 console 128353 LT t=-383 h=-398 d=4842 00 c=224 m=-761,-523 n=108
+17:06:04 mtk3smp-pico/heartbeat/telemetry seq=124 captured_ms=115020 obstacle flags=17 edges=255 width_mm=0
+17:06:04 console 128424 terrain: TURNING t 128.39 s
+17:06:04 console 128424 terrain: summary humps 1 (mm: 7) highest 7 mm lifts 4 turns 8 msg 71 40 08 07 00 00 00 00 00 00 00
+17:06:04 mtk3smp-pico/heartbeat/telemetry seq=125 captured_ms=116020 obstacle flags=17 edges=255 width_mm=0
+17:06:04 status CAR v=119 l=140 r=99 d=4876 h=-396 m=5 os=1 ow=0 od=0 av=IDLE p=-9 ro=-2 tr=50 hu=1 lf=4 rq=31 rt=31 cs=2
+17:06:05 console 128753 LT t=-397 h=-396 d=4891 00 c=228 m=-800,-492 n=110
+17:06:07 mtk3smp-pico/heartbeat/telemetry seq=126 captured_ms=117020 obstacle flags=17 edges=255 width_mm=0
+17:06:07 console 128973 line HUMP SLOW h=-397 d=4917
+17:06:07 console 128974 terrain: STRAIGHT t 128.95 s
+17:06:07 console 128975 terrain: hump ASCENDING lean 4.3 deg t 128.95 s
+17:06:07 console 128975 terrain: hump DESCENDING lean 1.5 deg t 128.95 s
+17:06:07 status CAR v=27 l=25 r=30 d=4926 h=-397 m=5 os=1 ow=0 od=0 av=IDLE p=-6 ro=-10 tr=-3 hu=1 lf=4 rq=56 rt=56 cs=2
+17:06:07 status CAR v=123 l=125 r=122 d=4974 h=-398 m=5 os=1 ow=0 od=0 av=IDLE p=-19 ro=2 tr=-1 hu=1 lf=4 rq=81 rt=81 cs=2
+17:06:08 console 129153 LT t=-397 h=-397 d=4927 00 c=230 m=-807,-479 n=111
+17:06:08 console 129233 line HUMP DONE h=-397 d=4928
+17:06:08 console 129553 LT t=-397 h=-397 d=4964 00 c=231 m=-819,-466 n=113
+17:06:08 console 129953 LT t=-397 h=-398 d=5013 00 c=232 m=-819,-457 n=114
+17:06:08 console 130353 LT t=-397 h=-399 d=5062 00 c=233 m=-841,-461 n=116
+17:06:08 console 130753 LT t=-397 h=-400 d=5110 00 c=233 m=-850,-472 n=117
+17:06:08 console 131093 LT t=-397 h=-400 d=5151 10 c=233 m=-858,-478 n=118
+17:06:09 console 131193 LT t=-383 h=-398 d=5162 00 c=232 m=-882,-500 n=119
+17:06:09 console 131415 LT t=-397 h=-396 d=5192 10 c=232 m=-882,-500 n=119
+17:06:09 console 131484 terrain: TURNING t 131.47 s
+17:06:09 console 131484 terrain: summary humps 1 (mm: 7) highest 7 mm lifts 4 turns 9 msg 71 40 09 07 00 00 00 00 00 00 00
+17:06:09 console 131573 LT t=-375 h=-390 d=5208 00 c=237 m=-920,-467 n=120
+17:06:09 mtk3smp-pico/heartbeat/telemetry seq=127 captured_ms=118020 obstacle flags=17 edges=255 width_mm=0
+17:06:09 status CAR v=132 l=57 r=208 d=5216 h=-385 m=5 os=1 ow=0 od=0 av=IDLE p=7 ro=-2 tr=-25 hu=1 lf=4 rq=181 rt=181 cs=2
+17:06:09 status CAR v=121 l=66 r=177 d=5278 h=-362 m=5 os=1 ow=0 od=0 av=IDLE p=0 ro=-16 tr=59 hu=1 lf=4 rq=206 rt=206 cs=2
+17:06:09 console 131764 terrain: hump ASCENDING lean 5.6 deg t 131.73 s
+17:06:09 console 131764 terrain: hump DESCENDING lean 2.4 deg t 131.73 s
+17:06:09 console 131973 LT t=-359 h=-371 d=5258 00 c=251 m=-1002,-315 n=121
+17:06:09 console 132134 LT t=-350 h=-362 d=5278 01 c=267 m=-1045,-122 n=122
+17:06:09 console 132233 LT t=-363 h=-357 d=5290 00 c=267 m=-1045,-122 n=122
+17:06:09 console 132313 LT t=-355 h=-359 d=5299 10 c=267 m=-1045,-122 n=122
+17:06:09 console 132473 LT t=-336 h=-351 d=5318 00 c=275 m=-1024,-37 n=123
+17:06:09 console 132873 LT t=-318 h=-330 d=5367 01 c=299 m=-913,221 n=125
+17:06:09 mtk3smp-pico/heartbeat/telemetry seq=128 captured_ms=119020 obstacle flags=17 edges=255 width_mm=0
+17:06:09 console 133034 LT t=-333 h=-327 d=5387 00 c=299 m=-913,221 n=125
+17:06:09 console 133044 terrain: hump LEVEL height 10 mm t 133.02 s
+17:06:09 console 133044 terrain: summary humps 2 (mm: 7 10) highest 10 mm lifts 4 turns 9 msg A2 40 09 07 0A 00 00 00 00 00 00
+17:06:09 status CAR v=116 l=135 r=97 d=5399 h=-329 m=5 os=1 ow=0 od=0 av=IDLE p=7 ro=-10 tr=-11 hu=2 lf=4 rq=0 rt=0 cs=2
+17:06:12 mtk3smp-pico/heartbeat/telemetry seq=129 captured_ms=120020 obstacle flags=17 edges=255 width_mm=0
+17:06:12 console 133253 LT t=-312 h=-324 d=5413 01 c=302 m=-872,242 n=126
+17:06:12 console 133393 LT t=-338 h=-323 d=5430 00 c=304 m=-840,244 n=127
+17:06:12 status CAR v=121 l=92 r=151 d=5461 h=-324 m=5 os=1 ow=0 od=0 av=IDLE p=7 ro=-6 tr=-51 hu=2 lf=4 rq=25 rt=25 cs=2
+17:06:12 status CAR v=128 l=134 r=123 d=5498 h=-325 m=5 os=1 ow=0 od=0 av=IDLE p=2 ro=-5 tr=0 hu=2 lf=4 rq=50 rt=50 cs=2
+17:06:13 console 133703 terrain: hump ASCENDING lean 2.5 deg t 133.69 s
+17:06:13 console 133714 line HUMP SLOW h=-324 d=5471
+17:06:13 console 133793 LT t=-325 h=-324 d=5479 00 c=300 m=-821,182 n=129
+17:06:13 console 133953 line HUMP DONE h=-324 d=5482
+17:06:13 console 133964 terrain: hump DESCENDING lean 0.4 deg t 133.94 s
+17:06:13 console 134073 LT t=-325 h=-324 d=5490 10 c=299 m=-821,173 n=130
+17:06:13 console 134173 LT t=-308 h=-323 d=5504 00 c=299 m=-821,173 n=130
+17:06:13 console 134573 LT t=-321 h=-320 d=5554 00 c=304 m=-783,204 n=132
+17:06:13 mtk3smp-pico/heartbeat/telemetry seq=130 captured_ms=121020 obstacle flags=17 edges=255 width_mm=0
+17:06:13 status CAR v=0 l=0 r=0 d=5595 h=-310 m=6 os=0 ow=0 od=0 av=WAIT_RESULT p=4 ro=8 tr=0 hu=2 lf=4 rq=175 rt=175 cs=2
+17:06:15 console 134593 LT t=-321 h=-320 d=5557 10 c=304 m=-783,204 n=132
+17:06:15 console 134693 LT t=-304 h=-319 d=5569 00 c=304 m=-783,204 n=132
+17:06:15 console 134734 terrain: hump ASCENDING lean 3.7 deg t 134.72 s
+17:06:15 console 134735 terrain: hump DESCENDING lean 1.8 deg t 134.72 s
+17:06:15 console 134863 [134740 ms]obstacle: avoid IDLE -> STOPPING (stop request)
+17:06:15 console 134864 [134740 ms]obstacle: stop request ACTIVE
+17:06:15 console 134865 [134740 ms]obstacle: [0x00] SCANNING dir -1
+17:06:15 console 134883 [134760 ms]obstacle: avoid STOPPING -> WAIT_RESULT (motors inhibited)
+17:06:15 status CAR v=-12 l=-6 r=-18 d=5555 h=-310 m=0 os=2 ow=180 od=158 av=REPLAN p=3 ro=-4 tr=4 hu=2 lf=4 rq=200 rt=199 cs=2
+17:06:15 status CAR v=0 l=0 r=0 d=5555 h=-310 m=0 os=2 ow=180 od=158 av=REPLAN p=15 ro=-12 tr=0 hu=2 lf=4 rq=225 rt=224 cs=2
+17:06:17 console 135023 [134900 ms]obstacle: side scan started
+17:06:17 console 135024 terrain: speed STATIONARY t 135.00 s
+17:06:17 console 135444 terrain: STRAIGHT t 135.42 s
+17:06:17 console 135963 [135840 ms]obstacle: ends L VALID 5611 us clear, R NO_ECHO 0 us clear (centre 951 us)
+17:06:17 console 136203 [136080 ms]obstacle: fine 120 deg NO_ECHO 0 us MISS
+17:06:17 console 136423 [136300 ms]obstacle: fine 110 deg VALID 1057 us HIT
+17:06:17 mtk3smp-pico/heartbeat/telemetry seq=131 captured_ms=122020 obstacle flags=17 edges=255 width_mm=0
+17:06:17 status CAR v=0 l=0 r=0 d=5555 h=-310 m=0 os=2 ow=180 od=158 av=REPLAN p=-1 ro=-2 tr=0 hu=2 lf=4 rq=44 rt=43 cs=2
+17:06:17 status CAR v=0 l=0 r=0 d=5555 h=-310 m=0 os=2 ow=180 od=158 av=REPLAN p=0 ro=-4 tr=0 hu=2 lf=4 rq=69 rt=68 cs=2
+17:06:18 console 136723 [136600 ms]obstacle: fine 60 deg VALID 1109 us HIT
+17:06:18 console 136724 [136600 ms]obstacle: width 180 mm hits 60..110 bounds 55.0..115.0
+17:06:18 console 136724 [136600 ms]obstacle: side scan completed after 1700 ms
+17:06:18 console 136725 [136600 ms]obstacle: avoid WAIT_RESULT -> RELEASING (path found)
+17:06:18 console 136726 [136600 ms]obstacle: [0x7A] PATH_FOUND dir 130 width 180 mm hits 60..110 (L found, R found)
+17:06:18 console 136743 [136620 ms]obstacle: avoid RELEASING -> SEND (reverse for room)
+17:06:18 status CAR v=1 l=80 r=-78 d=5558 h=-376 m=1 os=1 ow=0 od=0 av=RUN_LEG p=8 ro=-2 tr=-83 hu=2 lf=4 rq=144 rt=141 cs=2
+17:06:18 status CAR v=328 l=302 r=354 d=5698 h=-370 m=1 os=4 ow=0 od=0 av=RUN_LEG p=59 ro=0 tr=29 hu=2 lf=4 rq=169 rt=166 cs=2
+17:06:18 console 136923 [136800 ms]obstacle: corridor sweep started
+17:06:18 console 136924 [136800 ms]obstacle: avoid RUN_LEG -> REPLAN (re-sweep)
+17:06:18 console 137063 terrain: speed CRUISING t 137.04 s
+17:06:18 console 137523 terrain: speed STATIONARY t 137.50 s
+17:06:18 mtk3smp-pico/heartbeat/telemetry seq=132 captured_ms=123020 obstacle flags=17 edges=255 width_mm=0
+17:06:18 status CAR v=214 l=198 r=231 d=5836 h=-369 m=3 os=4 ow=0 od=0 av=RUN_LEG p=45 ro=-58 tr=11 hu=2 lf=4 rq=194 rt=190 cs=2
+17:06:22 console 140263 [140140 ms]obstacle: corridor sweep completed, valid 0x01FF after 3340 ms
+17:06:22 console 140264 obstacle: corridor echoes 6066 1319 1239 1210 1188 1214 1299 1385 0 us
+17:06:22 console 140264 [140140 ms]obstacle: rearmed, sequence 65
+17:06:22 console 140268 [140140 ms]obstacle: avoid REPLAN -> SEND (re-planned)
+17:06:22 console 140269 [140140 ms]obstacle: [0x00] SCANNING dir -1
+17:06:22 console 140423 terrain: TURNING t 140.41 s
+17:06:22 console 140424 terrain: speed CRUISING t 140.41 s
+17:06:22 console 140424 terrain: summary humps 2 (mm: 7 10) highest 10 mm lifts 4 turns 10 msg A2 40 0A 07 0A 00 00 00 00 00 00
+17:06:22 status CAR v=3 l=-71 r=77 d=5838 h=-321 m=3 os=4 ow=0 od=0 av=RUN_LEG p=85 ro=-9 tr=100 hu=2 lf=4 rq=219 rt=215 cs=2
+17:06:22 status CAR v=338 l=340 r=337 d=5898 h=-305 m=1 os=4 ow=0 od=0 av=RUN_LEG p=7 ro=-1 tr=8 hu=2 lf=4 rq=244 rt=239 cs=2
+17:06:23 console 140473 LT t=-321 h=-321 d=5555 10 c=312 m=-752,274 n=147
+17:06:23 console 140553 LT t=-328 h=-328 d=5556 00 c=312 m=-752,274 n=147
+17:06:23 console 140683 [140560 ms]obstacle: stop request RELEASED
+17:06:23 console 140684 [140560 ms]obstacle: [0x11] CLEAR dir 90
+17:06:23 console 141104 [140980 ms]obstacle: watching at 30 deg
+17:06:23 console 141104 [140980 ms]obstacle: avoid RUN_LEG -> SEND (sidestep)
+17:06:23 console 141303 [141180 ms]obstacle: forward data stale (220 ms old)
+17:06:23 console 141304 [141180 ms]obstacle: stop request ACTIVE
+17:06:23 mtk3smp-pico/heartbeat/telemetry seq=133 captured_ms=124020 obstacle flags=17 edges=255 width_mm=0
+17:06:23 status CAR v=302 l=304 r=300 d=6530 h=-245 m=1 os=1 ow=0 od=0 av=RUN_LEG p=-1 ro=-30 tr=-1 hu=2 lf=4 rq=138 rt=130 cs=2
+17:06:23 status CAR v=298 l=304 r=292 d=6680 h=-247 m=1 os=1 ow=0 od=0 av=RUN_LEG p=0 ro=2 tr=-2 hu=2 lf=4 rq=163 rt=155 cs=2
+17:06:23 console 141305 [141180 ms]obstacle: [0x04] UNKNOWN dir -1
+17:06:23 console 141323 terrain: STRAIGHT t 141.30 s
+17:06:23 console 141333 LT t=-376 h=-376 d=5601 01 c=252 m=-875,-263 n=150
+17:06:23 console 141373 LT t=-376 h=-376 d=5614 11 c=252 m=-875,-263 n=150
+17:06:23 console 141423 obstacle: watch 4830 us d=5634 h=-376 leg=2
+17:06:23 console 141503 obstacle: watch 3891 us d=5659 h=-374 leg=2
+17:06:23 console 141563 obstacle: watch 4582 us d=5679 h=-372 leg=2
+17:06:23 console 141623 terrain: TURNING t 141.60 s
+17:06:23 console 141624 terrain: summary humps 2 (mm: 7 10) highest 10 mm lifts 4 turns 11 msg A2 40 0B 07 0A 00 00 00 00 00 00
+17:06:23 console 141643 obstacle: watch 0 us d=5704 h=-370 leg=2
+17:06:23 console 141683 obstacle: watch 13208 us d=5716 h=-370 leg=2
+17:06:23 console 141783 obstacle: watch 0 us d=5745 h=-369 leg=2
+17:06:23 console 141843 obstacle: watch 0 us d=5761 h=-368 leg=2
+17:06:23 console 141923 obstacle: watch 0 us d=5784 h=-369 leg=2
+17:06:23 console 141983 obstacle: watch 8781 us d=5802 h=-370 leg=2
+17:06:23 console 142043 obstacle: watch 8701 us d=5821 h=-371 leg=2
+17:06:23 console 142064 [141940 ms]obstacle: avoid RUN_LEG -> SEND (turn back)
+17:06:23 mtk3smp-pico/heartbeat/telemetry seq=134 captured_ms=125020 obstacle flags=17 edges=255 width_mm=0
+17:06:23 console 142103 obstacle: watch 8650 us d=5835 h=-370 leg=3
+17:06:23 console 142183 obstacle: watch 8678 us d=5838 h=-363 leg=3
+17:06:23 console 142273 LT t=-355 h=-355 d=5838 01 c=294 m=-1024,209 n=153
+17:06:23 console 142283 obstacle: watch 0 us d=5838 h=-352 leg=3
+17:06:23 console 142294 LT t=-352 h=-352 d=5838 00 c=294 m=-1024,209 n=153
+17:06:23 console 142343 obstacle: watch 0 us d=5838 h=-346 leg=3
+17:06:23 console 142423 obstacle: watch 0 us d=5839 h=-338 leg=3
+17:06:23 console 142473 LT t=-334 h=-334 d=5839 10 c=319 m=-824,455 n=154
+17:06:27 console 142483 obstacle: watch 0 us d=5838 h=-332 leg=3
+17:06:27 console 142563 obstacle: watch 0 us d=5838 h=-325 leg=3
+17:06:27 console 142623 obstacle: watch 5563 us d=5838 h=-321 leg=3
+17:06:27 console 142683 obstacle: watch 4444 us d=5839 h=-317 leg=3
+17:06:27 console 142693 LT t=-317 h=-317 d=5839 00 c=319 m=-824,455 n=154
+17:06:27 console 142713 LT t=-316 h=-316 d=5838 01 c=338 m=-610,584 n=155
+17:06:27 console 142763 obstacle: watch 0 us d=5838 h=-313 leg=3
+17:06:27 console 142823 obstacle: watch 5350 us d=5838 h=-309 leg=3
+17:06:27 console 142864 [142740 ms]obstacle: watching at 60 deg
+17:06:27 mtk3smp-pico/heartbeat/telemetry seq=135 captured_ms=125700 avoid WAIT_CLEAR>RELEASING

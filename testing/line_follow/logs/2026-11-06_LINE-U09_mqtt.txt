@@ -1,0 +1,197 @@
+15:31:18 listening on 0.0.0.0:1884
+15:32:36 connect from 172.20.10.3:54591
+15:32:36 console 0 
+15:32:36 console 0 
+15:32:36 console 0 microT-Kernel Version 3.00
+15:32:36 console 0 
+15:32:36 console 0 
+15:32:36 console 0 === micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+15:32:36 console 0 dual-core (SMP) build, usermain on core 0
+15:32:36 console 1 line_follow: DO calibration; motors not started. Turn each potentiometer until DO flips at the tape edge (1 = black)
+15:32:36 console 1 IR calibration only: DO on GP26 left, GP27 right, GP28 barcode; compass printed for the spin
+15:32:36 console 2 
+15:32:36 console 2 LINE L=0 R=0
+15:32:36 console 2 wifi: cyw43_utk_task starting (proc 1)
+15:32:36 console 3 Wi-Fi: the kernel radio service joins the network from config/wifi_secrets.h
+15:32:36 console 3 wifi: cyw43_init() ...
+15:32:36 console 3 wifi: cyw43_init() returned, bringing interface up ...
+15:32:36 console 4 barcode: Code 39 reader on GP28 started
+15:32:36 console 203 terrain: IMU ready; calibrating, keep the car still on level ground
+15:32:36 console 283 terrain: compass ready
+15:32:36 console 573 terrain: compass x -439 y -539 z 176 heading 1917 ddeg centre -439 -542 span 0 7
+15:32:36 console 873 terrain: compass x -439 y -544 z 176 heading 1916 ddeg centre -439 -542 span 1 7
+15:32:36 console 1233 terrain: compass x -441 y -545 z 175 heading 1918 ddeg centre -441 -542 span 4 7
+15:32:36 console 1453 wifi: joining "Nyx" ...
+15:32:36 console 1513 terrain: compass x -442 y -542 z 176 heading 1920 ddeg centre -441 -542 span 4 7
+15:32:36 console 1673 wifi: link status -> joined AP, waiting for IP (1)
+15:32:36 console 2003 terrain: compass x -441 y -543 z 175 heading 1919 ddeg centre -441 -542 span 4 7
+15:32:36 console 2123 LINE L=0 R=0
+15:32:36 console 2673 terrain: compass x -442 y -544 z 175 heading 1920 ddeg centre -441 -542 span 4 7
+15:32:36 console 3353 terrain: compass x -445 y -547 z 178 heading 1923 ddeg centre -442 -543 span 6 8
+15:32:36 console 4043 terrain: compass x -443 y -543 z 177 heading 1921 ddeg centre -442 -543 span 6 8
+15:32:36 console 4123 LINE L=0 R=0
+15:32:36 console 4614 wifi: link status -> joined AP, no IP yet (2)
+15:32:36 console 4633 terrain: compass x -442 y -544 z 175 heading 1920 ddeg centre -442 -543 span 6 8
+15:32:36 console 4814 wifi: link up, ip=172.20.10.3
+15:32:36 console 5153 terrain: compass x -440 y -546 z 175 heading 1917 ddeg centre -442 -543 span 6 8
+15:32:36 console 5223 Wi-Fi connected
+15:32:36 console 5223 IP Address: 172.20.10.3
+15:32:36 console 5494 mqtt: connected to 172.20.10.2
+15:32:36 console 5574 terrain: compass x -442 y -545 z 177 heading 1919 ddeg centre -442 -543 span 6 8
+15:32:36 console 5963 terrain: compass x -445 y -545 z 176 heading 1923 ddeg centre -442 -543 span 6 8
+15:32:36 console 6123 LINE L=0 R=0
+15:32:37 console 6503 terrain: compass x -442 y -546 z 175 heading 1919 ddeg centre -442 -543 span 6 8
+15:32:37 console 7153 terrain: compass x -441 y -543 z 174 heading 1919 ddeg centre -442 -543 span 6 8
+15:32:38 console 7743 terrain: compass x -447 y -545 z 178 heading 1926 ddeg centre -443 -543 span 8 8
+15:32:38 console 8123 LINE L=0 R=0
+15:32:38 console 8283 terrain: compass x -452 y -540 z 182 heading 1933 ddeg centre -445 -543 span 13 8
+15:32:39 console 8923 terrain: compass x -453 y -543 z 181 heading 1933 ddeg centre -446 -543 span 14 8
+15:32:40 console 9543 terrain: compass x -455 y -544 z 178 heading 1936 ddeg centre -447 -543 span 16 8
+15:32:40 console 10123 LINE L=0 R=0
+15:32:40 console 10153 terrain: compass x -457 y -540 z 183 heading 1939 ddeg centre -448 -543 span 18 8
+15:32:42 console 10673 terrain: compass x -455 y -542 z 183 heading 1936 ddeg centre -448 -543 span 18 8
+15:32:42 console 11243 terrain: compass x -460 y -539 z 183 heading 1943 ddeg centre -449 -543 span 21 8
+15:32:42 console 11874 terrain: compass x -461 y -539 z 185 heading 1944 ddeg centre -450 -543 span 22 8
+15:32:42 console 12123 LINE L=0 R=0
+15:32:42 console 12353 terrain: compass x -452 y -547 z 186 heading 1931 ddeg centre -450 -543 span 22 8
+15:32:43 console 12963 terrain: compass x -444 y -545 z 184 heading 1922 ddeg centre -450 -543 span 22 8
+15:32:44 console 13583 terrain: compass x -442 y -547 z 185 heading 1919 ddeg centre -450 -543 span 22 8
+15:32:44 console 14123 LINE L=0 R=0
+15:32:44 console 14173 terrain: compass x -432 y -548 z 187 heading 1907 ddeg centre -446 -543 span 29 9
+15:32:45 console 14763 terrain: compass x -415 y -553 z 186 heading 1885 ddeg centre -438 -546 span 46 14
+15:32:45 console 14943 LINE L=0 R=1 *
+15:32:45 console 15333 terrain: compass x -401 y -550 z 182 heading 1868 ddeg centre -431 -546 span 60 14
+15:32:46 console 15923 terrain: compass x -404 y -549 z 184 heading 1872 ddeg centre -431 -546 span 60 14
+15:32:47 console 16563 terrain: compass x -404 y -549 z 186 heading 1872 ddeg centre -431 -546 span 60 14
+15:32:47 console 16943 LINE L=0 R=1
+15:32:47 console 17133 terrain: compass x -405 y -550 z 183 heading 1873 ddeg centre -431 -546 span 60 14
+15:32:47 console 17383 LINE L=0 R=0 *
+15:32:48 console 17623 terrain: compass x -418 y -549 z 184 heading 1889 ddeg centre -431 -546 span 60 14
+15:32:48 console 18283 terrain: compass x -445 y -542 z 186 heading 1924 ddeg centre -431 -546 span 60 14
+15:32:49 console 18913 terrain: compass x -458 y -545 z 186 heading 1939 ddeg centre -431 -546 span 60 14
+15:32:49 console 19383 LINE L=0 R=0
+15:32:50 console 19453 terrain: compass x -460 y -545 z 187 heading 1941 ddeg centre -431 -546 span 60 14
+15:32:50 console 20043 terrain: compass x -460 y -548 z 186 heading 1940 ddeg centre -431 -546 span 60 14
+15:32:51 console 20673 terrain: compass x -477 y -542 z 189 heading 1963 ddeg centre -439 -546 span 76 14
+15:32:51 console 21183 LINE L=0 R=1 *
+15:32:51 console 21233 terrain: compass x -480 y -531 z 162 heading 1970 ddeg centre -440 -542 span 79 22
+15:32:51 console 21323 LINE L=1 R=1 *
+15:32:52 console 21743 terrain: compass x -376 y -501 z 133 heading 1841 ddeg centre -428 -527 span 104 52
+15:32:52 console 21883 LINE L=0 R=1 *
+15:32:52 console 22103 LINE L=0 R=0 *
+15:32:52 console 22203 LINE L=0 R=1 *
+15:32:52 console 22233 terrain: compass x -305 y -502 z 156 heading 1741 ddeg centre -392 -527 span 175 52
+15:32:53 console 22463 LINE L=0 R=0 *
+15:32:53 console 22723 terrain: compass x -251 y -500 z 162 heading 1666 ddeg centre -365 -526 span 229 53
+15:32:53 console 22873 barcode: FAIL length elements=11 narrow=1 us
+15:32:53 console 23073 barcode: edge queue overflow, scan dropped
+15:32:53 console 23214 terrain: compass x -269 y -501 z 165 heading 1691 ddeg centre -365 -526 span 229 53
+15:32:54 console 23793 terrain: compass x -273 y -516 z 157 heading 1700 ddeg centre -365 -526 span 229 53
+15:32:55 console 24403 terrain: compass x -273 y -513 z 166 heading 1699 ddeg centre -365 -526 span 229 53
+15:32:55 console 24463 LINE L=0 R=0
+15:32:55 console 24943 terrain: compass x -265 y -516 z 162 heading 1690 ddeg centre -365 -526 span 229 53
+15:32:56 console 25583 terrain: compass x -270 y -515 z 163 heading 1696 ddeg centre -365 -526 span 229 53
+15:32:56 console 26223 terrain: compass x -279 y -516 z 162 heading 1708 ddeg centre -365 -526 span 229 53
+15:32:57 console 26463 LINE L=0 R=0
+15:32:57 console 26783 terrain: compass x -298 y -521 z 164 heading 1734 ddeg centre -365 -526 span 229 53
+15:32:58 console 27433 terrain: compass x -328 y -523 z 162 heading 1775 ddeg centre -365 -526 span 229 53
+15:32:58 console 28003 terrain: compass x -339 y -521 z 163 heading 1789 ddeg centre -365 -526 span 229 53
+15:32:59 console 28463 LINE L=0 R=0
+15:32:59 console 28593 terrain: compass x -341 y -519 z 165 heading 1792 ddeg centre -365 -526 span 229 53
+15:33:00 console 29173 terrain: compass x -344 y -523 z 166 heading 1796 ddeg centre -365 -526 span 229 53
+15:33:00 console 29743 terrain: compass x -342 y -523 z 165 heading 1793 ddeg centre -365 -526 span 229 53
+15:33:01 console 30403 terrain: compass x -343 y -523 z 159 heading 1795 ddeg centre -365 -526 span 229 53
+15:33:01 console 30463 LINE L=0 R=0
+15:33:01 console 30963 terrain: compass x -352 y -527 z 163 heading 1807 ddeg centre -365 -526 span 229 53
+15:33:02 console 31623 terrain: compass x -352 y -523 z 166 heading 1807 ddeg centre -365 -526 span 229 53
+15:33:02 console 32263 terrain: compass x -352 y -524 z 162 heading 1807 ddeg centre -365 -526 span 229 53
+15:33:03 console 32463 LINE L=0 R=0
+15:33:03 console 32823 terrain: compass x -355 y -522 z 165 heading 1811 ddeg centre -365 -526 span 229 53
+15:33:04 console 33473 terrain: compass x -353 y -525 z 163 heading 1808 ddeg centre -365 -526 span 229 53
+15:33:04 console 34023 terrain: compass x -352 y -527 z 165 heading 1807 ddeg centre -365 -526 span 229 53
+15:33:05 console 34463 LINE L=0 R=0
+15:33:05 console 34603 terrain: compass x -357 y -522 z 163 heading 1813 ddeg centre -365 -526 span 229 53
+15:33:05 console 35233 terrain: compass x -355 y -520 z 164 heading 1811 ddeg centre -365 -526 span 229 53
+15:33:06 console 35823 terrain: compass x -413 y -512 z 160 heading 1890 ddeg centre -365 -526 span 229 53
+15:33:07 console 36463 LINE L=0 R=0
+15:33:07 console 36463 terrain: compass x -500 y -496 z 170 heading 2009 ddeg centre -375 -524 span 249 57
+15:33:07 console 36543 LINE L=1 R=0 *
+15:33:07 console 37003 terrain: compass x -528 y -482 z 168 heading 2051 ddeg centre -389 -517 span 277 71
+15:33:08 console 37643 terrain: compass x -534 y -480 z 171 heading 2060 ddeg centre -392 -516 span 283 73
+15:33:08 console 38243 terrain: compass x -530 y -479 z 167 heading 2055 ddeg centre -392 -516 span 283 74
+15:33:09 console 38543 LINE L=1 R=0
+15:33:09 console 38823 terrain: compass x -510 y -476 z 166 heading 2032 ddeg centre -392 -514 span 283 77
+15:33:10 console 39463 terrain: compass x -509 y -467 z 160 heading 2036 ddeg centre -392 -510 span 283 86
+15:33:10 console 40103 terrain: compass x -510 y -467 z 164 heading 2037 ddeg centre -392 -510 span 283 86
+15:33:11 console 40543 LINE L=1 R=0
+15:33:11 console 40694 terrain: compass x -516 y -465 z 163 heading 2046 ddeg centre -392 -509 span 283 88
+15:33:30 listening on 0.0.0.0:1884
+15:33:30 connect from 172.20.10.3:54597
+15:33:30 console 41283 terrain: compass x -513 y -466 z 164 heading 2042 ddeg centre -392 -509 span 283 88
+15:33:30 console 41314 mqtt: connection status 256, retrying in 3s
+15:33:30 console 41903 terrain: compass x -511 y -468 z 163 heading 2038 ddeg centre -392 -509 span 283 88
+15:33:30 console 42543 LINE L=1 R=0
+15:33:30 console 42543 terrain: compass x -512 y -466 z 166 heading 2040 ddeg centre -392 -509 span 283 88
+15:33:30 console 43183 terrain: compass x -513 y -468 z 161 heading 2040 ddeg centre -392 -509 span 283 88
+15:33:30 console 43863 terrain: compass x -512 y -469 z 162 heading 2039 ddeg centre -392 -509 span 283 88
+15:33:30 console 44373 mqtt: connection status 256, retrying in 3s
+15:33:30 console 44473 terrain: compass x -513 y -468 z 160 heading 2040 ddeg centre -392 -509 span 283 88
+15:33:30 console 44543 LINE L=1 R=0
+15:33:30 console 45163 terrain: compass x -512 y -467 z 166 heading 2040 ddeg centre -392 -509 span 283 88
+15:33:30 console 45843 terrain: compass x -511 y -467 z 161 heading 2038 ddeg centre -392 -509 span 283 88
+15:33:30 console 46523 terrain: compass x -512 y -469 z 163 heading 2039 ddeg centre -392 -509 span 283 88
+15:33:30 console 46543 LINE L=1 R=0
+15:33:30 console 47183 terrain: compass x -514 y -468 z 164 heading 2042 ddeg centre -392 -509 span 283 88
+15:33:30 console 47393 mqtt: connection status 256, retrying in 3s
+15:33:30 console 47803 terrain: compass x -513 y -466 z 164 heading 2042 ddeg centre -392 -509 span 283 88
+15:33:30 console 48483 terrain: compass x -512 y -465 z 163 heading 2041 ddeg centre -392 -509 span 283 88
+15:33:30 console 48543 LINE L=1 R=0
+15:33:30 console 49153 terrain: compass x -512 y -467 z 164 heading 2040 ddeg centre -392 -509 span 283 88
+15:33:30 console 49843 terrain: compass x -513 y -467 z 163 heading 2041 ddeg centre -392 -509 span 283 88
+15:33:30 console 50473 mqtt: connection status 256, retrying in 3s
+15:33:30 console 50493 terrain: compass x -514 y -466 z 163 heading 2043 ddeg centre -392 -509 span 283 88
+15:33:30 console 50543 LINE L=1 R=0
+15:33:30 console 51153 terrain: compass x -512 y -466 z 166 heading 2040 ddeg centre -392 -509 span 283 88
+15:33:30 console 51843 terrain: compass x -513 y -469 z 163 heading 2040 ddeg centre -392 -509 span 283 88
+15:33:30 console 52513 terrain: compass x -512 y -465 z 162 heading 2041 ddeg centre -392 -509 span 283 88
+15:33:30 console 52543 LINE L=1 R=0
+15:33:30 console 53173 terrain: calibration NOT_LEVEL
+15:33:31 console 53173 terrain: compass x -513 y -469 z 163 heading 2040 ddeg centre -392 -509 span 283 88
+15:33:31 console 53513 mqtt: connection status 256, retrying in 3s
+15:33:31 console 53783 terrain: compass x -511 y -467 z 164 heading 2038 ddeg centre -392 -509 span 283 88
+15:33:31 console 54453 terrain: compass x -509 y -466 z 165 heading 2036 ddeg centre -392 -509 span 283 88
+15:33:31 console 54543 LINE L=1 R=0
+15:33:31 console 55123 terrain: compass x -511 y -467 z 163 heading 2038 ddeg centre -392 -509 span 283 88
+15:33:31 console 55803 terrain: compass x -512 y -467 z 161 heading 2040 ddeg centre -392 -509 span 283 88
+15:33:31 console 56473 terrain: compass x -515 y -465 z 164 heading 2045 ddeg centre -392 -509 span 283 88
+15:33:31 console 56543 LINE L=1 R=0
+15:33:31 console 56933 mqtt: connection status 256, retrying in 3s
+15:33:31 console 57073 terrain: compass x -524 y -478 z 169 heading 2049 ddeg centre -392 -509 span 283 88
+15:33:31 console 57643 LINE L=0 R=0 *
+15:33:31 console 57753 terrain: compass x -510 y -509 z 163 heading 2015 ddeg centre -392 -509 span 283 88
+15:33:31 console 57933 barcode: FAIL length elements=19 narrow=1 us
+15:33:31 console 58433 terrain: compass x -464 y -524 z 181 heading 1953 ddeg centre -392 -509 span 283 88
+15:33:31 console 59123 terrain: compass x -477 y -517 z 177 heading 1972 ddeg centre -392 -509 span 283 88
+15:33:31 console 59643 LINE L=0 R=0
+15:33:31 console 59813 terrain: compass x -477 y -514 z 178 heading 1973 ddeg centre -392 -509 span 283 88
+15:33:31 console 59994 mqtt: connected to 172.20.10.2
+15:33:31 console 60234 terrain: compass x -478 y -511 z 182 heading 1975 ddeg centre -392 -509 span 283 88
+15:33:31 console 60803 terrain: compass x -479 y -516 z 180 heading 1974 ddeg centre -392 -509 span 283 88
+15:33:32 console 61423 terrain: compass x -480 y -515 z 180 heading 1976 ddeg centre -392 -509 span 283 88
+15:33:32 console 61643 LINE L=0 R=0
+15:33:32 console 62003 terrain: compass x -480 y -517 z 180 heading 1975 ddeg centre -392 -509 span 283 88
+15:33:33 console 62623 terrain: compass x -482 y -515 z 180 heading 1979 ddeg centre -392 -509 span 283 88
+15:33:34 console 63263 terrain: compass x -499 y -506 z 176 heading 2003 ddeg centre -392 -509 span 283 88
+15:33:34 console 63383 LINE L=0 R=1 *
+15:33:34 console 63803 terrain: compass x -519 y -501 z 182 heading 2030 ddeg centre -392 -509 span 283 88
+15:33:34 console 64083 LINE L=0 R=0 *
+15:33:34 console 64383 terrain: compass x -479 y -518 z 179 heading 1974 ddeg centre -392 -509 span 283 88
+15:33:35 console 64723 LINE L=1 R=0 *
+15:33:35 console 64963 terrain: compass x -413 y -527 z 178 heading 1887 ddeg centre -392 -509 span 283 88
+15:33:36 console 65563 terrain: compass x -395 y -527 z 179 heading 1864 ddeg centre -392 -509 span 283 88
+15:33:36 console 66223 terrain: compass x -407 y -530 z 180 heading 1879 ddeg centre -392 -509 span 283 88
+15:33:37 console 66523 LINE L=0 R=0 *
+15:33:37 console 66783 terrain: compass x -468 y -512 z 181 heading 1962 ddeg centre -392 -509 span 283 88
+15:33:38 console 67443 terrain: compass x -468 y -519 z 182 heading 1960 ddeg centre -392 -509 span 283 88
+15:33:38 console 68103 terrain: compass x -443 y -519 z 170 heading 1928 ddeg centre -392 -509 span 283 88
+15:33:39 console 68523 LINE L=0 R=0

@@ -1,0 +1,185 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1690" viewBox="0 0 1280 1690">
+<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#1a1a1a"/></marker><marker id="ah_red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#c0271f"/></marker></defs>
+<rect width="1280" height="1690" fill="#ffffff"/>
+<text x="640.0" y="30" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="21" font-weight="bold" font-style="normal" fill="#1a1a1a" text-anchor="middle">Group 30 software block diagram: vehicle controller on micro T-Kernel 3.0 (both RP2040 cores)</text>
+<rect x="60" y="48" width="1160" height="70" rx="8" fill="#ffffff" stroke="#222222" stroke-width="2"/>
+<text x="75" y="76" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="20" font-weight="bold" font-style="normal" fill="#1a1a1a" text-anchor="start">DASHBOARD on a laptop (tools/dashboard/car_dashboard.py)</text>
+<text x="75" y="102" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">MQTT broker · web page with Start, Stop and the barcode actions · decodes the packed records into one run log</text>
+<path d="M 230 118 L 230 208" fill="none" stroke="#1a1a1a" stroke-width="2.2" marker-end="url(#ah)"/>
+<text x="242" y="158" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="18" font-weight="bold" font-style="normal" fill="#1a1a1a" text-anchor="start">&lt;topic&gt;/cmd</text>
+<text x="242" y="180" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">start · stop · clear · map</text>
+<path d="M 640 208 L 640 118" fill="none" stroke="#1a1a1a" stroke-width="2.2" marker-end="url(#ah)"/>
+<text x="652" y="148" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">&lt;topic&gt;/status: 24 bytes every 0.5 s</text>
+<text x="652" y="170" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">&lt;topic&gt;/telemetry: 12-byte event records, QoS 1</text>
+<text x="652" y="192" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">&lt;topic&gt;/console: every console line</text>
+<rect x="60" y="210" width="725" height="195" rx="8" fill="#e6e6e6" stroke="#555555" stroke-width="2"/>
+<text x="72" y="238" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="20" font-weight="bold" font-style="normal" fill="#1a1a1a" text-anchor="start">cyw43_utk_task: kernel radio service task</text>
+<text x="72" y="261" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="16" font-weight="normal" font-style="normal" fill="#333333" text-anchor="start">pri 4 · core 0 · owns the CYW43 radio (PIO1), lwIP and MQTT; no application task calls them</text>
+<rect x="72" y="275" width="170" height="118" rx="6" fill="#dbe9f9" stroke="#2b5d9b" stroke-width="1.6"/>
+<text x="81" y="300" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="18" font-weight="bold" font-style="normal" fill="#1a1a1a" text-anchor="start">mqtt_client</text>
+<text x="81" y="325" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="16" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">connect, retry 3 s,</text>
+<text x="81" y="345" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="16" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">publish, subscribe</text>
+<text x="81" y="383" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="15" font-weight="bold" font-style="normal" fill="#2b5d9b" text-anchor="start">Buddy 1</text>
+<rect x="249" y="275" width="170" height="118" rx="6" fill="#dbe9f9" stroke="#2b5d9b" stroke-width="1.6"/>
+<text x="258" y="300" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="18" font-weight="bold" font-style="normal" fill="#1a1a1a" text-anchor="start">remote_command</text>
+<text x="258" y="325" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="16" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">run flag (Start/Stop),</text>
+<text x="258" y="345" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="16" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">barcode map, 8 entries</text>
+<text x="258" y="383" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="15" font-weight="bold" font-style="normal" fill="#2b5d9b" text-anchor="start">Buddy 1</text>
+<rect x="426" y="275" width="170" height="118" rx="6" fill="#dbe9f9" stroke="#2b5d9b" stroke-width="1.6"/>
+<text x="435" y="300" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="18" font-weight="bold" font-style="normal" fill="#1a1a1a" text-anchor="start">car_status</text>
+<text x="435" y="325" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="16" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">reads every task's</text>
+<text x="435" y="345" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="16" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">copy, packs 174 bits</text>
+<text x="435" y="383" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="15" font-weight="bold" font-style="normal" fill="#2b5d9b" text-anchor="start">Buddy 1</text>
+<rect x="603" y="275" width="170" height="118" rx="6" fill="#dbe9f9" stroke="#2b5d9b" stroke-width="1.6"/>
+<text x="612" y="300" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="18" font-weight="bold" font-style="normal" fill="#1a1a1a" text-anchor="start">console_mirror</text>
+<text x="612" y="325" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="16" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">copies console</text>
+<text x="612" y="345" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="16" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">lines to MQTT</text>
+<text x="612" y="383" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="15" font-weight="bold" font-style="normal" fill="#2b5d9b" text-anchor="start">Buddy 1</text>
+<rect x="930" y="210" width="290" height="88" rx="8" fill="#f7f7f7" stroke="#777777" stroke-width="2" stroke-dasharray="7 5"/>
+<text x="942" y="236" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="19" font-weight="bold" font-style="normal" fill="#1a1a1a" text-anchor="start">Telemetry queue (shared)</text>
+<text x="942" y="259" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">128 records x 12 bytes, mutex</text>
+<text x="942" y="281" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">filled by tLine, tBarcode, tScan</text>
+<path d="M 930 250 L 785 250" fill="none" stroke="#1a1a1a" stroke-width="2.2" marker-end="url(#ah)"/>
+<text x="858" y="243" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="middle">event</text>
+<text x="858" y="270" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="middle">records</text>
+<rect x="930" y="315" width="290" height="90" rx="8" fill="#dbe9f9" stroke="#2b5d9b" stroke-width="2"/>
+<text x="942" y="341" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="19" font-weight="bold" font-style="normal" fill="#1a1a1a" text-anchor="start">communication_task</text>
+<text x="942" y="363" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="16" font-weight="normal" font-style="normal" fill="#333333" text-anchor="start">tComms · pri 13 · any core · Buddy 1</text>
+<text x="942" y="388" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">Checks the Wi-Fi link every 500 ms</text>
+<rect x="60" y="480" width="290" height="190" rx="8" fill="#fbf1c9" stroke="#9a7a10" stroke-width="2"/>
+<text x="72" y="508" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="20" font-weight="bold" font-style="normal" fill="#1a1a1a" text-anchor="start">tBarcode</text>
+<text x="72" y="531" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="16" font-weight="normal" font-style="normal" fill="#333333" text-anchor="start">pri 8 · core 0 · 10 ms · Buddy 3</text>
+<line x1="60" y1="541" x2="350" y2="541" stroke="#9a7a10" stroke-width="1"/>
+<text x="72" y="565" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">Edge widths to Code 39 text,</text>
+<text x="72" y="588" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">either direction; looks up the</text>
+<text x="72" y="611" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">turn in the barcode map</text>
+<text x="72" y="658" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="bold" font-style="normal" fill="#9a7a10" text-anchor="start">Owns: barcode IR DO GP28</text>
+<rect x="60" y="770" width="290" height="200" rx="8" fill="#fbf1c9" stroke="#9a7a10" stroke-width="2"/>
+<text x="72" y="798" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="20" font-weight="bold" font-style="normal" fill="#1a1a1a" text-anchor="start">line_follow_task (tLine)</text>
+<text x="72" y="821" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="16" font-weight="normal" font-style="normal" fill="#333333" text-anchor="start">pri 7 · any core · 10 ms · Buddy 3</text>
+<line x1="60" y1="831" x2="350" y2="831" stroke="#9a7a10" stroke-width="1"/>
+<text x="72" y="855" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">Two IR levels + odometry to</text>
+<text x="72" y="878" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">a target heading, line search,</text>
+<text x="72" y="901" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">junction turn, slow pass</text>
+<text x="72" y="958" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="bold" font-style="normal" fill="#9a7a10" text-anchor="start">Owns: line IR DO GP26, GP27</text>
+<rect x="60" y="1070" width="290" height="200" rx="8" fill="#ead9f3" stroke="#6f3d91" stroke-width="2"/>
+<text x="72" y="1098" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="20" font-weight="bold" font-style="normal" fill="#1a1a1a" text-anchor="start">terrain_task (tImu)</text>
+<text x="72" y="1121" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="16" font-weight="normal" font-style="normal" fill="#333333" text-anchor="start">pri 9 · any core · 10 ms · Buddy 4</text>
+<line x1="60" y1="1131" x2="350" y2="1131" stroke="#6f3d91" stroke-width="1"/>
+<text x="72" y="1155" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">Calibration, tilt, humps and</text>
+<text x="72" y="1178" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">height, lifted or overturned,</text>
+<text x="72" y="1201" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">compass, run summary</text>
+<text x="72" y="1258" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="bold" font-style="normal" fill="#6f3d91" text-anchor="start">Owns: I2C0 GP4/5 (GY-511)</text>
+<rect x="495" y="640" width="290" height="262" rx="8" fill="#dcf0dc" stroke="#2f7a35" stroke-width="2"/>
+<text x="507" y="668" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="20" font-weight="bold" font-style="normal" fill="#1a1a1a" text-anchor="start">tMotion</text>
+<text x="507" y="691" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="16" font-weight="normal" font-style="normal" fill="#333333" text-anchor="start">pri 6 · core 1 · 20 ms · Buddy 2</text>
+<line x1="495" y1="701" x2="785" y2="701" stroke="#2f7a35" stroke-width="1"/>
+<text x="507" y="725" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">The only task that drives the</text>
+<text x="507" y="748" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">motors. Wheel speed PI loops,</text>
+<text x="507" y="771" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">moves, turns, heading hold,</text>
+<text x="507" y="794" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">odometry, stall detection</text>
+<text x="507" y="868" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="bold" font-style="normal" fill="#2f7a35" text-anchor="start">Owns: motor PWM GP8-11,</text>
+<text x="507" y="890" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="bold" font-style="normal" fill="#2f7a35" text-anchor="start">encoders on PIO0</text>
+<rect x="930" y="480" width="290" height="490" rx="8" fill="#fbdfc9" stroke="#b2561a" stroke-width="2"/>
+<text x="942" y="508" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="20" font-weight="bold" font-style="normal" fill="#1a1a1a" text-anchor="start">obstacle_scan_task (tScan)</text>
+<text x="942" y="531" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="16" font-weight="normal" font-style="normal" fill="#333333" text-anchor="start">pri 11 · core 0 · 10 ms · Buddy 5</text>
+<line x1="930" y1="541" x2="1220" y2="541" stroke="#b2561a" stroke-width="1"/>
+<text x="942" y="565" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">Scanner: pings ahead every</text>
+<text x="942" y="588" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">60 ms, stops at 150 mm,</text>
+<text x="942" y="611" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">sweeps 50-130 deg for width</text>
+<text x="942" y="644" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">Bypass state machine: plans</text>
+<text x="942" y="667" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">and sends the moves round</text>
+<text x="942" y="690" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">the obstacle</text>
+<text x="942" y="723" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">Motor hold: the only task that</text>
+<text x="942" y="746" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">sets or clears INHIBIT (stop,</text>
+<text x="942" y="769" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">fault, lift, dashboard Stop)</text>
+<text x="942" y="802" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">Stands in for tSafety and</text>
+<text x="942" y="825" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">tMission, which are NOT</text>
+<text x="942" y="848" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">implemented (pri 5, 10 reserved)</text>
+<text x="942" y="936" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="bold" font-style="normal" fill="#b2561a" text-anchor="start">Owns: servo PWM GP12,</text>
+<text x="942" y="958" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="bold" font-style="normal" fill="#b2561a" text-anchor="start">ultrasonic GP16/17</text>
+<path d="M 205 405 L 205 480" fill="none" stroke="#1a1a1a" stroke-width="2.2" marker-end="url(#ah)"/>
+<text x="217" y="437" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">IF-10 barcode map</text>
+<text x="217" y="458" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">(one word per entry)</text>
+<path d="M 785 370 L 858 370 L 858 442 L 1075 442 L 1075 480" fill="none" stroke="#c0271f" stroke-width="2.2" marker-end="url(#ah_red)"/>
+<text x="870" y="434" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#c0271f" text-anchor="start">IF-10 run flag: Start / Stop</text>
+<path d="M 205 670 L 205 770" fill="none" stroke="#1a1a1a" stroke-width="2.2" marker-end="url(#ah)"/>
+<text x="217" y="706" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">IF-08 next turn,</text>
+<text x="217" y="727" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">slow-pass phase</text>
+<text x="217" y="748" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="16" font-weight="normal" font-style="normal" fill="#444444" text-anchor="start">(one byte each)</text>
+<path d="M 205 1070 L 205 970" fill="none" stroke="#1a1a1a" stroke-width="2.2" marker-end="url(#ah)"/>
+<text x="217" y="1003" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">IF-09 on a hump:</text>
+<text x="217" y="1024" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">slow to 30 mm/s</text>
+<text x="217" y="1045" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="16" font-weight="normal" font-style="normal" fill="#444444" text-anchor="start">(copy under a spin lock)</text>
+<path d="M 60 1140 L 32 1140 L 32 575 L 60 575" fill="none" stroke="#1a1a1a" stroke-width="2.2" marker-end="url(#ah)"/>
+<text x="22" y="860" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="16" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="middle" transform="rotate(-90 22 860)">IF-09 on a hump: hold the barcode trigger (spin lock)</text>
+<path d="M 350 800 L 495 800" fill="none" stroke="#1a1a1a" stroke-width="2.2" marker-end="url(#ah)"/>
+<text x="422" y="792" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="16" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="middle">IF-04 line request</text>
+<text x="422" y="819" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="14" font-weight="normal" font-style="normal" fill="#444444" text-anchor="middle">double buffer, 10 ms</text>
+<path d="M 495 862 L 350 862" fill="none" stroke="#1a1a1a" stroke-width="2.2" marker-end="url(#ah)"/>
+<text x="422" y="854" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="16" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="middle">IF-05 odometry</text>
+<text x="422" y="881" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="15" font-weight="normal" font-style="normal" fill="#444444" text-anchor="middle">sequence-checked</text>
+<path d="M 930 690 L 785 690" fill="none" stroke="#1a1a1a" stroke-width="2.2" marker-end="url(#ah)"/>
+<text x="857" y="682" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="16" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="middle">IF-01 commands</text>
+<text x="857" y="709" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="15" font-weight="normal" font-style="normal" fill="#444444" text-anchor="middle">(message buffer)</text>
+<path d="M 930 758 L 785 758" fill="none" stroke="#c0271f" stroke-width="3" marker-end="url(#ah_red)"/>
+<text x="857" y="750" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="16" font-weight="bold" font-style="normal" fill="#c0271f" text-anchor="middle">IF-02 INHIBIT</text>
+<text x="857" y="777" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="15" font-weight="normal" font-style="normal" fill="#c0271f" text-anchor="middle">(event flag)</text>
+<path d="M 785 826 L 930 826" fill="none" stroke="#1a1a1a" stroke-width="2.2" marker-end="url(#ah)"/>
+<text x="857" y="818" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="16" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="middle">IF-03 event flag</text>
+<text x="857" y="845" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="16" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="middle">IF-05 odometry</text>
+<path d="M 640 902 L 640 1115 L 350 1115" fill="none" stroke="#1a1a1a" stroke-width="2.2" marker-end="url(#ah)"/>
+<text x="652" y="1000" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">IF-05 odometry,</text>
+<text x="652" y="1022" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">IF-03 status</text>
+<text x="652" y="1044" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="16" font-weight="normal" font-style="normal" fill="#444444" text-anchor="start">(sequence-checked copy)</text>
+<path d="M 350 1215 L 1075 1215 L 1075 970" fill="none" stroke="#c0271f" stroke-width="3" marker-end="url(#ah_red)"/>
+<text x="700" y="1205" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="bold" font-style="normal" fill="#c0271f" text-anchor="middle">IF-11 lift count (one byte): lifted or overturned, so hold the motors</text>
+<text x="1060" y="1000" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="16" font-weight="normal" font-style="italic" fill="#1a1a1a" text-anchor="end">IF-07: obstacle state and</text>
+<text x="1060" y="1020" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="16" font-weight="normal" font-style="italic" fill="#1a1a1a" text-anchor="end">event flag, read by car_status</text>
+<rect x="60" y="1288" width="1160" height="108" rx="8" fill="#fdeeed" stroke="#c0271f" stroke-width="2"/>
+<text x="72" y="1313" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="16" font-weight="bold" font-style="normal" fill="#c0271f" text-anchor="start">Stop paths: every stop goes through tScan, the only task that sets INHIBIT. It polls every loop (10 ms delay) and never waits on the servo or an echo.</text>
+<text x="72" y="1337" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="16" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">Lift or overturn: terrain_task (100 ms mean; overturn 300 ms) → IF-11 → tScan next loop → INHIBIT → tMotion brakes (limit 20 ms; 251 µs measured)</text>
+<text x="72" y="1360" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="16" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">Obstacle: ping every 60 ms → first reading under 150 mm → INHIBIT in the same loop.   Stall or bypass fault: tMotion event → tScan → INHIBIT</text>
+<text x="72" y="1383" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="16" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">Dashboard Stop: /cmd → run flag → tScan next loop → INHIBIT. It needs Wi-Fi; lifting the car is the stop that does not.</text>
+<rect x="60" y="1410" width="380" height="208" rx="8" fill="#f7f7f7" stroke="#777777" stroke-width="2" stroke-dasharray="7 5"/>
+<text x="72" y="1438" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="19" font-weight="bold" font-style="normal" fill="#1a1a1a" text-anchor="start">Interrupts and handlers</text>
+<text x="72" y="1466" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">GPIO bank interrupt, core 0: one</text>
+<text x="72" y="1490" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">dispatcher (drv_gpio_irq.c, Buddy 5)</text>
+<text x="72" y="1514" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">  GP17 echo edges to tScan</text>
+<text x="72" y="1538" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">  GP28 barcode edges to a 64-edge</text>
+<text x="72" y="1562" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">  queue, then tBarcode</text>
+<text x="72" y="1586" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">cyc_motion: TICK every 20 ms to tMotion</text>
+<rect x="450" y="1410" width="380" height="208" rx="8" fill="#f7f7f7" stroke="#777777" stroke-width="2" stroke-dasharray="7 5"/>
+<text x="462" y="1438" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="19" font-weight="bold" font-style="normal" fill="#1a1a1a" text-anchor="start">Shared resources</text>
+<text x="462" y="1466" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">1 MHz TIMER: read-only time stamps</text>
+<text x="462" y="1490" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">PWM slices: 4 and 5 motors, 6 servo</text>
+<text x="462" y="1514" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">PIO0 encoder counters · PIO1 radio</text>
+<text x="462" y="1538" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">robot_types.h: every packed layout</text>
+<text x="462" y="1562" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">No reader waits: one word, double</text>
+<text x="462" y="1586" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">buffer, sequence check or spin lock</text>
+<rect x="840" y="1410" width="380" height="208" rx="8" fill="#e6e6e6" stroke="#555555" stroke-width="2"/>
+<text x="852" y="1438" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="19" font-weight="bold" font-style="normal" fill="#1a1a1a" text-anchor="start">Kernel: micro T-Kernel 3.0</text>
+<text x="852" y="1466" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">Initial task (pri 1): usermain() runs</text>
+<text x="852" y="1490" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">every &lt;name&gt;_init(), then _start()</text>
+<text x="852" y="1514" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">USB console (pri 3) and radio service</text>
+<text x="852" y="1538" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">(pri 4) tasks, both on core 0</text>
+<text x="852" y="1562" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">I2C driver, used by terrain_task</text>
+<text x="852" y="1586" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">Stacks 2,048 bytes; objects at start-up</text>
+<path d="M 60 1648 L 110 1648" fill="none" stroke="#1a1a1a" stroke-width="2.2" marker-end="url(#ah)"/>
+<text x="120" y="1654" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">data or command</text>
+<path d="M 290 1648 L 340 1648" fill="none" stroke="#c0271f" stroke-width="3" marker-end="url(#ah_red)"/>
+<text x="350" y="1654" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#c0271f" text-anchor="start">stop / safety path</text>
+<rect x="540" y="1635" width="26" height="26" rx="4" fill="#dbe9f9" stroke="#2b5d9b" stroke-width="1.5"/>
+<text x="574" y="1654" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">Buddy 1</text>
+<rect x="655" y="1635" width="26" height="26" rx="4" fill="#dcf0dc" stroke="#2f7a35" stroke-width="1.5"/>
+<text x="689" y="1654" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">Buddy 2</text>
+<rect x="770" y="1635" width="26" height="26" rx="4" fill="#fbf1c9" stroke="#9a7a10" stroke-width="1.5"/>
+<text x="804" y="1654" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">Buddy 3</text>
+<rect x="885" y="1635" width="26" height="26" rx="4" fill="#ead9f3" stroke="#6f3d91" stroke-width="1.5"/>
+<text x="919" y="1654" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">Buddy 4</text>
+<rect x="1000" y="1635" width="26" height="26" rx="4" fill="#fbdfc9" stroke="#b2561a" stroke-width="1.5"/>
+<text x="1034" y="1654" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">Buddy 5</text>
+<rect x="1115" y="1635" width="26" height="26" rx="4" fill="#e6e6e6" stroke="#555555" stroke-width="1.5"/>
+<text x="1149" y="1654" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="17" font-weight="normal" font-style="normal" fill="#1a1a1a" text-anchor="start">kernel</text>
+<text x="60" y="1682" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="15" font-weight="normal" font-style="normal" fill="#444444" text-anchor="start">IF numbers are the interface IDs in TEAM.md section 5. pri = task priority (1 is highest).</text>
+</svg>

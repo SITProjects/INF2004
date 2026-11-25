@@ -1,0 +1,126 @@
+16:03:10 listening on 0.0.0.0:1884
+16:08:09 connect from 172.20.10.3:54591
+16:08:09 console 0 
+16:08:09 console 0 
+16:08:09 console 0 microT-Kernel Version 3.00
+16:08:09 console 0 
+16:08:09 console 0 
+16:08:09 console 0 === micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+16:08:09 console 0 dual-core (SMP) build, usermain on core 0
+16:08:09 console 1 motion: motors initialized and braked
+16:08:09 console 1 motion: encoders counting on PIO0
+16:08:09 console 1 motion: tMotion line adapter at 80 mm/s; 5 s startup delay, no run cutoff
+16:08:09 console 2 Wi-Fi: the kernel radio service joins the network from config/wifi_secrets.h
+16:08:09 console 2 all subsystems started
+16:08:09 console 3 
+16:08:09 console 3 wifi: cyw43_utk_task starting (proc 1)
+16:08:09 console 4 wifi: cyw43_init() ...
+16:08:09 console 4 wifi: cyw43_init() returned, bringing interface up ...
+16:08:09 console 5 barcode: Code 39 reader on GP28 started
+16:08:09 console 183 terrain: IMU ready; calibrating, keep the car still on level ground
+16:08:09 console 263 terrain: compass ready
+16:08:09 console 703 CALMETA,START,5,0
+16:08:09 console 1403 CALWIDE,1,30,30,5,6593,7976
+16:08:09 console 1453 wifi: joining "Nyx" ...
+16:08:09 console 1693 wifi: link status -> joined AP, waiting for IP (1)
+16:08:09 console 1893 CALWIDE,1,35,35,5,6593,6647
+16:08:09 console 2383 CALWIDE,1,40,40,5,6571,8010
+16:08:09 console 2853 CALWIDE,1,45,45,5,8009,8088
+16:08:09 console 3343 CALWIDE,1,50,50,5,8062,8111
+16:08:09 console 3853 CALWIDE,1,55,55,5,8071,8192
+16:08:09 console 4283 CALWIDE,1,60,60,5,8128,8223
+16:08:09 console 4734 wifi: link status -> joined AP, no IP yet (2)
+16:08:09 console 4753 CALWIDE,1,65,65,5,14017,14240
+16:08:09 console 4835 wifi: link up, ip=172.20.10.3
+16:08:09 console 5094 mqtt: connected to 172.20.10.2
+16:08:09 console 5133 line_follow: digital IR line sensing started. Submitting requests to motion. Built Nov  6 2026 07:42:17
+16:08:09 console 5134 LT t=0 h=0 d=0 01 c=303 m=-798,205 n=18
+16:08:09 console 5223 Wi-Fi connected
+16:08:09 console 5223 IP Address: 172.20.10.3
+16:08:09 console 5263 CALWIDE,1,70,70,0,0,0
+16:08:10 console 5533 LT t=-28 h=-13 d=28 01 c=303 m=-796,204 n=19
+16:08:10 console 5583 terrain: TURNING t 5.56 s
+16:08:10 console 5584 terrain: speed CRUISING t 5.56 s
+16:08:10 console 5584 terrain: summary humps 0 (mm:) highest 0 mm collisions 0 turns 1 msg 00 00 01 00 00 00 00 00 00 00 00
+16:08:10 console 5734 CALWIDE,1,75,75,5,7769,13933
+16:08:10 console 5933 LT t=-48 h=-33 d=61 01 c=284 m=-840,29 n=20
+16:08:10 console 6203 CALWIDE,1,80,80,5,6072,7662
+16:08:10 console 6333 LT t=-70 h=-55 d=94 01 c=249 m=-808,-268 n=21
+16:08:32 listening on 0.0.0.0:1884
+16:09:35 connect from 172.20.10.3:54591
+16:09:36 console 6 
+16:09:36 console 6 
+16:09:36 console 6 microT-Kernel Version 3.00
+16:09:36 console 6 
+16:09:36 console 6 
+16:09:36 console 6 === micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+16:09:36 console 7 dual-core (SMP) build, usermain on core 0
+16:09:36 console 7 motion: motors initialized and braked
+16:09:36 console 8 motion: encoders counting on PIO0
+16:09:36 console 8 motion: tMotion line adapter at 80 mm/s; 5 s startup delay, no run cutoff
+16:09:36 console 9 Wi-Fi: the kernel radio service joins the network from config/wifi_secrets.h
+16:09:36 console 9 all subsystems started
+16:09:36 console 9 
+16:09:36 console 10 wifi: cyw43_utk_task starting (proc 1)
+16:09:36 console 11 wifi: cyw43_init() ...
+16:09:36 mtk3smp-pico/heartbeat/telemetry seq=0 captured_ms=6550 line JUNCTION STRAIGHT t=-69 h=-69 d=122
+16:09:36 console 11 wifi: cyw43_init() returned, bringing interface up ...
+16:09:36 console 11 barcode: Code 39 reader on GP28 started
+16:09:36 console 170 terrain: IMU ready; calibrating, keep the car still on level ground
+16:09:36 console 248 terrain: compass ready
+16:09:36 console 707 CALMETA,START,5,0
+16:09:36 console 1400 CALWIDE,1,30,30,5,6578,7993
+16:09:36 console 1460 wifi: joining "Nyx" ...
+16:09:36 console 1700 wifi: link status -> joined AP, waiting for IP (1)
+16:09:36 console 1890 CALWIDE,1,35,35,5,7923,8049
+16:09:36 console 2360 CALWIDE,1,40,40,5,7948,8023
+16:09:36 console 2810 CALWIDE,1,45,45,5,7982,8079
+16:09:36 console 3280 CALWIDE,1,50,50,5,8008,8248
+16:09:36 console 3770 CALWIDE,1,55,55,5,8068,8193
+16:09:36 console 4260 CALWIDE,1,60,60,5,8202,14198
+16:09:36 console 4641 wifi: link status -> joined AP, no IP yet (2)
+16:09:36 console 4750 CALWIDE,1,65,65,0,0,0
+16:09:36 console 4841 wifi: link up, ip=172.20.10.3
+16:09:36 console 5140 line_follow: digital IR line sensing started. Submitting requests to motion. Built Nov  6 2026 07:42:17
+16:09:36 console 5141 LT t=0 h=0 d=0 01 c=300 m=-900,228 n=24
+16:09:36 console 5230 Wi-Fi connected
+16:09:36 console 5230 IP Address: 172.20.10.3
+16:09:36 console 5241 CALWIDE,1,70,70,0,0,0
+16:09:36 console 5350 terrain: TURNING t 5.34 s
+16:09:36 console 5350 terrain: speed CRUISING t 5.34 s
+16:09:36 console 5350 terrain: summary humps 0 (mm:) highest 0 mm collisions 0 turns 1 msg 00 00 01 00 00 00 00 00 00 00 00
+16:09:36 console 5540 LT t=-27 h=-12 d=25 01 c=296 m=-911,185 n=25
+16:09:36 console 5690 CALWIDE,1,75,75,2,7904,7965
+16:09:36 console 5940 LT t=-47 h=-32 d=58 01 c=273 m=-977,-53 n=26
+16:09:36 console 6141 CALWIDE,1,80,80,5,6101,7690
+16:09:36 console 6340 LT t=-66 h=-51 d=90 01 c=256 m=-955,-240 n=27
+16:09:36 console 6480 LT t=-77 h=-62 d=105 00 c=256 m=-955,-240 n=27
+16:09:36 console 6590 CALWIDE,1,85,85,5,5891,7569
+16:09:36 console 6620 LT t=-74 h=-68 d=117 11 c=256 m=-955,-240 n=27
+16:09:36 console 6680 line JUNCTION STRAIGHT t=-69 h=-69 d=122
+16:09:36 console 7020 LT t=-75 h=-75 d=148 11 c=277 m=-969,-19 n=28
+16:09:36 console 7062 CALWIDE,1,90,90,0,0,0
+16:09:36 console 7070 terrain: STRAIGHT t 7.06 s
+16:09:36 console 7420 LT t=-76 h=-76 d=183 11 c=293 m=-896,138 n=29
+16:09:36 console 7510 CALWIDE,1,95,95,0,0,0
+16:09:36 console 7761 mqtt: connected to 172.20.10.2
+16:09:36 console 7821 LT t=-79 h=-79 d=217 11 c=290 m=-885,108 n=30
+16:09:36 console 8003 CALWIDE,1,100,100,0,0,0
+16:09:36 console 8220 LT t=-79 h=-79 d=249 11 c=288 m=-886,79 n=32
+16:09:36 console 8470 CALWIDE,1,105,105,0,0,0
+16:09:36 console 8620 LT t=-81 h=-81 d=282 11 c=288 m=-886,86 n=33
+16:09:37 console 8961 CALWIDE,1,110,110,0,0,0
+16:09:37 console 9020 LT t=-83 h=-83 d=314 11 c=289 m=-879,91 n=34
+16:09:37 console 9420 LT t=-85 h=-85 d=346 11 c=289 m=-879,91 n=34
+16:09:37 console 9470 CALWIDE,1,115,115,0,0,0
+16:09:38 console 9820 LT t=-87 h=-87 d=379 11 c=290 m=-884,101 n=35
+16:09:38 console 9961 CALWIDE,1,120,120,0,0,0
+16:09:38 console 10220 LT t=-89 h=-89 d=411 11 c=290 m=-877,100 n=36
+16:09:38 console 10450 CALWIDE,1,125,125,0,0,0
+16:09:38 console 10620 LT t=-91 h=-91 d=443 11 c=290 m=-876,101 n=37
+16:09:39 console 10960 CALWIDE,1,130,130,0,0,0
+16:09:39 console 11020 LT t=-92 h=-92 d=475 11 c=290 m=-879,107 n=38
+16:09:39 console 11420 LT t=-94 h=-94 d=507 11 c=291 m=-879,112 n=39
+16:09:39 console 11450 CALWIDE,1,135,135,0,0,0
+16:09:40 console 11820 LT t=-96 h=-96 d=539 11 c=290 m=-877,98 n=40
+16:09:40 console 11940 CALWIDE,1,140,140,0,0,0

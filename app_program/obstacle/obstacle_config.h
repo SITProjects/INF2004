@@ -348,7 +348,11 @@
 #define OBSTACLE_AVOID_EDGE_MIN_MM 115u
 #define OBSTACLE_AVOID_LATERAL_MAX_MM 500u
 #define OBSTACLE_AVOID_PASS_MAX_MM 1500u
-#define OBSTACLE_AVOID_RETURN_EXTRA_MM 150u
+/* Return travel past the planned sideways offset. 0 stops the axle where the
+ * line should be, with the IR row 130 mm beyond it; a line not seen by then
+ * is looked for by pivoting there (line following's search), not by driving
+ * on (user, 2026-11-25). */
+#define OBSTACLE_AVOID_RETURN_EXTRA_MM 0u
 #define OBSTACLE_AVOID_MAX_SIDESTEPS 3u /* First plus two extra. */
 #define OBSTACLE_AVOID_RESUME_MIN_MM 10u
 #define OBSTACLE_AVOID_RESUME_MIN_DEG 3u

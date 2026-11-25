@@ -2178,7 +2178,8 @@ avoid_verify_valid (void)
 
 /* OBS-U46: the done reason ends the return leg early: the axle goes onto
  * the line and the car turns back 90 degrees left to the heading it
- * stopped on. A missed line retries once, then line following searches. */
+ * stopped on. A missed line hands over to line following at once, to pivot
+ * for it on the spot: no further move, no retry used. */
 static bool
 avoid_line_valid (void)
 {
@@ -2203,24 +2204,17 @@ avoid_line_valid (void)
          (sim.last_cmd == robot_motion_cmd_follow()) &&
          (sim.in.heading_deg == 0);
 
-    /* Missed line: one search move of 150 mm, then line following. */
+    /* Missed line: straight to line following, which pivots for it. */
     ok = ok && sim_detect_path();
     ok =
         ok && sim_until(OBSTACLE_AVOID_RUN_LEG, OBSTACLE_AVOID_LEG_RETURN, 80u);
     sim.in.b_move_done = true;
     sim.in.motion_done = ROBOT_MOTION_DONE_DIST;
-    ok = ok && sim_step().b_set_inhibit &&
-         (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_RETRY_WAIT);
-    ok = ok && sim_stays(OBSTACLE_AVOID_RETRY_WAIT, 99u);
-    ok = ok && sim_until(OBSTACLE_AVOID_SEND, OBSTACLE_AVOID_LEG_RETURN, 20u) &&
-         (sim.act.cmd == robot_motion_cmd_move(150u, false, true));
-    (void)sim_step();
-    sim.in.b_move_done = true;
-    sim.in.motion_done = ROBOT_MOTION_DONE_DIST;
     ok = ok && sim_step().b_send &&
          (sim.act.cmd == robot_motion_cmd_follow()) &&
          (obstacle_avoid_leg_of(&sim.ctx) == OBSTACLE_AVOID_LEG_FOLLOW) &&
-         (obstacle_avoid_fault_of(&sim.ctx) == OBSTACLE_AVOID_FAULT_NONE);
+         (obstacle_avoid_fault_of(&sim.ctx) == OBSTACLE_AVOID_FAULT_NONE) &&
+         !obstacle_avoid_flag(&sim.ctx, OBSTACLE_AVOID_F_RETRY_USED);
     (void)sim_step();
     return ok && (obstacle_avoid_state_of(&sim.ctx) == OBSTACLE_AVOID_IDLE);
 }

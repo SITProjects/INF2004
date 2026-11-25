@@ -1831,6 +1831,24 @@ test_rejoin (void)
           "from",
           b_left && b_right);
 
+    /* The return missed the line: the bypass's last pivot was the turn in,
+     * then it drove back over white and handed over where it stopped. */
+    bool b_pivots = true;
+    for (int sign = -1; sign <= 1; sign += 2)
+    {
+        pivot_then_move(sign * 90);
+        drive(false, false, samples_for(250));
+        in.b_moving = false;
+        in.b_control = true;
+        drive(false, false, 1u);
+        b_pivots = b_pivots &&
+                   (((sign > 0) ? LINE_MODE_SEARCH_RIGHT
+                                : LINE_MODE_SEARCH_LEFT) == out.mode);
+    }
+    check("LT129 a return that missed the line hands over to a pivot search, "
+          "first back towards the line's heading, both ways",
+          b_pivots);
+
     end_of_bypass(60);
     drive(false, true, LINE_CONFIRM_SAMPLES);
     check("LT80 with the tape between the sensors, it carries on along it",

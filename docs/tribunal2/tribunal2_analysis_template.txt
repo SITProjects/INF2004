@@ -1,0 +1,92 @@
+TRIBUNAL 2: REQUIREMENT CHANGE AND DESIGN REVIEW
+
+Team ID: CSC30
+
+Member IDs: 2500658, 2503811, 2500859, 2503286, 2503998
+
+Repo Link: https://github.com/SITProjects/INF2004
+
+DURATION: 1 hour
+
+
+INJECTED REQUIREMENT: TBA
+
+
+-------------------------------------------------------------------------------------------------------------------------------------------------
+
+INSTRUCTIONS
+1. Review the injected requirement against the complete system.
+2. Identify what needs to change and what should remain unchanged.
+3. Suggestions may come from AI, a Buddy, or the team.
+4. For every suggestion, choose: Accept, Modify, Reject, or No Change.
+5. Explain the reason and provide engineering evidence.
+6. Add as many rows as necessary. Coverage is assessed.
+7. AI output is a suggestion, not engineering evidence.
+8. Submit this completed text file at the end of Tribunal 2. No separate report is required.
+
+DECISION MEANINGS
+Accept    - Use the suggestion as proposed.
+Modify    - Use the idea, but change the proposed solution.
+Reject    - Do not use the suggestion.
+No Change - The area was considered and the existing design should remain.
+
+ENGINEERING EVIDENCE MAY INCLUDE
+Requirement values, calculations, measurements, test results, source-code behaviour, interfaces, statecharts, block diagrams, hardware limits, RTOS behaviour, or datasheet specifications.
+
+========================================================================
+TRIBUNAL 2 ANALYSIS TABLE
+========================================================================
+
+
+#1
+Affected Requirement / Component:
+What needs to change?:
+Suggested by: (AI/Buddy/Team) ** select one only
+Decision: (Accept/Modify/Reject/No Change) ** select one only
+Why?:
+Engineering Evidence:
+
+------------------------------------
+
+#2
+Affected Requirement / Component:
+What needs to change?:
+Suggested by: (AI/Buddy/Team) ** select one only
+Decision: (Accept/Modify/Reject/No Change) ** select one only
+Why?:
+Engineering Evidence:
+
+------------------------------------
+
+#3
+Affected Requirement / Component:
+What needs to change?:
+Suggested by: (AI/Buddy/Team) ** select one only
+Decision: (Accept/Modify/Reject/No Change) ** select one only
+Why?:
+Engineering Evidence:
+
+------------------------------------
+
+#4 ...
+Add more as needed.
+------------------------------------
+
+
+
+FINAL COVERAGE CHECK
+Before submitting, check whether the team considered, where relevant:
+[ ] Requirements
+[ ] Tasks / components
+[ ] State machines
+[ ] Interfaces / messages
+[ ] Shared data / concurrency / interrupts
+[ ] Timing / performance
+[ ] Memory / resources
+[ ] Safety / fault handling
+[ ] Hardware / software interaction
+[ ] Recovery and safe resumption
+[ ] Verification / testing
+
+FINAL TEAM STATEMENT
+[X] We reviewed the injected requirement against the complete system. Areas marked No Change were deliberately considered rather than omitted.
