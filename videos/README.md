@@ -39,3 +39,8 @@ Newest at the bottom. Never delete a row.
 | Date | Subsystem | Test ID / demo | Commit | Student ID | Link | Notes |
 |---|---|---|---|---|---|---|
 | YYYY-MM-DD | obstacle | OBS-U04 | `abc1234` | | <https://youtu.be/...> | servo scans 60° and 120° when blocked |
+| 2026-11-20 | terrain | TER-U34 (S6) | `bc6bd73` | | [video](terrain/2026-11-20_S6_TER-U34_lift_side_overturn.MOV) | brisk lift, on its side and upside down: each stops the motors until Start |
+| 2026-11-20 | terrain | TER-U17 (S4) | `0fec680` (branch `189`) | | [video](terrain/2026-11-20_S4_TER-U17_flat_lap_0_humps.MOV) | full flat lap with the hump off the track: Humps stays 0 |
+| 2026-11-20 | terrain | TER-U33 (S5) | `0fec680` (branch `189`) | | [video](terrain/2026-11-20_S5_TER-U33_hump_lap_1_hump.MOV) | lap over the 11 mm hump: counted once, Humps 1 |
+| 2026-11-20 | terrain | TER-U33 (S5) | `0fec680` (branch `189`) | | [video](terrain/2026-11-20_S5_TER-U33_hump_left_wheel.MOV) | hump under the left wheel |
+| 2026-11-20 | terrain | TER-U33 (S5) | `0fec680` (branch `189`) | | [video](terrain/2026-11-20_S5_TER-U33_hump_right_wheel.MOV) | hump under the right wheel |
