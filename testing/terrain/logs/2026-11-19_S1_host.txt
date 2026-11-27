@@ -1,0 +1,59 @@
+PASS CMP01 nothing valid before set-up
+PASS CMP02 heading turns counter-clockwise (+ is left), 0 to 3599, offset removed
+PASS CMP03 the range spans the field seen: centre the offset, span 800
+PASS CMP04 an overflowed axis is no reading; the next good one is
+PASS CMP05 a failed read is no reading; set-up is retried after 1 s
+PASS CMP06 the sensor's limits survive packing, neighbours untouched
+PASS CMP08 X and Y stay out of each other's bits
+PASS CMP07 the 8-bit sample count wraps and leaves the axes alone
+0 failure(s)
+  30 mm/s: 1 climb, 1 hump, height 10 mm
+  120 mm/s: 1 climb, 1 hump, height 9 mm
+PASS TH01 the course's hump counts once, at 30 and 120 mm/s
+PASS TH02 and reads 9 to 11 mm high
+PASS TH03 a hump dropped half way never counts, back on the line after
+PASS TH04 the real hump, 188 mm, counts
+PASS TH05 the leans of steering, 34, 67 and 122 mm, do not
+PASS TH06 reversing never counts, and the distance may wrap
+  slowed: 1 climb, 1 hump, 119 mm travel, height 10 mm, fastest 30 mm/s
+PASS TH10 braking for the hump does not end it: it counts once
+PASS TH11 and the car stays slow until level, reading 9 to 11 mm
+  steering lean: 1 climb, 0 hump, 18 mm travel
+PASS TH12 a steering lean, braked the same way, does not count
+PASS TH13 too slow or a held roll pauses, off the line drops
+PASS TH15 slowed, the real hump's 66 to 116 mm counts, leans of up to 55 mm do not
+PASS TH14 a car that slowed needs less travel than one at speed
+0 failure(s)
+  floor        4326 samples: 0 lifted, 0 overturned
+PASS LF01 43 s of floor driving, with starts, stops and bumps, gives nothing
+  moving_1      183 samples: 1 lifted, 0 overturned
+  moving_2      200 samples: 1 lifted, 0 overturned
+  moving_3      194 samples: 1 lifted, 0 overturned
+  moving_4      236 samples: 1 lifted, 0 overturned
+  moving_5      202 samples: 1 lifted, 0 overturned
+PASS LF02 each of five lifts of the moving car is seen
+  stopped_1     236 samples: 1 lifted, 0 overturned
+  stopped_2     172 samples: 1 lifted, 0 overturned
+  stopped_3     232 samples: 1 lifted, 0 overturned
+PASS LF03 each of three lifts of the stopped car is seen
+  upside_down   647 samples: 1 lifted, 1 overturned
+  on_side      1120 samples: 0 lifted, 2 overturned
+PASS LF04 upside down and on its side are overturned
+  gentle        547 samples: 0 lifted, 0 overturned
+PASS LF05 a slow, gentle lift is not seen (the known limit)
+  floor        4326 samples: 0 lifted, 0 overturned
+  moving_1      183 samples: 1 lifted, 0 overturned
+  moving_2      200 samples: 1 lifted, 0 overturned
+  moving_3      194 samples: 1 lifted, 0 overturned
+  moving_4      236 samples: 1 lifted, 0 overturned
+  moving_5      202 samples: 1 lifted, 0 overturned
+  stopped_1     236 samples: 1 lifted, 0 overturned
+  stopped_2     172 samples: 1 lifted, 0 overturned
+  stopped_3     232 samples: 1 lifted, 0 overturned
+PASS LF06 margins: floor quiet down to 1.18, lifts seen up to 1.41
+PASS LF07 a full window at level, and at exactly 1.30 g up, is nothing
+PASS LF08 one brisk sample past 1.30 g lifts, sized 131; once per 1 s, then again
+PASS LF09 on its side: overturned on the 36th sample, once while there; upside down again after righting
+PASS LF11 nothing is decided until the 10-sample window is full
+PASS LF10 NULL or a zero level reading is refused and changes nothing
+0 failure(s)
